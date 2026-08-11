@@ -1,0 +1,13 @@
+{
+  "name": "@studynarrator/runtime",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": "./src/index.ts",
+  "types": "./src/index.ts",
+  "dependencies": {
+    "@studynarrator/application": "0.1.0",
+    "@studynarrator/shared-types": "0.1.0"
+  }
+}

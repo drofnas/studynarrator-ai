@@ -1,0 +1,43 @@
+{
+  "name": "studynarrator",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "packageManager": "npm@11.19.0",
+  "engines": {
+    "node": ">=26.0.0 <27.0.0"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace @studynarrator/web && npm run build --workspace @studynarrator/server && npm run build --workspace @studynarrator/desktop",
+    "dev:web": "concurrently --kill-others --names api,web \"npm run dev --workspace @studynarrator/server\" \"npm run dev --workspace @studynarrator/web\"",
+    "dev:desktop": "npm run build --workspace @studynarrator/desktop && npm run rebuild:native --workspace @studynarrator/desktop && concurrently --kill-others --names web,desktop \"npm run dev --workspace @studynarrator/web\" \"wait-on http://127.0.0.1:5173 && npm run start --workspace @studynarrator/desktop\"",
+    "gate:reset": "node scripts/gates/g01-reset.mjs",
+    "lint": "eslint . --max-warnings 0",
+    "test": "vitest run",
+    "typecheck": "tsc --build --pretty false",
+    "verify:gate": "node scripts/gates/verify-gate.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@testing-library/jest-dom": "7.0.1",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/user-event": "14.6.3",
+    "@types/node": "26.2.0",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "concurrently": "10.0.4",
+    "eslint": "10.8.1",
+    "globals": "17.9.0",
+    "jsdom": "30.0.1",
+    "tsx": "4.23.12",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.67.0",
+    "vitest": "4.1.10",
+    "wait-on": "9.1.0"
+  }
+}

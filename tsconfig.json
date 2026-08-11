@@ -1,0 +1,13 @@
+{
+  "files": [],
+  "references": [
+    { "path": "tsconfig.tools.json" },
+    { "path": "packages/shared-types" },
+    { "path": "packages/application" },
+    { "path": "packages/persistence" },
+    { "path": "packages/runtime" },
+    { "path": "apps/server" },
+    { "path": "apps/web" },
+    { "path": "apps/desktop" }
+  ]
+}
