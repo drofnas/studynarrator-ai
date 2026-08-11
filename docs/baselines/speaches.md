@@ -1,6 +1,6 @@
 # Speaches G00 Baseline
 
-- **Status:** Automated baseline, outage, and recovery captured; listening approval pending
+- **Status:** Approved baseline; automated, outage, recovery, and listening evidence captured
 - **Prepared:** 2026-08-11
 - **Authoritative gate:** G00 — Freeze the external TTS baseline
 
