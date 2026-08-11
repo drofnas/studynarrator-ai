@@ -1,6 +1,6 @@
 # Speaches G00 Baseline
 
-- **Status:** Automated real-server baseline captured; listening and outage validation pending
+- **Status:** Automated baseline, outage, and recovery captured; listening approval pending
 - **Prepared:** 2026-08-11
 - **Authoritative gate:** G00 — Freeze the external TTS baseline
 
@@ -72,13 +72,17 @@ The server operator must stop Speaches or block the client connection before thi
 
 | Field | Captured value |
 | --- | --- |
-| Test date | PENDING |
-| Failure class | PENDING |
-| Curl exit | PENDING |
-| HTTP status | PENDING |
-| Authorization header configured | PENDING — boolean only |
+| Test date | 2026-08-11 02:23 PDT |
+| Failure class | `connection-failure` |
+| Curl exit | `7` |
+| HTTP status | `000` |
+| Authorization header configured | `false` |
 
 No raw error body, hostname, or credential is copied into this document.
+
+## Recovery evidence
+
+Speaches was restarted and the complete normal probe was rerun at 2026-08-11 02:24 PDT. `/health` and `/v1/models` returned HTTP 200, the configured model was present, and all four WAV/MP3 requests passed. File sizes, durations, codecs, and SHA-256 hashes exactly matched the pre-outage baseline.
 
 ## Reproduction
 
