@@ -109,7 +109,7 @@ smoke_text="$(<"$fixture_path")"
 mkdir -p -- "$output_root"
 
 auth_header_file=""
-declare -a curl_auth_args=()
+declare -a curl_auth_args=(--header 'Accept: */*')
 cleanup_auth_header() {
   if [[ -n "$auth_header_file" && -f "$auth_header_file" && ! -L "$auth_header_file" ]]; then
     : > "$auth_header_file"
@@ -126,7 +126,7 @@ if [[ -n "${SPEACHES_API_KEY:-}" ]]; then
   auth_header_file="$(mktemp "$output_root/.auth-header.XXXXXX")"
   chmod 600 "$auth_header_file"
   printf 'Authorization: Bearer %s\n' "$SPEACHES_API_KEY" > "$auth_header_file"
-  curl_auth_args=(--header "@$auth_header_file")
+  curl_auth_args+=(--header "@$auth_header_file")
   auth_header_sent=true
 fi
 

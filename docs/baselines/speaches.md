@@ -1,6 +1,6 @@
 # Speaches G00 Baseline
 
-- **Status:** Pending real-server validation
+- **Status:** Automated real-server baseline captured; listening and outage validation pending
 - **Prepared:** 2026-08-11
 - **Authoritative gate:** G00 — Freeze the external TTS baseline
 
@@ -9,12 +9,12 @@ This record freezes the external Speaches behavior that StudyNarrator will later
 ## Fixed request
 
 - Endpoint: `POST <redacted-server>/v1/audio/speech`
-- Supplied base URL form: `PENDING — root or /v1`
+- Supplied base URL form: root URL
 - Model: `speaches-ai/Kokoro-82M-v1.0-ONNX`
 - Voice: `af_heart`
 - Formats: `wav`, `mp3`
 - Speed: `1`
-- Authorization: `PENDING — omitted or Bearer <redacted>`
+- Authorization: omitted; server accepted an unauthenticated tailnet request
 - Smoke fixture: `fixtures/baseline/speaches-smoke.txt`
 
 ```json
@@ -33,14 +33,14 @@ The probe accepts either a server root URL or a URL ending in `/v1` and always s
 
 | Field | Tested value |
 | --- | --- |
-| Test date | PENDING |
-| Operating system | PENDING |
-| `curl` | PENDING |
-| `jq` | PENDING |
-| `ffmpeg` | PENDING |
-| `ffprobe` | PENDING |
-| `file` | PENDING |
-| `shasum` | PENDING |
+| Test date | 2026-08-11 02:15 PDT |
+| Operating system | macOS 26.5.1 (25F80), arm64 |
+| `curl` | 8.7.1, SecureTransport, LibreSSL 3.3.6 |
+| `jq` | 1.7.1-apple |
+| `ffmpeg` | 8.1.2 |
+| `ffprobe` | 8.1.2 |
+| `file` | 5.41 |
+| `shasum` | 6.02 |
 
 ## Optional server preflight
 
@@ -48,8 +48,8 @@ The probe records sanitized status information for `/health` and `/v1/models`. T
 
 | Check | HTTP status | Result |
 | --- | ---: | --- |
-| `/health` | PENDING | PENDING |
-| `/v1/models` | PENDING | PENDING — include whether the configured model was listed |
+| `/health` | 200 | Supported |
+| `/v1/models` | 200 | Supported; configured model present among 2 local models |
 
 ## Successful-run evidence
 
@@ -57,14 +57,14 @@ Generated files remain in `.tmp/gates/G00/`. Hashes are recorded for traceabilit
 
 | Run | Format | Local filename | HTTP | Content type | Bytes | Duration | Codec | SHA-256 |
 | ---: | --- | --- | ---: | --- | ---: | ---: | --- | --- |
-| 1 | WAV | `.tmp/gates/G00/run-1/speaches-baseline.wav` | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
-| 1 | MP3 | `.tmp/gates/G00/run-1/speaches-baseline.mp3` | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
-| 2 | WAV | `.tmp/gates/G00/run-2/speaches-baseline.wav` | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
-| 2 | MP3 | `.tmp/gates/G00/run-2/speaches-baseline.mp3` | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
+| 1 | WAV | `.tmp/gates/G00/run-1/speaches-baseline.wav` | 200 | `audio/wav` | 261164 | 5.440 s | `pcm_s16le` | `92ef2fc52926354cf9a9ae5986bd4c06237b18e2e5cb0da86711c3e08f800d02` |
+| 1 | MP3 | `.tmp/gates/G00/run-1/speaches-baseline.mp3` | 200 | `audio/mp3` | 43944 | 5.440 s | `mp3` | `0f209125dd96404658280c0e5837f8aa39ea0c5057f26f4c2f41096af67c0cd9` |
+| 2 | WAV | `.tmp/gates/G00/run-2/speaches-baseline.wav` | 200 | `audio/wav` | 261164 | 5.440 s | `pcm_s16le` | `92ef2fc52926354cf9a9ae5986bd4c06237b18e2e5cb0da86711c3e08f800d02` |
+| 2 | MP3 | `.tmp/gates/G00/run-2/speaches-baseline.mp3` | 200 | `audio/mp3` | 43944 | 5.440 s | `mp3` | `0f209125dd96404658280c0e5837f8aa39ea0c5057f26f4c2f41096af67c0cd9` |
 
 ### FFprobe summaries
 
-PENDING — copy the format, duration, size, and first audio-stream fields from each ignored `*.ffprobe.json` file after the real-server run.
+All four files contain one 24,000 Hz mono audio stream and a positive 5.440-second duration. The WAV files use `pcm_s16le` in a WAV container; the MP3 files use the `mp3` codec in an MP3 container. FFmpeg decoded every file without error. Runs 1 and 2 were byte-identical for both formats, although byte equality is not a gate requirement.
 
 ## Unavailable-server evidence
 
