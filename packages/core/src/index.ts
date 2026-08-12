@@ -3,6 +3,11 @@ export {
   CirNodeSchema,
   DiagnosticSchema,
   IgnoredDiagnosticSchema,
+  LEXICON_TRANSFORM_VERSION,
+  LexiconEntrySchema,
+  LexiconEntryTypeSchema,
+  LexiconMatchAuditSchema,
+  LexiconScopeSchema,
   ParagraphBreakNodeSchema,
   ParseScriptInputSchema,
   ParseScriptResultSchema,
@@ -15,12 +20,23 @@ export {
   SourceRangeSchema,
   SpeakerIdSchema,
   SpeechNodeSchema,
+  TransformDiagnosticSchema,
+  TransformScriptInputSchema,
+  TransformScriptResultSchema,
+  TransformedSpeechSegmentSchema,
   type CirNode,
   type IgnoredDiagnostic,
+  type LexiconEntry,
+  type LexiconMatchAudit,
   type ParseDiagnostic,
   type ParseScriptInput,
   type ParseScriptResult,
   type PronunciationAnnotation,
-  type SourceRange
+  type SourceRange,
+  type TransformDiagnostic,
+  type TransformScriptInput,
+  type TransformScriptResult,
+  type TransformedSpeechSegment
 } from "./schemas.js";
 export { parseScript } from "./parser.js";
+export { transformScript } from "./transformer.js";

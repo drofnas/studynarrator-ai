@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const SCRIPT_GRAMMAR_VERSION = 1;
 export const CIR_SCHEMA_VERSION = 1;
+export const LEXICON_TRANSFORM_VERSION = 1;
 
 export const SpeakerIdSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/u);
 
@@ -127,3 +128,86 @@ export const ParseScriptResultSchema = z.object({
   warnings: z.array(DiagnosticSchema)
 }).strict();
 export type ParseScriptResult = z.infer<typeof ParseScriptResultSchema>;
+
+export const LexiconScopeSchema = z.enum(["global", "project"]);
+export const LexiconEntryTypeSchema = z.enum(["exactTerm", "exactPhrase", "namedSense"]);
+
+export const LexiconEntrySchema = z.object({
+  id: z.string().min(1),
+  scope: LexiconScopeSchema,
+  entryType: LexiconEntryTypeSchema,
+  displayText: z.string().min(1),
+  senseId: z.string().regex(/^[A-Za-z0-9_-]+$/u).optional(),
+  spokenText: z.string().trim().min(1),
+  caseSensitive: z.boolean(),
+  wholeWord: z.boolean(),
+  priority: z.number().int(),
+  enabled: z.boolean(),
+  notes: z.string(),
+  createdAt: z.iso.datetime({ offset: true }),
+  updatedAt: z.iso.datetime({ offset: true })
+}).strict().superRefine((entry, context) => {
+  if (entry.entryType === "namedSense" && !entry.senseId) {
+    context.addIssue({ code: "custom", message: "Named-sense entries require a sense ID.", path: ["senseId"] });
+  }
+  if (entry.entryType !== "namedSense" && entry.senseId !== undefined) {
+    context.addIssue({ code: "custom", message: "Only named-sense entries may define a sense ID.", path: ["senseId"] });
+  }
+});
+export type LexiconEntry = z.infer<typeof LexiconEntrySchema>;
+
+export const TransformScriptInputSchema = z.object({
+  parsedScript: ParseScriptResultSchema,
+  entries: z.array(LexiconEntrySchema)
+}).strict();
+export type TransformScriptInput = z.infer<typeof TransformScriptInputSchema>;
+
+export const TransformDiagnosticSchema = z.object({
+  code: z.string().regex(/^[A-Z][A-Z0-9_]*$/u),
+  message: z.string().min(1),
+  nodeOrdinal: z.number().int().positive(),
+  range: SourceRangeSchema,
+  sourceStartOffset: z.number().int().nonnegative(),
+  sourceEndOffset: z.number().int().nonnegative(),
+  offendingText: z.string().min(1),
+  suggestion: z.string().min(1)
+}).strict();
+export type TransformDiagnostic = z.infer<typeof TransformDiagnosticSchema>;
+
+export const LexiconMatchAuditSchema = z.object({
+  entryId: z.string().min(1),
+  scope: LexiconScopeSchema,
+  entryType: LexiconEntryTypeSchema,
+  displayText: z.string().min(1),
+  senseId: z.string().optional(),
+  originalText: z.string().min(1),
+  replacement: z.string().min(1),
+  nodeOrdinal: z.number().int().positive(),
+  range: SourceRangeSchema,
+  sourceStartOffset: z.number().int().nonnegative(),
+  sourceEndOffset: z.number().int().positive()
+}).strict();
+export type LexiconMatchAudit = z.infer<typeof LexiconMatchAuditSchema>;
+
+export const TransformedSpeechSegmentSchema = z.object({
+  nodeOrdinal: z.number().int().positive(),
+  speakerId: SpeakerIdSchema,
+  sourceRange: SourceRangeSchema,
+  readableText: z.string().min(1),
+  ttsText: z.string().min(1),
+  matches: z.array(LexiconMatchAuditSchema)
+}).strict();
+export type TransformedSpeechSegment = z.infer<typeof TransformedSpeechSegmentSchema>;
+
+export const TransformScriptResultSchema = z.object({
+  transformVersion: z.literal(LEXICON_TRANSFORM_VERSION),
+  source: z.string(),
+  segments: z.array(TransformedSpeechSegmentSchema),
+  readableTranscript: z.string(),
+  ttsTranscript: z.string(),
+  matches: z.array(LexiconMatchAuditSchema),
+  errors: z.array(TransformDiagnosticSchema),
+  warnings: z.array(TransformDiagnosticSchema),
+  synthesisReady: z.boolean()
+}).strict();
+export type TransformScriptResult = z.infer<typeof TransformScriptResultSchema>;
