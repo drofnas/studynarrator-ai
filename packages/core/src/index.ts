@@ -22,6 +22,7 @@ export {
   SourceRangeSchema,
   SpeakerIdSchema,
   SpeechNodeSchema,
+  SYSTEM_DEFAULT_SPEAKER_ID,
   TransformDiagnosticSchema,
   TransformScriptInputSchema,
   TransformScriptResultSchema,

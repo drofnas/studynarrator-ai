@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { ParseScriptInputSchema, ParseScriptResultSchema, parseScript } from "./index.js";
+import { ParseScriptInputSchema, ParseScriptResultSchema, SYSTEM_DEFAULT_SPEAKER_ID, parseScript } from "./index.js";
 
 const fixture = (name: string) => readFileSync(resolve(process.cwd(), "fixtures/gates", name), "utf8");
 const expected = (name: string): unknown => JSON.parse(readFileSync(resolve(process.cwd(), "fixtures/gates/expected", name), "utf8"));
@@ -173,14 +173,59 @@ describe("G02 script parser", () => {
     expect(result.nodes[0]).toMatchObject({ type: "speech", readableText: source.slice(source.indexOf("]") + 2), annotations: [] });
   });
 
-  it("uses an optional default speaker and blocks unassigned leading text", () => {
-    const withoutDefault = parseScript({ source: "Opening text.\n[speaker_teacher] Assigned." });
-    expect(withoutDefault.errors[0]?.code).toBe("MISSING_DEFAULT_SPEAKER");
-    expect(withoutDefault.nodes.filter((node) => node.type === "speech")).toHaveLength(1);
+  it("uses the system narrator by default and honors explicit overrides", () => {
+    expect(SYSTEM_DEFAULT_SPEAKER_ID).toBe("narrator");
 
-    const withDefault = parseScript({ source: "Opening text.", defaultSpeakerId: "narrator" });
-    expect(withDefault.errors).toEqual([]);
-    expect(withDefault.discoveries.speakers.map(({ id }) => id)).toEqual(["narrator"]);
+    const systemDefault = parseScript({ source: "Opening text.\n[speaker_teacher] Assigned." });
+    expect(systemDefault.errors).toEqual([]);
+    expect(systemDefault.nodes.filter((node) => node.type === "speech").map(({ speakerId }) => speakerId)).toEqual([
+      "narrator",
+      "teacher"
+    ]);
+    expect(systemDefault.discoveries.speakers.map(({ id }) => id)).toEqual(["narrator", "teacher"]);
+
+    const override = parseScript({ source: "Opening text.\n[speaker_teacher] Assigned.", defaultSpeakerId: "host" });
+    expect(override.errors).toEqual([]);
+    expect(override.nodes.filter((node) => node.type === "speech").map(({ speakerId }) => speakerId)).toEqual([
+      "host",
+      "teacher"
+    ]);
+    expect(override.discoveries.speakers.map(({ id }) => id)).toEqual(["host", "teacher"]);
+  });
+
+  it("parses bare scripts with structure, annotations, and pauses under the system narrator", () => {
+    const source = "Introduction.\n\n[section: Topic]\nRead {{resume|cv}}.\n[pause_short] Continue.";
+    const result = parseScript({ source });
+
+    expect(result.errors).toEqual([]);
+    expect(result.discoveries.speakers.map(({ id }) => id)).toEqual(["narrator"]);
+    expect(result.nodes.map((node) => node.type === "speech" ? `${node.speakerId}: ${node.readableText}` : node.type)).toEqual([
+      "narrator: Introduction.",
+      "paragraphBreak",
+      "section",
+      "narrator: Read resume.",
+      "pause",
+      "narrator: Continue."
+    ]);
+    expect(result.summary).toMatchObject({
+      speakerCount: 1,
+      pauseIdCount: 1,
+      sectionCount: 1,
+      speechSegmentCount: 3,
+      pronunciationAnnotationCount: 1
+    });
+  });
+
+  it("parses hundreds of bare lines without missing-speaker diagnostics or source loss", () => {
+    const source = Array.from({ length: 783 }, (_, index) => `Study guide line ${String(index + 1)}.`).join("\n");
+    const first = parseScript({ source });
+    const second = parseScript({ source });
+
+    expect(first).toEqual(second);
+    expect(first.source).toBe(source);
+    expect(first.errors).toEqual([]);
+    expect(first.summary).toMatchObject({ speakerCount: 1, speechSegmentCount: 783 });
+    expect(first.nodes.filter((node) => node.type === "speech").every(({ speakerId }) => speakerId === "narrator")).toBe(true);
   });
 
   it("preserves Unicode speech", () => {

@@ -3,6 +3,7 @@ import { z } from "zod";
 export const SCRIPT_GRAMMAR_VERSION = 1;
 export const CIR_SCHEMA_VERSION = 1;
 export const LEXICON_TRANSFORM_VERSION = 1;
+export const SYSTEM_DEFAULT_SPEAKER_ID = "narrator";
 
 export const SpeakerIdSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/u);
 

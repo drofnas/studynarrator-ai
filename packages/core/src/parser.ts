@@ -3,6 +3,7 @@ import {
   ParseScriptInputSchema,
   ParseScriptResultSchema,
   SCRIPT_GRAMMAR_VERSION,
+  SYSTEM_DEFAULT_SPEAKER_ID,
   type CirNode,
   type ParseDiagnostic,
   type ParseScriptInput,
@@ -189,6 +190,7 @@ function parseSpeechText(
 export function parseScript(input: ParseScriptInput): ParseScriptResult {
   const parsedInput = ParseScriptInputSchema.parse(input);
   const { source, defaultSpeakerId, ignoredDiagnostics = [] } = parsedInput;
+  const effectiveDefaultSpeakerId = defaultSpeakerId ?? SYSTEM_DEFAULT_SPEAKER_ID;
   const lines = sourceLines(source);
   const nodes: CirNode[] = [];
   const errors: ParseDiagnostic[] = [];
@@ -197,7 +199,7 @@ export function parseScript(input: ParseScriptInput): ParseScriptResult {
   const pauseMap = new Map<string, MutableNamedDiscovery>();
   const sectionMap = new Map<string, MutableSectionDiscovery>();
   const pronunciationDiscoveries: ParseScriptResult["discoveries"]["pronunciations"] = [];
-  let activeSpeaker = defaultSpeakerId;
+  let activeSpeaker = effectiveDefaultSpeakerId;
   let blankStart: number | undefined;
 
   function nextOrdinal(): number {
@@ -265,18 +267,6 @@ export function parseScript(input: ParseScriptInput): ParseScriptResult {
   }
 
   function addSpeechSegment(rawText: string, lineNumber: number, startColumn: number, lineText: string): void {
-    if (!activeSpeaker) {
-      recordError(diagnostic(
-        "MISSING_DEFAULT_SPEAKER",
-        "Speech appears before a speaker is selected.",
-        lineNumber,
-        startColumn,
-        lineText,
-        "Add a [speaker_name] directive before this text or provide a default speaker."
-      ));
-      return;
-    }
-
     const speech = parseSpeechText(rawText, lineNumber, startColumn, lineText);
     for (const error of speech.errors) recordError(error);
     if (speech.readableText.length === 0) return;
@@ -292,7 +282,7 @@ export function parseScript(input: ParseScriptInput): ParseScriptResult {
       readableText: speech.readableText,
       annotations: speech.annotations
     });
-    if (activeSpeaker === defaultSpeakerId && !speakerMap.has(activeSpeaker)) {
+    if (activeSpeaker === effectiveDefaultSpeakerId && !speakerMap.has(activeSpeaker)) {
       recordSpeaker(activeSpeaker, speechRange, lineText);
     }
     for (const annotation of speech.annotations) {

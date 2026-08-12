@@ -229,11 +229,29 @@ describe("G03 lexicon transformation", () => {
   });
 
   it("keeps parser failures blocking even when lexicon transformation itself succeeds", () => {
-    const parsedScript = parseScript({ source: "Unassigned speech." });
+    const parsedScript = parseScript({ source: "[section Missing colon]" });
     const result = transformScript({ parsedScript, entries: [] });
     expect(parsedScript.errors).toHaveLength(1);
     expect(result.errors).toEqual([]);
     expect(result.synthesisReady).toBe(false);
+  });
+
+  it("transforms a bare script under the system narrator", () => {
+    const source = "SQL introduction.\n\nContinue {{resume|process}}.";
+    const parsedScript = parseScript({ source });
+    const result = transformScript({
+      parsedScript,
+      entries: [
+        entry({ id: "sql", displayText: "SQL", spokenText: "sequel" }),
+        entry({ id: "resume-process", entryType: "namedSense", displayText: "resume", senseId: "process", spokenText: "ree-zoom" })
+      ]
+    });
+
+    expect(parsedScript.errors).toEqual([]);
+    expect(result.segments.map(({ speakerId }) => speakerId)).toEqual(["narrator", "narrator"]);
+    expect(result.readableTranscript).toBe("SQL introduction.\nContinue resume.");
+    expect(result.ttsTranscript).toBe("sequel introduction.\nContinue ree-zoom.");
+    expect(result.synthesisReady).toBe(true);
   });
 
   it("validates named-sense fields and ignores empty replacements", () => {
