@@ -1,0 +1,45 @@
+.rail { position: relative; border-top: 1px solid var(--line); }
+.rail::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 126px;
+  width: 1px;
+  background: var(--line);
+  content: "";
+}
+
+.row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 154px;
+  align-items: center;
+  min-height: 62px;
+  border-bottom: 1px solid var(--line);
+  font-size: 1.04rem;
+}
+
+.statusValue, .metadataRow strong {
+  position: relative;
+  display: inline-flex;
+  gap: 12px;
+  align-items: center;
+  justify-self: end;
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+}
+
+.statusLamp {
+  z-index: 1;
+  width: 13px;
+  height: 13px;
+  background: var(--paper);
+  border: 2px solid var(--line);
+  border-radius: 50%;
+}
+
+.statusPass { color: var(--signal); }
+.statusPass .statusLamp { background: var(--signal); border-color: var(--signal); box-shadow: 0 0 0 5px var(--signal-pale); }
+.statusFail { color: var(--fault); }
+.statusFail .statusLamp { background: var(--fault); border-color: var(--fault); box-shadow: 0 0 0 5px #f1d7da; }

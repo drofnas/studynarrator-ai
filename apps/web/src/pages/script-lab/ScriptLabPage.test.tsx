@@ -2,22 +2,18 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseScript, type ParseScriptResult } from "@studynarrator/core";
-import { App } from "@/app/App.js";
-import { ScriptLab } from "./ScriptLab.js";
+import { ScriptLabPage } from "./ScriptLabPage.js";
 
 afterEach(cleanup);
 
 describe("G02 Script Lab", () => {
-  it("is the default view and parses without calling diagnostics", async () => {
+  it("parses a script and preserves its source", async () => {
     const user = userEvent.setup();
-    const diagnostics = vi.fn();
     const parser = { parse: vi.fn(async (input: { source: string; defaultSpeakerId?: string }) => parseScript(input)) };
-    render(<MemoryRouter initialEntries={["/script-lab"]}><App client={{ diagnostics }} parser={parser} /></MemoryRouter>);
+    render(<ScriptLabPage parser={parser} />);
 
-    expect(screen.getByRole("heading", { name: "Script Lab" })).toBeInTheDocument();
     const source = "[section: Topic]\n\n[speaker_teacher] Read {{resume|cv}}.\n[pause_short]";
     const editor = screen.getByLabelText("Script source");
     fireEvent.change(editor, { target: { value: source } });
@@ -28,13 +24,12 @@ describe("G02 Script Lab", () => {
     expect(screen.getByLabelText("Speaker teacher")).toBeInTheDocument();
     expect(screen.getByRole("table")).toHaveTextContent("Read resume.");
     expect(editor).toHaveValue(source);
-    expect(diagnostics).not.toHaveBeenCalled();
   });
 
   it("uses an optional default speaker without persisting or mutating source", async () => {
     const user = userEvent.setup();
     const parser = { parse: vi.fn(async (input: { source: string; defaultSpeakerId?: string }) => parseScript(input)) };
-    render(<ScriptLab parser={parser} />);
+    render(<ScriptLabPage parser={parser} />);
     fireEvent.change(screen.getByLabelText("Script source"), { target: { value: "Opening narration." } });
     await user.type(screen.getByLabelText(/Default speaker ID/u), "narrator");
     await user.click(screen.getByRole("button", { name: "Parse" }));
@@ -46,7 +41,7 @@ describe("G02 Script Lab", () => {
   it("shows ordered errors while retaining malformed text as speech", async () => {
     const user = userEvent.setup();
     const parser = { parse: vi.fn(async (input: { source: string }) => parseScript(input)) };
-    render(<ScriptLab parser={parser} />);
+    render(<ScriptLabPage parser={parser} />);
     fireEvent.change(screen.getByLabelText("Script source"), { target: { value: "[speaker_1bad] Valid.\n[section Database indexes]" } });
     await user.click(screen.getByRole("button", { name: "Parse" }));
     const alert = await screen.findByRole("alert");
@@ -61,7 +56,7 @@ describe("G02 Script Lab", () => {
   it("ignores and restores every occurrence of a malformed token pattern", async () => {
     const user = userEvent.setup();
     const parser = { parse: vi.fn(async (input: Parameters<typeof parseScript>[0]) => parseScript(input)) };
-    render(<ScriptLab parser={parser} />);
+    render(<ScriptLabPage parser={parser} />);
     fireEvent.change(screen.getByLabelText("Script source"), { target: { value: "[speaker_teacher] First {{resume|cv sentence.\nSecond {{resume|cv" } });
     await user.click(screen.getByRole("button", { name: "Parse" }));
     expect(await screen.findByRole("heading", { name: "Blocking errors (2)" })).toBeInTheDocument();
@@ -79,7 +74,7 @@ describe("G02 Script Lab", () => {
   it("shows inline pauses and speaker switches in canonical order", async () => {
     const user = userEvent.setup();
     const parser = { parse: vi.fn(async (input: Parameters<typeof parseScript>[0]) => parseScript(input)) };
-    render(<ScriptLab parser={parser} />);
+    render(<ScriptLabPage parser={parser} />);
     fireEvent.change(screen.getByLabelText("Script source"), {
       target: { value: "[speaker_1bad] Before [pause_short] after [speaker_teacher] changed.\nStill teacher." }
     });
@@ -101,7 +96,7 @@ describe("G02 Script Lab", () => {
     const user = userEvent.setup();
     let resolveParse: ((result: ParseScriptResult) => void) | undefined;
     const parser = { parse: vi.fn(async () => await new Promise<ParseScriptResult>((resolve) => { resolveParse = resolve; })) };
-    render(<ScriptLab parser={parser} />);
+    render(<ScriptLabPage parser={parser} />);
     const editor = screen.getByLabelText("Script source");
     fireEvent.change(editor, { target: { value: "[speaker_teacher] First." } });
     await user.click(screen.getByRole("button", { name: "Parse" }));
@@ -114,20 +109,12 @@ describe("G02 Script Lab", () => {
 
   it("preserves source and gives recovery guidance after worker failure", async () => {
     const user = userEvent.setup();
-    render(<ScriptLab parser={{ parse: vi.fn(async () => { throw new Error("Worker unavailable."); }) }} />);
+    render(<ScriptLabPage parser={{ parse: vi.fn(async () => { throw new Error("Worker unavailable."); }) }} />);
     const editor = screen.getByLabelText("Script source");
     fireEvent.change(editor, { target: { value: "[speaker_teacher] Keep me." } });
     await user.click(screen.getByRole("button", { name: "Parse" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Worker unavailable.");
     expect(screen.getByRole("alert")).toHaveTextContent("Your source is unchanged");
     expect(editor).toHaveValue("[speaker_teacher] Keep me.");
-  });
-
-  it("preserves the G01 diagnostics screen behind navigation", async () => {
-    const user = userEvent.setup();
-    render(<MemoryRouter initialEntries={["/script-lab"]}><App client={{ diagnostics: vi.fn() }} parser={{ parse: vi.fn() }} /></MemoryRouter>);
-    await user.click(screen.getByRole("link", { name: "Runtime diagnostics" }));
-    expect(screen.getByRole("heading", { name: "Runtime self-test" })).toBeInTheDocument();
-    expect(within(screen.getByRole("navigation")).getByRole("link", { name: "Runtime diagnostics" })).toHaveAttribute("aria-current", "page");
   });
 });

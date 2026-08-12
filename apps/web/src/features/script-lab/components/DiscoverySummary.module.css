@@ -1,0 +1,8 @@
+.grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 1px; margin-top: 24px; background: var(--line); }
+.grid article { display: grid; gap: 5px; min-width: 0; padding: 14px 10px; background: #eef4f4; text-align: center; }
+.grid strong { color: var(--signal); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 1.45rem; }
+.grid span { color: #557080; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; }
+
+@media (max-width: 720px) {
+  .grid { grid-template-columns: repeat(2, 1fr); }
+}

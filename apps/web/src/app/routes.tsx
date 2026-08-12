@@ -1,7 +1,7 @@
 import { Navigate, Route, Routes } from "react-router";
 import type { SystemClient } from "@studynarrator/shared-types";
-import { DiagnosticsView } from "@/DiagnosticsView.js";
-import { ScriptLab } from "@/ScriptLab.js";
+import { DiagnosticsPage } from "@/pages/diagnostics/DiagnosticsPage.js";
+import { ScriptLabPage } from "@/pages/script-lab/ScriptLabPage.js";
 import type { ScriptParser } from "@/workers/parser/parserClient.js";
 import { AppShell } from "./AppShell.js";
 
@@ -20,8 +20,8 @@ export function AppRoutes({ client, parser }: AppRoutesProps) {
     <Routes>
       <Route element={<AppShell />}>
         <Route index element={<Navigate to={APP_PATHS.scriptLab} replace />} />
-        <Route path={APP_PATHS.scriptLab} element={<ScriptLab parser={parser} />} />
-        <Route path={APP_PATHS.diagnostics} element={<DiagnosticsView client={client} />} />
+        <Route path={APP_PATHS.scriptLab} element={<ScriptLabPage parser={parser} />} />
+        <Route path={APP_PATHS.diagnostics} element={<DiagnosticsPage client={client} />} />
         <Route path="*" element={<Navigate to={APP_PATHS.scriptLab} replace />} />
       </Route>
     </Routes>

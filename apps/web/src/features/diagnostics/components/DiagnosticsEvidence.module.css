@@ -1,0 +1,7 @@
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; margin-top: 28px; background: var(--line); }
+.grid article { min-width: 0; padding: 18px; background: #eef4f4; }
+.grid p { margin: 0 0 8px; color: #557080; font-size: 0.76rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+
+@media (max-width: 720px) {
+  .grid { grid-template-columns: 1fr; }
+}

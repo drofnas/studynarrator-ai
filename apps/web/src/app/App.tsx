@@ -1,7 +1,7 @@
 import type { SystemClient } from "@studynarrator/shared-types";
 import { AppRoutes } from "./routes.js";
 import type { ScriptParser } from "@/workers/parser/parserClient.js";
-import "@/styles.css";
+import "./styles/global.css";
 
 export interface AppProps {
   client: SystemClient;

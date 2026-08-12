@@ -1,0 +1,33 @@
+.panel {
+  margin-top: 28px;
+  padding: clamp(24px, 5vw, 48px);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  box-shadow: 10px 10px 0 #d2dfe2;
+}
+
+.heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: end;
+  margin-bottom: 28px;
+}
+
+.kicker {
+  margin: 0 0 10px;
+  color: var(--signal);
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.title { margin: 0; font-size: clamp(1.65rem, 3vw, 2.4rem); letter-spacing: -0.035em; }
+
+@media (max-width: 720px) {
+  .panel { padding: 22px; box-shadow: 6px 6px 0 #d2dfe2; }
+  .heading { align-items: stretch; flex-direction: column; }
+  .heading button { width: 100%; }
+}

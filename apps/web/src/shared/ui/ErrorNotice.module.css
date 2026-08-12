@@ -1,0 +1,9 @@
+.notice {
+  display: grid;
+  gap: 6px;
+  margin-top: 24px;
+  padding: 16px 18px;
+  color: #681f28;
+  background: #f7e6e8;
+  border-left: 4px solid var(--fault);
+}

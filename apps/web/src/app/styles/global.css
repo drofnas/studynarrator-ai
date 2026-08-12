@@ -1,0 +1,40 @@
+:root {
+  color: #17304b;
+  background: #eaf0f2;
+  font-family: "Avenir Next", Avenir, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --ink: #17304b;
+  --paper: #f8fbfb;
+  --mist: #eaf0f2;
+  --signal: #0a827d;
+  --signal-pale: #c7e4e1;
+  --copper: #d56a43;
+  --fault: #a63d49;
+  --line: #b9c8ce;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; min-height: 100vh; }
+button, input, textarea, select { font: inherit; }
+
+button {
+  min-height: 46px;
+  padding: 0 20px;
+  color: white;
+  background: var(--ink);
+  border: 2px solid var(--ink);
+  border-radius: 2px;
+  cursor: pointer;
+  font-weight: 700;
+  transition: transform 140ms ease, background 140ms ease;
+}
+
+button:hover:not(:disabled) { background: var(--signal); transform: translateY(-2px); }
+button:focus-visible { outline: 3px solid var(--copper); outline-offset: 3px; }
+button:disabled { cursor: wait; opacity: 0.6; }
+code { display: block; overflow-wrap: anywhere; color: var(--ink); font-size: 0.78rem; line-height: 1.55; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+}
