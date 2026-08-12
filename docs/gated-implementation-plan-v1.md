@@ -312,7 +312,7 @@ The first unchecked item is the next gate. Only that gate may be implemented or 
 - [x] G01 — Walking skeleton and architecture-risk spike
 - [x] G02 — Script parser and canonical intermediate representation
 - [x] G03 — Lexicon, named senses, and transcript transformation
-- [ ] G04 — SQLite project persistence and migrations
+- [x] G04 — SQLite project persistence and migrations
 - [ ] G05 — Project authoring, discovery, configuration, and dry run
 - [ ] G06 — Speaches connection profiles and diagnostics
 - [ ] G07 — Quick Scratchpad and first audible output
