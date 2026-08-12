@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   DEFAULT_PARAGRAPH_PAUSE_DURATION_MS,
   DEFAULT_PARAGRAPH_PAUSE_ID,
@@ -9,6 +9,7 @@ import {
 } from "@studynarrator/core";
 import type { ScriptAnalyzer } from "@/workers/parser/parserClient.js";
 import type { ScriptAnalysisResult } from "@/workers/parser/parserWorkerProtocol.js";
+import type { SystemPacingDefaults } from "@studynarrator/shared-types";
 
 export interface LexiconEntryDraft {
   scope: LexiconEntry["scope"];
@@ -34,19 +35,26 @@ export type ScriptLabState =
   | { phase: "stale" }
   | { phase: "error"; message: string };
 
-export function useScriptLab(analyzer: ScriptAnalyzer) {
+export function useScriptLab(analyzer: ScriptAnalyzer, systemPacing: SystemPacingDefaults = { enabled: true, durationMs: DEFAULT_PARAGRAPH_PAUSE_DURATION_MS }) {
   const [source, setSourceState] = useState("");
   const [defaultSpeakerId, setDefaultSpeakerIdState] = useState("");
   const [paragraphPauseEnabled, setParagraphPauseEnabledState] = useState(true);
+  const [paragraphPauseDurationMs, setParagraphPauseDurationMs] = useState(DEFAULT_PARAGRAPH_PAUSE_DURATION_MS);
   const [ignoredDiagnostics, setIgnoredDiagnostics] = useState<IgnoredDiagnostic[]>([]);
   const [entries, setEntries] = useState<LexiconEntry[]>([]);
   const [removedEntries, setRemovedEntries] = useState<LexiconEntry[]>([]);
   const [lexiconError, setLexiconError] = useState<string>();
   const [state, setState] = useState<ScriptLabState>({ phase: "idle" });
-  const currentInput = useRef({ source, defaultSpeakerId, entries, paragraphPauseEnabled });
+  const currentInput = useRef({ source, defaultSpeakerId, entries, paragraphPauseEnabled, paragraphPauseDurationMs });
   const analysisRevision = useRef(0);
   const nextEntryId = useRef(1);
-  currentInput.current = { source, defaultSpeakerId, entries, paragraphPauseEnabled };
+  currentInput.current = { source, defaultSpeakerId, entries, paragraphPauseEnabled, paragraphPauseDurationMs };
+
+  useEffect(() => {
+    if (source || state.phase !== "idle") return;
+    setParagraphPauseEnabledState(systemPacing.enabled);
+    setParagraphPauseDurationMs(systemPacing.durationMs);
+  }, [source, state.phase, systemPacing]);
 
   function markInputChanged(): void {
     analysisRevision.current += 1;
@@ -146,7 +154,7 @@ export function useScriptLab(analyzer: ScriptAnalyzer) {
   }
 
   async function runParser(nextIgnoredDiagnostics = ignoredDiagnostics, nextEntries = entries) {
-    const submitted = { source, defaultSpeakerId, entries: nextEntries, paragraphPauseEnabled };
+    const submitted = { source, defaultSpeakerId, entries: nextEntries, paragraphPauseEnabled, paragraphPauseDurationMs };
     const submittedRevision = analysisRevision.current + 1;
     analysisRevision.current = submittedRevision;
     setState({ phase: "parsing" });
@@ -157,7 +165,7 @@ export function useScriptLab(analyzer: ScriptAnalyzer) {
         paragraphPause: {
           enabled: submitted.paragraphPauseEnabled,
           pauseId: DEFAULT_PARAGRAPH_PAUSE_ID,
-          durationMs: DEFAULT_PARAGRAPH_PAUSE_DURATION_MS
+          durationMs: submitted.paragraphPauseDurationMs
         },
         ...(submitted.defaultSpeakerId.trim() ? { defaultSpeakerId: submitted.defaultSpeakerId.trim() } : {}),
         ...(nextIgnoredDiagnostics.length > 0 ? { ignoredDiagnostics: nextIgnoredDiagnostics } : {})
@@ -168,6 +176,7 @@ export function useScriptLab(analyzer: ScriptAnalyzer) {
         || currentInput.current.defaultSpeakerId !== submitted.defaultSpeakerId
         || currentInput.current.entries !== submitted.entries
         || currentInput.current.paragraphPauseEnabled !== submitted.paragraphPauseEnabled
+        || currentInput.current.paragraphPauseDurationMs !== submitted.paragraphPauseDurationMs
       ) {
         setState({ phase: "stale" });
         return;
@@ -205,6 +214,7 @@ export function useScriptLab(analyzer: ScriptAnalyzer) {
     lexiconError,
     pacingResult: result?.pacingResult,
     paragraphPauseEnabled,
+    paragraphPauseDurationMs,
     parseResult: result?.parseResult,
     removeEntry,
     removedEntries,

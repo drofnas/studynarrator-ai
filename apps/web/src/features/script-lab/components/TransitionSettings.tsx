@@ -1,15 +1,13 @@
-import {
-  DEFAULT_PARAGRAPH_PAUSE_DURATION_MS,
-  DEFAULT_PARAGRAPH_PAUSE_ID
-} from "@studynarrator/core";
+import { DEFAULT_PARAGRAPH_PAUSE_ID } from "@studynarrator/core";
 import styles from "./TransitionSettings.module.css";
 
 interface TransitionSettingsProps {
   paragraphPauseEnabled: boolean;
+  paragraphPauseDurationMs: number;
   onParagraphPauseEnabledChange: (enabled: boolean) => void;
 }
 
-export function TransitionSettings({ paragraphPauseEnabled, onParagraphPauseEnabledChange }: TransitionSettingsProps) {
+export function TransitionSettings({ paragraphPauseDurationMs, paragraphPauseEnabled, onParagraphPauseEnabledChange }: TransitionSettingsProps) {
   return (
     <section className={styles.settings} aria-labelledby="transition-settings-heading">
       <div className={styles.heading}>
@@ -17,7 +15,7 @@ export function TransitionSettings({ paragraphPauseEnabled, onParagraphPauseEnab
           <p>In-memory pacing</p>
           <h3 id="transition-settings-heading">Transition settings</h3>
         </div>
-        <span><code>{DEFAULT_PARAGRAPH_PAUSE_ID}</code> · {DEFAULT_PARAGRAPH_PAUSE_DURATION_MS} ms</span>
+        <span><code>{DEFAULT_PARAGRAPH_PAUSE_ID}</code> · {paragraphPauseDurationMs} ms</span>
       </div>
       <label className={styles.toggle}>
         <input
@@ -30,7 +28,7 @@ export function TransitionSettings({ paragraphPauseEnabled, onParagraphPauseEnab
           <small>Resolve eligible blank-line boundaries to the medium pause. Explicit pause directives take precedence.</small>
         </span>
       </label>
-      <p className={styles.help}>This G03 preview does not generate audio. System Settings will provide the default duration, and projects will keep an independent override.</p>
+      <p className={styles.help}>This projectless preview starts from the saved System Settings value and does not generate audio. Projects keep independent overrides.</p>
     </section>
   );
 }

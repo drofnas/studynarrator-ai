@@ -1,0 +1,17 @@
+.page { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 22px; }
+.page header { grid-column: 1 / -1; padding-bottom: 22px; border-bottom: 2px solid var(--ink); }
+.page header p, .page section > div p { margin: 0 0 7px; color: var(--signal); font: 800 0.68rem ui-monospace, monospace; letter-spacing: 0.12em; text-transform: uppercase; }
+.page header h2 { margin: 0; font: 700 clamp(2.7rem, 6vw, 5.2rem)/0.9 "Avenir Next Condensed", "Arial Narrow", sans-serif; letter-spacing: -0.045em; }
+.page header span { display: block; max-width: 650px; margin-top: 12px; color: #557080; }
+.page section { padding: 24px; background: var(--paper); border: 1px solid var(--line); border-top: 5px solid var(--signal); }
+.page section h3 { margin: 0 0 18px; }
+.page section label { display: grid; gap: 6px; max-width: 480px; margin: 14px 0; font-size: 0.78rem; font-weight: 800; }
+.page section label input { padding: 10px 12px; color: var(--ink); background: white; border: 1px solid #91a9b2; }
+.page section label input:focus { outline: 3px solid var(--signal-pale); border-color: var(--signal); }
+.check { display: flex !important; align-items: center; gap: 8px !important; }
+.check input { width: auto; }
+.error { color: var(--fault); font-weight: 800; }
+.status { color: #557080; font-size: 0.8rem; }
+.page aside { align-self: start; padding: 20px; color: white; background: var(--ink); border-top: 5px solid var(--copper); }
+.page aside p { color: #b9d4db; line-height: 1.55; }
+@media (max-width: 740px) { .page { grid-template-columns: 1fr; } .page header { grid-column: 1; } }

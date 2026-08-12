@@ -1,0 +1,139 @@
+.page { display: grid; gap: 22px; }
+.pageHeader { display: flex; justify-content: space-between; gap: 32px; align-items: end; padding-bottom: 20px; border-bottom: 2px solid var(--ink); }
+.pageHeader h2 { margin: 0; font-family: "Avenir Next Condensed", "Arial Narrow", sans-serif; font-size: clamp(2.7rem, 6vw, 5.2rem); letter-spacing: -0.045em; line-height: 0.9; }
+.pageHeader p:last-child { max-width: 660px; margin: 12px 0 0; color: #557080; }
+.kicker, .sectionHeading span { margin: 0 0 7px; color: var(--signal); font-family: ui-monospace, "SFMono-Regular", monospace; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
+.status { display: grid; min-width: 190px; color: white; background: var(--ink); border-top: 5px solid var(--signal); }
+.status span, .status strong { padding: 9px 14px; }
+.status span { border-bottom: 1px solid #577083; font-size: 0.75rem; }
+.status strong { color: #85e5dc; }
+.status[data-state="invalid"] strong, .status[data-state="failed"] strong { color: #ffc1b3; }
+.notice { min-height: 20px; margin: -8px 0 0; color: #557080; font-size: 0.82rem; font-weight: 700; }
+.alert { display: grid; grid-template-columns: 1fr auto; gap: 8px 20px; padding: 16px 18px; color: #701f2c; background: #fae8e8; border-left: 5px solid var(--fault); }
+.alert ul { grid-column: 1; margin: 0; padding-left: 20px; }
+.alert button { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+.workspace { display: grid; grid-template-columns: 230px minmax(410px, 1fr) 310px; gap: 18px; align-items: start; }
+.projectRail, .configRail > section, .projectIdentity, .scriptPanel, .lexiconPanel, .validationPanel, .empty { background: #f8fbfb; border: 1px solid var(--line); }
+.projectRail { position: sticky; top: 14px; padding: 18px; border-top: 5px solid var(--copper); }
+.projectRail h3, .configRail h3, .scriptPanel h3, .lexiconPanel h3, .validationPanel h3, .empty h3 { margin: 0; font-size: 1.05rem; }
+.projectRail label, .projectIdentity label, .configRail label, .lexiconPanel label, .sample label { display: grid; gap: 5px; margin-top: 12px; font-size: 0.72rem; font-weight: 800; }
+.projectRail input, .projectIdentity input, .configRail input, .configRail select, .lexiconPanel input, .lexiconPanel select, .lexiconPanel textarea, .searchBar input { width: 100%; padding: 9px 10px; color: var(--ink); background: white; border: 1px solid #91a9b2; border-radius: 0; }
+.projectRail input:focus, .projectIdentity input:focus, .configRail input:focus, .configRail select:focus, .lexiconPanel input:focus, .lexiconPanel select:focus, .lexiconPanel textarea:focus, .searchBar input:focus { outline: 3px solid var(--signal-pale); border-color: var(--signal); }
+.projectRail > button { width: 100%; margin-top: 12px; }
+.projectList { display: grid; gap: 7px; margin-top: 16px; }
+.projectList button { display: grid; gap: 5px; min-height: 0; padding: 11px; color: var(--ink); text-align: left; background: white; border: 1px solid var(--line); }
+.projectList button:hover { color: white; }
+.projectList span { font-family: ui-monospace, monospace; font-size: 0.61rem; font-weight: 500; }
+.projectList .activeProject { color: white; background: var(--signal); border-color: var(--signal); }
+.editorColumn { display: grid; gap: 18px; min-width: 0; }
+.projectIdentity { padding: 16px; border-top: 5px solid var(--signal); }
+.projectIdentity { display: grid; grid-template-columns: 0.8fr 1.4fr auto; gap: 12px; align-items: end; }
+.projectIdentity label { margin: 0; }
+.actionRow { display: flex; flex-wrap: wrap; gap: 7px; }
+.actionRow button { min-height: 38px; padding: 0 12px; font-size: 0.75rem; }
+.secondary { color: var(--ink); background: transparent; }
+.danger { color: white; background: var(--fault); border-color: var(--fault); }
+.scriptPanel, .lexiconPanel, .validationPanel { padding: 18px; border-top: 5px solid var(--signal); }
+.sectionHeading { display: flex; justify-content: space-between; gap: 16px; align-items: center; margin-bottom: 14px; }
+.sectionHeading span { display: block; }
+.sectionHeading b { min-width: 34px; padding: 8px; color: white; text-align: center; background: var(--ink); }
+.fileButton { display: inline-flex !important; align-items: center; min-height: 40px; margin: 0 !important; padding: 0 14px; color: white; background: var(--ink); cursor: pointer; }
+.fileButton input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.searchBar { display: grid; grid-template-columns: 1fr 1fr auto repeat(3, auto); gap: 7px; align-items: center; margin-bottom: 10px; }
+.searchBar label { display: flex; gap: 5px; align-items: center; font-size: 0.67rem; font-weight: 700; }
+.searchBar label input { width: auto; }
+.searchBar button { min-height: 38px; padding: 0 10px; font-size: 0.7rem; }
+.sourceEditor { display: grid; grid-template-columns: 44px minmax(0, 1fr); min-height: 420px; overflow: hidden; background: #10293f; border: 1px solid #10293f; }
+.sourceEditor pre { margin: 0; padding: 14px 9px; overflow: hidden; color: #6f94a5; text-align: right; background: #10293f; border-right: 1px solid #38546a; font: 0.76rem/1.65 ui-monospace, "SFMono-Regular", monospace; user-select: none; }
+.sourceEditor textarea { width: 100%; min-height: 420px; padding: 14px 16px; color: #eaf6f5; background: #17354c; border: 0; outline: 0; resize: vertical; font: 0.82rem/1.65 ui-monospace, "SFMono-Regular", monospace; tab-size: 2; }
+.sourceEditor textarea:focus { box-shadow: inset 0 0 0 3px var(--copper); }
+.sourceActions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; align-items: center; margin-top: 9px; color: #557080; font-size: 0.7rem; }
+.sourceActions button { min-height: 34px; padding: 0 10px; font-size: 0.68rem; }
+.configRail { display: grid; gap: 14px; }
+.configRail > section { padding: 15px; border-top: 4px solid var(--copper); }
+.configRail article { margin-top: 11px; padding: 12px; background: white; border-left: 3px solid var(--signal); }
+.configRail article header { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.configRail article header span { color: #557080; font-size: 0.63rem; }
+.configRail code { display: inline; font-size: 0.7rem; }
+.sourceLinks { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.sourceLink { min-height: 26px; padding: 0 7px; color: var(--signal); background: #e8f4f3; border-color: #b5d6d2; font: 0.62rem ui-monospace, monospace; }
+.sourceLink:hover { color: white; }
+.unused { opacity: 0.64; border-left-color: var(--line) !important; }
+.inlineFields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.copyRow { display: grid; grid-template-columns: 1fr auto; gap: 6px; margin-top: 10px; }
+.copyRow button { min-height: 37px; padding: 0 10px; }
+.check { display: flex !important; grid-template-columns: auto 1fr; align-items: center; gap: 7px !important; margin-bottom: 12px; }
+.check input { width: auto; }
+.fieldError { margin: 5px 0; color: var(--fault); font-size: 0.72rem; font-weight: 800; }
+.sectionLink { display: grid; gap: 4px; width: 100%; min-height: 0; margin-top: 7px; padding: 10px; color: var(--ink); text-align: left; background: white; border: 1px solid var(--line); }
+.sectionLink:hover { color: white; }
+.sectionLink span { font-size: 0.65rem; }
+.empty { grid-column: 2 / 4; min-height: 300px; padding: 54px; border-top: 5px solid var(--signal); }
+.empty p { max-width: 540px; color: #557080; line-height: 1.6; }
+.lexiconFilters { display: grid; grid-template-columns: 1fr 180px 180px; gap: 8px; }
+.lexiconGrid { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 18px; margin-top: 14px; }
+.lexiconGrid form { padding: 15px; background: #e4edef; }
+.lexiconGrid form label:first-child { margin-top: 0; }
+.checks { display: grid; gap: 5px; margin: 12px 0; }
+.checks label { display: flex; gap: 6px; align-items: center; margin: 0; }
+.checks input { width: auto; }
+.lexiconEntries { display: grid; gap: 8px; align-content: start; }
+.lexiconEntries article { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px 14px; padding: 12px 14px; background: white; border-left: 4px solid var(--signal); }
+.lexiconEntries article > div:first-child { display: flex; gap: 10px; }
+.lexiconEntries article code { grid-column: 1; }
+.lexiconEntries article .sourceLinks { grid-column: 1; }
+.lexiconEntries article .actionRow { grid-column: 2; grid-row: 1 / span 3; align-items: center; }
+.sample { display: grid; grid-template-columns: 1.2fr 0.7fr 1.5fr; gap: 12px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+.sample label { margin: 0; }
+.sample textarea { min-height: 120px; resize: vertical; }
+.sample div { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; align-content: start; padding: 12px; background: #e4edef; }
+.sample div span { color: var(--signal); font-size: 0.63rem; font-weight: 800; text-transform: uppercase; }
+.sample div p { margin: 0; font-size: 0.78rem; line-height: 1.45; }
+.validationSummary { display: flex; justify-content: space-between; gap: 20px; padding: 14px 16px; color: white; background: var(--ink); border-left: 5px solid var(--fault); }
+.validationSummary[data-state="ready"] { border-left-color: #69d5c7; }
+.validationSummary[data-state="readyWithWarnings"] { border-left-color: var(--copper); }
+.validationSummary span { color: #b9d4db; font-size: 0.76rem; }
+.issues { display: grid; gap: 6px; padding: 0; list-style: none; }
+.issues li { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center; padding: 8px 10px; background: #fae8e8; border-left: 4px solid var(--fault); }
+.issues li[data-severity="warning"] { background: #fff1e6; border-left-color: var(--copper); }
+.issues button { min-height: 30px; padding: 0 8px; font: 0.65rem ui-monospace, monospace; }
+.score { display: grid; gap: 2px; margin-top: 14px; background: #d5e0e3; border: 1px solid #d5e0e3; }
+.scoreRow { display: grid; grid-template-columns: 40px 90px 170px repeat(3, minmax(120px, 1fr)); gap: 10px; align-items: start; min-height: 0; padding: 11px 12px; color: var(--ink); text-align: left; background: white; border: 0; border-left: 5px solid var(--signal); border-radius: 0; font-weight: 500; }
+.scoreRow:hover { color: var(--ink); background: #eef7f6; transform: none; }
+.scoreRow[data-type="section"] { grid-template-columns: 40px 90px 1fr auto; color: white; background: var(--ink); border-left-color: var(--copper); }
+.scoreRow[data-type="pause"] { grid-template-columns: 40px 90px 1fr auto; background: #e8f0f2; border-left-color: var(--copper); }
+.scoreRow[data-valid="error"] { border-left-color: var(--fault); }
+.scoreRow > b { font-family: ui-monospace, monospace; }
+.scoreType { color: var(--signal); font: 0.65rem ui-monospace, monospace; text-transform: uppercase; }
+.scoreRow[data-type="section"] .scoreType { color: #9fe2d9; }
+.scoreRow span, .scoreRow small { font-size: 0.73rem; line-height: 1.45; }
+
+@media (max-width: 1180px) {
+  .workspace { grid-template-columns: 210px minmax(0, 1fr); }
+  .configRail { grid-column: 1 / -1; grid-template-columns: repeat(3, 1fr); }
+  .empty { grid-column: 2; }
+  .searchBar { grid-template-columns: 1fr 1fr repeat(3, auto); }
+  .searchBar label { grid-column: 1 / 3; }
+  .scoreRow { grid-template-columns: 38px 82px 140px repeat(3, minmax(100px, 1fr)); }
+}
+
+@media (max-width: 820px) {
+  .pageHeader, .validationSummary { align-items: stretch; flex-direction: column; }
+  .status { min-width: 0; }
+  .workspace { grid-template-columns: 1fr; }
+  .projectRail { position: static; }
+  .editorColumn, .configRail, .empty { grid-column: 1; }
+  .configRail { grid-template-columns: 1fr; }
+  .projectIdentity { grid-template-columns: 1fr; }
+  .lexiconFilters, .lexiconGrid, .sample { grid-template-columns: 1fr; }
+  .score { overflow-x: auto; }
+  .scoreRow { min-width: 870px; }
+  .scoreRow[data-type="section"], .scoreRow[data-type="pause"] { min-width: 560px; }
+}
+
+@media (max-width: 560px) {
+  .searchBar { grid-template-columns: 1fr 1fr; }
+  .searchBar label { grid-column: 1 / -1; }
+  .sourceEditor { grid-template-columns: 36px minmax(0, 1fr); }
+  .scriptPanel, .lexiconPanel, .validationPanel { padding: 13px; }
+}

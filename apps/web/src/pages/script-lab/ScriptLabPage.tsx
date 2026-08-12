@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+import type { PersistenceClient, SystemPacingDefaults } from "@studynarrator/shared-types";
 import { CanonicalNodeTable } from "@/features/script-lab/components/CanonicalNodeTable.js";
 import { DiscoverySummary } from "@/features/script-lab/components/DiscoverySummary.js";
 import { IgnoredDiagnostics } from "@/features/script-lab/components/IgnoredDiagnostics.js";
@@ -15,10 +17,13 @@ import type { ScriptAnalyzer } from "@/workers/parser/parserClient.js";
 
 interface ScriptLabPageProps {
   analyzer: ScriptAnalyzer;
+  persistence?: PersistenceClient;
 }
 
-export function ScriptLabPage({ analyzer }: ScriptLabPageProps) {
-  const lab = useScriptLab(analyzer);
+export function ScriptLabPage({ analyzer, persistence }: ScriptLabPageProps) {
+  const [systemPacing, setSystemPacing] = useState<SystemPacingDefaults>({ enabled: true, durationMs: 750 });
+  useEffect(() => { if (persistence) void persistence.settings.getPacing().then(setSystemPacing); }, [persistence]);
+  const lab = useScriptLab(analyzer, systemPacing);
   return (
     <ContentPanel
       action={<button type="button" onClick={() => void lab.runParser()} disabled={lab.state.phase === "parsing"}>{lab.state.phase === "parsing" ? "Analyzing…" : "Analyze"}</button>}
@@ -33,6 +38,7 @@ export function ScriptLabPage({ analyzer }: ScriptLabPageProps) {
         source={lab.source}
       />
       <TransitionSettings
+        paragraphPauseDurationMs={lab.paragraphPauseDurationMs}
         paragraphPauseEnabled={lab.paragraphPauseEnabled}
         onParagraphPauseEnabledChange={lab.setParagraphPauseEnabled}
       />
