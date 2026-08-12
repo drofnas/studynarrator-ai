@@ -30,7 +30,7 @@ export function ScriptLabPage({ analyzer }: ScriptLabPageProps) {
         onSourceChange={lab.setSource}
         source={lab.source}
       />
-      <LexiconEditor entries={lab.entries} {...(lab.lexiconError ? { error: lab.lexiconError } : {})} onAdd={lab.addEntry} onRemove={lab.removeEntry} onRestore={lab.restoreEntry} removedEntries={lab.removedEntries} />
+      <LexiconEditor entries={lab.entries} {...(lab.lexiconError ? { error: lab.lexiconError } : {})} onAdd={lab.addEntry} onRemove={lab.removeEntry} onReplaceFromJson={lab.replaceEntriesFromJson} onRestore={lab.restoreEntry} removedEntries={lab.removedEntries} />
       <ParseStatus state={lab.state} />
       {lab.parseResult && lab.transformResult ? (
         <>

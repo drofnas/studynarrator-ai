@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import {
   LexiconEntrySchema,
+  normalizeLexiconEntries,
   type IgnoredDiagnostic,
   type LexiconEntry
 } from "@studynarrator/core";
@@ -19,6 +20,10 @@ export interface LexiconEntryDraft {
   enabled: boolean;
   notes: string;
 }
+
+export type LexiconJsonSaveResult =
+  | { success: true }
+  | { success: false; errors: string[] };
 
 export type ScriptLabState =
   | { phase: "idle" }
@@ -105,6 +110,33 @@ export function useScriptLab(analyzer: ScriptAnalyzer) {
     replaceEntries([...entries, restored]);
   }
 
+  function replaceEntriesFromJson(value: unknown): LexiconJsonSaveResult {
+    try {
+      const normalized = normalizeLexiconEntries(value, {
+        existingEntries: entries,
+        nextId: nextEntryId.current,
+        timestamp: new Date().toISOString()
+      });
+      nextEntryId.current = normalized.nextId;
+      setRemovedEntries([]);
+      replaceEntries(normalized.entries);
+      return { success: true };
+    } catch (error) {
+      if (typeof error === "object" && error !== null && "issues" in error && Array.isArray(error.issues)) {
+        const errors = error.issues.map((issue: unknown) => {
+          if (typeof issue !== "object" || issue === null) return "The lexicon entry is invalid.";
+          const pathValue = "path" in issue && Array.isArray(issue.path) ? issue.path : [];
+          const path = pathValue.reduce<string>((result, segment) =>
+            typeof segment === "number" ? `${result}[${String(segment)}]` : result ? `${result}.${String(segment)}` : String(segment), "");
+          const message = "message" in issue && typeof issue.message === "string" ? issue.message : "The value is invalid.";
+          return `${path || "$"}: ${message}`;
+        });
+        return { success: false, errors };
+      }
+      return { success: false, errors: [error instanceof Error ? error.message : "The lexicon JSON is invalid."] };
+    }
+  }
+
   async function runParser(nextIgnoredDiagnostics = ignoredDiagnostics, nextEntries = entries) {
     const submitted = { source, defaultSpeakerId, entries: nextEntries };
     const submittedRevision = analysisRevision.current + 1;
@@ -160,6 +192,7 @@ export function useScriptLab(analyzer: ScriptAnalyzer) {
     parseResult: result?.parseResult,
     removeEntry,
     removedEntries,
+    replaceEntriesFromJson,
     restoreDiagnostic,
     restoreEntry,
     runParser,

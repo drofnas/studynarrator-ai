@@ -172,4 +172,119 @@ describe("G02 and G03 Script Lab", () => {
     expect(screen.getByText("Synthesis ready")).toBeInTheDocument();
     expect(screen.getByLabelText("Script source")).toHaveValue(source);
   });
+
+  it("opens compact JSON with stable IDs and cancels without changing entries or analysis", async () => {
+    const user = userEvent.setup();
+    render(<ScriptLabPage analyzer={analyzer()} />);
+    fireEvent.change(screen.getByLabelText("Script source"), { target: { value: "[speaker_teacher] SQL" } });
+    await addEntry(user, { display: "SQL", spoken: "sequel" });
+    await user.click(screen.getByRole("button", { name: "Analyze" }));
+    expect(await screen.findByText("Synthesis ready")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Edit as JSON" }));
+    const jsonEditor = screen.getByLabelText("Lexicon entries JSON");
+    const authored = JSON.parse(String((jsonEditor as HTMLTextAreaElement).value)) as Array<Record<string, unknown>>;
+    expect(authored).toEqual([{
+      id: "g03-global-001",
+      scope: "global",
+      entryType: "exactTerm",
+      displayText: "SQL",
+      spokenText: "sequel",
+      caseSensitive: true,
+      wholeWord: true,
+      priority: 0,
+      enabled: true,
+      notes: ""
+    }]);
+    expect((jsonEditor as HTMLTextAreaElement).value).not.toContain("createdAt");
+    fireEvent.change(jsonEditor, { target: { value: "[]" } });
+    expect(screen.getByText("Synthesis ready")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(within(screen.getByLabelText("Active lexicon entries")).getByText("SQL")).toBeInTheDocument();
+    expect(screen.getByText("Synthesis ready")).toBeInTheDocument();
+  });
+
+  it("bulk-authors valid JSON with defaults and produces the canonical four matches", async () => {
+    const user = userEvent.setup();
+    render(<ScriptLabPage analyzer={analyzer()} />);
+    fireEvent.change(screen.getByLabelText("Script source"), {
+      target: { value: "[speaker_teacher] {{resume|cv}} SQL {{resume|continue}} SQL" }
+    });
+    await user.click(screen.getByRole("button", { name: "Edit as JSON" }));
+    fireEvent.change(screen.getByLabelText("Lexicon entries JSON"), { target: { value: JSON.stringify([
+      { scope: "global", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel" },
+      { id: "custom-cv", scope: "project", entryType: "namedSense", displayText: "resume", senseId: "cv", spokenText: "rez-oo-may" },
+      { scope: "project", entryType: "namedSense", displayText: "resume", senseId: "continue", spokenText: "ree-zoom" }
+    ]) } });
+    await user.click(screen.getByRole("button", { name: "Save JSON" }));
+
+    expect(screen.getByText("g03-global-001", { exact: false })).toBeInTheDocument();
+    expect(screen.getByText("custom-cv", { exact: false })).toBeInTheDocument();
+    expect(screen.getByText("g03-project-002", { exact: false })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Edit as JSON" }));
+    const normalized = JSON.parse(String((screen.getByLabelText("Lexicon entries JSON") as HTMLTextAreaElement).value)) as Array<Record<string, unknown>>;
+    expect(normalized.every((item) => item.caseSensitive === true && item.wholeWord === true && item.enabled === true && item.priority === 0 && item.notes === "")).toBe(true);
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await user.click(screen.getByRole("button", { name: "Analyze" }));
+    await user.click(await screen.findByRole("tab", { name: "Lexicon matches" }));
+    expect(within(screen.getByRole("table", { name: "Lexicon match audit" })).getAllByRole("row")).toHaveLength(5);
+  });
+
+  it("keeps entries unchanged when JSON syntax or schema validation fails", async () => {
+    const user = userEvent.setup();
+    render(<ScriptLabPage analyzer={analyzer()} />);
+    await addEntry(user, { display: "SQL", spoken: "sequel" });
+    await user.click(screen.getByRole("button", { name: "Edit as JSON" }));
+    const jsonEditor = screen.getByLabelText("Lexicon entries JSON");
+    fireEvent.change(jsonEditor, { target: { value: "{" } });
+    await user.click(screen.getByRole("button", { name: "Save JSON" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("JSON syntax:");
+    expect(jsonEditor).toHaveAttribute("aria-invalid", "true");
+
+    fireEvent.change(jsonEditor, { target: { value: JSON.stringify([
+      { id: "replacement", scope: "global", entryType: "exactTerm", displayText: "API", spokenText: "A P I" },
+      { scope: "project", entryType: "namedSense", displayText: "resume", spokenText: "rez-oo-may" }
+    ]) } });
+    await user.click(screen.getByRole("button", { name: "Save JSON" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("[1].senseId");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByText("SQL")).toBeInTheDocument();
+    expect(screen.queryByText("API")).not.toBeInTheDocument();
+  });
+
+  it("allows an empty JSON array to clear active entries and restore history", async () => {
+    const user = userEvent.setup();
+    render(<ScriptLabPage analyzer={analyzer()} />);
+    await addEntry(user, { display: "SQL", spoken: "sequel" });
+    await addEntry(user, { display: "API", spoken: "A P I" });
+    const sqlEntry = screen.getByText("SQL").closest("article");
+    expect(sqlEntry).not.toBeNull();
+    await user.click(within(sqlEntry!).getByRole("button", { name: "Delete entry" }));
+    expect(screen.getByRole("button", { name: "Restore SQL" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Edit as JSON" }));
+    fireEvent.change(screen.getByLabelText("Lexicon entries JSON"), { target: { value: "[]" } });
+    await user.click(screen.getByRole("button", { name: "Save JSON" }));
+    expect(screen.getByText("No lexicon entries yet.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Restore SQL" })).not.toBeInTheDocument();
+  });
+
+  it("marks an in-flight worker result stale only after JSON is saved", async () => {
+    const user = userEvent.setup();
+    let resolveAnalysis: ((result: ScriptAnalysisResult) => void) | undefined;
+    const worker = { analyze: vi.fn(async () => await new Promise<ScriptAnalysisResult>((resolve) => { resolveAnalysis = resolve; })) };
+    render(<ScriptLabPage analyzer={worker} />);
+    fireEvent.change(screen.getByLabelText("Script source"), { target: { value: "[speaker_teacher] SQL" } });
+    await user.click(screen.getByRole("button", { name: "Analyze" }));
+    await user.click(screen.getByRole("button", { name: "Edit as JSON" }));
+    fireEvent.change(screen.getByLabelText("Lexicon entries JSON"), { target: { value: JSON.stringify([
+      { scope: "global", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel" }
+    ]) } });
+    expect(screen.getByText(/Parsing and transforming/u)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save JSON" }));
+    expect(await screen.findByText(/stale result was discarded/u)).toBeInTheDocument();
+    resolveAnalysis?.(analyze({ source: "[speaker_teacher] SQL", entries: [] }));
+    expect(screen.queryByRole("table", { name: "Ordered canonical nodes" })).not.toBeInTheDocument();
+  });
 });

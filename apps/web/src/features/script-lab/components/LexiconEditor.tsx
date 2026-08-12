@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { LexiconEntry } from "@studynarrator/core";
-import type { LexiconEntryDraft } from "../useScriptLab.js";
+import type { LexiconEntryDraft, LexiconJsonSaveResult } from "../useScriptLab.js";
 import styles from "./LexiconEditor.module.css";
 
 const initialDraft: LexiconEntryDraft = {
@@ -21,12 +21,32 @@ interface LexiconEditorProps {
   error?: string;
   onAdd: (draft: LexiconEntryDraft) => boolean;
   onRemove: (id: string) => void;
+  onReplaceFromJson: (value: unknown) => LexiconJsonSaveResult;
   onRestore: (id: string) => void;
   removedEntries: LexiconEntry[];
 }
 
-export function LexiconEditor({ entries, error, onAdd, onRemove, onRestore, removedEntries }: LexiconEditorProps) {
+function entriesToJson(entries: LexiconEntry[]): string {
+  return JSON.stringify(entries.map((entry) => ({
+    id: entry.id,
+    scope: entry.scope,
+    entryType: entry.entryType,
+    displayText: entry.displayText,
+    ...(entry.senseId ? { senseId: entry.senseId } : {}),
+    spokenText: entry.spokenText,
+    caseSensitive: entry.caseSensitive,
+    wholeWord: entry.wholeWord,
+    priority: entry.priority,
+    enabled: entry.enabled,
+    notes: entry.notes
+  })), null, 2);
+}
+
+export function LexiconEditor({ entries, error, onAdd, onRemove, onReplaceFromJson, onRestore, removedEntries }: LexiconEditorProps) {
   const [draft, setDraft] = useState(initialDraft);
+  const [jsonDraft, setJsonDraft] = useState("");
+  const [jsonErrors, setJsonErrors] = useState<string[]>([]);
+  const [jsonMode, setJsonMode] = useState(false);
 
   function update<Key extends keyof LexiconEntryDraft>(key: Key, value: LexiconEntryDraft[Key]): void {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -39,8 +59,54 @@ export function LexiconEditor({ entries, error, onAdd, onRemove, onRestore, remo
           <p>Memory-only rules</p>
           <h3 id="lexicon-editor-heading">Lexicon entries</h3>
         </div>
-        <span>{entries.length} active · {removedEntries.length} removed</span>
+        <div className={styles.headingActions}>
+          <span>{entries.length} active · {removedEntries.length} removed</span>
+          {!jsonMode ? <button type="button" onClick={() => { setJsonDraft(entriesToJson(entries)); setJsonErrors([]); setJsonMode(true); }}>Edit as JSON</button> : null}
+        </div>
       </div>
+      {jsonMode ? (
+        <div className={styles.jsonEditor}>
+          <label htmlFor="lexicon-json">Lexicon entries JSON</label>
+          <p id="lexicon-json-help">Save replaces the active list for this session only. IDs are optional for new entries; timestamps are managed internally.</p>
+          <textarea
+            id="lexicon-json"
+            value={jsonDraft}
+            onChange={(event) => { setJsonDraft(event.target.value); setJsonErrors([]); }}
+            aria-describedby="lexicon-json-help lexicon-json-errors"
+            aria-invalid={jsonErrors.length > 0}
+            spellCheck={false}
+          />
+          {jsonErrors.length > 0 ? (
+            <div className={styles.jsonErrors} id="lexicon-json-errors" role="alert">
+              <strong>JSON could not be saved.</strong>
+              <ul>{jsonErrors.map((item, index) => <li key={`${String(index)}:${item}`}>{item}</li>)}</ul>
+            </div>
+          ) : <span id="lexicon-json-errors" />}
+          <div className={styles.jsonActions}>
+            <button
+              type="button"
+              onClick={() => {
+                let value: unknown;
+                try {
+                  value = JSON.parse(jsonDraft) as unknown;
+                } catch (parseError) {
+                  setJsonErrors([`JSON syntax: ${parseError instanceof Error ? parseError.message : "The text is not valid JSON."}`]);
+                  return;
+                }
+                const result = onReplaceFromJson(value);
+                if (!result.success) {
+                  setJsonErrors(result.errors);
+                  return;
+                }
+                setJsonErrors([]);
+                setJsonMode(false);
+              }}
+            >Save JSON</button>
+            <button className={styles.secondaryButton} type="button" onClick={() => { setJsonErrors([]); setJsonMode(false); }}>Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <>
       <form
         className={styles.form}
         onSubmit={(event) => {
@@ -78,6 +144,8 @@ export function LexiconEditor({ entries, error, onAdd, onRemove, onRestore, remo
           {removedEntries.map((entry) => <button type="button" key={entry.id} onClick={() => onRestore(entry.id)}>Restore {entry.displayText}{entry.senseId ? ` + ${entry.senseId}` : ""}</button>)}
         </div>
       ) : null}
+        </>
+      )}
     </section>
   );
 }
