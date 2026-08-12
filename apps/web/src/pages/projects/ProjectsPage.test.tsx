@@ -85,8 +85,14 @@ describe("G05 Projects workbench", () => {
 
     expect(await screen.findByRole("heading", { name: "Script editor" })).toBeInTheDocument();
     await waitFor(() => expect(analyze).toHaveBeenCalled());
-    expect(await screen.findByLabelText("Dry run ordered segment table")).toHaveTextContent("voice_teacher");
-    expect(screen.getByLabelText("Dry run ordered segment table")).toHaveTextContent("sequel");
+    const score = await screen.findByLabelText("Dry run ordered segment table");
+    expect(score).toHaveTextContent("teacher");
+    expect(score).not.toHaveTextContent("voice_teacher");
+    expect(within(score).getAllByLabelText("Speaker teacher. Voice ID voice_teacher")).toEqual([
+      expect.objectContaining({ title: "Voice ID: voice_teacher" }),
+      expect.objectContaining({ title: "Voice ID: voice_teacher" })
+    ]);
+    expect(score).toHaveTextContent("sequel");
     expect(screen.getByText(/project · exactTerm · enabled · 1 matches/u)).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /Line 1/u }).length).toBeGreaterThan(0);
     expect(fetchSpy).not.toHaveBeenCalled();

@@ -107,6 +107,9 @@
 .scoreType { color: var(--signal); font: 0.65rem ui-monospace, monospace; text-transform: uppercase; }
 .scoreRow[data-type="section"] .scoreType { color: #9fe2d9; }
 .scoreRow span, .scoreRow small { font-size: 0.73rem; line-height: 1.45; }
+.speakerChip { display: inline-flex; flex: none; gap: 7px; align-items: baseline; justify-self: start; padding: 4px 8px 4px 7px; color: white; background: var(--ink); border-left: 4px solid var(--signal); border-radius: 2px; box-shadow: 2px 2px 0 var(--signal-pale); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; line-height: 1.1; }
+.speakerChip .speakerLabel { color: #9ed8d3; font-size: 0.58rem; font-weight: 700; letter-spacing: 0.1em; line-height: 1.1; text-transform: uppercase; }
+.speakerChip .speakerName { font-size: 0.76rem; font-weight: 700; line-height: 1.1; }
 
 @media (max-width: 1180px) {
   .workspace { grid-template-columns: 210px minmax(0, 1fr); }
