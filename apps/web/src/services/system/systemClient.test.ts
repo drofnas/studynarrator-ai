@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createRestClient, resolveSystemClient } from "./client.js";
+import { createRestClient, resolveSystemClient } from "./systemClient.js";
 
 describe("system clients", () => {
   it("prefers the narrow preload bridge", () => {

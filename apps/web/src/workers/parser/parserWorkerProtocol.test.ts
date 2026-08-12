@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { handleParserWorkerRequest } from "./parser-worker-protocol.js";
+import { handleParserWorkerRequest } from "./parserWorkerProtocol.js";
 
 describe("parser worker protocol", () => {
   it("parses a 100,000-character script through the worker handler", () => {

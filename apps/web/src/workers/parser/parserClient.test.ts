@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { parseScript } from "@studynarrator/core";
-import { ScriptParserWorkerClient, createScriptParserWorkerClient } from "./parser-client.js";
+import { ScriptParserWorkerClient, createScriptParserWorkerClient } from "./parserClient.js";
 
 class FakeWorker {
   readonly postMessage = vi.fn<(value: unknown) => void>();

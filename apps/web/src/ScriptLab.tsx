@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode } from "react";
 import type { CirNode, IgnoredDiagnostic, ParseScriptResult } from "@studynarrator/core";
-import type { ScriptParser } from "./parser-client.js";
+import type { ScriptParser } from "@/workers/parser/parserClient.js";
 
 interface ScriptLabProps {
   parser: ScriptParser;

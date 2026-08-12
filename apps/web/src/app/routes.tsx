@@ -2,7 +2,7 @@ import { Navigate, Route, Routes } from "react-router";
 import type { SystemClient } from "@studynarrator/shared-types";
 import { DiagnosticsView } from "@/DiagnosticsView.js";
 import { ScriptLab } from "@/ScriptLab.js";
-import type { ScriptParser } from "@/parser-client.js";
+import type { ScriptParser } from "@/workers/parser/parserClient.js";
 import { AppShell } from "./AppShell.js";
 
 export const APP_PATHS = {

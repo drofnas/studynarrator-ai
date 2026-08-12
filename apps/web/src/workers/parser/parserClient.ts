@@ -4,7 +4,7 @@ import {
   type ParseScriptInput,
   type ParseScriptResult
 } from "@studynarrator/core";
-import type { ParserWorkerResponse } from "./parser-worker-protocol.js";
+import type { ParserWorkerResponse } from "./parserWorkerProtocol.js";
 
 export interface ScriptParser {
   parse(input: ParseScriptInput): Promise<ParseScriptResult>;
