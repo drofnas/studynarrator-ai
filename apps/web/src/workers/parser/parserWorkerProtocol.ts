@@ -1,22 +1,29 @@
 import {
   LexiconEntrySchema,
+  ParagraphPauseConfigurationSchema,
   ParseScriptInputSchema,
   ParseScriptResultSchema,
+  ResolveParagraphPausesResultSchema,
   TransformScriptResultSchema,
   parseScript,
+  resolveParagraphPauses,
   transformScript,
   type LexiconEntry,
+  type ParagraphPauseConfiguration,
   type ParseScriptInput,
   type ParseScriptResult,
+  type ResolveParagraphPausesResult,
   type TransformScriptResult
 } from "@studynarrator/core";
 
 export interface ScriptAnalysisInput extends ParseScriptInput {
   entries: LexiconEntry[];
+  paragraphPause: ParagraphPauseConfiguration;
 }
 
 export interface ScriptAnalysisResult {
   parseResult: ParseScriptResult;
+  pacingResult: ResolveParagraphPausesResult;
   transformResult: TransformScriptResult;
 }
 
@@ -30,20 +37,37 @@ export type ParserWorkerResponse =
   | { requestId: number; ok: false; error: string };
 
 export function validateScriptAnalysisInput(value: unknown): ScriptAnalysisInput {
-  if (typeof value !== "object" || value === null || !("entries" in value) || !Array.isArray(value.entries)) {
-    throw new Error("Script analysis input is missing lexicon entries.");
+  if (
+    typeof value !== "object"
+    || value === null
+    || !("entries" in value)
+    || !Array.isArray(value.entries)
+    || !("paragraphPause" in value)
+  ) {
+    throw new Error("Script analysis input is missing lexicon entries or paragraph-pause configuration.");
   }
-  const { entries, ...parseInput } = value;
+  const { entries, paragraphPause, ...parseInput } = value;
   const parsed = ParseScriptInputSchema.parse(parseInput);
-  return { ...parsed, entries: entries.map((entry) => LexiconEntrySchema.parse(entry)) };
+  return {
+    ...parsed,
+    entries: entries.map((entry) => LexiconEntrySchema.parse(entry)),
+    paragraphPause: ParagraphPauseConfigurationSchema.parse(paragraphPause)
+  };
 }
 
 export function validateScriptAnalysisResult(value: unknown): ScriptAnalysisResult {
-  if (typeof value !== "object" || value === null || !("parseResult" in value) || !("transformResult" in value)) {
+  if (
+    typeof value !== "object"
+    || value === null
+    || !("parseResult" in value)
+    || !("pacingResult" in value)
+    || !("transformResult" in value)
+  ) {
     throw new Error("Script analysis result is incomplete.");
   }
   return {
     parseResult: ParseScriptResultSchema.parse(value.parseResult),
+    pacingResult: ResolveParagraphPausesResultSchema.parse(value.pacingResult),
     transformResult: TransformScriptResultSchema.parse(value.transformResult)
   };
 }
@@ -58,14 +82,18 @@ export function handleParserWorkerRequest(value: unknown): ParserWorkerResponse 
       throw new Error("Parser worker request is missing its input.");
     }
     const input = validateScriptAnalysisInput(value.input);
-    const { entries, ...parseInput } = input;
+    const { entries, paragraphPause, ...parseInput } = input;
     const parseResult = ParseScriptResultSchema.parse(parseScript(parseInput));
+    const pacingResult = ResolveParagraphPausesResultSchema.parse(resolveParagraphPauses({
+      parsedScript: parseResult,
+      configuration: paragraphPause
+    }));
     const transformResult = TransformScriptResultSchema.parse(transformScript({
       parsedScript: parseResult,
       entries,
       ...(input.ignoredDiagnostics ? { ignoredDiagnostics: input.ignoredDiagnostics } : {})
     }));
-    return { requestId, ok: true, result: { parseResult, transformResult } };
+    return { requestId, ok: true, result: { parseResult, pacingResult, transformResult } };
   } catch (error) {
     return {
       requestId,

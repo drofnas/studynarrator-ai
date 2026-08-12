@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { parseScript, transformScript } from "@studynarrator/core";
+import {
+  DEFAULT_PARAGRAPH_PAUSE_DURATION_MS,
+  DEFAULT_PARAGRAPH_PAUSE_ID,
+  parseScript,
+  resolveParagraphPauses,
+  transformScript
+} from "@studynarrator/core";
 import { ScriptAnalysisWorkerClient, createScriptAnalysisWorkerClient } from "./parserClient.js";
 
 class FakeWorker {
@@ -22,22 +28,28 @@ describe("script analysis worker client", () => {
   it("posts validated analysis input and resolves validated parser and transform output", async () => {
     const worker = new FakeWorker();
     const client = new ScriptAnalysisWorkerClient(worker);
-    const input = { source: "[speaker_teacher] Hello.", entries: [] };
+    const paragraphPause = { enabled: true, pauseId: DEFAULT_PARAGRAPH_PAUSE_ID, durationMs: DEFAULT_PARAGRAPH_PAUSE_DURATION_MS };
+    const input = { source: "[speaker_teacher] Hello.", entries: [], paragraphPause };
     const pending = client.analyze(input);
     expect(worker.postMessage).toHaveBeenCalledWith({ requestId: 1, input });
     const parseResult = parseScript({ source: input.source });
-    worker.respond({ requestId: 1, ok: true, result: { parseResult, transformResult: transformScript({ parsedScript: parseResult, entries: [] }) } });
+    worker.respond({ requestId: 1, ok: true, result: {
+      parseResult,
+      pacingResult: resolveParagraphPauses({ parsedScript: parseResult, configuration: paragraphPause }),
+      transformResult: transformScript({ parsedScript: parseResult, entries: [] })
+    } });
     await expect(pending).resolves.toMatchObject({ parseResult: { summary: { speechSegmentCount: 1 } }, transformResult: { synthesisReady: true } });
   });
 
   it("rejects worker failures and invalid result envelopes", async () => {
     const worker = new FakeWorker();
     const client = new ScriptAnalysisWorkerClient(worker);
-    const failed = client.analyze({ source: "text", defaultSpeakerId: "narrator", entries: [] });
+    const paragraphPause = { enabled: true, pauseId: DEFAULT_PARAGRAPH_PAUSE_ID, durationMs: DEFAULT_PARAGRAPH_PAUSE_DURATION_MS };
+    const failed = client.analyze({ source: "text", defaultSpeakerId: "narrator", entries: [], paragraphPause });
     worker.respond({ requestId: 1, ok: false, error: "Worker failed safely." });
     await expect(failed).rejects.toThrow("Worker failed safely.");
 
-    const invalid = client.analyze({ source: "[speaker_teacher] Text.", entries: [] });
+    const invalid = client.analyze({ source: "[speaker_teacher] Text.", entries: [], paragraphPause });
     worker.respond({ requestId: 2, ok: true, result: { secret: "invalid" } });
     await expect(invalid).rejects.toThrow("failed validation");
   });

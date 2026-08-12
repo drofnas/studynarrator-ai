@@ -1,5 +1,7 @@
 import { useRef, useState } from "react";
 import {
+  DEFAULT_PARAGRAPH_PAUSE_DURATION_MS,
+  DEFAULT_PARAGRAPH_PAUSE_ID,
   LexiconEntrySchema,
   normalizeLexiconEntries,
   type IgnoredDiagnostic,
@@ -35,15 +37,16 @@ export type ScriptLabState =
 export function useScriptLab(analyzer: ScriptAnalyzer) {
   const [source, setSourceState] = useState("");
   const [defaultSpeakerId, setDefaultSpeakerIdState] = useState("");
+  const [paragraphPauseEnabled, setParagraphPauseEnabledState] = useState(true);
   const [ignoredDiagnostics, setIgnoredDiagnostics] = useState<IgnoredDiagnostic[]>([]);
   const [entries, setEntries] = useState<LexiconEntry[]>([]);
   const [removedEntries, setRemovedEntries] = useState<LexiconEntry[]>([]);
   const [lexiconError, setLexiconError] = useState<string>();
   const [state, setState] = useState<ScriptLabState>({ phase: "idle" });
-  const currentInput = useRef({ source, defaultSpeakerId, entries });
+  const currentInput = useRef({ source, defaultSpeakerId, entries, paragraphPauseEnabled });
   const analysisRevision = useRef(0);
   const nextEntryId = useRef(1);
-  currentInput.current = { source, defaultSpeakerId, entries };
+  currentInput.current = { source, defaultSpeakerId, entries, paragraphPauseEnabled };
 
   function markInputChanged(): void {
     analysisRevision.current += 1;
@@ -57,6 +60,11 @@ export function useScriptLab(analyzer: ScriptAnalyzer) {
 
   function setDefaultSpeakerId(value: string): void {
     setDefaultSpeakerIdState(value);
+    markInputChanged();
+  }
+
+  function setParagraphPauseEnabled(value: boolean): void {
+    setParagraphPauseEnabledState(value);
     markInputChanged();
   }
 
@@ -138,7 +146,7 @@ export function useScriptLab(analyzer: ScriptAnalyzer) {
   }
 
   async function runParser(nextIgnoredDiagnostics = ignoredDiagnostics, nextEntries = entries) {
-    const submitted = { source, defaultSpeakerId, entries: nextEntries };
+    const submitted = { source, defaultSpeakerId, entries: nextEntries, paragraphPauseEnabled };
     const submittedRevision = analysisRevision.current + 1;
     analysisRevision.current = submittedRevision;
     setState({ phase: "parsing" });
@@ -146,6 +154,11 @@ export function useScriptLab(analyzer: ScriptAnalyzer) {
       const result = await analyzer.analyze({
         source: submitted.source,
         entries: submitted.entries,
+        paragraphPause: {
+          enabled: submitted.paragraphPauseEnabled,
+          pauseId: DEFAULT_PARAGRAPH_PAUSE_ID,
+          durationMs: DEFAULT_PARAGRAPH_PAUSE_DURATION_MS
+        },
         ...(submitted.defaultSpeakerId.trim() ? { defaultSpeakerId: submitted.defaultSpeakerId.trim() } : {}),
         ...(nextIgnoredDiagnostics.length > 0 ? { ignoredDiagnostics: nextIgnoredDiagnostics } : {})
       });
@@ -154,6 +167,7 @@ export function useScriptLab(analyzer: ScriptAnalyzer) {
         currentInput.current.source !== submitted.source
         || currentInput.current.defaultSpeakerId !== submitted.defaultSpeakerId
         || currentInput.current.entries !== submitted.entries
+        || currentInput.current.paragraphPauseEnabled !== submitted.paragraphPauseEnabled
       ) {
         setState({ phase: "stale" });
         return;
@@ -189,6 +203,8 @@ export function useScriptLab(analyzer: ScriptAnalyzer) {
     ignoreDiagnostic,
     ignoredDiagnostics,
     lexiconError,
+    pacingResult: result?.pacingResult,
+    paragraphPauseEnabled,
     parseResult: result?.parseResult,
     removeEntry,
     removedEntries,
@@ -197,6 +213,7 @@ export function useScriptLab(analyzer: ScriptAnalyzer) {
     restoreEntry,
     runParser,
     setDefaultSpeakerId,
+    setParagraphPauseEnabled,
     setSource,
     source,
     state,

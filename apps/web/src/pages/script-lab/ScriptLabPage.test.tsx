@@ -3,17 +3,25 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { parseScript, transformScript, type LexiconEntry } from "@studynarrator/core";
+import {
+  DEFAULT_PARAGRAPH_PAUSE_DURATION_MS,
+  DEFAULT_PARAGRAPH_PAUSE_ID,
+  parseScript,
+  resolveParagraphPauses,
+  transformScript,
+  type LexiconEntry
+} from "@studynarrator/core";
 import type { ScriptAnalysisInput, ScriptAnalysisResult } from "@/workers/parser/parserWorkerProtocol.js";
 import { ScriptLabPage } from "./ScriptLabPage.js";
 
 afterEach(cleanup);
 
 function analyze(input: ScriptAnalysisInput): ScriptAnalysisResult {
-  const { entries, ...parseInput } = input;
+  const { entries, paragraphPause, ...parseInput } = input;
   const parseResult = parseScript(parseInput);
   return {
     parseResult,
+    pacingResult: resolveParagraphPauses({ parsedScript: parseResult, configuration: paragraphPause }),
     transformResult: transformScript({
       parsedScript: parseResult,
       entries,
@@ -21,6 +29,12 @@ function analyze(input: ScriptAnalysisInput): ScriptAnalysisResult {
     })
   };
 }
+
+const paragraphPause = {
+  enabled: true,
+  pauseId: DEFAULT_PARAGRAPH_PAUSE_ID,
+  durationMs: DEFAULT_PARAGRAPH_PAUSE_DURATION_MS
+};
 
 function analyzer() {
   return { analyze: vi.fn(async (input: ScriptAnalysisInput) => analyze(input)) };
@@ -68,19 +82,85 @@ describe("G02 and G03 Script Lab", () => {
     await user.click(screen.getByRole("button", { name: "Analyze" }));
     expect(await screen.findByLabelText("Speaker narrator")).toBeInTheDocument();
     expect(screen.getByRole("table", { name: "Ordered canonical nodes" })).toHaveTextContent("Opening narration.");
-    expect(worker.analyze).toHaveBeenLastCalledWith({ source: "Opening narration.", entries: [] });
+    expect(worker.analyze).toHaveBeenLastCalledWith({ source: "Opening narration.", entries: [], paragraphPause });
 
     await user.type(override, "host");
     expect(await screen.findByText(/stale result was discarded/u)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Analyze" }));
     expect(await screen.findByLabelText("Speaker host")).toBeInTheDocument();
-    expect(worker.analyze).toHaveBeenLastCalledWith({ source: "Opening narration.", defaultSpeakerId: "host", entries: [] });
+    expect(worker.analyze).toHaveBeenLastCalledWith({ source: "Opening narration.", defaultSpeakerId: "host", entries: [], paragraphPause });
 
     await user.clear(override);
     expect(await screen.findByText(/stale result was discarded/u)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Analyze" }));
     expect(await screen.findByLabelText("Speaker narrator")).toBeInTheDocument();
-    expect(worker.analyze).toHaveBeenLastCalledWith({ source: "Opening narration.", entries: [] });
+    expect(worker.analyze).toHaveBeenLastCalledWith({ source: "Opening narration.", entries: [], paragraphPause });
+  });
+
+  it("previews enabled-by-default paragraph pauses without changing transcripts", async () => {
+    const user = userEvent.setup();
+    const worker = analyzer();
+    render(<ScriptLabPage analyzer={worker} />);
+    const toggle = screen.getByRole("checkbox", { name: /Pause at paragraph breaks/u });
+    expect(toggle).toBeChecked();
+    expect(screen.getByText("pause_medium")).toBeInTheDocument();
+    expect(screen.getByText(/750 ms/u)).toBeInTheDocument();
+
+    const source = "First paragraph.\n\nSecond paragraph.";
+    fireEvent.change(screen.getByLabelText("Script source"), { target: { value: source } });
+    await user.click(screen.getByRole("button", { name: "Analyze" }));
+
+    const preview = await screen.findByRole("table", { name: "Paragraph pacing preview" });
+    expect(preview).toHaveTextContent("Line 2, column 1");
+    expect(preview).toHaveTextContent("Applied automatic pause");
+    expect(preview).toHaveTextContent("pause_medium");
+    expect(preview).toHaveTextContent("750 ms");
+    await user.click(screen.getByRole("tab", { name: "Readable transcript" }));
+    expect(screen.getByRole("tabpanel", { name: "Readable transcript" }).textContent).toBe("First paragraph.\nSecond paragraph.");
+    await user.click(screen.getByRole("tab", { name: "TTS transcript" }));
+    expect(screen.getByRole("tabpanel", { name: "TTS transcript" }).textContent).toBe("First paragraph.\nSecond paragraph.");
+    expect(screen.getByLabelText("Script source")).toHaveValue(source);
+
+    await user.click(toggle);
+    expect(await screen.findByText(/stale result was discarded/u)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Analyze" }));
+    expect(await screen.findByText("Automatic paragraph pauses are disabled.")).toBeInTheDocument();
+    expect(screen.queryByRole("table", { name: "Paragraph pacing preview" })).not.toBeInTheDocument();
+    expect(worker.analyze).toHaveBeenLastCalledWith({
+      source,
+      entries: [],
+      paragraphPause: { ...paragraphPause, enabled: false }
+    });
+  });
+
+  it("shows when an explicit pause suppresses the paragraph default", async () => {
+    const user = userEvent.setup();
+    render(<ScriptLabPage analyzer={analyzer()} />);
+    fireEvent.change(screen.getByLabelText("Script source"), {
+      target: { value: "First paragraph.\n[pause_short]\n\nSecond paragraph." }
+    });
+    await user.click(screen.getByRole("button", { name: "Analyze" }));
+
+    const preview = await screen.findByRole("table", { name: "Paragraph pacing preview" });
+    expect(preview).toHaveTextContent("Suppressed by explicit pause");
+    expect(preview).toHaveTextContent("Explicit nodes #2");
+    expect(screen.getByText("0 applied · 1 suppressed")).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Ordered canonical nodes" })).toHaveTextContent("pause_short");
+  });
+
+  it("discards an in-flight result when paragraph pacing changes", async () => {
+    const user = userEvent.setup();
+    let resolveAnalysis: ((result: ScriptAnalysisResult) => void) | undefined;
+    const worker = { analyze: vi.fn(async () => await new Promise<ScriptAnalysisResult>((resolve) => { resolveAnalysis = resolve; })) };
+    render(<ScriptLabPage analyzer={worker} />);
+    fireEvent.change(screen.getByLabelText("Script source"), { target: { value: "First.\n\nSecond." } });
+    await user.click(screen.getByRole("button", { name: "Analyze" }));
+    await user.click(screen.getByRole("checkbox", { name: /Pause at paragraph breaks/u }));
+    expect(await screen.findByText(/stale result was discarded/u)).toBeInTheDocument();
+
+    resolveAnalysis?.(analyze({ source: "First.\n\nSecond.", entries: [], paragraphPause }));
+    expect(screen.queryByRole("table", { name: "Paragraph pacing preview" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("table", { name: "Ordered canonical nodes" })).not.toBeInTheDocument();
   });
 
   it("shows ordered parse errors while retaining malformed text as speech", async () => {
@@ -164,7 +244,7 @@ describe("G02 and G03 Script Lab", () => {
     await user.click(screen.getByRole("button", { name: "Analyze" }));
     await user.type(editor, " changed");
     expect(await screen.findByText(/stale result was discarded/u)).toBeInTheDocument();
-    resolveAnalysis?.(analyze({ source: "[speaker_teacher] First.", entries: [] }));
+    resolveAnalysis?.(analyze({ source: "[speaker_teacher] First.", entries: [], paragraphPause }));
     expect(screen.queryByRole("table", { name: "Ordered canonical nodes" })).not.toBeInTheDocument();
     expect(editor).toHaveValue("[speaker_teacher] First. changed");
   });
@@ -334,10 +414,10 @@ describe("G02 and G03 Script Lab", () => {
     fireEvent.change(screen.getByLabelText("Lexicon entries JSON"), { target: { value: JSON.stringify([
       { scope: "global", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel" }
     ]) } });
-    expect(screen.getByText(/Parsing and transforming/u)).toBeInTheDocument();
+    expect(screen.getByText(/Parsing, transforming, and resolving pacing/u)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Save JSON" }));
     expect(await screen.findByText(/stale result was discarded/u)).toBeInTheDocument();
-    resolveAnalysis?.(analyze({ source: "[speaker_teacher] SQL", entries: [] }));
+    resolveAnalysis?.(analyze({ source: "[speaker_teacher] SQL", entries: [], paragraphPause }));
     expect(screen.queryByRole("table", { name: "Ordered canonical nodes" })).not.toBeInTheDocument();
   });
 });

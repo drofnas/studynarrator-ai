@@ -4,9 +4,11 @@ import { IgnoredDiagnostics } from "@/features/script-lab/components/IgnoredDiag
 import { LexiconEditor } from "@/features/script-lab/components/LexiconEditor.js";
 import { ParseDiagnostics } from "@/features/script-lab/components/ParseDiagnostics.js";
 import { ParseStatus } from "@/features/script-lab/components/ParseStatus.js";
+import { PacingPreview } from "@/features/script-lab/components/PacingPreview.js";
 import { ScriptEditor } from "@/features/script-lab/components/ScriptEditor.js";
 import { TranscriptTabs } from "@/features/script-lab/components/TranscriptTabs.js";
 import { TransformDiagnostics } from "@/features/script-lab/components/TransformDiagnostics.js";
+import { TransitionSettings } from "@/features/script-lab/components/TransitionSettings.js";
 import { useScriptLab } from "@/features/script-lab/useScriptLab.js";
 import { ContentPanel } from "@/shared/ui/ContentPanel.js";
 import type { ScriptAnalyzer } from "@/workers/parser/parserClient.js";
@@ -30,14 +32,19 @@ export function ScriptLabPage({ analyzer }: ScriptLabPageProps) {
         onSourceChange={lab.setSource}
         source={lab.source}
       />
+      <TransitionSettings
+        paragraphPauseEnabled={lab.paragraphPauseEnabled}
+        onParagraphPauseEnabledChange={lab.setParagraphPauseEnabled}
+      />
       <LexiconEditor entries={lab.entries} {...(lab.lexiconError ? { error: lab.lexiconError } : {})} onAdd={lab.addEntry} onRemove={lab.removeEntry} onReplaceFromJson={lab.replaceEntriesFromJson} onRestore={lab.restoreEntry} removedEntries={lab.removedEntries} />
       <ParseStatus state={lab.state} />
-      {lab.parseResult && lab.transformResult ? (
+      {lab.parseResult && lab.pacingResult && lab.transformResult ? (
         <>
           <DiscoverySummary summary={lab.parseResult.summary} />
           <ParseDiagnostics errors={lab.parseResult.errors} onIgnore={lab.ignoreDiagnostic} warnings={lab.parseResult.warnings} />
           <IgnoredDiagnostics items={lab.ignoredDiagnostics} onRestore={lab.restoreDiagnostic} />
           <TransformDiagnostics errors={lab.transformResult.errors} onIgnore={lab.ignoreDiagnostic} warnings={lab.transformResult.warnings} />
+          <PacingPreview result={lab.pacingResult} />
           <TranscriptTabs result={lab.transformResult} />
           <CanonicalNodeTable nodes={lab.parseResult.nodes} />
         </>

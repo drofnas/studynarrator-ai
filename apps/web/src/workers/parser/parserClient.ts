@@ -1,8 +1,4 @@
 import {
-  type LexiconEntry,
-  type ParseScriptInput
-} from "@studynarrator/core";
-import {
   validateScriptAnalysisInput,
   validateScriptAnalysisResult,
   type ParserWorkerResponse,
@@ -11,7 +7,7 @@ import {
 } from "./parserWorkerProtocol.js";
 
 export interface ScriptAnalyzer {
-  analyze(input: ParseScriptInput & { entries: LexiconEntry[] }): Promise<ScriptAnalysisResult>;
+  analyze(input: ScriptAnalysisInput): Promise<ScriptAnalysisResult>;
 }
 
 interface WorkerPort {
