@@ -591,7 +591,7 @@ npm run verify:gate -- G02
 
 ### Goal
 
-Prove that pronunciation corrections are deterministic and that readable text remains separate from TTS text.
+Prove that pronunciation corrections and automatic paragraph-pause decisions are deterministic while readable text remains separate from TTS text.
 
 ### Deliverables
 
@@ -602,6 +602,8 @@ Prove that pronunciation corrections are deterministic and that readable text re
 - Transformed TTS transcript generation.
 - Match audit showing which entry changed each span.
 - Script Lab tabs for source, readable transcript, TTS transcript, and lexicon matches.
+- A separate in-memory Transition settings panel with paragraph pauses enabled by default as `pause_medium` at 750 milliseconds.
+- An ordered paragraph-pacing preview showing applied pauses and explicit-pause suppressions without generating audio.
 
 ### Automated checks
 
@@ -613,6 +615,9 @@ Required tests include PRD Section 19.2 and:
 - No replacement inside the display half of unresolved annotations.
 - Original source object remains immutable.
 - Match audit offsets correspond to the displayed source.
+- Paragraph boundaries resolve at most once between neighboring speech nodes, while leading/trailing blanks do not create pauses.
+- Explicit pauses suppress the automatic paragraph pause without altering authored pause nodes.
+- Pacing changes invalidate stale worker results but do not alter source, CIR, transcripts, lexicon matches, or synthesis readiness.
 
 Run:
 
@@ -637,7 +642,9 @@ npm run verify:gate -- G03
 8. Delete the `resume + cv` sense and rerun validation.
 9. Confirm the unresolved annotation remains byte-for-byte literal in both transcripts and produces a source-linked, non-blocking warning rather than being guessed.
 10. Ignore the warning and verify it moves to the shared session diagnostic list without changing either transcript; restore it, then restore the entry and verify the warning clears.
-11. Copy the original source and compare it with the fixture; it must remain unchanged.
+11. Confirm Transition settings shows **Pause at paragraph breaks** enabled as `pause_medium · 750 ms` and the canonical fixture's explicit pause suppresses its automatic paragraph boundary.
+12. Analyze two bare paragraphs separated by blank lines and confirm one applied automatic pause appears in the pacing preview. Disable the checkbox, reanalyze, and confirm the preview reports that automatic paragraph pauses are disabled.
+13. Copy the original source and compare it with the fixture; it must remain unchanged.
 
 ### Pass criteria
 
@@ -646,6 +653,7 @@ npm run verify:gate -- G03
 - Every change has an inspectable reason.
 - Missing senses remain literal, produce non-blocking warnings, and never disable synthesis-ready validation.
 - Parser and transformation errors or warnings can be ignored and restored by exact code and pattern for the current session.
+- Paragraph pacing is auditable, explicit pauses win, and pacing never rewrites parser or transformation output.
 
 ### Explicitly excluded
 
@@ -669,6 +677,7 @@ Prove that user work survives application restart and schema upgrades before the
   - Script source.
   - Speaker mappings.
   - Pause presets.
+  - System pacing defaults and project-owned paragraph-pause configuration.
   - Personal ignored-diagnostic patterns.
   - Global lexicon entries.
   - Project lexicon entries.
@@ -689,6 +698,7 @@ Required tests:
 - Project deletion does not delete unrelated global entries.
 - No secret values appear in logs or API responses.
 - REST and IPC application-service schemas match.
+- New projects copy the current system paragraph-pause enabled state and duration; later system edits do not mutate existing projects.
 
 Run:
 
@@ -703,14 +713,16 @@ npm run verify:gate -- G04
 3. Paste the valid fixture.
 4. Add the global SQL entry and both project resume senses.
 5. Add speaker placeholders and pause values.
-6. Save the project.
-7. Stop every application process.
-8. Restart the Web application with the same data directory.
-9. Open the project and verify every saved value.
-10. Change one pause duration, restart again, and confirm the change persists.
-11. Duplicate or back up the database, then run the migration command again.
-12. Confirm the schema version remains correct and no duplicate records appear.
-13. Delete the project and confirm the global SQL entry still exists.
+6. Confirm the project owns a copied `pause_medium = 750 ms` preset and enabled paragraph transition.
+7. Save the project.
+8. Stop every application process.
+9. Restart the Web application with the same data directory.
+10. Open the project and verify every saved value.
+11. Change the system paragraph duration, create another project, and confirm only the new project receives the new value.
+12. Change one project pause duration, restart again, and confirm the override persists.
+13. Duplicate or back up the database, then run the migration command again.
+14. Confirm the schema version remains correct and no duplicate records appear.
+15. Delete the project and confirm the global SQL entry still exists.
 
 ### Pass criteria
 
@@ -734,6 +746,8 @@ Deliver the first coherent StudyNarrator workflow without audio: create a projec
 - Automatic parsing on source changes with debouncing.
 - Speaker discovery and voice-ID mapping fields.
 - Pause discovery and duration fields.
+- A System Settings **Pacing defaults** area for the new-project paragraph-pause enabled state and duration.
+- Project transition controls initialized from, but independent of, those system defaults.
 - Section list.
 - Pronunciation workbench using persisted lexicons.
 - Validation summary with blocking errors and warnings.
@@ -753,6 +767,7 @@ Required tests:
 - Invalid or missing mappings block render-ready status.
 - Dry run does not call the mock Speaches server.
 - Explicit pauses suppress duplicate automatic transition pauses according to the PRD.
+- System pacing defaults apply to projectless analysis and are copied, not live-linked, when a project is created.
 - Original, readable, and TTS text remain separately accessible.
 
 Run:
@@ -771,19 +786,22 @@ npm run verify:gate -- G05
 
 ```text
 pause_short = 350 ms
+pause_medium = 750 ms
 pause_long  = 1.5 s
 ```
 
-6. Add the canonical lexicon entries.
-7. Run validation.
-8. Confirm the project reports no blocking deterministic errors.
-9. Open Dry Run and verify the source order, speakers, pauses, sections, readable text, and transformed text.
-10. Clear the `student` voice mapping and rerun validation.
-11. Confirm rendering becomes blocked and the error identifies `student`.
-12. Restore the mapping.
-13. Enter `-1 s` for a pause and confirm it is rejected.
-14. Enter `0 s` and confirm it is accepted.
-15. Reload the browser and verify the project remains intact.
+6. Confirm **Pause at paragraph breaks** is enabled and points to `pause_medium`.
+7. Change the System Settings paragraph duration, create a second project, and confirm the first project remains at 750 ms while the second receives the new default.
+8. Add the canonical lexicon entries.
+9. Run validation.
+10. Confirm the project reports no blocking deterministic errors.
+11. Open Dry Run and verify the source order, speakers, pauses, sections, readable text, and transformed text.
+12. Clear the `student` voice mapping and rerun validation.
+13. Confirm rendering becomes blocked and the error identifies `student`.
+14. Restore the mapping.
+15. Enter `-1 s` for a pause and confirm it is rejected.
+16. Enter `0 s` and confirm it is accepted.
+17. Reload the browser and verify the project remains intact.
 
 ### Pass criteria
 
@@ -1021,6 +1039,8 @@ Prove the full ordered render plan and exact pause assets before combining them 
 - Editing a project after snapshot creation does not mutate the plan.
 - Same snapshot yields the same plan.
 - Explicit adjacent pauses suppress automatic duplicates.
+- The project snapshot freezes its paragraph-pause enabled state, preset ID, and effective duration independently of later System Settings changes.
+- The starter paragraph pause produces exact 750-millisecond PCM silence when not overridden.
 - Zero-duration pauses are represented without an invalid audio file.
 - Silence metadata and decoded duration match configuration within a strict PCM tolerance.
 - Plan references source lines and transformation audits.
@@ -1035,7 +1055,7 @@ npm run verify:gate -- G09
 
 1. Open the canonical project and create a render plan.
 2. Inspect the plan and verify sections, speech, and explicit pauses follow source order.
-3. Confirm `pause_short` entries are 350 ms and `pause_long` is 1,500 ms.
+3. Confirm `pause_short` entries are 350 ms, automatic `pause_medium` paragraph entries are 750 ms, and `pause_long` is 1,500 ms.
 4. Edit the project’s `pause_long` value after the plan is created.
 5. Reopen the existing plan and confirm it still contains the frozen old value.
 6. Create a new plan and confirm it contains the new value.

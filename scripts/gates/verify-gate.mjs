@@ -76,11 +76,15 @@ if (gate === "G03") {
       'packages/core/src/transformer.test.ts',
       'packages/core/src/lexicon.ts',
       'packages/core/src/lexicon.test.ts',
+      'packages/core/src/pacing.ts',
+      'packages/core/src/pacing.test.ts',
       'fixtures/gates/expected/study-guide-valid.transform.json',
       'apps/web/src/features/script-lab/components/LexiconEditor.tsx',
       'apps/web/src/features/script-lab/components/TransformDiagnostics.tsx',
       'apps/web/src/features/script-lab/components/IgnoredDiagnostics.tsx',
       'apps/web/src/features/script-lab/components/ScriptEditor.tsx',
+      'apps/web/src/features/script-lab/components/TransitionSettings.tsx',
+      'apps/web/src/features/script-lab/components/PacingPreview.tsx',
       'apps/web/src/features/script-lab/components/TranscriptTabs.tsx',
       'docs/gates/G03-manual-test.md'
     ]) if (!fs.existsSync(path)) process.exit(1);
@@ -88,10 +92,13 @@ if (gate === "G03") {
     const schemas = fs.readFileSync('packages/core/src/schemas.ts', 'utf8');
     const parser = fs.readFileSync('packages/core/src/parser.ts', 'utf8');
     const transformer = fs.readFileSync('packages/core/src/transformer.ts', 'utf8');
+    const pacing = fs.readFileSync('packages/core/src/pacing.ts', 'utf8');
     const lexiconEditor = fs.readFileSync('apps/web/src/features/script-lab/components/LexiconEditor.tsx', 'utf8');
     const transformDiagnostics = fs.readFileSync('apps/web/src/features/script-lab/components/TransformDiagnostics.tsx', 'utf8');
     const ignoredDiagnostics = fs.readFileSync('apps/web/src/features/script-lab/components/IgnoredDiagnostics.tsx', 'utf8');
     const scriptEditor = fs.readFileSync('apps/web/src/features/script-lab/components/ScriptEditor.tsx', 'utf8');
+    const transitionSettings = fs.readFileSync('apps/web/src/features/script-lab/components/TransitionSettings.tsx', 'utf8');
+    const pacingPreview = fs.readFileSync('apps/web/src/features/script-lab/components/PacingPreview.tsx', 'utf8');
     const workerProtocol = fs.readFileSync('apps/web/src/workers/parser/parserWorkerProtocol.ts', 'utf8');
     const manualTest = fs.readFileSync('docs/gates/G03-manual-test.md', 'utf8');
     if (
@@ -101,24 +108,37 @@ if (gate === "G03") {
       || !schemas.includes('ignorePattern: z.string().min(1)')
       || !schemas.includes('ignoredDiagnostics: z.array(IgnoredDiagnosticSchema).optional()')
       || !schemas.includes('SYSTEM_DEFAULT_SPEAKER_ID = "narrator"')
+      || !schemas.includes('DEFAULT_PARAGRAPH_PAUSE_ID = "pause_medium"')
+      || !schemas.includes('DEFAULT_PARAGRAPH_PAUSE_DURATION_MS = 750')
+      || !schemas.includes('durationMs: z.number().int().min(0).max(30_000)')
       || !parser.includes('defaultSpeakerId ?? SYSTEM_DEFAULT_SPEAKER_ID')
       || parser.includes('MISSING_DEFAULT_SPEAKER')
       || !transformer.includes('export function transformScript')
       || !transformer.includes('readableReplacement: projected.annotation.rawText')
       || !transformer.includes('ttsReplacement: projected.annotation.rawText')
+      || !pacing.includes('export function resolveParagraphPauses')
+      || !pacing.includes('suppressedByExplicitPause')
       || !lexiconEditor.includes('Edit as JSON')
       || !lexiconEditor.includes('Save JSON')
       || !transformDiagnostics.includes('Ignore this pattern')
       || !ignoredDiagnostics.includes('Ignored diagnostic patterns')
       || !scriptEditor.includes('System Default')
       || !scriptEditor.includes('SYSTEM_DEFAULT_SPEAKER_ID')
+      || !transitionSettings.includes('Pause at paragraph breaks')
+      || !transitionSettings.includes('DEFAULT_PARAGRAPH_PAUSE_DURATION_MS')
+      || !pacingPreview.includes('Paragraph pacing preview')
+      || !pacingPreview.includes('Suppressed by explicit pause')
+      || !workerProtocol.includes('resolveParagraphPauses')
       || !workerProtocol.includes('ignoredDiagnostics: input.ignoredDiagnostics')
       || !manualTest.includes('non-blocking')
       || !manualTest.includes('{{resume|cv}}')
+      || !manualTest.includes('Automatic paragraph pacing')
+      || !manualTest.includes('pause_medium')
     ) process.exit(1);
     const forbidden = new RegExp('fetch\\\\s*\\\\(|localStorage|indexedDB|/api/|speaches|system\\\\.[A-Za-z]', 'iu');
     for (const path of [
       'packages/core/src/transformer.ts',
+      'packages/core/src/pacing.ts',
       'apps/web/src/features/script-lab/useScriptLab.ts',
       'apps/web/src/workers/parser/parserWorkerProtocol.ts'
     ]) if (forbidden.test(fs.readFileSync(path, 'utf8'))) process.exit(1);

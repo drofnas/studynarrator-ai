@@ -26,11 +26,12 @@ Use the Web development client and disposable data only. Lexicon entries are int
 3. Select **Save JSON**. Confirm three active entries appear in JSON order with deterministic session IDs and the form/list view returns.
 4. Open **Edit as JSON** again. Confirm the generated JSON contains the IDs and every pronunciation behavior field, includes the documented defaults, and contains no timestamps. Select **Cancel**.
 5. Select **Analyze**. Confirm the G02 discovery summary still reports 2 speakers, 2 pause IDs, 2 sections, 5 speech segments, 4 explicit pauses, and 2 annotations.
-6. Open **Source** and confirm the complete original fixture, including annotation markup and directives, is unchanged.
-7. Open **Readable transcript**. Confirm both annotations display as `resume` and both `SQL` occurrences remain `SQL`.
-8. Open **TTS transcript**. Confirm the CV sense is `rez-oo-may`, the continue sense is `ree-zoom`, and both whole-word `SQL` occurrences are `sequel`.
-9. Open **Lexicon matches**. Confirm exactly four rows appear. Each row must show scope, type, deterministic session entry ID, original text, spoken text, source line and column, and end-exclusive source offsets.
-10. Confirm the status reads **Synthesis ready**.
+6. Confirm **Pause at paragraph breaks** is enabled and identified as `pause_medium · 750 ms`. In **Paragraph pacing preview**, confirm the canonical fixture's paragraph boundary is suppressed by its explicit pause.
+7. Open **Source** and confirm the complete original fixture, including annotation markup and directives, is unchanged.
+8. Open **Readable transcript**. Confirm both annotations display as `resume` and both `SQL` occurrences remain `SQL`.
+9. Open **TTS transcript**. Confirm the CV sense is `rez-oo-may`, the continue sense is `ree-zoom`, and both whole-word `SQL` occurrences are `sequel`.
+10. Open **Lexicon matches**. Confirm exactly four rows appear. Each row must show scope, type, deterministic session entry ID, original text, spoken text, source line and column, and end-exclusive source offsets.
+11. Confirm the status reads **Synthesis ready**.
 
 ## JSON validation and atomicity
 
@@ -53,12 +54,21 @@ Use the Web development client and disposable data only. Lexicon entries are int
 7. Copy **Script source** to a diff tool and confirm it remains byte-for-byte identical to `fixtures/gates/study-guide-valid.txt`.
 8. Delete any entry so it appears under **Removed this session**, then save `[]` through **Edit as JSON**. Confirm both the active list and restore history are cleared.
 
+## Automatic paragraph pacing
+
+1. Paste `First paragraph.`, two blank lines, and `Second paragraph.` with no directives. Leave **Pause at paragraph breaks** enabled and select **Analyze**.
+2. Confirm **Paragraph pacing preview** contains one applied `pause_medium` row at 750 ms with the blank-line source location and neighboring speech node ordinals.
+3. Confirm the source remains byte-for-byte unchanged, both transcripts contain only the two speech lines, and **Synthesis ready** is unchanged.
+4. Add `[pause_short]` anywhere between the two speech lines, preserving a blank-line boundary, and analyze. Confirm the automatic row is marked suppressed and cites the explicit pause node; the authored pause remains in canonical nodes.
+5. Remove the explicit pause, analyze, then clear **Pause at paragraph breaks**. Confirm the analysis becomes stale. Reanalyze and confirm the preview states that automatic paragraph pauses are disabled.
+6. Re-enable the checkbox for subsequent checks. Confirm Lexicon entries and **Edit as JSON** never contain pacing fields.
+
 ## Determinism, responsiveness, and isolation
 
 1. Select **Analyze** repeatedly without changing inputs. Confirm transcripts and match order remain identical.
 2. Paste or generate a bare multi-line study guide near 100,000 characters, leave **Default speaker override** blank, and select **Analyze**. Confirm the status identifies the browser worker, the page remains interactive, `narrator` is the only discovered speaker, all source appears in both transcripts, no `MISSING_DEFAULT_SPEAKER` diagnostic appears, and the result is **Synthesis ready**.
 3. Enter `host` as the override and analyze; confirm bare speech uses `host`. Clear it and analyze again; confirm bare speech returns to `narrator`.
-4. During separate long analyses, edit the source, default-speaker override, and lexicon. Confirm each edit marks the result stale and the old worker result is discarded.
+4. During separate long analyses, edit the source, default-speaker override, transition checkbox, and lexicon. Confirm each edit marks the result stale and the old worker result is discarded.
 5. Refresh the page. Confirm all lexicon entries are gone; no session entry is persisted.
 6. Open browser developer tools before adding entries and analyzing. Confirm there are no project persistence, lexicon REST, Electron IPC, audio preview, or Speaches requests.
 7. Replay the invalid G02 fixture and its ignore/restore flow. Confirm parser errors and warnings offer the same shared controls, canonical ordering, literal recovery, diagnostics, and source preservation still work.

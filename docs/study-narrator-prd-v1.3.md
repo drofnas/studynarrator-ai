@@ -607,9 +607,9 @@ The readable transcript removes only the escape character. This also prevents an
 
 ### 9.7 Blank lines and paragraphs
 
-Blank lines preserve paragraph boundaries in the parsed representation but insert no silence by default.
+Blank lines preserve paragraph boundaries in the parsed representation. The parser itself never inserts silence. The default transition configuration resolves eligible boundaries between speech segments to `pause_medium`, initially 750 milliseconds, without changing the source, CIR, or transcripts.
 
-The project may configure an automatic paragraph pause. Explicit pause directives adjacent to a blank-line boundary override the automatic paragraph pause.
+The user may disable this behavior or override its duration. An explicit pause directive anywhere between the neighboring speech segments wins and suppresses the automatic paragraph pause.
 
 ### 9.8 Unknown directives
 
@@ -948,6 +948,8 @@ Each transition may be set to:
 - None.
 - A named project pause preset.
 - A direct duration.
+
+Automatic paragraph pauses are enabled by default and use `pause_medium`, initially 750 milliseconds. System Settings supplies this default for projectless analysis and new projects. Project creation copies the effective value so existing projects remain reproducible when the system default later changes.
 
 Precedence rules:
 
@@ -1331,6 +1333,7 @@ Selecting the indicator opens diagnostics containing the effective endpoint, con
 A Settings area must provide:
 
 - Connection profiles.
+- Pacing defaults, including whether new projects pause at paragraph breaks and the editable `pause_medium` duration.
 - Client and application-version information.
 - Data, cache, and output locations.
 - FFmpeg status.
@@ -1687,6 +1690,10 @@ RenderArtifact
       "durationMs": 350,
       "description": "Brief speaker handoff."
     },
+    "pause_medium": {
+      "durationMs": 750,
+      "description": "Paragraph or subtopic separation."
+    },
     "pause_long": {
       "durationMs": 1500,
       "description": "Major topic transition."
@@ -1694,7 +1701,7 @@ RenderArtifact
   },
   "transitions": {
     "speakerChange": "none",
-    "paragraph": "none",
+    "paragraph": "pause_medium",
     "section": "pause_long",
     "explicitPauseWins": true
   },
@@ -2176,12 +2183,24 @@ Required cases:
 - Longer match wins.
 - Priority tie-breaking.
 - Named-sense resolution.
-- Unresolved sense error.
+- Unresolved sense warning with exact literal fallback.
 - No replacement inside directives.
 - No mutation of original script.
 - Overlapping entries produce deterministic output.
 
-### 19.3 Chunking tests
+### 19.3 Paragraph pacing tests
+
+Required cases:
+
+- Automatic paragraph pauses are enabled by default with `pause_medium` at 750 milliseconds.
+- Disabled configuration produces no automatic pauses.
+- One or more blank-line boundaries between consecutive speech nodes produce at most one automatic pause.
+- Leading and trailing blank lines produce no automatic pauses.
+- Any explicit pause between neighboring speech nodes suppresses the automatic paragraph pause without removing authored pause nodes.
+- Source, CIR nodes, readable/TTS transcripts, lexicon matches, and synthesis readiness remain unchanged.
+- Results are deterministic and do not mutate deeply frozen parser output.
+
+### 19.4 Chunking tests
 
 - Stable chunks for identical input.
 - Sentence-boundary preference.
@@ -2191,7 +2210,7 @@ Required cases:
 - Cache keys change when relevant synthesis settings change.
 - Cache keys remain unchanged for pause-only or output-metadata changes.
 
-### 19.4 TTS adapter tests
+### 19.5 TTS adapter tests
 
 Use a fake local server to test:
 
@@ -2206,7 +2225,7 @@ Use a fake local server to test:
 
 A separate opt-in integration suite should test an actual Speaches installation.
 
-### 19.5 Audio assembly tests
+### 19.6 Audio assembly tests
 
 - Speech plus pause plus speech.
 - Multiple sample rates normalized correctly.
@@ -2219,7 +2238,7 @@ A separate opt-in integration suite should test an actual Speaches installation.
 - A long synthetic fixture is assembled without memory growth proportional to the full decoded output.
 - Final MP3 encoding uses the lossless file or stream path rather than a complete in-memory PCM object.
 
-### 19.6 Player, waveform, scratchpad, and history tests
+### 19.7 Player, waveform, scratchpad, and history tests
 
 - Quick Scratchpad synthesis does not mutate project state.
 - Global lexicon use in the Scratchpad matches the full-render transformation path.
@@ -2231,7 +2250,7 @@ A separate opt-in integration suite should test an actual Speaches installation.
 - Explicit segment export writes the selected audio and does not expose unrelated cache files.
 - Cleaned-up segment audio produces a clear unavailable state and explicit regeneration option.
 
-### 19.7 Distribution and deployment tests
+### 19.8 Distribution and deployment tests
 
 Automated or release-gate tests must cover:
 
@@ -2244,7 +2263,7 @@ Automated or release-gate tests must cover:
 - Verification that the v1 Compose definition contains no Speaches service.
 - Upgrade from the previous supported application version using the preserved application-data volume.
 
-### 19.8 Electron packaging and security tests
+### 19.9 Electron packaging and security tests
 
 Each published desktop target must verify:
 
@@ -2259,7 +2278,7 @@ Each published desktop target must verify:
 - External documentation links open only to approved HTTPS destinations.
 - Accurate signing or unsigned-build metadata.
 
-### 19.9 End-to-end acceptance fixture
+### 19.10 End-to-end acceptance fixture
 
 Maintain a small fixture project with:
 
