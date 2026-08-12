@@ -4,6 +4,8 @@ export {
   DiagnosticSchema,
   IgnoredDiagnosticSchema,
   LEXICON_TRANSFORM_VERSION,
+  LexiconEntryAuthoringCollectionSchema,
+  LexiconEntryAuthoringSchema,
   LexiconEntrySchema,
   LexiconEntryTypeSchema,
   LexiconMatchAuditSchema,
@@ -26,6 +28,8 @@ export {
   TransformedSpeechSegmentSchema,
   type CirNode,
   type IgnoredDiagnostic,
+  type LexiconEntryAuthoring,
+  type LexiconEntryAuthoringCollection,
   type LexiconEntry,
   type LexiconMatchAudit,
   type ParseDiagnostic,
@@ -39,4 +43,9 @@ export {
   type TransformedSpeechSegment
 } from "./schemas.js";
 export { parseScript } from "./parser.js";
+export {
+  normalizeLexiconEntries,
+  type NormalizeLexiconEntriesOptions,
+  type NormalizeLexiconEntriesResult
+} from "./lexicon.js";
 export { transformScript } from "./transformer.js";

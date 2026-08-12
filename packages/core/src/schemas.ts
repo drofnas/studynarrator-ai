@@ -132,6 +132,40 @@ export type ParseScriptResult = z.infer<typeof ParseScriptResultSchema>;
 export const LexiconScopeSchema = z.enum(["global", "project"]);
 export const LexiconEntryTypeSchema = z.enum(["exactTerm", "exactPhrase", "namedSense"]);
 
+export const LexiconEntryAuthoringSchema = z.object({
+  id: z.string().min(1).optional(),
+  scope: LexiconScopeSchema,
+  entryType: LexiconEntryTypeSchema,
+  displayText: z.string().min(1),
+  senseId: z.string().regex(/^[A-Za-z0-9_-]+$/u).optional(),
+  spokenText: z.string(),
+  caseSensitive: z.boolean().default(true),
+  wholeWord: z.boolean().default(true),
+  priority: z.number().int().default(0),
+  enabled: z.boolean().default(true),
+  notes: z.string().default("")
+}).strict().superRefine((entry, context) => {
+  if (entry.entryType === "namedSense" && !entry.senseId) {
+    context.addIssue({ code: "custom", message: "Named-sense entries require a sense ID.", path: ["senseId"] });
+  }
+  if (entry.entryType !== "namedSense" && entry.senseId !== undefined) {
+    context.addIssue({ code: "custom", message: "Only named-sense entries may define a sense ID.", path: ["senseId"] });
+  }
+});
+export type LexiconEntryAuthoring = z.infer<typeof LexiconEntryAuthoringSchema>;
+
+export const LexiconEntryAuthoringCollectionSchema = z.array(LexiconEntryAuthoringSchema).superRefine((entries, context) => {
+  const seenIds = new Set<string>();
+  entries.forEach((entry, index) => {
+    if (!entry.id) return;
+    if (seenIds.has(entry.id)) {
+      context.addIssue({ code: "custom", message: `Duplicate lexicon entry ID: ${entry.id}.`, path: [index, "id"] });
+    }
+    seenIds.add(entry.id);
+  });
+});
+export type LexiconEntryAuthoringCollection = z.infer<typeof LexiconEntryAuthoringCollectionSchema>;
+
 export const LexiconEntrySchema = z.object({
   id: z.string().min(1),
   scope: LexiconScopeSchema,
