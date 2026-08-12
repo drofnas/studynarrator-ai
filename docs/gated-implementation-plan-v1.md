@@ -45,7 +45,19 @@ gate/G17-v1-release
 
 A gate should be reviewable and revertible as one logical change. Do not combine two gates into one pull request merely because an implementation agent can generate both quickly.
 
-### 2.2 No speculative next-gate work
+### 2.2 Strict sequential gate order
+
+Gates must be implemented and approved in numeric order from G00 through G17. The progress checklist in Section 6 is the human-readable source of truth: the first unchecked gate is the only gate eligible for implementation or review.
+
+- Do not skip a gate.
+- Do not implement, scaffold, or review later gates in parallel with the current gate.
+- Before beginning Gate GXX, confirm every lower-numbered Gate GNN is checked and has both an approval record and a matching `gate-GNN-approved` tag.
+- If the current gate is rejected, leave it unchecked and continue work only on that gate until it is approved.
+- Later gate sections may inform architectural boundaries, but their deliverables must not be started early.
+
+Check a gate only after its automated and manual validation pass and its approval record contains either `APPROVED` or `APPROVED WITH DOCUMENTED DEFERRED ISSUE`. The deferred-issue form counts only under the rules in Section 2.6. Update the checklist in the same approval commit that records the decision, then create the approved tag for that checkpoint. A rejected gate remains unchecked and blocks every later gate.
+
+### 2.3 No speculative next-gate work
 
 A gate implementation must not add unfinished code for later gates. In particular:
 
@@ -57,7 +69,7 @@ A gate implementation must not add unfinished code for later gates. In particula
 
 A small interface or placeholder is acceptable only when the current gate needs it to prove an architectural boundary. It must be labeled clearly and must not pretend to be working functionality.
 
-### 2.3 Every gate includes four kinds of evidence
+### 2.4 Every gate includes four kinds of evidence
 
 Each gate must provide:
 
@@ -66,7 +78,7 @@ Each gate must provide:
 3. **Manual validation** — exact actions for the human reviewer.
 4. **Approval record** — the commit, environment, results, known limitations, and approval decision.
 
-### 2.4 Previously approved behavior must continue to pass
+### 2.5 Previously approved behavior must continue to pass
 
 The automated gate command must run the current gate’s checks and all previously approved regression checks. A later gate does not get to break an earlier gate merely because its own new tests pass.
 
@@ -84,7 +96,7 @@ GATE G05: AUTOMATED CHECKS PASSED
 
 It must exit nonzero if any required check fails.
 
-### 2.5 Approval is explicit
+### 2.6 Approval is explicit
 
 At the end of a review, record one of:
 
@@ -96,7 +108,7 @@ APPROVED WITH DOCUMENTED DEFERRED ISSUE
 
 “Looks mostly okay” is not approval. An approved-with-deferred-issue decision is allowed only when the issue does not violate the gate’s pass criteria and has a named follow-up gate or issue.
 
-### 2.6 Tag approved checkpoints
+### 2.7 Tag approved checkpoints
 
 After merging an approved gate, create an annotated tag:
 
@@ -106,7 +118,7 @@ gate-G05-approved
 
 This provides a known-good rollback point and makes it easy to compare behavior between gates.
 
-### 2.7 Use disposable test data
+### 2.8 Use disposable test data
 
 Manual tests must not use the user’s permanent StudyNarrator data directory. Development and gate validation should use a disposable location such as:
 
@@ -289,7 +301,34 @@ The final MP3 duration may differ slightly because of encoder delay. The allowed
 
 ---
 
-## 6. Gate summary
+## 6. Gate progress and summary
+
+### 6.1 Linear progress checklist
+
+The first unchecked item is the next gate. Only that gate may be implemented or reviewed.
+
+- [x] G00 — Freeze the external TTS baseline
+- [x] G01 — Walking skeleton and architecture-risk spike
+- [ ] G02 — Script parser and canonical intermediate representation
+- [ ] G03 — Lexicon, named senses, and transcript transformation
+- [ ] G04 — SQLite project persistence and migrations
+- [ ] G05 — Project authoring, discovery, configuration, and dry run
+- [ ] G06 — Speaches connection profiles and diagnostics
+- [ ] G07 — Quick Scratchpad and first audible output
+- [ ] G08 — Segment preview and content-addressed cache
+- [ ] G09 — Frozen render plan and exact silence generation
+- [ ] G10 — Deterministic FFmpeg assembly from fixed audio
+- [ ] G11 — Full render orchestration and artifact bundle
+- [ ] G12 — Waveform player and segment-level render history
+- [ ] G13 — External-LLM prompt and skill export
+- [ ] G14 — Production Docker Web distribution
+- [ ] G15 — Electron functional integration and native desktop behavior
+- [ ] G16 — Cross-platform packages and clean-install release matrix
+- [ ] G17 — Version 1 release acceptance
+
+The checked G00 and G01 entries are supported by their records under `docs/gates/approvals/` and their matching approved tags. Therefore, G02 is the current and only eligible gate.
+
+### 6.2 Gate outcomes
 
 | Gate | Outcome proven to the human reviewer | Real Speaches required? |
 |---|---|---:|
@@ -1651,7 +1690,10 @@ Authoritative documents:
 2. StudyNarrator Gate-Driven Implementation Plan, Gate GXX.
 
 Rules:
+- Before changing code, confirm GXX is the first unchecked gate in the Section 6 progress checklist.
+- Confirm every lower-numbered gate is checked and has both an approval record and a matching approved tag. If either condition fails, stop and report the mismatch instead of implementing GXX.
 - Do not begin or scaffold later gates.
+- Do not implement another gate in parallel with GXX.
 - Do not add hidden future features.
 - Preserve all previously approved gate behavior.
 - Use shared TypeScript domain/application services; do not duplicate behavior in REST and Electron transports.
@@ -1680,6 +1722,8 @@ Review StudyNarrator Gate GXX against its gate specification and the PRD.
 
 Do not reward extra features. Treat out-of-scope later-gate work as a review concern.
 
+Before reviewing implementation, confirm GXX is the first unchecked gate in the Section 6 progress checklist and that every lower-numbered gate is checked with a matching approval record and approved tag. If not, stop and report the sequencing violation.
+
 Check:
 - Every required deliverable exists.
 - Every pass criterion is covered by automated or manual evidence.
@@ -1705,13 +1749,14 @@ Return:
 When any pass criterion fails:
 
 1. Mark the gate `REJECTED — CHANGES REQUIRED`.
-2. Record the exact failing test and environment.
-3. Fix only the current gate or a regression it introduced.
-4. Add an automated regression test whenever the failure can be reproduced deterministically.
-5. Rerun the entire current gate suite, including previously approved regression checks.
-6. Repeat the relevant manual test from its first setup step; do not test only the final click.
-7. Update the approval record.
-8. Do not start the next gate until approval is explicit.
+2. Leave its Section 6 progress checkbox unchecked so it continues to block every later gate.
+3. Record the exact failing test and environment.
+4. Fix only the current gate or a regression it introduced.
+5. Add an automated regression test whenever the failure can be reproduced deterministically.
+6. Rerun the entire current gate suite, including previously approved regression checks.
+7. Repeat the relevant manual test from its first setup step; do not test only the final click.
+8. Update the approval record.
+9. Do not start the next gate until approval is explicit and the current gate's checkbox is checked.
 
 If the failure reveals a PRD contradiction, write an Architecture Decision Record describing:
 
@@ -1755,6 +1800,8 @@ Publish only after the complete cross-distribution and cross-platform evidence e
 
 Before approving each gate, confirm:
 
+- Was this gate the first unchecked item when implementation began?
+- Are all lower-numbered gates checked and supported by matching approval records and approved tags?
 - Does the gate prove one coherent risk?
 - Can its primary output be inspected without later features?
 - Are real Speaches calls used only where necessary?
@@ -1764,6 +1811,7 @@ Before approving each gate, confirm:
 - Did the implementation avoid future-version Speaches management?
 - Did the implementation preserve the original source and distinguish readable text from TTS text?
 - Are secrets confined to privileged processes and ignored configuration?
+- Will a rejected decision leave this gate unchecked and block all later gates?
 - Can the next gate begin without unresolved ambiguity from this one?
 
 If any answer is no, the gate is not ready to approve.
