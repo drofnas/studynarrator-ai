@@ -74,6 +74,8 @@ if (gate === "G03") {
     for (const path of [
       'packages/core/src/transformer.ts',
       'packages/core/src/transformer.test.ts',
+      'packages/core/src/lexicon.ts',
+      'packages/core/src/lexicon.test.ts',
       'fixtures/gates/expected/study-guide-valid.transform.json',
       'apps/web/src/features/script-lab/components/LexiconEditor.tsx',
       'apps/web/src/features/script-lab/components/TranscriptTabs.tsx',
@@ -81,7 +83,15 @@ if (gate === "G03") {
     ]) if (!fs.existsSync(path)) process.exit(1);
     const coreIndex = fs.readFileSync('packages/core/src/index.ts', 'utf8');
     const transformer = fs.readFileSync('packages/core/src/transformer.ts', 'utf8');
-    if (!coreIndex.includes('transformer.js') || !transformer.includes('export function transformScript')) process.exit(1);
+    const lexiconEditor = fs.readFileSync('apps/web/src/features/script-lab/components/LexiconEditor.tsx', 'utf8');
+    if (
+      !coreIndex.includes('transformer.js')
+      || !coreIndex.includes('lexicon.js')
+      || !coreIndex.includes('LexiconEntryAuthoringCollectionSchema')
+      || !transformer.includes('export function transformScript')
+      || !lexiconEditor.includes('Edit as JSON')
+      || !lexiconEditor.includes('Save JSON')
+    ) process.exit(1);
     const forbidden = new RegExp('fetch\\\\s*\\\\(|localStorage|indexedDB|/api/|speaches|system\\\\.[A-Za-z]', 'iu');
     for (const path of [
       'packages/core/src/transformer.ts',
