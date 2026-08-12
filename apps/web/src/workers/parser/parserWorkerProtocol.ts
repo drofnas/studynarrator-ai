@@ -60,7 +60,11 @@ export function handleParserWorkerRequest(value: unknown): ParserWorkerResponse 
     const input = validateScriptAnalysisInput(value.input);
     const { entries, ...parseInput } = input;
     const parseResult = ParseScriptResultSchema.parse(parseScript(parseInput));
-    const transformResult = TransformScriptResultSchema.parse(transformScript({ parsedScript: parseResult, entries }));
+    const transformResult = TransformScriptResultSchema.parse(transformScript({
+      parsedScript: parseResult,
+      entries,
+      ...(input.ignoredDiagnostics ? { ignoredDiagnostics: input.ignoredDiagnostics } : {})
+    }));
     return { requestId, ok: true, result: { parseResult, transformResult } };
   } catch (error) {
     return {

@@ -12,7 +12,14 @@ afterEach(cleanup);
 function analyze(input: ScriptAnalysisInput): ScriptAnalysisResult {
   const { entries, ...parseInput } = input;
   const parseResult = parseScript(parseInput);
-  return { parseResult, transformResult: transformScript({ parsedScript: parseResult, entries }) };
+  return {
+    parseResult,
+    transformResult: transformScript({
+      parsedScript: parseResult,
+      entries,
+      ...(input.ignoredDiagnostics ? { ignoredDiagnostics: input.ignoredDiagnostics } : {})
+    })
+  };
 }
 
 function analyzer() {
@@ -83,15 +90,33 @@ describe("G02 and G03 Script Lab", () => {
     await user.click(screen.getByRole("button", { name: "Analyze" }));
     expect(await screen.findByRole("heading", { name: "Blocking errors (2)" })).toBeInTheDocument();
     await user.click((await screen.findAllByRole("button", { name: "Ignore this pattern" }))[0]!);
-    expect(await screen.findByRole("heading", { name: "Ignored error patterns (1)" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Ignored diagnostic patterns (1)" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /Blocking errors/u })).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Ignored error patterns (1)" }).parentElement).toHaveTextContent("{{resume|cv");
+    expect(screen.getByRole("heading", { name: "Ignored diagnostic patterns (1)" }).parentElement).toHaveTextContent("{{resume|cv");
     expect(worker.analyze).toHaveBeenLastCalledWith(expect.objectContaining({
       ignoredDiagnostics: [{ code: "UNCLOSED_PRONUNCIATION_ANNOTATION", pattern: "{{resume|cv" }],
       entries: []
     }));
     await user.click(screen.getByRole("button", { name: "Restore this pattern" }));
     expect(await screen.findByRole("heading", { name: "Blocking errors (2)" })).toBeInTheDocument();
+  });
+
+  it("ignores and restores parser warnings without changing canonical nodes", async () => {
+    const user = userEvent.setup();
+    const worker = analyzer();
+    render(<ScriptLabPage analyzer={worker} />);
+    const source = "[speaker_Teacher] First.\n[speaker_teacher] Second.";
+    fireEvent.change(screen.getByLabelText("Script source"), { target: { value: source } });
+    await user.click(screen.getByRole("button", { name: "Analyze" }));
+
+    expect(await screen.findByRole("heading", { name: "Warnings (1)" })).toBeInTheDocument();
+    const before = screen.getByRole("table", { name: "Ordered canonical nodes" }).textContent;
+    await user.click(screen.getByRole("button", { name: "Ignore this pattern" }));
+    expect(await screen.findByRole("heading", { name: "Ignored diagnostic patterns (1)" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /Warnings/u })).not.toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Ordered canonical nodes" }).textContent).toBe(before);
+    await user.click(screen.getByRole("button", { name: "Restore this pattern" }));
+    expect(await screen.findByRole("heading", { name: "Warnings (1)" })).toBeInTheDocument();
   });
 
   it("shows inline pauses and speaker switches in canonical order", async () => {
@@ -164,11 +189,24 @@ describe("G02 and G03 Script Lab", () => {
     expect(cvEntry).not.toBeNull();
     await user.click(within(cvEntry!).getByRole("button", { name: "Delete entry" }));
     await user.click(screen.getByRole("button", { name: "Analyze" }));
-    expect(await screen.findByRole("heading", { name: "Transformation errors (1)" })).toBeInTheDocument();
-    expect(screen.getByRole("alert")).toHaveTextContent("UNRESOLVED_NAMED_SENSE");
+    expect(await screen.findByRole("heading", { name: "Transformation warnings (1)" })).toBeInTheDocument();
+    expect(screen.getByText("Synthesis ready")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Readable transcript" }));
+    expect(screen.getByRole("tabpanel", { name: "Readable transcript" })).toHaveTextContent("Update {{resume|cv}}. SQL can resume.");
+    await user.click(screen.getByRole("tab", { name: "TTS transcript" }));
+    expect(screen.getByRole("tabpanel", { name: "TTS transcript" })).toHaveTextContent("Update {{resume|cv}}. sequel can ree-zoom.");
+
+    const transformWarnings = screen.getByRole("heading", { name: "Transformation warnings (1)" }).parentElement;
+    expect(transformWarnings).not.toBeNull();
+    await user.click(within(transformWarnings!).getByRole("button", { name: "Ignore this pattern" }));
+    expect(await screen.findByRole("heading", { name: "Ignored diagnostic patterns (1)" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /Transformation warnings/u })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Restore this pattern" }));
+    expect(await screen.findByRole("heading", { name: "Transformation warnings (1)" })).toBeInTheDocument();
+
     await user.click(screen.getByRole("button", { name: "Restore resume + cv" }));
     await user.click(screen.getByRole("button", { name: "Analyze" }));
-    expect(screen.queryByRole("heading", { name: /Transformation errors/u })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /Transformation warnings/u })).not.toBeInTheDocument();
     expect(screen.getByText("Synthesis ready")).toBeInTheDocument();
     expect(screen.getByLabelText("Script source")).toHaveValue(source);
   });

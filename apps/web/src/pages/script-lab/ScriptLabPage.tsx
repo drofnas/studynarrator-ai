@@ -37,7 +37,7 @@ export function ScriptLabPage({ analyzer }: ScriptLabPageProps) {
           <DiscoverySummary summary={lab.parseResult.summary} />
           <ParseDiagnostics errors={lab.parseResult.errors} onIgnore={lab.ignoreDiagnostic} warnings={lab.parseResult.warnings} />
           <IgnoredDiagnostics items={lab.ignoredDiagnostics} onRestore={lab.restoreDiagnostic} />
-          <TransformDiagnostics errors={lab.transformResult.errors} warnings={lab.transformResult.warnings} />
+          <TransformDiagnostics errors={lab.transformResult.errors} onIgnore={lab.ignoreDiagnostic} warnings={lab.transformResult.warnings} />
           <TranscriptTabs result={lab.transformResult} />
           <CanonicalNodeTable nodes={lab.parseResult.nodes} />
         </>

@@ -33,6 +33,7 @@ export function ParseDiagnostics({ errors, onIgnore, warnings }: ParseDiagnostic
               <strong>Line {item.line}, column {item.column} · {item.code}</strong>
               <span>{item.message}</span>
               <em>{item.suggestion}</em>
+              <button type="button" onClick={() => onIgnore({ code: item.code, pattern: item.ignorePattern })}>Ignore this pattern</button>
             </article>
           ))}
         </section>

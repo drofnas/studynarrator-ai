@@ -22,6 +22,34 @@ describe("script analysis worker protocol", () => {
     expect(response).toMatchObject({ requestId: 4, ok: true, result: { transformResult: { ttsTranscript: "sequel" } } });
   });
 
+  it("forwards diagnostic suppressions to parsing and transformation", () => {
+    const source = "[speaker_Teacher] {{resume|cv}}.\n[speaker_teacher] Again {{resume|cv}}.";
+    const response = handleParserWorkerRequest({
+      requestId: 5,
+      input: {
+        source,
+        entries: [],
+        ignoredDiagnostics: [
+          { code: "SPEAKER_ID_CASE_COLLISION", pattern: "[speaker_teacher] Again {{resume|cv}}." },
+          { code: "UNRESOLVED_NAMED_SENSE", pattern: "{{resume|cv}}" }
+        ]
+      }
+    });
+    expect(response).toMatchObject({
+      requestId: 5,
+      ok: true,
+      result: {
+        parseResult: { warnings: [] },
+        transformResult: {
+          readableTranscript: "{{resume|cv}}.\nAgain {{resume|cv}}.",
+          ttsTranscript: "{{resume|cv}}.\nAgain {{resume|cv}}.",
+          warnings: [],
+          synthesisReady: true
+        }
+      }
+    });
+  });
+
   it("returns a safe error for invalid messages", () => {
     expect(handleParserWorkerRequest({ requestId: 9, input: { source: "text" } })).toMatchObject({ requestId: 9, ok: false });
     expect(handleParserWorkerRequest(null)).toMatchObject({ requestId: -1, ok: false });
