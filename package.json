@@ -14,6 +14,7 @@
   ],
   "scripts": {
     "build": "npm run build --workspace @studynarrator/web && npm run build --workspace @studynarrator/server && npm run build --workspace @studynarrator/desktop",
+    "db:migrate": "npm run build --workspace @studynarrator/server && npm run migrate --workspace @studynarrator/server --",
     "dev:web": "concurrently --kill-others --names api,web \"npm run dev --workspace @studynarrator/server\" \"npm run dev --workspace @studynarrator/web\"",
     "dev:desktop": "npm run build --workspace @studynarrator/desktop && npm run rebuild:native --workspace @studynarrator/desktop && concurrently --kill-others --names web,desktop \"npm run dev --workspace @studynarrator/web\" \"wait-on http://127.0.0.1:5173 && npm run start --workspace @studynarrator/desktop\"",
     "gate:reset": "node scripts/gates/reset-gate.mjs",

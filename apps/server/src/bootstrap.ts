@@ -1,7 +1,14 @@
 import { resolve } from "node:path";
 import Database from "better-sqlite3";
-import { createSystemService, type DiagnosticsContext } from "@studynarrator/application";
-import { openStudyNarratorRepository } from "@studynarrator/persistence";
+import {
+  createPersistenceService,
+  createSystemService,
+  createUnavailablePersistenceService,
+  type DiagnosticsContext,
+  type StorageCheck
+} from "@studynarrator/application";
+import { MigrationFailureError, openStudyNarratorRepository } from "@studynarrator/persistence";
+import { DATABASE_SCHEMA_VERSION, PERSISTENCE_CONTRACT_VERSION, type PersistenceClient } from "@studynarrator/shared-types";
 import { createFfmpegProbe } from "@studynarrator/runtime";
 
 const repositoryRoot = resolve(import.meta.dirname, "../../..");
@@ -12,12 +19,37 @@ export function resolveServerDataDirectory(environment = process.env): string {
 
 export async function createServerServices(environment = process.env) {
   const dataDirectory = resolveServerDataDirectory(environment);
-  const repository = await openStudyNarratorRepository({
-    Database,
-    databasePath: resolve(dataDirectory, "studynarrator.sqlite")
-  });
+  const databasePath = resolve(dataDirectory, "studynarrator.sqlite");
+  let storageFailure: StorageCheck | undefined;
+  let persistence: PersistenceClient;
+  let repository;
+  try {
+    repository = await openStudyNarratorRepository({ Database, databasePath });
+    persistence = createPersistenceService(repository);
+  } catch (error) {
+    if (!(error instanceof MigrationFailureError)) throw error;
+    storageFailure = {
+      status: "fail",
+      code: error.code,
+      message: error.message,
+      databasePath: error.databasePath,
+      recoveryBackupPath: error.backupPath
+    };
+    persistence = createUnavailablePersistenceService({
+      contractVersion: PERSISTENCE_CONTRACT_VERSION,
+      state: "unavailable",
+      databaseSchemaVersion: error.databaseSchemaVersion,
+      targetDatabaseSchemaVersion: DATABASE_SCHEMA_VERSION,
+      databasePath: error.databasePath,
+      latestBackupPath: error.backupPath,
+      code: "MIGRATION_FAILED",
+      message: error.message
+    });
+    repository = { runMarker: () => { throw error; }, close: () => undefined };
+  }
   const service = createSystemService({
     repository,
+    ...(storageFailure === undefined ? {} : { storageFailure }),
     ffmpegProbe: createFfmpegProbe(
       environment.STUDYNARRATOR_FFMPEG_PATH
         ? { executable: environment.STUDYNARRATOR_FFMPEG_PATH }
@@ -34,5 +66,5 @@ export async function createServerServices(environment = process.env) {
     architecture: process.arch,
     dataDirectory
   };
-  return { service, context };
+  return { service, persistence, context };
 }

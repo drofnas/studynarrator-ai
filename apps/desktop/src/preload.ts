@@ -3,5 +3,5 @@ import { createPreloadBridge } from "./bridge.js";
 
 contextBridge.exposeInMainWorld(
   "studyNarrator",
-  createPreloadBridge((channel) => ipcRenderer.invoke(channel) as Promise<unknown>)
+  createPreloadBridge((channel, input) => ipcRenderer.invoke(channel, input) as Promise<unknown>)
 );

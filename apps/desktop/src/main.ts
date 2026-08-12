@@ -1,7 +1,7 @@
 import { join, resolve } from "node:path";
 import { app, BrowserWindow, ipcMain } from "electron";
 import { createDesktopServices } from "./bootstrap.js";
-import { registerDiagnosticsHandler } from "./ipc.js";
+import { registerDiagnosticsHandler, registerPersistenceHandlers } from "./ipc.js";
 import { SECURE_WEB_PREFERENCES } from "./security.js";
 
 let runtime: Awaited<ReturnType<typeof createDesktopServices>> | undefined;
@@ -39,6 +39,7 @@ async function createWindow() {
 void app.whenReady().then(async () => {
   runtime = await createDesktopServices({ defaultDataDirectory: app.getPath("userData") });
   registerDiagnosticsHandler(ipcMain, runtime.service, runtime.context);
+  registerPersistenceHandlers(ipcMain, runtime.persistence);
   await createWindow();
 });
 

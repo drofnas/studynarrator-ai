@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { SYSTEM_DIAGNOSTICS_CHANNEL } from "@studynarrator/shared-types";
+import { PERSISTENCE_CHANNELS, SYSTEM_DIAGNOSTICS_CHANNEL } from "@studynarrator/shared-types";
 import { createPreloadBridge } from "./bridge.js";
-import { registerDiagnosticsHandler } from "./ipc.js";
+import { registerDiagnosticsHandler, registerPersistenceHandlers } from "./ipc.js";
 import { SECURE_WEB_PREFERENCES } from "./security.js";
 
 const diagnostics = {
@@ -26,14 +26,38 @@ const diagnostics = {
   }
 } as const;
 
+const persistenceStatus = {
+  contractVersion: 1 as const,
+  state: "ready" as const,
+  databaseSchemaVersion: 2 as const,
+  targetDatabaseSchemaVersion: 2 as const,
+  databasePath: "/tmp/studynarrator.sqlite",
+  latestBackupPath: null
+};
+
+const persistence = {
+  status: vi.fn(async () => persistenceStatus),
+  projects: { list: vi.fn(async () => []), create: vi.fn(), get: vi.fn(), replace: vi.fn(), delete: vi.fn() },
+  settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() },
+  preferences: { getIgnoredDiagnostics: vi.fn(async () => []), replaceIgnoredDiagnostics: vi.fn() },
+  globalLexicon: { list: vi.fn(async () => []), replace: vi.fn() },
+  connectionProfiles: { list: vi.fn(async () => []), create: vi.fn(), replace: vi.fn(), delete: vi.fn() }
+};
+
 describe("Electron boundary", () => {
-  it("exposes only the validated diagnostics operation", async () => {
-    const invoke = vi.fn(async () => diagnostics);
+  it("exposes only the validated diagnostics and persistence operations", async () => {
+    const invoke = vi.fn(async (channel: string) => {
+      if (channel === SYSTEM_DIAGNOSTICS_CHANNEL) return diagnostics;
+      if (channel === PERSISTENCE_CHANNELS.projectsList) return [];
+      return persistenceStatus;
+    });
     const bridge = createPreloadBridge(invoke);
-    expect(Object.keys(bridge)).toEqual(["system"]);
+    expect(Object.keys(bridge)).toEqual(["system", "persistence"]);
     expect(Object.keys(bridge.system)).toEqual(["diagnostics"]);
     await expect(bridge.system.diagnostics()).resolves.toEqual(diagnostics);
     expect(invoke).toHaveBeenCalledWith(SYSTEM_DIAGNOSTICS_CHANNEL);
+    await expect(bridge.persistence.projects.list()).resolves.toEqual([]);
+    expect(invoke).toHaveBeenCalledWith(PERSISTENCE_CHANNELS.projectsList);
   });
 
   it("rejects malformed IPC output", async () => {
@@ -41,11 +65,11 @@ describe("Electron boundary", () => {
     await expect(bridge.system.diagnostics()).rejects.toThrow();
   });
 
-  it("registers one fixed IPC channel", async () => {
-    const handlers = new Map<string, () => Promise<unknown>>();
+  it("registers the diagnostics and fixed persistence IPC channels without a generic primitive", async () => {
+    const handlers = new Map<string, (event?: unknown, input?: unknown) => Promise<unknown>>();
     const ipcMain = {
       removeHandler: vi.fn((channel: string) => handlers.delete(channel)),
-      handle: vi.fn((channel: string, handler: () => Promise<unknown>) => handlers.set(channel, handler))
+      handle: vi.fn((channel: string, handler: (event?: unknown, input?: unknown) => Promise<unknown>) => handlers.set(channel, handler))
     };
     const service = {
       health: vi.fn(),
@@ -54,8 +78,13 @@ describe("Electron boundary", () => {
       close: vi.fn()
     };
     registerDiagnosticsHandler(ipcMain, service as never, {} as never);
-    expect([...handlers.keys()]).toEqual([SYSTEM_DIAGNOSTICS_CHANNEL]);
+    registerPersistenceHandlers(ipcMain, persistence as never);
+    expect([...handlers.keys()]).toEqual([SYSTEM_DIAGNOSTICS_CHANNEL, ...Object.values(PERSISTENCE_CHANNELS)]);
+    expect([...handlers.keys()]).not.toContain("persistence.execute");
     await expect(handlers.get(SYSTEM_DIAGNOSTICS_CHANNEL)?.()).resolves.toEqual(diagnostics);
+    await expect(handlers.get(PERSISTENCE_CHANNELS.projectsList)?.()).resolves.toEqual([]);
+    await expect(handlers.get(PERSISTENCE_CHANNELS.projectsCreate)?.(undefined, { name: "", secret: "must-not-leak" }))
+      .rejects.toThrow("The request does not match the persistence contract.");
   });
 
   it("keeps the renderer sandboxed without Node integration", () => {

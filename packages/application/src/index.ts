@@ -48,6 +48,7 @@ const STORAGE_FAILURE: StorageCheck = {
 export function createSystemService(dependencies: {
   repository: DiagnosticRepository;
   ffmpegProbe: FfmpegProbe;
+  storageFailure?: StorageCheck;
 }): SystemService {
   return {
     health() {
@@ -70,7 +71,7 @@ export function createSystemService(dependencies: {
       try {
         storage = dependencies.repository.runMarker();
       } catch {
-        storage = STORAGE_FAILURE;
+        storage = dependencies.storageFailure ?? STORAGE_FAILURE;
       }
 
       const ffmpeg = await dependencies.ffmpegProbe.run();
@@ -94,3 +95,10 @@ export function createSystemService(dependencies: {
     }
   };
 }
+
+export {
+  PersistenceUnavailableError,
+  createPersistenceService,
+  createUnavailablePersistenceService,
+  type PersistenceRepository
+} from "./persistence.js";

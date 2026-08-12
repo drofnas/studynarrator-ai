@@ -81,7 +81,8 @@ export type SystemDiagnostics = z.infer<typeof SystemDiagnosticsSchema>;
 export const BoundaryErrorSchema = z.object({
   error: z.object({
     code: z.string().min(1),
-    message: z.string().min(1)
+    message: z.string().min(1),
+    issues: z.array(z.object({ path: z.string(), message: z.string().min(1) }).strict()).optional()
   }).strict()
 }).strict();
 export type BoundaryError = z.infer<typeof BoundaryErrorSchema>;
@@ -92,7 +93,7 @@ export interface SystemClient {
 
 export interface StudyNarratorBridge {
   system: SystemClient;
-  persistence?: PersistenceClient;
+  persistence: PersistenceClient;
 }
 
 export * from "./persistence.js";

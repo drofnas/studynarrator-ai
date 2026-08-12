@@ -12,6 +12,24 @@ import { z } from "zod";
 
 export const DATABASE_SCHEMA_VERSION = 2;
 export const PERSISTENCE_CONTRACT_VERSION = 1;
+export const PERSISTENCE_CHANNELS = Object.freeze({
+  status: "persistence.status",
+  projectsList: "projects.list",
+  projectsCreate: "projects.create",
+  projectsGet: "projects.get",
+  projectsReplace: "projects.replace",
+  projectsDelete: "projects.delete",
+  pacingGet: "settings.pacing.get",
+  pacingUpdate: "settings.pacing.update",
+  ignoredGet: "preferences.ignored.get",
+  ignoredReplace: "preferences.ignored.replace",
+  globalLexiconList: "lexicon.global.list",
+  globalLexiconReplace: "lexicon.global.replace",
+  connectionProfilesList: "connection-profiles.list",
+  connectionProfilesCreate: "connection-profiles.create",
+  connectionProfilesReplace: "connection-profiles.replace",
+  connectionProfilesDelete: "connection-profiles.delete"
+} as const);
 
 export const ProjectIdSchema = z.uuid();
 export const DurableIdSchema = z.string().min(1).max(128).regex(/^[A-Za-z0-9][A-Za-z0-9_.-]*$/u);
@@ -193,6 +211,14 @@ export const ConnectionProfilePlaceholderSchema = z.object({
 }).strict();
 export type ConnectionProfilePlaceholder = z.infer<typeof ConnectionProfilePlaceholderSchema>;
 export const ConnectionProfileCollectionSchema = z.array(ConnectionProfilePlaceholderSchema);
+export const ConnectionProfileIdInputSchema = z.object({ profileId: DurableIdSchema }).strict();
+export const ProjectIdInputSchema = z.object({ projectId: ProjectIdSchema }).strict();
+export const ProjectReplaceRequestSchema = z.object({ projectId: ProjectIdSchema, project: ProjectReplaceInputSchema }).strict();
+export const ConnectionProfileReplaceRequestSchema = z.object({
+  profileId: DurableIdSchema,
+  profile: ConnectionProfileAuthoringSchema
+}).strict();
+export const EmptyResponseSchema = z.object({}).strict();
 
 export const PersistenceReadyStatusSchema = z.object({
   contractVersion: z.literal(PERSISTENCE_CONTRACT_VERSION),
