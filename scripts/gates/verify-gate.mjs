@@ -6,7 +6,9 @@ import { spawnSync } from "node:child_process";
 
 const gate = process.argv[2];
 const repositoryRoot = resolve(import.meta.dirname, "../..");
-const supportedGates = new Set(["G01", "G02", "G03", "G04"]);
+const gateOrder = ["G01", "G02", "G03", "G04", "G05"];
+const supportedGates = new Set(gateOrder);
+const gateIndex = gateOrder.indexOf(gate);
 
 function fail(message) {
   process.stderr.write(`GATE ${gate ?? "UNKNOWN"}: ERROR: ${message}\n`);
@@ -32,13 +34,11 @@ function requireApprovedGate(approvedGate) {
 }
 
 if (!gate || !supportedGates.has(gate) || process.argv.length !== 3) {
-  fail("usage: npm run verify:gate -- G01|G02|G03|G04");
+  fail("usage: npm run verify:gate -- G01|G02|G03|G04|G05");
 }
 
 requireApprovedGate("G00");
-if (gate === "G02" || gate === "G03" || gate === "G04") requireApprovedGate("G01");
-if (gate === "G03" || gate === "G04") requireApprovedGate("G02");
-if (gate === "G04") requireApprovedGate("G03");
+for (const approvedGate of gateOrder.slice(0, gateIndex)) requireApprovedGate(approvedGate);
 
 run("node", ["-e", `
   const fs = require('node:fs');
@@ -48,11 +48,11 @@ run("node", ["-e", `
 run("bash", ["-n", "scripts/gates/g00-speaches-baseline.sh"]);
 run("bash", ["-n", "scripts/gates/g00-reset.sh"]);
 
-if (gate === "G02") {
+if (gateIndex >= gateOrder.indexOf("G02")) {
   run("node", ["-e", `
     const fs = require('node:fs');
     const plan = fs.readFileSync('docs/gated-implementation-plan-v1.md', 'utf8');
-    if (!plan.includes('- [x] G02 —')) process.exit(1);
+    if (!plan.includes('- [x] G02 —') && !plan.includes('- [ ] G02 —')) process.exit(1);
     for (const path of [
       'docs/script-grammar-v1.md',
       'fixtures/gates/study-guide-valid.txt',
@@ -67,11 +67,11 @@ if (gate === "G02") {
   `]);
 }
 
-if (gate === "G03") {
+if (gateIndex >= gateOrder.indexOf("G03")) {
   run("node", ["-e", `
     const fs = require('node:fs');
     const plan = fs.readFileSync('docs/gated-implementation-plan-v1.md', 'utf8');
-    if (!plan.includes('- [x] G02 —') || !plan.includes('- [ ] G03 —')) process.exit(1);
+    if (!plan.includes('- [x] G02 —') || (!plan.includes('- [ ] G03 —') && !plan.includes('- [x] G03 —'))) process.exit(1);
     for (const path of [
       'packages/core/src/transformer.ts',
       'packages/core/src/transformer.test.ts',
@@ -146,11 +146,11 @@ if (gate === "G03") {
   `]);
 }
 
-if (gate === "G04") {
+if (gateIndex >= gateOrder.indexOf("G04")) {
   run("node", ["-e", `
     const fs = require('node:fs');
     const plan = fs.readFileSync('docs/gated-implementation-plan-v1.md', 'utf8');
-    if (!plan.includes('- [x] G03 —') || !plan.includes('- [ ] G04 —')) process.exit(1);
+    if (!plan.includes('- [x] G03 —') || (!plan.includes('- [ ] G04 —') && !plan.includes('- [x] G04 —'))) process.exit(1);
     for (const path of [
       'packages/shared-types/src/persistence.ts',
       'packages/persistence/src/migrations.ts',

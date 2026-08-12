@@ -336,7 +336,7 @@ The first unchecked item is the next gate. Only that gate may be implemented or 
 - [ ] G16 — Cross-platform packages and clean-install release matrix
 - [ ] G17 — Version 1 release acceptance
 
-The checked G00, G01, G02, and G03 entries are supported by their records under `docs/gates/approvals/` and their matching approved tags. Therefore, G04 is the current and only eligible gate.
+The checked G00 through G04 entries are supported by their records under `docs/gates/approvals/` and their matching approved tags. Therefore, G05 is the current and only eligible gate.
 
 ### 6.2 Gate outcomes
 
