@@ -685,7 +685,9 @@ Prove that user work survives application restart and schema upgrades before the
 - Create, read, update, list, and delete operations through REST.
 - Equivalent high-level IPC operations or contract tests for later Electron use.
 - Database backup-before-migration behavior.
-- Diagnostics showing schema version and data directory.
+- Diagnostics showing schema version, effective data directory/database path, migration state, and latest retained backup.
+- A dedicated Persistence Lab for restart and migration review; the approved G03 Script Lab remains memory-only until G05.
+- A strict `db:migrate -- --data-dir <directory>` command that reports versions and backup location without project content.
 
 ### Automated checks
 
@@ -695,6 +697,7 @@ Required tests:
 - Repeated migration is safe.
 - Upgrade from a checked-in prior schema fixture.
 - Failed migration leaves the original database recoverable.
+- Failed startup enters a diagnostics-only state and rejects persistence operations with sanitized recovery guidance.
 - Project deletion does not delete unrelated global entries.
 - No secret values appear in logs or API responses.
 - REST and IPC application-service schemas match.
@@ -723,6 +726,7 @@ npm run verify:gate -- G04
 13. Duplicate or back up the database, then run the migration command again.
 14. Confirm the schema version remains correct and no duplicate records appear.
 15. Delete the project and confirm the global SQL entry still exists.
+16. Confirm the Persistence Lab accepts no credentials and makes no Speaches, TTS, render, or external network calls.
 
 ### Pass criteria
 

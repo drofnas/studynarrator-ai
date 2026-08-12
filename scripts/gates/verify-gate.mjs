@@ -6,7 +6,7 @@ import { spawnSync } from "node:child_process";
 
 const gate = process.argv[2];
 const repositoryRoot = resolve(import.meta.dirname, "../..");
-const supportedGates = new Set(["G01", "G02", "G03"]);
+const supportedGates = new Set(["G01", "G02", "G03", "G04"]);
 
 function fail(message) {
   process.stderr.write(`GATE ${gate ?? "UNKNOWN"}: ERROR: ${message}\n`);
@@ -32,12 +32,13 @@ function requireApprovedGate(approvedGate) {
 }
 
 if (!gate || !supportedGates.has(gate) || process.argv.length !== 3) {
-  fail("usage: npm run verify:gate -- G01|G02|G03");
+  fail("usage: npm run verify:gate -- G01|G02|G03|G04");
 }
 
 requireApprovedGate("G00");
-if (gate === "G02" || gate === "G03") requireApprovedGate("G01");
-if (gate === "G03") requireApprovedGate("G02");
+if (gate === "G02" || gate === "G03" || gate === "G04") requireApprovedGate("G01");
+if (gate === "G03" || gate === "G04") requireApprovedGate("G02");
+if (gate === "G04") requireApprovedGate("G03");
 
 run("node", ["-e", `
   const fs = require('node:fs');
@@ -143,6 +144,63 @@ if (gate === "G03") {
       'apps/web/src/workers/parser/parserWorkerProtocol.ts'
     ]) if (forbidden.test(fs.readFileSync(path, 'utf8'))) process.exit(1);
   `]);
+}
+
+if (gate === "G04") {
+  run("node", ["-e", `
+    const fs = require('node:fs');
+    const plan = fs.readFileSync('docs/gated-implementation-plan-v1.md', 'utf8');
+    if (!plan.includes('- [x] G03 —') || !plan.includes('- [ ] G04 —')) process.exit(1);
+    for (const path of [
+      'packages/shared-types/src/persistence.ts',
+      'packages/persistence/src/migrations.ts',
+      'packages/persistence/src/repository.ts',
+      'packages/application/src/persistence.ts',
+      'apps/server/src/migrate.ts',
+      'apps/web/src/services/persistence/persistenceClient.ts',
+      'apps/web/src/pages/persistence-lab/PersistenceLabPage.tsx',
+      'fixtures/gates/G04/schema-v1.sql',
+      'docs/gates/G04-manual-test.md'
+    ]) if (!fs.existsSync(path)) process.exit(1);
+    const schemas = fs.readFileSync('packages/shared-types/src/persistence.ts', 'utf8');
+    const migrations = fs.readFileSync('packages/persistence/src/migrations.ts', 'utf8');
+    const repository = fs.readFileSync('packages/persistence/src/repository.ts', 'utf8');
+    const app = fs.readFileSync('apps/server/src/app.ts', 'utf8');
+    const ipc = fs.readFileSync('apps/desktop/src/ipc.ts', 'utf8');
+    const lab = fs.readFileSync('apps/web/src/pages/persistence-lab/PersistenceLabPage.tsx', 'utf8');
+    const scriptLab = fs.readFileSync('apps/web/src/features/script-lab/useScriptLab.ts', 'utf8');
+    const manual = fs.readFileSync('docs/gates/G04-manual-test.md', 'utf8');
+    if (
+      !schemas.includes('DATABASE_SCHEMA_VERSION = 2')
+      || !schemas.includes('PERSISTENCE_CHANNELS')
+      || !schemas.includes('projects.list')
+      || !schemas.includes('connection-profiles.delete')
+      || !migrations.includes('schema_migrations')
+      || !migrations.includes('database.backup')
+      || !migrations.includes('BEGIN IMMEDIATE')
+      || !repository.includes('createProject')
+      || !repository.includes('replaceProject')
+      || !repository.includes('scriptHash')
+      || !app.includes('/api/persistence/status')
+      || !app.includes('/api/projects')
+      || !ipc.includes('registerPersistenceHandlers')
+      || ipc.includes('persistence.execute')
+      || !lab.includes('Migration ledger')
+      || !lab.includes('Reload from database')
+      || !lab.includes('Connection placeholders')
+      || !manual.includes('two full restarts')
+      || !manual.includes('zero Speaches')
+    ) process.exit(1);
+    const forbiddenSecrets = /apiKey|api_key|password|authorization|bearerToken/iu;
+    for (const path of [
+      'packages/shared-types/src/persistence.ts',
+      'packages/persistence/src/repository.ts',
+      'apps/web/src/pages/persistence-lab/PersistenceLabPage.tsx'
+    ]) if (forbiddenSecrets.test(fs.readFileSync(path, 'utf8'))) process.exit(1);
+    const forbiddenScriptLab = new RegExp('localStorage|indexedDB|fetch\\\\s*\\\\(|/api/', 'u');
+    if (forbiddenScriptLab.test(scriptLab)) process.exit(1);
+  `]);
+  run("npm", ["run", "db:migrate", "--", "--data-dir", ".tmp/gates/G04/verify-cli"]);
 }
 
 run("npm", ["run", "lint"]);

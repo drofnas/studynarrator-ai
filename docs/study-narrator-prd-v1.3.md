@@ -2093,6 +2093,8 @@ Docker deployments must keep persistent data outside the container layer. Electr
 - Docker images and desktop packages must report the same semantic application version when built from the same release.
 - Database and project-schema migrations must run before the UI accepts writes.
 - A migration failure must leave the previous data intact and produce recovery guidance.
+- Before upgrading an existing SQLite database, StudyNarrator must create and retain a consistent protected backup in the application data directory. Fresh and already-current databases do not create a backup.
+- Each ordered migration runs transactionally. A failed migration closes persistence, preserves the original database and backup, leaves diagnostics available, and rejects writes until recovery; boundary guidance must not reveal SQL, source text, credentials, or internal exception details.
 - Docker upgrades must preserve named or bind-mounted application-data volumes.
 - Desktop upgrades must preserve application data without requiring manual copying.
 - Release notes must identify schema changes, minimum tested Speaches version when applicable, and any manual migration step.

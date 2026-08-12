@@ -11,12 +11,18 @@ import { MigrationFailureError, openStudyNarratorRepository } from "@studynarrat
 import { DATABASE_SCHEMA_VERSION, PERSISTENCE_CONTRACT_VERSION, type PersistenceClient } from "@studynarrator/shared-types";
 import { createFfmpegProbe } from "@studynarrator/runtime";
 
+export function resolveDesktopDataDirectory(defaultDataDirectory: string, environment: NodeJS.ProcessEnv): string {
+  return environment.STUDYNARRATOR_DATA_DIR
+    ? resolve(environment.INIT_CWD ?? process.cwd(), environment.STUDYNARRATOR_DATA_DIR)
+    : resolve(defaultDataDirectory);
+}
+
 export async function createDesktopServices(options: {
   defaultDataDirectory: string;
   environment?: NodeJS.ProcessEnv;
 }) {
   const environment = options.environment ?? process.env;
-  const dataDirectory = resolve(environment.STUDYNARRATOR_DATA_DIR ?? options.defaultDataDirectory);
+  const dataDirectory = resolveDesktopDataDirectory(options.defaultDataDirectory, environment);
   const databasePath = resolve(dataDirectory, "studynarrator.sqlite");
   let storageFailure: StorageCheck | undefined;
   let persistence: PersistenceClient;

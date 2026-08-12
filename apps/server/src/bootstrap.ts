@@ -14,7 +14,9 @@ import { createFfmpegProbe } from "@studynarrator/runtime";
 const repositoryRoot = resolve(import.meta.dirname, "../../..");
 
 export function resolveServerDataDirectory(environment = process.env): string {
-  return resolve(environment.STUDYNARRATOR_DATA_DIR ?? resolve(repositoryRoot, ".tmp/gates/G01/web"));
+  return environment.STUDYNARRATOR_DATA_DIR
+    ? resolve(environment.INIT_CWD ?? repositoryRoot, environment.STUDYNARRATOR_DATA_DIR)
+    : resolve(repositoryRoot, ".tmp/gates/G01/web");
 }
 
 export async function createServerServices(environment = process.env) {

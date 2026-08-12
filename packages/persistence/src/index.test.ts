@@ -45,15 +45,9 @@ describe("G04 migrations", () => {
 
   it("backs up an existing v1 database before upgrading", async () => {
     const databasePath = await temporaryDatabase("studynarrator-g04-upgrade-");
-    const old = await migrateDatabase({
-      Database: DatabaseAdapter,
-      databasePath,
-      now: () => new Date("2026-08-11T12:00:00.000Z"),
-      migrations: STUDYNARRATOR_MIGRATIONS.slice(0, 1)
-    });
-    old.database.prepare("INSERT INTO diagnostic_kv (key, value, created_at) VALUES (?, ?, ?)")
-      .run("fixture", "preserved", "2026-08-11T12:00:00.000Z");
-    old.database.close();
+    const old = new Database(databasePath);
+    old.exec(readFileSync(new URL("../../../fixtures/gates/G04/schema-v1.sql", import.meta.url), "utf8"));
+    old.close();
 
     const upgraded = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-12T12:00:00.000Z") });
     expect(upgraded.appliedVersions).toEqual([2]);
