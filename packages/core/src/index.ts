@@ -2,6 +2,8 @@ export {
   CIR_SCHEMA_VERSION,
   CirNodeSchema,
   DiagnosticSchema,
+  DEFAULT_PARAGRAPH_PAUSE_DURATION_MS,
+  DEFAULT_PARAGRAPH_PAUSE_ID,
   IgnoredDiagnosticSchema,
   LEXICON_TRANSFORM_VERSION,
   LexiconEntryAuthoringCollectionSchema,
@@ -11,11 +13,17 @@ export {
   LexiconMatchAuditSchema,
   LexiconScopeSchema,
   ParagraphBreakNodeSchema,
+  ParagraphPauseConfigurationSchema,
+  PARAGRAPH_PACING_VERSION,
   ParseScriptInputSchema,
   ParseScriptResultSchema,
   PauseNodeSchema,
+  PauseIdSchema,
   PronunciationAnnotationSchema,
   PronunciationDiscoverySchema,
+  ResolveParagraphPausesInputSchema,
+  ResolveParagraphPausesResultSchema,
+  ResolvedParagraphPauseAuditSchema,
   SCRIPT_GRAMMAR_VERSION,
   SectionNodeSchema,
   SourcePositionSchema,
@@ -36,7 +44,11 @@ export {
   type ParseDiagnostic,
   type ParseScriptInput,
   type ParseScriptResult,
+  type ParagraphPauseConfiguration,
   type PronunciationAnnotation,
+  type ResolveParagraphPausesInput,
+  type ResolveParagraphPausesResult,
+  type ResolvedParagraphPauseAudit,
   type SourceRange,
   type TransformDiagnostic,
   type TransformScriptInput,
@@ -50,3 +62,4 @@ export {
   type NormalizeLexiconEntriesResult
 } from "./lexicon.js";
 export { transformScript } from "./transformer.js";
+export { resolveParagraphPauses } from "./pacing.js";

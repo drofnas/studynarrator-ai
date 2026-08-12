@@ -3,9 +3,13 @@ import { z } from "zod";
 export const SCRIPT_GRAMMAR_VERSION = 1;
 export const CIR_SCHEMA_VERSION = 1;
 export const LEXICON_TRANSFORM_VERSION = 1;
+export const PARAGRAPH_PACING_VERSION = 1;
 export const SYSTEM_DEFAULT_SPEAKER_ID = "narrator";
+export const DEFAULT_PARAGRAPH_PAUSE_ID = "pause_medium";
+export const DEFAULT_PARAGRAPH_PAUSE_DURATION_MS = 750;
 
 export const SpeakerIdSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/u);
+export const PauseIdSchema = z.string().regex(/^pause_[A-Za-z0-9_-]*$/u);
 
 export const IgnoredDiagnosticSchema = z.object({
   code: z.string().regex(/^[A-Z][A-Z0-9_]*$/u),
@@ -54,7 +58,7 @@ export const SpeechNodeSchema = NodeBaseSchema.extend({
 
 export const PauseNodeSchema = NodeBaseSchema.extend({
   type: z.literal("pause"),
-  pauseId: z.string().regex(/^pause_[A-Za-z0-9_-]*$/u)
+  pauseId: PauseIdSchema
 }).strict();
 
 export const SectionNodeSchema = NodeBaseSchema.extend({
@@ -129,6 +133,49 @@ export const ParseScriptResultSchema = z.object({
   warnings: z.array(DiagnosticSchema)
 }).strict();
 export type ParseScriptResult = z.infer<typeof ParseScriptResultSchema>;
+
+export const ParagraphPauseConfigurationSchema = z.object({
+  enabled: z.boolean(),
+  pauseId: PauseIdSchema,
+  durationMs: z.number().int().min(0).max(30_000)
+}).strict();
+export type ParagraphPauseConfiguration = z.infer<typeof ParagraphPauseConfigurationSchema>;
+
+export const ResolveParagraphPausesInputSchema = z.object({
+  parsedScript: ParseScriptResultSchema,
+  configuration: ParagraphPauseConfigurationSchema
+}).strict();
+export type ResolveParagraphPausesInput = z.infer<typeof ResolveParagraphPausesInputSchema>;
+
+const ParagraphBreakAuditSchema = z.object({
+  nodeOrdinal: z.number().int().positive(),
+  range: SourceRangeSchema
+}).strict();
+
+export const ResolvedParagraphPauseAuditSchema = z.object({
+  status: z.enum(["applied", "suppressedByExplicitPause"]),
+  pauseId: PauseIdSchema,
+  durationMs: z.number().int().min(0).max(30_000),
+  previousSpeechNodeOrdinal: z.number().int().positive(),
+  nextSpeechNodeOrdinal: z.number().int().positive(),
+  paragraphBreaks: z.array(ParagraphBreakAuditSchema).min(1),
+  explicitPauseNodeOrdinals: z.array(z.number().int().positive())
+}).strict().superRefine((audit, context) => {
+  if (audit.status === "applied" && audit.explicitPauseNodeOrdinals.length > 0) {
+    context.addIssue({ code: "custom", message: "Applied paragraph pauses cannot cite an explicit pause.", path: ["explicitPauseNodeOrdinals"] });
+  }
+  if (audit.status === "suppressedByExplicitPause" && audit.explicitPauseNodeOrdinals.length === 0) {
+    context.addIssue({ code: "custom", message: "Suppressed paragraph pauses must cite an explicit pause.", path: ["explicitPauseNodeOrdinals"] });
+  }
+});
+export type ResolvedParagraphPauseAudit = z.infer<typeof ResolvedParagraphPauseAuditSchema>;
+
+export const ResolveParagraphPausesResultSchema = z.object({
+  pacingVersion: z.literal(PARAGRAPH_PACING_VERSION),
+  configuration: ParagraphPauseConfigurationSchema,
+  audits: z.array(ResolvedParagraphPauseAuditSchema)
+}).strict();
+export type ResolveParagraphPausesResult = z.infer<typeof ResolveParagraphPausesResultSchema>;
 
 export const LexiconScopeSchema = z.enum(["global", "project"]);
 export const LexiconEntryTypeSchema = z.enum(["exactTerm", "exactPhrase", "namedSense"]);
