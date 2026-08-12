@@ -45,7 +45,7 @@ Use the Web development client and disposable data only. Lexicon entries are int
 ## Missing sense and restoration
 
 1. Delete the Project `resume + cv` entry and select **Analyze** again.
-2. Confirm an `UNRESOLVED_NAMED_SENSE` warning points to the complete CV annotation's source location.
+2. Confirm a non-blocking `UNRESOLVED_NAMED_SENSE` warning points to the complete CV annotation's source location.
 3. Confirm both transcript views preserve the exact `{{resume|cv}}` markup and do not apply an ordinary `resume` rule inside it.
 4. Confirm the status remains **Synthesis ready**.
 5. Select **Ignore this pattern** on the warning. Confirm it disappears, `UNRESOLVED_NAMED_SENSE` plus `{{resume|cv}}` appear under **Ignored diagnostic patterns**, and both transcripts remain unchanged.
