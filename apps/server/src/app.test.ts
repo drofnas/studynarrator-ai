@@ -1,9 +1,10 @@
 import { mkdtempSync } from "node:fs";
+import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
 import request from "supertest";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { createPersistenceService, createSystemService, createUnavailablePersistenceService, type DiagnosticsContext } from "@studynarrator/application";
 import { openStudyNarratorRepository, type DatabaseConstructor } from "@studynarrator/persistence";
 import { BoundaryErrorSchema, HealthSchema, ProjectDetailSchema, ProjectSummaryCollectionSchema, RuntimeSchema, SystemDiagnosticsSchema } from "@studynarrator/shared-types";
@@ -20,6 +21,32 @@ const context: DiagnosticsContext = {
   dataDirectory: "/tmp/g01"
 };
 
+const openServers = new Set<Server>();
+const openServices = new Set<{ close(): void }>();
+
+async function listen(app: ReturnType<typeof createExpressApp>): Promise<Server> {
+  const server = createServer(app);
+  await new Promise<void>((resolveListen, rejectListen) => {
+    const onError = (error: Error) => rejectListen(error);
+    server.once("error", onError);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", onError);
+      resolveListen();
+    });
+  });
+  openServers.add(server);
+  return server;
+}
+
+afterEach(async () => {
+  await Promise.all([...openServers].map(async (server) => await new Promise<void>((resolveClose, rejectClose) => {
+    server.close((error) => { if (error) rejectClose(error); else resolveClose(); });
+  })));
+  openServers.clear();
+  for (const service of openServices) service.close();
+  openServices.clear();
+});
+
 async function fixture() {
   const databasePath = join(mkdtempSync(join(tmpdir(), "studynarrator-server-")), "app.sqlite");
   const repository = await openStudyNarratorRepository({ Database: Database as unknown as DatabaseConstructor, databasePath });
@@ -28,24 +55,23 @@ async function fixture() {
     ffmpegProbe: { run: async () => ({ status: "pass", executable: "ffmpeg", version: "ffmpeg version test" }) }
   });
   const persistence = createPersistenceService(repository);
-  return { service, persistence, app: createExpressApp({ service, persistence, context }) };
+  openServices.add(service);
+  return { service, persistence, app: await listen(createExpressApp({ service, persistence, context })) };
 }
 
 describe("Express diagnostics API", () => {
   it("serves side-effect-free health and runtime contracts", async () => {
-    const { app, service } = await fixture();
+    const { app } = await fixture();
     HealthSchema.parse((await request(app).get("/api/health").expect(200)).body);
     RuntimeSchema.parse((await request(app).get("/api/runtime").expect(200)).body);
-    service.close();
   });
 
   it("serves the shared diagnostics contract", async () => {
-    const { app, service } = await fixture();
+    const { app } = await fixture();
     const response = await request(app).get("/api/diagnostics").expect(200);
     const diagnostics = SystemDiagnosticsSchema.parse(response.body);
     expect(diagnostics.client).toBe("web");
     expect(diagnostics.transport).toBe("rest");
-    service.close();
   });
 
   it("sanitizes an invalid boundary result", async () => {
@@ -55,7 +81,7 @@ describe("Express diagnostics API", () => {
       diagnostics: async () => ({ secret: "must-not-leak" } as never),
       close: () => undefined
     };
-    const response = await request(createExpressApp({ service, context })).get("/api/diagnostics").expect(500);
+    const response = await request(await listen(createExpressApp({ service, context }))).get("/api/diagnostics").expect(500);
     expect(response.body).toEqual({
       error: {
         code: "DIAGNOSTICS_BOUNDARY_ERROR",
@@ -68,7 +94,7 @@ describe("Express diagnostics API", () => {
 
 describe("Express persistence API", () => {
   it("creates, replaces, reads, lists, and deletes complete project aggregates", async () => {
-    const { app, service } = await fixture();
+    const { app } = await fixture();
     const created = ProjectDetailSchema.parse((await request(app).post("/api/projects").send({ name: "REST study" }).expect(201)).body as unknown);
     expect(created).toMatchObject({ name: "REST study", paragraphPause: { pauseId: "pause_medium", durationMs: 750 } });
 
@@ -93,11 +119,10 @@ describe("Express persistence API", () => {
     expect(duplicate.lexiconEntries[0]?.id).not.toBe(replaced.lexiconEntries[0]?.id);
     await request(app).delete(`/api/projects/${created.id}`).expect(204);
     await request(app).get(`/api/projects/${created.id}`).expect(404);
-    service.close();
   });
 
   it("returns path-specific validation errors and sanitized conflicts", async () => {
-    const { app, service } = await fixture();
+    const { app } = await fixture();
     const invalidResponse = await request(app).post("/api/projects").send({ name: "", password: "must-not-leak" }).expect(400);
     const invalid = BoundaryErrorSchema.parse(invalidResponse.body as unknown);
     expect(invalid.error).toMatchObject({ code: "VALIDATION_ERROR" });
@@ -108,7 +133,6 @@ describe("Express persistence API", () => {
     await request(app).post("/api/connection-profiles").send(profile).expect(201);
     const conflict = BoundaryErrorSchema.parse((await request(app).post("/api/connection-profiles").send(profile).expect(409)).body as unknown);
     expect(conflict).toEqual({ error: { code: "CONFLICT", message: "The persistence operation conflicts with existing data." } });
-    service.close();
   });
 
   it("keeps diagnostics status available while degraded writes return 503", async () => {
@@ -123,10 +147,9 @@ describe("Express persistence API", () => {
       code: "MIGRATION_FAILED",
       message: "Migration failed; restore the recovery backup."
     });
-    const app = createExpressApp({ service, persistence, context });
+    const app = await listen(createExpressApp({ service, persistence, context }));
     await request(app).get("/api/persistence/status").expect(200);
     const response = BoundaryErrorSchema.parse((await request(app).post("/api/projects").send({ name: "Unavailable" }).expect(503)).body as unknown);
     expect(response).toEqual({ error: { code: "PERSISTENCE_UNAVAILABLE", message: "Persistence is unavailable until the database migration is repaired." } });
-    service.close();
   });
 });

@@ -113,6 +113,12 @@ describe("G05 deterministic readiness and dry run", () => {
 
   it("keeps original, readable, and TTS text separate in the canonical fixture", () => {
     const source = readFileSync(resolve(process.cwd(), "fixtures/gates/study-guide-valid.txt"), "utf8");
+    const expected = JSON.parse(readFileSync(resolve(process.cwd(), "fixtures/gates/expected/study-guide-valid.dry-run.json"), "utf8")) as {
+      schemaVersion: number;
+      status: string;
+      issueCount: number;
+      rows: Array<Record<string, unknown>>;
+    };
     const parseResult = parseScript({ source });
     const transformResult = transformScript({
       parsedScript: parseResult,
@@ -142,6 +148,26 @@ describe("G05 deterministic readiness and dry run", () => {
     expect(result.rows.filter((row) => row.type === "pause").map((row) => row.origin)).toEqual([
       "explicit", "explicit", "explicit", "explicit"
     ]);
+    expect({
+      schemaVersion: result.schemaVersion,
+      status: result.status,
+      issueCount: result.issues.length,
+      rows: result.rows.map((row) => row.type === "section"
+        ? { rowNumber: row.rowNumber, type: row.type, nodeOrdinal: row.nodeOrdinal, title: row.title }
+        : row.type === "pause"
+          ? { rowNumber: row.rowNumber, type: row.type, nodeOrdinal: row.nodeOrdinal, pauseId: row.pauseId, origin: row.origin, durationMs: row.durationMs }
+          : {
+              rowNumber: row.rowNumber,
+              type: row.type,
+              nodeOrdinal: row.nodeOrdinal,
+              speakerId: row.speakerId,
+              voiceId: row.voiceId,
+              originalText: row.originalText,
+              readableText: row.readableText,
+              ttsText: row.ttsText,
+              durationMs: row.durationMs
+            })
+    }).toEqual(expected);
     expect(AuthoringDryRunResultSchema.parse(result)).toEqual(result);
   });
 
