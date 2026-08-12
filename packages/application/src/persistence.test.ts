@@ -3,13 +3,14 @@ import type { IgnoredDiagnosticCollection, SystemPacingDefaults } from "@studyna
 import { createPersistenceService, createUnavailablePersistenceService, PersistenceUnavailableError } from "./persistence.js";
 
 const project = {
-  contractVersion: 2 as const,
+  contractVersion: 3 as const,
   id: "00000000-0000-4000-8000-000000000001",
   name: "Persisted study",
   description: "",
   scriptSource: "Résumé\r\nSQL",
   scriptHash: "a".repeat(64),
   connectionProfileId: null,
+  modelId: null,
   speakerMappings: [],
   pausePresets: [{ pauseId: "pause_medium", durationMs: 750, description: "Paragraph" }],
   paragraphPause: { enabled: true, pauseId: "pause_medium" as const, durationMs: 750 },
@@ -21,10 +22,10 @@ const project = {
 function repository() {
   return {
     status: vi.fn(() => ({
-      contractVersion: 2 as const,
+      contractVersion: 3 as const,
       state: "ready" as const,
-      databaseSchemaVersion: 2 as const,
-      targetDatabaseSchemaVersion: 2 as const,
+      databaseSchemaVersion: 3 as const,
+      targetDatabaseSchemaVersion: 3 as const,
       databasePath: "/tmp/studynarrator.sqlite",
       latestBackupPath: null
     })),
@@ -68,10 +69,10 @@ describe("persistence application service", () => {
 
   it("keeps status available while rejecting degraded persistence operations", async () => {
     const service = createUnavailablePersistenceService({
-      contractVersion: 2,
+      contractVersion: 3,
       state: "unavailable",
       databaseSchemaVersion: 1,
-      targetDatabaseSchemaVersion: 2,
+      targetDatabaseSchemaVersion: 3,
       databasePath: "/tmp/studynarrator.sqlite",
       latestBackupPath: "/tmp/backups/recovery.sqlite",
       code: "MIGRATION_FAILED",

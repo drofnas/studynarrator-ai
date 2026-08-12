@@ -30,18 +30,18 @@ function ids(...values: string[]) {
   return () => values[index++] ?? "00000000-0000-4000-8000-ffffffffffff";
 }
 
-describe("G04 migrations", () => {
-  it("creates schema version 2 and reruns without duplicate migrations or backups", async () => {
+describe("G06 migrations", () => {
+  it("creates schema version 3 and reruns without duplicate migrations or backups", async () => {
     const databasePath = await temporaryDatabase("studynarrator-g04-fresh-");
     const first = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-12T12:00:00.000Z") });
-    expect(first.appliedVersions).toEqual([1, 2]);
+    expect(first.appliedVersions).toEqual([1, 2, 3]);
     expect(first.backupPath).toBeNull();
     first.database.close();
 
     const second = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-13T12:00:00.000Z") });
     expect(second.appliedVersions).toEqual([]);
     expect(second.backupPath).toBeNull();
-    expect(second.database.prepare("SELECT count(*) AS count FROM schema_migrations").get()).toEqual({ count: 2 });
+    expect(second.database.prepare("SELECT count(*) AS count FROM schema_migrations").get()).toEqual({ count: 3 });
     second.database.close();
   });
 
@@ -52,14 +52,38 @@ describe("G04 migrations", () => {
     old.close();
 
     const upgraded = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-12T12:00:00.000Z") });
-    expect(upgraded.appliedVersions).toEqual([2]);
-    expect(upgraded.backupPath).toContain("-v1-to-v2-");
+    expect(upgraded.appliedVersions).toEqual([2, 3]);
+    expect(upgraded.backupPath).toContain("-v1-to-v3-");
     expect((await stat(upgraded.backupPath!)).mode & 0o777).toBe(0o600);
     expect(upgraded.database.prepare("SELECT value FROM diagnostic_kv WHERE key = 'fixture'").get()).toEqual({ value: "preserved" });
     const backup = new Database(upgraded.backupPath!, { readonly: true });
     expect(backup.prepare("SELECT value FROM diagnostic_kv WHERE key = 'fixture'").get()).toEqual({ value: "preserved" });
     expect(backup.prepare("SELECT max(version) AS version FROM schema_migrations").get()).toEqual({ version: 1 });
     backup.close();
+    upgraded.database.close();
+  });
+
+  it("backs up and upgrades a complete v2 database without losing projects", async () => {
+    const databasePath = await temporaryDatabase("studynarrator-g06-v2-");
+    const previous = await migrateDatabase({
+      Database: DatabaseAdapter,
+      databasePath,
+      migrations: STUDYNARRATOR_MIGRATIONS.slice(0, 2),
+      now: () => new Date("2026-08-12T12:00:00.000Z")
+    });
+    previous.database.prepare(`
+      INSERT INTO projects (
+        id, config_version, name, description, script_source, script_hash, connection_profile_id,
+        paragraph_pause_enabled, paragraph_pause_id, paragraph_pause_duration_ms, created_at, updated_at
+      ) VALUES (?, 1, 'V2 project', '', 'SQL', ?, NULL, 1, 'pause_medium', 750, ?, ?)
+    `).run(projectId, "a".repeat(64), "2026-08-12T12:00:00.000Z", "2026-08-12T12:00:00.000Z");
+    previous.database.close();
+
+    const upgraded = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-13T12:00:00.000Z") });
+    expect(upgraded.appliedVersions).toEqual([3]);
+    expect(upgraded.backupPath).toContain("-v2-to-v3-");
+    expect(upgraded.database.prepare("SELECT name, model_id FROM projects WHERE id = ?").get(projectId))
+      .toEqual({ name: "V2 project", model_id: null });
     upgraded.database.close();
   });
 
@@ -233,6 +257,44 @@ describe("StudyNarratorRepository", () => {
       paragraphPause: { ...project.paragraphPause, durationMs: 999 }, lexiconEntries: []
     })).toThrow();
     expect(repository.getProject(project.id)).toMatchObject({ name: "Atomic", scriptSource: "" });
+    repository.close();
+  });
+
+  it("persists safe connection state and voice overrides without exposing credential values", async () => {
+    const repository = await openStudyNarratorRepository({
+      Database: DatabaseAdapter,
+      databasePath: await temporaryDatabase("studynarrator-g06-connections-"),
+      now: () => new Date("2026-08-12T12:00:00.000Z"),
+      idFactory: ids(profileId)
+    });
+    const profile = repository.createConnectionProfile({
+      id: profileId,
+      name: "LAN Speaches",
+      baseUrl: "http://127.0.0.1:18080",
+      defaultModelId: "speaches-ai/Kokoro-82M-v1.0-ONNX",
+      defaultVoiceId: "af_heart"
+    });
+    expect(profile).toMatchObject({ timeoutSeconds: 120, retryCount: 2, apiKeyConfigured: false, source: "saved" });
+    repository.setConnectionCredentialReference(profile.id, "vault:opaque-reference");
+    expect(repository.getConnectionProfile(profile.id).apiKeyConfigured).toBe(true);
+    expect(JSON.stringify(repository.getConnectionProfile(profile.id))).not.toContain("opaque-reference");
+
+    repository.setActiveConnectionProfile(profile.id);
+    repository.completeConnectionOnboarding();
+    expect(repository.getConnectionSetup()).toEqual({
+      activeProfileId: profile.id,
+      onboardingCompletedAt: "2026-08-12T12:00:00.000Z"
+    });
+
+    const catalog = repository.replaceVoiceCatalogOverrides({
+      schemaVersion: 1,
+      modelId: "speaches-ai/Kokoro-82M-v1.0-ONNX",
+      entries: [{ voiceId: "af_heart", label: "Heart", enabled: false }]
+    });
+    expect(catalog.entries).toEqual([{
+      voiceId: "af_heart", label: "Heart", enabled: false, language: null, locale: null,
+      accent: null, category: null, style: null, sampleText: null
+    }]);
     repository.close();
   });
 });

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ConnectionsClient, VoiceCatalogClient } from "./connections.js";
 import type { PersistenceClient } from "./persistence.js";
 
 export const APPLICATION_VERSION = "0.1.0";
@@ -42,7 +43,7 @@ export const StorageCheckSchema = z.discriminatedUnion("status", [
     status: z.literal("pass"),
     driver: z.literal("better-sqlite3"),
     sqliteVersion: z.string().min(1),
-    migrationVersion: z.literal(2),
+    migrationVersion: z.literal(3),
     databasePath: z.string().min(1),
     latestBackupPath: z.string().min(1).nullable(),
     markerKey: z.literal("g01.runtime-self-test"),
@@ -94,6 +95,9 @@ export interface SystemClient {
 export interface StudyNarratorBridge {
   system: SystemClient;
   persistence: PersistenceClient;
+  connections?: ConnectionsClient;
+  voiceCatalog?: VoiceCatalogClient;
 }
 
+export * from "./connections.js";
 export * from "./persistence.js";

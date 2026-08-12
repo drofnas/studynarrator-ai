@@ -10,13 +10,14 @@ import type { ScriptAnalysisInput } from "@/workers/parser/parserWorkerProtocol.
 import { ProjectsPage } from "./ProjectsPage.js";
 
 const project: ProjectDetail = {
-  contractVersion: 2,
+  contractVersion: 3,
   id: "00000000-0000-4000-8000-000000000001",
   name: "Authoring study",
   description: "Offline fixture",
   scriptSource: "[speaker_teacher] SQL.\n[pause_short]\nContinue.",
   scriptHash: "a".repeat(64),
   connectionProfileId: null,
+  modelId: null,
   speakerMappings: [{ speakerId: "teacher", displayName: "Teacher", voiceId: "voice_teacher", speed: 1, gainDb: 0, roleDescription: "", sampleText: "" }],
   pausePresets: [
     { pauseId: "pause_short", durationMs: 350, description: "Brief" },
@@ -34,7 +35,7 @@ const project: ProjectDetail = {
 function fixture(sourceProject = project) {
   let stored = structuredClone(sourceProject);
   const replace = vi.fn(async (_id: string, input: ProjectReplaceInput) => {
-    stored = { ...stored, ...input, scriptHash: "b".repeat(64), updatedAt: "2026-08-12T13:00:00.000Z", lexiconEntries: stored.lexiconEntries };
+    stored = { ...stored, ...input, modelId: input.modelId ?? stored.modelId, scriptHash: "b".repeat(64), updatedAt: "2026-08-12T13:00:00.000Z", lexiconEntries: stored.lexiconEntries };
     return structuredClone(stored);
   });
   const duplicate = vi.fn(async () => structuredClone(stored));
@@ -178,6 +179,7 @@ describe("G05 Projects workbench", () => {
     replace.mockImplementationOnce(async (_id, input) => ({
       ...project,
       ...input,
+      modelId: input.modelId ?? project.modelId,
       lexiconEntries: project.lexiconEntries,
       updatedAt: "2026-08-12T14:00:00.000Z"
     }));

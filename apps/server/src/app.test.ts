@@ -138,10 +138,10 @@ describe("Express persistence API", () => {
   it("keeps diagnostics status available while degraded writes return 503", async () => {
     const { service } = await fixture();
     const persistence = createUnavailablePersistenceService({
-      contractVersion: 2,
+      contractVersion: 3,
       state: "unavailable",
       databaseSchemaVersion: 1,
-      targetDatabaseSchemaVersion: 2,
+      targetDatabaseSchemaVersion: 3,
       databasePath: "/tmp/studynarrator.sqlite",
       latestBackupPath: "/tmp/backups/recovery.sqlite",
       code: "MIGRATION_FAILED",
