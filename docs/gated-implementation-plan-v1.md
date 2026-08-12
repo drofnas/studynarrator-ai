@@ -78,6 +78,15 @@ Each gate must provide:
 3. **Manual validation** — exact actions for the human reviewer.
 4. **Approval record** — the commit, environment, results, known limitations, and approval decision.
 
+Manual test instructions must be runnable without requiring the reviewer to infer fixture contents or reverse-engineer schemas. Whenever a step requires pasted or entered data, the gate's manual checklist must include the complete copy/paste-ready value next to the workflow, including as applicable:
+
+- Full JSON roots with every required property, valid IDs, and valid cross-references between editors or records.
+- Exact source text, prompts, filenames, URLs, commands, environment variables, form values, and confirmation text.
+- Separate replacement payloads when a later step changes only part of an earlier value.
+- A specific invalid payload and the expected error path/message when validation failure is part of the test.
+
+Examples must be valid for the implementation at the reviewed checkpoint. JSON examples must parse and satisfy the same exported schemas used by the product boundary; when practical, an automated contract test should load the manual checklist and validate its examples so documentation cannot silently drift from the schema. Do not use placeholders such as “add mappings,” “enter suitable JSON,” or “use the valid fixture” unless the exact referenced content is included inline or linked directly and can be copied without additional construction.
+
 ### 2.5 Previously approved behavior must continue to pass
 
 The automated gate command must run the current gate’s checks and all previously approved regression checks. A later gate does not get to break an earlier gate merely because its own new tests pass.
@@ -1735,7 +1744,7 @@ Rules:
 - Use shared TypeScript domain/application services; do not duplicate behavior in REST and Electron transports.
 - Add or update automated tests for every pass criterion that can be automated.
 - Extend `npm run verify:gate -- GXX` so it runs this gate and all prior regression checks.
-- Provide exact manual test instructions matching the gate document.
+- Provide exact manual test instructions matching the gate document. Include complete copy/paste-ready JSON, source text, commands, IDs, URLs, form values, linked cross-references, mutation payloads, and expected validation errors needed to execute every case; validate examples against product schemas when practical.
 - Use disposable test data and never commit secrets.
 - Do not modify the PRD unless a contradiction makes implementation impossible. Document any such contradiction instead.
 - Stop after the gate deliverables are complete.
@@ -1768,7 +1777,7 @@ Check:
 - User content and secrets are not leaked.
 - Errors are honest and actionable.
 - The implementation can be reverted as one gate.
-- The manual test instructions are complete enough for a non-author to execute.
+- The manual test instructions are complete enough for a non-author to execute, with all required JSON/text/commands and linked values supplied as copy/paste-ready fixtures rather than left for the reviewer to invent.
 
 Return:
 1. Blocking findings.
@@ -1843,6 +1852,7 @@ Before approving each gate, confirm:
 - Are real Speaches calls used only where necessary?
 - Is deterministic behavior tested with mocks or fixed fixtures?
 - Does the reviewer know exactly what success looks like?
+- Can the reviewer execute every manual step using only the supplied copy/paste-ready JSON, text, commands, IDs, URLs, and form values without inferring a schema or inventing fixture data?
 - Is there a rollback tag after approval?
 - Did the implementation avoid future-version Speaches management?
 - Did the implementation preserve the original source and distinguish readable text from TTS text?
