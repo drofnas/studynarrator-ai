@@ -86,6 +86,10 @@ describe("G05 Projects workbench", () => {
     expect(await screen.findByRole("heading", { name: "Script editor" })).toBeInTheDocument();
     await waitFor(() => expect(analyze).toHaveBeenCalled());
     const score = await screen.findByLabelText("Dry run ordered segment table");
+    expect(within(score).getByText("Speaker / cue")).toBeInTheDocument();
+    expect(within(score).getByText("Original")).toBeInTheDocument();
+    expect(within(score).getByText("Readable")).toBeInTheDocument();
+    expect(within(score).getByText("TTS text")).toBeInTheDocument();
     expect(score).toHaveTextContent("teacher");
     expect(score).not.toHaveTextContent("voice_teacher");
     expect(within(score).getAllByLabelText("Speaker teacher. Voice ID voice_teacher")).toEqual([
