@@ -80,15 +80,18 @@ if (gate === "G03") {
       'apps/web/src/features/script-lab/components/LexiconEditor.tsx',
       'apps/web/src/features/script-lab/components/TransformDiagnostics.tsx',
       'apps/web/src/features/script-lab/components/IgnoredDiagnostics.tsx',
+      'apps/web/src/features/script-lab/components/ScriptEditor.tsx',
       'apps/web/src/features/script-lab/components/TranscriptTabs.tsx',
       'docs/gates/G03-manual-test.md'
     ]) if (!fs.existsSync(path)) process.exit(1);
     const coreIndex = fs.readFileSync('packages/core/src/index.ts', 'utf8');
     const schemas = fs.readFileSync('packages/core/src/schemas.ts', 'utf8');
+    const parser = fs.readFileSync('packages/core/src/parser.ts', 'utf8');
     const transformer = fs.readFileSync('packages/core/src/transformer.ts', 'utf8');
     const lexiconEditor = fs.readFileSync('apps/web/src/features/script-lab/components/LexiconEditor.tsx', 'utf8');
     const transformDiagnostics = fs.readFileSync('apps/web/src/features/script-lab/components/TransformDiagnostics.tsx', 'utf8');
     const ignoredDiagnostics = fs.readFileSync('apps/web/src/features/script-lab/components/IgnoredDiagnostics.tsx', 'utf8');
+    const scriptEditor = fs.readFileSync('apps/web/src/features/script-lab/components/ScriptEditor.tsx', 'utf8');
     const workerProtocol = fs.readFileSync('apps/web/src/workers/parser/parserWorkerProtocol.ts', 'utf8');
     const manualTest = fs.readFileSync('docs/gates/G03-manual-test.md', 'utf8');
     if (
@@ -97,6 +100,9 @@ if (gate === "G03") {
       || !coreIndex.includes('LexiconEntryAuthoringCollectionSchema')
       || !schemas.includes('ignorePattern: z.string().min(1)')
       || !schemas.includes('ignoredDiagnostics: z.array(IgnoredDiagnosticSchema).optional()')
+      || !schemas.includes('SYSTEM_DEFAULT_SPEAKER_ID = "narrator"')
+      || !parser.includes('defaultSpeakerId ?? SYSTEM_DEFAULT_SPEAKER_ID')
+      || parser.includes('MISSING_DEFAULT_SPEAKER')
       || !transformer.includes('export function transformScript')
       || !transformer.includes('readableReplacement: projected.annotation.rawText')
       || !transformer.includes('ttsReplacement: projected.annotation.rawText')
@@ -104,6 +110,8 @@ if (gate === "G03") {
       || !lexiconEditor.includes('Save JSON')
       || !transformDiagnostics.includes('Ignore this pattern')
       || !ignoredDiagnostics.includes('Ignored diagnostic patterns')
+      || !scriptEditor.includes('System Default')
+      || !scriptEditor.includes('SYSTEM_DEFAULT_SPEAKER_ID')
       || !workerProtocol.includes('ignoredDiagnostics: input.ignoredDiagnostics')
       || !manualTest.includes('non-blocking')
       || !manualTest.includes('{{resume|cv}}')

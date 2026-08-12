@@ -371,7 +371,7 @@ The user creates a project and provides:
 - Speaches connection profile, preselected from the installation default when available.
 - TTS model ID.
 - Default output directory or export behavior.
-- Optional default narrator.
+- Optional project override for the system default `narrator`.
 
 Recommended defaults:
 
@@ -498,8 +498,8 @@ Rules:
 - Speaker IDs are case-sensitive in the script but the UI should warn about IDs that differ only by case.
 - A speaker tag may occur anywhere in a line. Text before it uses the previous speaker; text after it uses the new speaker.
 - The selected speaker remains active across subsequent lines until another speaker tag appears.
-- Text before the first speaker tag uses the configured default speaker.
-- If no default speaker is configured, text before the first speaker tag is a blocking validation error.
+- Text before the first speaker tag uses the configured default-speaker override when present, otherwise the system default `narrator`.
+- A bare script therefore remains valid and discovers `narrator` as its logical speaker; later voice configuration may map that ID without changing source.
 - A speaker may be mapped to the same voice as another speaker.
 
 ### 9.3 Pause directives
@@ -1954,7 +1954,6 @@ Examples:
 - Unknown or malformed control directive.
 - Unclosed pronunciation annotation.
 - Invalid pronunciation-sense syntax.
-- Text before the first speaker when no default speaker exists.
 
 Parse errors include line, column, offending text, and a suggested correction. A valid annotation whose named sense is absent from the lexicon is instead a non-blocking transformation warning and remains literal in both transcripts.
 
@@ -2154,7 +2153,7 @@ Required cases:
 - Valid and invalid pronunciation aliases.
 - Windows and Unix line endings.
 - Unicode speaker text.
-- Text before first speaker with and without default narrator.
+- Bare text under the system default narrator and under an explicit default-speaker override.
 - Consecutive speaker directives.
 - Consecutive pauses.
 - Pause at beginning and end.

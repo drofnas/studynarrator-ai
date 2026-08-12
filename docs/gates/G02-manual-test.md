@@ -12,7 +12,7 @@ Use the Web development client and disposable data only. Speaches is not require
 ## Valid fixture
 
 1. Open `fixtures/gates/study-guide-valid.txt`, copy it byte-for-byte, and paste it into **Script source**.
-2. Leave **Default speaker ID** empty and select **Parse**.
+2. Leave **Default speaker override** empty and select **Parse**. Confirm the field explains that blank uses System Default (`narrator`).
 3. Confirm the discovery summary reports 2 speakers, 2 pause IDs, 2 sections, 5 speech segments, 4 explicit pauses, and 2 annotations.
 4. Inspect the ordered table. Confirm section, paragraph, speech, and pause nodes follow source order and every row displays its source line.
 5. Confirm annotated `resume` text is readable without its `{{...}}` markup.
@@ -29,16 +29,17 @@ Use the Web development client and disposable data only. Speaches is not require
 7. Select **Ignore this pattern** for either malformed annotation. Confirm both annotation errors disappear, both speech nodes remain, and only `{{resume|cv` appears under **Ignored diagnostic patterns**.
 8. Ignore either malformed section and confirm both matching section errors disappear without changing their speech nodes.
 9. Restore both patterns and confirm all four errors return. These choices are intentionally limited to the current Script Lab session until G04 adds persistence.
-10. Enter `Speak \[pause_short] literally.`, set the default speaker to `narrator`, and parse. Confirm `[pause_short]` remains readable speech and no pause node is created.
+10. Enter `Speak \[pause_short] literally.`, leave the default-speaker override blank, and parse. Confirm the text is assigned to `narrator`, `[pause_short]` remains readable speech, and no pause node is created.
 11. Enter `[speaker_Teacher] First.`, a newline, and `[speaker_teacher] Second.`; parse and confirm the case-collision warning appears.
 
 ## Responsiveness and isolation
 
-1. Paste or generate a large script near 100,000 characters and select **Parse**.
-2. Confirm the parsing status identifies the browser worker and the page remains interactive while work completes.
-3. While a large parse is running, edit the source. Confirm the completed stale result is discarded and the UI asks you to parse again.
-4. Open browser developer tools and confirm parsing creates no project API, persistence, IPC, or Speaches network request.
-5. Open Runtime diagnostics and run the G01 self-test once to confirm the prior screen and behavior remain intact.
+1. Paste or generate a bare multi-line script near 100,000 characters and select **Parse** with the override blank.
+2. Confirm the parsing status identifies the browser worker, the page remains interactive, every speech segment uses `narrator`, and no `MISSING_DEFAULT_SPEAKER` diagnostic appears.
+3. Enter a valid override such as `host`, parse, and confirm bare speech uses `host`. Clear the override, parse again, and confirm it returns to `narrator`.
+4. While a large parse is running, edit the source. Confirm the completed stale result is discarded and the UI asks you to parse again.
+5. Open browser developer tools and confirm parsing creates no project API, persistence, IPC, or Speaches network request.
+6. Open Runtime diagnostics and run the G01 self-test once to confirm the prior screen and behavior remains intact.
 
 ## Approval
 

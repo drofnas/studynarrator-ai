@@ -520,6 +520,7 @@ Prove that StudyNarrator understands its deterministic script language before an
 - Structured parse errors with line, column, code, offending text, and suggested correction.
 - Exact diagnostic suppression input and an in-memory Script Lab ignore list; durable personal storage is deferred to G04.
 - Inline pause and speaker control tokens that split speech at their exact source position; inline speaker state persists until the next speaker token.
+- A stable system default speaker ID, `narrator`, so bare scripts remain valid while callers may still provide an override.
 - Discovery summary for speakers, pauses, sections, and pronunciation annotations.
 - A minimal Script Lab screen in the shared React UI.
 - Original source remains byte-for-byte unchanged in parser output.
@@ -534,6 +535,7 @@ Required parser tests include all cases from PRD Section 19.1 plus:
 - Unix and Windows line-ending equivalence.
 - No timestamps or random IDs in deterministic parser output.
 - Invalid fixture recovery and its remaining errors stay stable and line-specific.
+- Bare one-line, multi-line, and large scripts produce narrator speech without missing-speaker diagnostics.
 
 Run:
 
@@ -556,18 +558,20 @@ npm run verify:gate -- G02
 5. Inspect the ordered node view and verify that it follows source order.
 6. Confirm each node displays its source line.
 7. Confirm the source editor text has not changed.
-8. Paste `study-guide-invalid.txt`.
-9. Confirm `[speaker_1bad]` discovers `1bad`, both pause tokens emit pause nodes, and line 3 is split into speech, pause, and speech in source order.
-10. Confirm line 5 splits at `[speaker_teacher]`, its trailing speech uses `teacher`, and a following plain line remains assigned to `teacher` until another speaker token.
-11. Confirm both malformed sections and annotations receive blocking, line-specific errors and remain literal speech.
-12. Ignore either repeated section or annotation pattern, confirm both matching errors disappear while all speech nodes remain, then restore the pattern.
-13. Escape an inline pause as `\[pause_short]` and confirm it remains readable text without creating a pause node.
+8. Paste a bare multi-line study guide with no directives and leave the override blank. Confirm it produces narrator speech without `MISSING_DEFAULT_SPEAKER` diagnostics.
+9. Paste `study-guide-invalid.txt`.
+10. Confirm `[speaker_1bad]` discovers `1bad`, both pause tokens emit pause nodes, and line 3 is split into speech, pause, and speech in source order.
+11. Confirm line 5 splits at `[speaker_teacher]`, its trailing speech uses `teacher`, and a following plain line remains assigned to `teacher` until another speaker token.
+12. Confirm both malformed sections and annotations receive blocking, line-specific errors and remain literal speech.
+13. Ignore either repeated section or annotation pattern, confirm both matching errors disappear while all speech nodes remain, then restore the pattern.
+14. Escape an inline pause as `\[pause_short]` and confirm it remains readable text without creating a pause node.
 
 ### Pass criteria
 
 - All expected counts are correct.
 - Node ordering and source locations are correct.
 - Inline control tokens split speech correctly, and active-speaker state persists across lines.
+- Bare scripts use `narrator`; explicit default overrides and speaker directives take precedence.
 - Invalid syntax is diagnosed and retained as explicit literal speech, never misclassified as a speaker.
 - Parsing the same input twice produces structurally identical output.
 - The human reviewer agrees that error messages explain how to fix the source.

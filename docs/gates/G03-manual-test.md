@@ -56,12 +56,13 @@ Use the Web development client and disposable data only. Lexicon entries are int
 ## Determinism, responsiveness, and isolation
 
 1. Select **Analyze** repeatedly without changing inputs. Confirm transcripts and match order remain identical.
-2. Paste or generate a script near 100,000 characters and select **Analyze**. Confirm the status identifies the browser worker and the page remains interactive.
-3. During separate long analyses, edit the source, default speaker, and lexicon. Confirm each edit marks the result stale and the old worker result is discarded.
-4. Refresh the page. Confirm all lexicon entries are gone; no session entry is persisted.
-5. Open browser developer tools before adding entries and analyzing. Confirm there are no project persistence, lexicon REST, Electron IPC, audio preview, or Speaches requests.
-6. Replay the invalid G02 fixture and its ignore/restore flow. Confirm parser errors and warnings offer the same shared controls, canonical ordering, literal recovery, diagnostics, and source preservation still work.
-7. Open Runtime diagnostics and run the G01 self-test once to confirm the previously approved screen and behavior remain intact.
+2. Paste or generate a bare multi-line study guide near 100,000 characters, leave **Default speaker override** blank, and select **Analyze**. Confirm the status identifies the browser worker, the page remains interactive, `narrator` is the only discovered speaker, all source appears in both transcripts, no `MISSING_DEFAULT_SPEAKER` diagnostic appears, and the result is **Synthesis ready**.
+3. Enter `host` as the override and analyze; confirm bare speech uses `host`. Clear it and analyze again; confirm bare speech returns to `narrator`.
+4. During separate long analyses, edit the source, default-speaker override, and lexicon. Confirm each edit marks the result stale and the old worker result is discarded.
+5. Refresh the page. Confirm all lexicon entries are gone; no session entry is persisted.
+6. Open browser developer tools before adding entries and analyzing. Confirm there are no project persistence, lexicon REST, Electron IPC, audio preview, or Speaches requests.
+7. Replay the invalid G02 fixture and its ignore/restore flow. Confirm parser errors and warnings offer the same shared controls, canonical ordering, literal recovery, diagnostics, and source preservation still work.
+8. Open Runtime diagnostics and run the G01 self-test once to confirm the previously approved screen and behavior remain intact.
 
 ## Review record
 
