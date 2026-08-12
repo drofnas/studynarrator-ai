@@ -1,7 +1,8 @@
 import { z } from "zod";
+import type { PersistenceClient } from "./persistence.js";
 
 export const APPLICATION_VERSION = "0.1.0";
-export const DIAGNOSTICS_SCHEMA_VERSION = 1;
+export const DIAGNOSTICS_SCHEMA_VERSION = 2;
 export const SYSTEM_DIAGNOSTICS_CHANNEL = "system.diagnostics";
 
 export const CheckStatusSchema = z.enum(["pass", "fail"]);
@@ -41,13 +42,17 @@ export const StorageCheckSchema = z.discriminatedUnion("status", [
     status: z.literal("pass"),
     driver: z.literal("better-sqlite3"),
     sqliteVersion: z.string().min(1),
-    migrationVersion: z.literal(1),
+    migrationVersion: z.literal(2),
     databasePath: z.string().min(1),
+    latestBackupPath: z.string().min(1).nullable(),
     markerKey: z.literal("g01.runtime-self-test"),
     markerValue: z.literal("study-narrator-g01"),
     createdAt: z.iso.datetime()
   }).strict(),
-  FailureSchema
+  FailureSchema.extend({
+    databasePath: z.string().min(1).optional(),
+    recoveryBackupPath: z.string().min(1).nullable().optional()
+  }).strict()
 ]);
 
 export const FfmpegCheckSchema = z.discriminatedUnion("status", [
@@ -87,4 +92,7 @@ export interface SystemClient {
 
 export interface StudyNarratorBridge {
   system: SystemClient;
+  persistence?: PersistenceClient;
 }
+
+export * from "./persistence.js";

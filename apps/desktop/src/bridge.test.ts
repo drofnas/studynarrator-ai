@@ -5,12 +5,12 @@ import { registerDiagnosticsHandler } from "./ipc.js";
 import { SECURE_WEB_PREFERENCES } from "./security.js";
 
 const diagnostics = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   overall: "fail",
   client: "electron",
   transport: "ipc",
   runtime: {
-    schemaVersion: 1,
+    schemaVersion: 2,
     applicationVersion: "0.1.0",
     runtimeName: "electron",
     runtimeVersion: "24.0.0",

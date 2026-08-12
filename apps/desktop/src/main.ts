@@ -4,7 +4,7 @@ import { createDesktopServices } from "./bootstrap.js";
 import { registerDiagnosticsHandler } from "./ipc.js";
 import { SECURE_WEB_PREFERENCES } from "./security.js";
 
-let runtime: ReturnType<typeof createDesktopServices> | undefined;
+let runtime: Awaited<ReturnType<typeof createDesktopServices>> | undefined;
 
 async function createWindow() {
   const window = new BrowserWindow({
@@ -37,7 +37,7 @@ async function createWindow() {
 }
 
 void app.whenReady().then(async () => {
-  runtime = createDesktopServices({ defaultDataDirectory: app.getPath("userData") });
+  runtime = await createDesktopServices({ defaultDataDirectory: app.getPath("userData") });
   registerDiagnosticsHandler(ipcMain, runtime.service, runtime.context);
   await createWindow();
 });

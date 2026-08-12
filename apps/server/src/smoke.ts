@@ -1,7 +1,7 @@
 import { SystemDiagnosticsSchema } from "@studynarrator/shared-types";
 import { createServerServices } from "./bootstrap.js";
 
-const { service, context } = createServerServices();
+const { service, context } = await createServerServices();
 try {
   const diagnostics = SystemDiagnosticsSchema.parse(await service.diagnostics(context));
   process.stdout.write(`${JSON.stringify(diagnostics)}\n`);

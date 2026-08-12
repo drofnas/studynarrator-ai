@@ -1,0 +1,259 @@
+import { chmod, mkdir, readdir, stat } from "node:fs/promises";
+import { basename, dirname, extname, join } from "node:path";
+import { DATABASE_SCHEMA_VERSION } from "@studynarrator/shared-types";
+import { MigrationFailureError } from "./errors.js";
+
+export interface StatementLike {
+  run(...parameters: unknown[]): { changes?: number | bigint };
+  get(...parameters: unknown[]): unknown;
+  all(...parameters: unknown[]): unknown[];
+}
+
+export interface DatabaseLike {
+  exec(sql: string): unknown;
+  pragma(source: string, options?: { simple?: boolean }): unknown;
+  prepare(sql: string): StatementLike;
+  backup(destinationFile: string): Promise<unknown>;
+  close(): void;
+}
+
+export interface DatabaseConstructor {
+  new(path: string): DatabaseLike;
+}
+
+export interface Migration {
+  version: number;
+  name: string;
+  up(database: DatabaseLike): void;
+}
+
+const MIGRATION_1_SQL = `
+  CREATE TABLE IF NOT EXISTS schema_migrations (
+    version INTEGER PRIMARY KEY,
+    applied_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS diagnostic_kv (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+`;
+
+const MIGRATION_2_SQL = `
+  CREATE TABLE connection_profiles (
+    id TEXT PRIMARY KEY,
+    ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+    name TEXT NOT NULL,
+    base_url TEXT,
+    default_model_id TEXT,
+    default_voice_id TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE system_pacing_defaults (
+    singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
+    paragraph_pause_enabled INTEGER NOT NULL CHECK (paragraph_pause_enabled IN (0, 1)),
+    paragraph_pause_duration_ms INTEGER NOT NULL CHECK (paragraph_pause_duration_ms BETWEEN 0 AND 30000),
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE ignored_diagnostic_patterns (
+    code TEXT NOT NULL,
+    pattern TEXT NOT NULL,
+    ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (code, pattern)
+  );
+
+  CREATE TABLE projects (
+    id TEXT PRIMARY KEY,
+    config_version INTEGER NOT NULL DEFAULT 1 CHECK (config_version = 1),
+    name TEXT NOT NULL,
+    description TEXT NOT NULL,
+    script_source TEXT NOT NULL,
+    script_hash TEXT NOT NULL CHECK (length(script_hash) = 64),
+    connection_profile_id TEXT REFERENCES connection_profiles(id) ON DELETE SET NULL,
+    paragraph_pause_enabled INTEGER NOT NULL CHECK (paragraph_pause_enabled IN (0, 1)),
+    paragraph_pause_id TEXT NOT NULL,
+    paragraph_pause_duration_ms INTEGER NOT NULL CHECK (paragraph_pause_duration_ms BETWEEN 0 AND 30000),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE speaker_mappings (
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    speaker_id TEXT NOT NULL,
+    ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+    display_name TEXT NOT NULL,
+    voice_id TEXT,
+    speed REAL NOT NULL,
+    gain_db REAL NOT NULL,
+    role_description TEXT NOT NULL,
+    sample_text TEXT NOT NULL,
+    PRIMARY KEY (project_id, speaker_id)
+  );
+
+  CREATE TABLE pause_presets (
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    pause_id TEXT NOT NULL,
+    ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+    duration_ms INTEGER NOT NULL CHECK (duration_ms BETWEEN 0 AND 30000),
+    description TEXT NOT NULL,
+    PRIMARY KEY (project_id, pause_id)
+  );
+
+  CREATE TABLE lexicon_entries (
+    id TEXT PRIMARY KEY,
+    scope TEXT NOT NULL CHECK (scope IN ('global', 'project')),
+    project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+    ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+    entry_type TEXT NOT NULL CHECK (entry_type IN ('exactTerm', 'exactPhrase', 'namedSense')),
+    display_text TEXT NOT NULL,
+    sense_id TEXT,
+    spoken_text TEXT NOT NULL,
+    case_sensitive INTEGER NOT NULL CHECK (case_sensitive IN (0, 1)),
+    whole_word INTEGER NOT NULL CHECK (whole_word IN (0, 1)),
+    priority INTEGER NOT NULL,
+    enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+    notes TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    CHECK (
+      (scope = 'global' AND project_id IS NULL)
+      OR (scope = 'project' AND project_id IS NOT NULL)
+    ),
+    CHECK (
+      (entry_type = 'namedSense' AND sense_id IS NOT NULL)
+      OR (entry_type != 'namedSense' AND sense_id IS NULL)
+    )
+  );
+
+  CREATE INDEX projects_updated_at_idx ON projects(updated_at DESC, id ASC);
+  CREATE INDEX lexicon_project_idx ON lexicon_entries(project_id, ordinal);
+`;
+
+export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
+  { version: 1, name: "g01-diagnostics", up: (database) => { database.exec(MIGRATION_1_SQL); } },
+  {
+    version: 2,
+    name: "g04-project-persistence",
+    up: (database) => {
+      database.exec(MIGRATION_2_SQL);
+    }
+  }
+]);
+
+interface VersionRow { version: number }
+
+export interface MigrationResult {
+  database: DatabaseLike;
+  databasePath: string;
+  databaseSchemaVersion: number;
+  appliedVersions: number[];
+  backupPath: string | null;
+}
+
+function validateMigrations(migrations: readonly Migration[]) {
+  migrations.forEach((migration, index) => {
+    if (migration.version !== index + 1) throw new Error("Migrations must be consecutive and start at version 1.");
+  });
+}
+
+async function isExistingDatabase(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).size > 0;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+function backupFilename(databasePath: string, from: number, to: number, now: Date): string {
+  const extension = extname(databasePath) || ".sqlite";
+  const stem = basename(databasePath, extname(databasePath));
+  const timestamp = now.toISOString().replace(/[:.]/gu, "-");
+  return `${stem}-v${String(from)}-to-v${String(to)}-${timestamp}${extension}`;
+}
+
+async function latestBackup(databasePath: string): Promise<string | null> {
+  const backupDirectory = join(dirname(databasePath), "backups");
+  try {
+    const stem = `${basename(databasePath, extname(databasePath))}-v`;
+    const names = (await readdir(backupDirectory)).filter((name) => name.startsWith(stem)).sort();
+    return names.length === 0 ? null : join(backupDirectory, names.at(-1)!);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+export async function migrateDatabase(options: {
+  Database: DatabaseConstructor;
+  databasePath: string;
+  now?: () => Date;
+  migrations?: readonly Migration[];
+}): Promise<MigrationResult> {
+  const migrations = options.migrations ?? STUDYNARRATOR_MIGRATIONS;
+  validateMigrations(migrations);
+  const targetVersion = migrations.at(-1)?.version ?? 0;
+  if (options.migrations === undefined && targetVersion !== DATABASE_SCHEMA_VERSION) {
+    throw new Error("The migration registry does not match the shared database schema version.");
+  }
+
+  await mkdir(dirname(options.databasePath), { recursive: true, mode: 0o700 });
+  const existed = await isExistingDatabase(options.databasePath);
+  const database = new options.Database(options.databasePath);
+  database.pragma("foreign_keys = ON");
+  database.pragma("journal_mode = WAL");
+  database.pragma("busy_timeout = 5000");
+
+  let currentVersion = 0;
+  let backupPath: string | null = null;
+  const appliedVersions: number[] = [];
+
+  try {
+    const table = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'").get();
+    if (table) {
+      const row = database.prepare("SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations").get() as VersionRow;
+      currentVersion = Number(row.version);
+    }
+    if (currentVersion > targetVersion) throw new Error("The database schema is newer than this application supports.");
+
+    if (existed && currentVersion < targetVersion) {
+      const backupDirectory = join(dirname(options.databasePath), "backups");
+      await mkdir(backupDirectory, { recursive: true, mode: 0o700 });
+      backupPath = join(backupDirectory, backupFilename(options.databasePath, currentVersion, targetVersion, (options.now ?? (() => new Date()))()));
+      await database.backup(backupPath);
+      await chmod(backupPath, 0o600);
+    }
+
+    for (const migration of migrations) {
+      if (migration.version <= currentVersion) continue;
+      database.exec("BEGIN IMMEDIATE;");
+      try {
+        migration.up(database);
+        database.prepare("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)")
+          .run(migration.version, (options.now ?? (() => new Date()))().toISOString());
+        database.pragma(`user_version = ${String(migration.version)}`);
+        database.exec("COMMIT;");
+        currentVersion = migration.version;
+        appliedVersions.push(migration.version);
+      } catch (error) {
+        try { database.exec("ROLLBACK;"); } catch { /* transaction did not start */ }
+        throw error;
+      }
+    }
+    await chmod(options.databasePath, 0o600);
+    backupPath ??= await latestBackup(options.databasePath);
+    return { database, databasePath: options.databasePath, databaseSchemaVersion: currentVersion, appliedVersions, backupPath };
+  } catch {
+    database.close();
+    throw new MigrationFailureError(
+      "StudyNarrator could not migrate its database. The previous data remains recoverable from the protected backup.",
+      options.databasePath,
+      backupPath,
+      currentVersion
+    );
+  }
+}
