@@ -99,6 +99,46 @@ describe("G05 Projects workbench", () => {
     await waitFor(() => expect(screen.getByText("Saved")).toBeInTheDocument());
   });
 
+  it("schedules one autosave for an edit burst instead of re-arming while saving", async () => {
+    const { client, analyze, replace } = fixture();
+    const pendingSave = deferred<ProjectDetail>();
+    replace.mockImplementationOnce(() => pendingSave.promise);
+    const timerSpy = vi.spyOn(window, "setTimeout");
+    renderPage(client, analyze);
+
+    const scriptSource = await screen.findByLabelText("Script source");
+    await waitFor(() => expect(analyze).toHaveBeenCalled());
+    timerSpy.mockClear();
+
+    const pastedSource = `[speaker_teacher] ${"Responsive paste 🧠 ".repeat(2_000)}`;
+    fireEvent.change(scriptSource, { target: { value: "[speaker_teacher] Autosave revision one" } });
+    fireEvent.change(scriptSource, { target: { value: "[speaker_teacher] Autosave revision two" } });
+    fireEvent.change(scriptSource, { target: { value: pastedSource } });
+    const editTimers = timerSpy.mock.calls.filter(([, delay]) => delay === 800).length;
+    expect(scriptSource).toHaveValue(pastedSource);
+
+    await waitFor(() => expect(replace).toHaveBeenCalledTimes(1), { timeout: 2_000 });
+    expect(editTimers).toBe(3);
+    expect(timerSpy.mock.calls.filter(([, delay]) => delay === 800)).toHaveLength(editTimers);
+    expect(replace).toHaveBeenCalledWith(project.id, expect.objectContaining({ scriptSource: pastedSource }));
+
+    pendingSave.resolve({ ...project, scriptSource: pastedSource, updatedAt: "2026-08-12T13:30:00.000Z" });
+    await waitFor(() => expect(screen.getByText("Saved")).toBeInTheDocument());
+  });
+
+  it("does not autosave discovery reconciliation when the user has not edited the project", async () => {
+    const unreconciled = { ...project, speakerMappings: [], pausePresets: [] };
+    const { client, analyze, replace } = fixture(unreconciled);
+    const timerSpy = vi.spyOn(window, "setTimeout");
+    renderPage(client, analyze);
+
+    expect(await screen.findByLabelText("Raw voice ID")).toHaveValue("");
+    await waitFor(() => expect(analyze).toHaveBeenCalled());
+    expect(timerSpy.mock.calls.filter(([, delay]) => delay === 800)).toHaveLength(0);
+    expect(replace).not.toHaveBeenCalled();
+    expect(screen.getByText("Saved")).toBeInTheDocument();
+  });
+
   it("retains an invalid custom pause draft and blocks Save now", async () => {
     const custom = { ...project, scriptSource: "[speaker_teacher] One. [pause_custom] Two.", pausePresets: [project.pausePresets[0]!] };
     const { client, analyze, replace, duplicate } = fixture(custom);

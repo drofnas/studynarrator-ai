@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import {
   buildAuthoringDryRun,
@@ -47,6 +47,16 @@ const emptyLexiconDraft: LexiconEntryAuthoring = {
 };
 
 function same(left: unknown, right: unknown): boolean { return JSON.stringify(left) === JSON.stringify(right); }
+function sameDraft(left: ProjectDraft, right: ProjectDraft): boolean {
+  return left.name === right.name
+    && left.description === right.description
+    && left.scriptSource === right.scriptSource
+    && left.connectionProfileId === right.connectionProfileId
+    && left.speakerMappings === right.speakerMappings
+    && left.pausePresets === right.pausePresets
+    && left.paragraphPause === right.paragraphPause
+    && left.lexiconEntries === right.lexiconEntries;
+}
 function message(error: unknown): string { return error instanceof Error ? error.message : "The operation failed."; }
 
 export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; analyzer: ScriptAnalyzer }) {
@@ -87,11 +97,28 @@ export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; 
   const savedRevisionRef = useRef(0);
   const analysisRevisionRef = useRef(0);
   const saveQueueRef = useRef<Promise<boolean>>(Promise.resolve(true));
+  const autosaveTimerRef = useRef<number | undefined>(undefined);
+  const saveNowRef = useRef<() => Promise<boolean>>(() => Promise.resolve(false));
 
   draftRef.current = draft;
   const isDirty = saveState === "unsaved" || saveState === "saving" || saveState === "invalid" || saveState === "failed";
 
   const reloadProjects = useCallback(async () => setProjects(await client.projects.list()), [client]);
+
+  const clearAutosave = useCallback(() => {
+    if (autosaveTimerRef.current === undefined) return;
+    window.clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = undefined;
+  }, []);
+
+  const scheduleAutosave = useCallback(() => {
+    // Draft mutations own the timer; save and analysis state transitions must never re-arm it.
+    clearAutosave();
+    autosaveTimerRef.current = window.setTimeout(() => {
+      autosaveTimerRef.current = undefined;
+      void saveNowRef.current();
+    }, 800);
+  }, [clearAutosave]);
 
   useEffect(() => {
     let active = true;
@@ -109,8 +136,10 @@ export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; 
 
   useEffect(() => {
     if (!projectId) {
+      clearAutosave();
       setProject(undefined);
       setDraft(undefined);
+      draftRef.current = undefined;
       setAnalysis(undefined);
       setConfiguration({ speakers: [], pauses: [], sections: [] });
       return;
@@ -119,8 +148,11 @@ export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; 
     setBusy(true);
     void client.projects.get(projectId).then((loaded) => {
       if (!active) return;
+      clearAutosave();
+      const loadedDraft = draftFromProject(loaded);
       setProject(loaded);
-      setDraft(draftFromProject(loaded));
+      setDraft(loadedDraft);
+      draftRef.current = loadedDraft;
       revisionRef.current = 0;
       savedRevisionRef.current = 0;
       invalidPauseRef.current = {};
@@ -131,18 +163,26 @@ export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; 
       setBusy(false);
     }).catch((error: unknown) => { if (active) { setErrors([message(error)]); setBusy(false); } });
     return () => { active = false; };
-  }, [client, projectId]);
+  }, [clearAutosave, client, projectId]);
 
-  const updateDraft = useCallback((updater: (current: ProjectDraft) => ProjectDraft) => {
-    setDraft((current) => {
-      if (!current) return current;
-      const next = updater(current);
-      if (same(current, next)) return current;
+  const updateDraft = useCallback((updater: (current: ProjectDraft) => ProjectDraft, autosave = true) => {
+    const current = draftRef.current;
+    if (!current) return;
+    const next = updater(current);
+    if (sameDraft(current, next)) return;
+    draftRef.current = next;
+    setDraft(next);
+    if (autosave) {
       revisionRef.current += 1;
-      setSaveState(Object.keys(invalidPauseRef.current).length > 0 ? "invalid" : "unsaved");
-      return next;
-    });
-  }, []);
+      if (Object.keys(invalidPauseRef.current).length > 0) {
+        clearAutosave();
+        setSaveState("invalid");
+      } else {
+        setSaveState("unsaved");
+        scheduleAutosave();
+      }
+    }
+  }, [clearAutosave, scheduleAutosave]);
 
   const performSave = useCallback(async (): Promise<boolean> => {
     const current = draftRef.current;
@@ -163,7 +203,9 @@ export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; 
       savedRevisionRef.current = targetRevision;
       setProject(saved);
       if (revisionRef.current === targetRevision) {
-        setDraft(draftFromProject(saved));
+        const savedDraft = draftFromProject(saved);
+        setDraft(savedDraft);
+        draftRef.current = savedDraft;
         setSaveState("saved");
         setNotice("All changes saved.");
         setProjects(await client.projects.list());
@@ -179,20 +221,20 @@ export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; 
   }, [client, project]);
 
   const saveNow = useCallback(() => {
+    clearAutosave();
     const run = () => performSave();
     saveQueueRef.current = saveQueueRef.current.then(run, run);
     return saveQueueRef.current;
-  }, [performSave]);
+  }, [clearAutosave, performSave]);
 
-  useEffect(() => {
-    if (!draft || revisionRef.current <= savedRevisionRef.current || saveState === "invalid") return;
-    const timer = window.setTimeout(() => { void saveNow(); }, 800);
-    return () => window.clearTimeout(timer);
-  }, [draft, saveNow, saveState]);
+  saveNowRef.current = saveNow;
+
+  useEffect(() => () => clearAutosave(), [clearAutosave]);
 
   useEffect(() => {
     if (!draft) return;
     const revision = ++analysisRevisionRef.current;
+    const persistReconciliation = revisionRef.current > savedRevisionRef.current;
     setAnalysisState("parsing");
     const timer = window.setTimeout(() => {
       const entries = materializeLexicon([...globalLexicon, ...draft.lexiconEntries], "g05-analysis");
@@ -203,7 +245,9 @@ export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; 
         ...(ignoredDiagnostics.length > 0 ? { ignoredDiagnostics } : {})
       }).then((result) => {
         if (revision !== analysisRevisionRef.current) return;
-        const reconciled = reconcileDiscoveredConfiguration({ parseResult: result.parseResult, speakerMappings: draft.speakerMappings, pausePresets: draft.pausePresets });
+        const currentDraft = draftRef.current;
+        if (!currentDraft) return;
+        const reconciled = reconcileDiscoveredConfiguration({ parseResult: result.parseResult, speakerMappings: currentDraft.speakerMappings, pausePresets: currentDraft.pausePresets });
         setAnalysis(result);
         setConfiguration(reconciled);
         setAnalysisState("ready");
@@ -215,8 +259,8 @@ export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; 
         });
         const nextSpeakers = reconciled.speakers.map(({ discovered: _discovered, occurrenceCount: _occurrenceCount, ...item }) => item);
         const nextPauses = reconciled.pauses.flatMap(({ durationMs, discovered: _discovered, occurrenceCount: _occurrenceCount, ...item }) => durationMs === null ? [] : [{ ...item, durationMs }]);
-        if (!same(draft.speakerMappings, nextSpeakers) || !same(draft.pausePresets, nextPauses)) {
-          updateDraft((current) => ({ ...current, speakerMappings: nextSpeakers, pausePresets: nextPauses }));
+        if (!same(currentDraft.speakerMappings, nextSpeakers) || !same(currentDraft.pausePresets, nextPauses)) {
+          updateDraft((current) => ({ ...current, speakerMappings: nextSpeakers, pausePresets: nextPauses }), persistReconciliation);
         }
       }).catch((error: unknown) => {
         if (revision === analysisRevisionRef.current) { setAnalysisState("failed"); setAnalysisError(message(error)); }
@@ -236,9 +280,13 @@ export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; 
     return () => { window.removeEventListener("beforeunload", beforeUnload); document.removeEventListener("click", linkGuard, true); };
   }, [isDirty]);
 
-  const dryRun: AuthoringDryRunResult | undefined = useMemo(() => analysis && draft
+  const dryRun: AuthoringDryRunResult | undefined = useMemo(() => analysis
     ? buildAuthoringDryRun({ parseResult: analysis.parseResult, pacingResult: analysis.pacingResult, transformResult: analysis.transformResult, speakers: configuration.speakers, pauses: configuration.pauses })
-    : undefined, [analysis, configuration, draft]);
+    : undefined, [analysis, configuration]);
+
+  const deferredScriptSource = useDeferredValue(draft?.scriptSource ?? "");
+  const lineNumbers = useMemo(() => deferredScriptSource.split(/\r?\n/u).map((_line, index) => index + 1).join("\n") || "1", [deferredScriptSource]);
+  const cleanedFencedSource = useMemo(() => draft ? stripSingleSurroundingCodeFence(draft.scriptSource) : undefined, [draft?.scriptSource]);
 
   const sampleResult = useMemo(() => {
     if (!sample.trim()) return undefined;
@@ -288,6 +336,7 @@ export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; 
     if (!parsed.ok) {
       invalidPauseRef.current = { ...invalidPauseRef.current, [row.pauseId]: parsed.message };
       revisionRef.current += 1;
+      clearAutosave();
       setSaveState("invalid");
       return;
     }
@@ -400,8 +449,8 @@ export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; 
             <section className={styles.scriptPanel} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void importFile(event.dataTransfer.files[0]); }}>
               <div className={styles.sectionHeading}><div><span>Source</span><h3>Script editor</h3></div><label className={styles.fileButton}>Upload .txt<input type="file" accept=".txt,text/plain" onChange={(event) => void importFile(event.target.files?.[0])} /></label></div>
               <div className={styles.searchBar}><input aria-label="Find text" placeholder="Find literal text" value={search} onChange={(event) => setSearch(event.target.value)} /><input aria-label="Replacement text" placeholder="Replace with" value={replacement} onChange={(event) => setReplacement(event.target.value)} /><label><input type="checkbox" checked={caseSensitive} onChange={(event) => setCaseSensitive(event.target.checked)} />Case sensitive</label><button type="button" onClick={findNext}>Find next</button><button type="button" onClick={replaceNext}>Replace next</button><button type="button" onClick={() => updateDraft((current) => ({ ...current, scriptSource: replaceLiteral(current.scriptSource, search, replacement, caseSensitive) }))}>Replace all</button></div>
-              <div className={styles.sourceEditor}><pre aria-hidden="true">{draft.scriptSource.split(/\r?\n/u).map((_line, index) => index + 1).join("\n") || "1"}</pre><textarea ref={editorRef} aria-label="Script source" spellCheck={false} value={draft.scriptSource} onChange={(event) => updateDraft((current) => ({ ...current, scriptSource: event.target.value }))} /></div>
-              <div className={styles.sourceActions}><span>{draft.scriptSource.length.toLocaleString()} characters · drop a UTF-8 .txt file anywhere in this panel</span>{stripSingleSurroundingCodeFence(draft.scriptSource) !== undefined ? <button type="button" className={styles.secondary} onClick={() => { const cleaned = stripSingleSurroundingCodeFence(draft.scriptSource); if (cleaned !== undefined) { setCleanupUndo(draft.scriptSource); updateDraft((current) => ({ ...current, scriptSource: cleaned })); } }}>Remove surrounding code fence</button> : null}{cleanupUndo !== undefined ? <button type="button" className={styles.secondary} onClick={() => { updateDraft((current) => ({ ...current, scriptSource: cleanupUndo })); setCleanupUndo(undefined); }}>Restore fenced source</button> : null}</div>
+              <div className={styles.sourceEditor}><pre aria-hidden="true">{lineNumbers}</pre><textarea ref={editorRef} aria-label="Script source" spellCheck={false} value={draft.scriptSource} onChange={(event) => updateDraft((current) => ({ ...current, scriptSource: event.target.value }))} /></div>
+              <div className={styles.sourceActions}><span>{draft.scriptSource.length.toLocaleString()} characters · drop a UTF-8 .txt file anywhere in this panel</span>{cleanedFencedSource !== undefined ? <button type="button" className={styles.secondary} onClick={() => { setCleanupUndo(draft.scriptSource); updateDraft((current) => ({ ...current, scriptSource: cleanedFencedSource })); }}>Remove surrounding code fence</button> : null}{cleanupUndo !== undefined ? <button type="button" className={styles.secondary} onClick={() => { updateDraft((current) => ({ ...current, scriptSource: cleanupUndo })); setCleanupUndo(undefined); }}>Restore fenced source</button> : null}</div>
             </section>
           </main>
 
