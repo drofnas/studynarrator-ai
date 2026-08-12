@@ -10,7 +10,7 @@ import { App } from "./App.js";
 const unusedAnalyzer = { analyze: vi.fn() };
 const unusedPersistence: PersistenceClient = {
   status: vi.fn(),
-  projects: { list: vi.fn(), create: vi.fn(), get: vi.fn(), replace: vi.fn(), delete: vi.fn() },
+  projects: { list: vi.fn(), create: vi.fn(), get: vi.fn(), replace: vi.fn(), duplicate: vi.fn(), delete: vi.fn() },
   settings: { getPacing: vi.fn(), updatePacing: vi.fn() },
   preferences: { getIgnoredDiagnostics: vi.fn(), replaceIgnoredDiagnostics: vi.fn() },
   globalLexicon: { list: vi.fn(), replace: vi.fn() },

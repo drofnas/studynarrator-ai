@@ -12,6 +12,7 @@ import {
   PersistenceStatusSchema,
   ProjectCreateInputSchema,
   ProjectDetailSchema,
+  ProjectDuplicateRequestSchema,
   ProjectIdInputSchema,
   ProjectReplaceRequestSchema,
   ProjectSummaryCollectionSchema,
@@ -69,6 +70,10 @@ export function registerPersistenceHandlers(ipcMain: IpcMainLike, persistence: P
   handle(PERSISTENCE_CHANNELS.projectsReplace, async (input) => {
     const request = ProjectReplaceRequestSchema.parse(input);
     return ProjectDetailSchema.parse(await persistence.projects.replace(request.projectId, request.project));
+  });
+  handle(PERSISTENCE_CHANNELS.projectsDuplicate, async (input) => {
+    const request = ProjectDuplicateRequestSchema.parse(input);
+    return ProjectDetailSchema.parse(await persistence.projects.duplicate(request.projectId, request.duplicate));
   });
   handle(PERSISTENCE_CHANNELS.projectsDelete, async (input) => {
     const request = ProjectIdInputSchema.parse(input);

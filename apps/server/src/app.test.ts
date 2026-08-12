@@ -87,6 +87,10 @@ describe("Express persistence API", () => {
     expect(replaced.scriptHash).toMatch(/^[a-f0-9]{64}$/u);
     expect(ProjectDetailSchema.parse((await request(app).get(`/api/projects/${created.id}`).expect(200)).body as unknown)).toEqual(replaced);
     expect(ProjectSummaryCollectionSchema.parse((await request(app).get("/api/projects").expect(200)).body as unknown)).toHaveLength(1);
+    const duplicate = ProjectDetailSchema.parse((await request(app).post(`/api/projects/${created.id}/duplicate`).send({ name: "REST study copy" }).expect(201)).body as unknown);
+    expect(duplicate).toMatchObject({ name: "REST study copy", scriptSource: source });
+    expect(duplicate.id).not.toBe(created.id);
+    expect(duplicate.lexiconEntries[0]?.id).not.toBe(replaced.lexiconEntries[0]?.id);
     await request(app).delete(`/api/projects/${created.id}`).expect(204);
     await request(app).get(`/api/projects/${created.id}`).expect(404);
     service.close();
@@ -110,7 +114,7 @@ describe("Express persistence API", () => {
   it("keeps diagnostics status available while degraded writes return 503", async () => {
     const { service } = await fixture();
     const persistence = createUnavailablePersistenceService({
-      contractVersion: 1,
+      contractVersion: 2,
       state: "unavailable",
       databaseSchemaVersion: 1,
       targetDatabaseSchemaVersion: 2,

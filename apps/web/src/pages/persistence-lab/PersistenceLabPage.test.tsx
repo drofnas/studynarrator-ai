@@ -7,7 +7,7 @@ import type { IgnoredDiagnosticCollection, PersistenceClient, ProjectCreateInput
 import { PersistenceLabPage } from "./PersistenceLabPage.js";
 
 const project: ProjectDetail = {
-  contractVersion: 1,
+  contractVersion: 2,
   id: "00000000-0000-4000-8000-000000000001",
   name: "Restart study",
   description: "Durable fixture",
@@ -33,12 +33,13 @@ function clientFixture() {
   const replaceIgnored = vi.fn(async (input: IgnoredDiagnosticCollection) => input);
   const replaceGlobal = vi.fn(async () => []);
   const client: PersistenceClient = {
-    status: vi.fn(async () => ({ contractVersion: 1, state: "ready", databaseSchemaVersion: 2, targetDatabaseSchemaVersion: 2, databasePath: "/tmp/gates/G04/studynarrator.sqlite", latestBackupPath: null } as const)),
+    status: vi.fn(async () => ({ contractVersion: 2, state: "ready", databaseSchemaVersion: 2, targetDatabaseSchemaVersion: 2, databasePath: "/tmp/gates/G04/studynarrator.sqlite", latestBackupPath: null } as const)),
     projects: {
       list: vi.fn(async () => remove.mock.calls.length > 0 ? [] : [{ id: stored.id, name: stored.name, description: stored.description, scriptHash: stored.scriptHash, createdAt: stored.createdAt, updatedAt: stored.updatedAt }]),
       create: vi.fn(async (input: ProjectCreateInput) => ({ ...structuredClone(project), name: input.name, description: input.description ?? "" })),
       get: vi.fn(async () => structuredClone(stored)),
       replace,
+      duplicate: vi.fn(async () => structuredClone(stored)),
       delete: remove
     },
     settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing },

@@ -11,6 +11,7 @@ import {
   PersistenceStatusSchema,
   ProjectCreateInputSchema,
   ProjectDetailSchema,
+  ProjectDuplicateInputSchema,
   ProjectIdSchema,
   ProjectReplaceInputSchema,
   ProjectSummaryCollectionSchema,
@@ -67,6 +68,14 @@ export function createExpressApp(options: { service: SystemService; context: Dia
         response.json(ProjectDetailSchema.parse(await persistence.projects.replace(
           ProjectIdSchema.parse(request.params.projectId),
           ProjectReplaceInputSchema.parse(request.body)
+        )));
+      } catch (error) { next(error); }
+    });
+    app.post("/api/projects/:projectId/duplicate", async (request, response, next) => {
+      try {
+        response.status(201).json(ProjectDetailSchema.parse(await persistence.projects.duplicate(
+          ProjectIdSchema.parse(request.params.projectId),
+          ProjectDuplicateInputSchema.parse(request.body)
         )));
       } catch (error) { next(error); }
     });

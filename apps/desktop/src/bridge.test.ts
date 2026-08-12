@@ -27,7 +27,7 @@ const diagnostics = {
 } as const;
 
 const persistenceStatus = {
-  contractVersion: 1 as const,
+  contractVersion: 2 as const,
   state: "ready" as const,
   databaseSchemaVersion: 2 as const,
   targetDatabaseSchemaVersion: 2 as const,
@@ -37,7 +37,7 @@ const persistenceStatus = {
 
 const persistence = {
   status: vi.fn(async () => persistenceStatus),
-  projects: { list: vi.fn(async () => []), create: vi.fn(), get: vi.fn(), replace: vi.fn(), delete: vi.fn() },
+  projects: { list: vi.fn(async () => []), create: vi.fn(), get: vi.fn(), replace: vi.fn(), duplicate: vi.fn(), delete: vi.fn() },
   settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() },
   preferences: { getIgnoredDiagnostics: vi.fn(async () => []), replaceIgnoredDiagnostics: vi.fn() },
   globalLexicon: { list: vi.fn(async () => []), replace: vi.fn() },

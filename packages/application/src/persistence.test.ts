@@ -3,7 +3,7 @@ import type { IgnoredDiagnosticCollection, SystemPacingDefaults } from "@studyna
 import { createPersistenceService, createUnavailablePersistenceService, PersistenceUnavailableError } from "./persistence.js";
 
 const project = {
-  contractVersion: 1 as const,
+  contractVersion: 2 as const,
   id: "00000000-0000-4000-8000-000000000001",
   name: "Persisted study",
   description: "",
@@ -21,7 +21,7 @@ const project = {
 function repository() {
   return {
     status: vi.fn(() => ({
-      contractVersion: 1 as const,
+      contractVersion: 2 as const,
       state: "ready" as const,
       databaseSchemaVersion: 2 as const,
       targetDatabaseSchemaVersion: 2 as const,
@@ -32,6 +32,7 @@ function repository() {
     createProject: vi.fn(() => project),
     getProject: vi.fn(() => project),
     replaceProject: vi.fn(() => project),
+    duplicateProject: vi.fn(() => project),
     deleteProject: vi.fn(),
     getSystemPacing: vi.fn(() => ({ enabled: true, durationMs: 750 })),
     updateSystemPacing: vi.fn((input: SystemPacingDefaults) => input),
@@ -55,6 +56,8 @@ describe("persistence application service", () => {
     expect(source.createProject).toHaveBeenCalledWith({ name: "Study", description: "" });
     await expect(service.projects.create({ name: "Study", extra: "not allowed" } as never)).rejects.toThrow();
     expect(source.createProject).toHaveBeenCalledTimes(1);
+    await expect(service.projects.duplicate(project.id, { name: "Study copy" })).resolves.toEqual(project);
+    expect(source.duplicateProject).toHaveBeenCalledWith(project.id, { name: "Study copy" });
   });
 
   it("validates repository responses at the application boundary", async () => {
@@ -65,7 +68,7 @@ describe("persistence application service", () => {
 
   it("keeps status available while rejecting degraded persistence operations", async () => {
     const service = createUnavailablePersistenceService({
-      contractVersion: 1,
+      contractVersion: 2,
       state: "unavailable",
       databaseSchemaVersion: 1,
       targetDatabaseSchemaVersion: 2,

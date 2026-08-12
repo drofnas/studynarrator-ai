@@ -9,6 +9,7 @@ import {
   PersistenceStatusSchema,
   ProjectCreateInputSchema,
   ProjectDetailSchema,
+  ProjectDuplicateInputSchema,
   ProjectIdSchema,
   ProjectReplaceInputSchema,
   ProjectSummaryCollectionSchema,
@@ -21,6 +22,7 @@ import {
   type PersistenceStatus,
   type ProjectCreateInput,
   type ProjectDetail,
+  type ProjectDuplicateInput,
   type ProjectReplaceInput,
   type ProjectSummary,
   type SystemPacingDefaults
@@ -33,6 +35,7 @@ export interface PersistenceRepository {
   createProject(input: ProjectCreateInput): ProjectDetail;
   getProject(projectId: string): ProjectDetail;
   replaceProject(projectId: string, input: ProjectReplaceInput): ProjectDetail;
+  duplicateProject(projectId: string, input: ProjectDuplicateInput): ProjectDetail;
   deleteProject(projectId: string): void;
   getSystemPacing(): SystemPacingDefaults;
   updateSystemPacing(input: SystemPacingDefaults): SystemPacingDefaults;
@@ -68,6 +71,9 @@ export function createPersistenceService(repository: PersistenceRepository): Per
       },
       replace(projectId, input) {
         return execute(() => ProjectDetailSchema.parse(repository.replaceProject(ProjectIdSchema.parse(projectId), ProjectReplaceInputSchema.parse(input))));
+      },
+      duplicate(projectId, input) {
+        return execute(() => ProjectDetailSchema.parse(repository.duplicateProject(ProjectIdSchema.parse(projectId), ProjectDuplicateInputSchema.parse(input))));
       },
       delete(projectId) {
         return execute(() => { repository.deleteProject(ProjectIdSchema.parse(projectId)); });
@@ -121,7 +127,7 @@ export function createUnavailablePersistenceService(statusInput: PersistenceStat
   );
   return {
     status() { return Promise.resolve(status); },
-    projects: { list: unavailable, create: unavailable, get: unavailable, replace: unavailable, delete: unavailable },
+    projects: { list: unavailable, create: unavailable, get: unavailable, replace: unavailable, duplicate: unavailable, delete: unavailable },
     settings: { getPacing: unavailable, updatePacing: unavailable },
     preferences: { getIgnoredDiagnostics: unavailable, replaceIgnoredDiagnostics: unavailable },
     globalLexicon: { list: unavailable, replace: unavailable },

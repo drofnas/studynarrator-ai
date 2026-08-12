@@ -18,6 +18,8 @@ const projectId = "00000000-0000-4000-8000-000000000001";
 const secondProjectId = "00000000-0000-4000-8000-000000000002";
 const lexiconId = "00000000-0000-4000-8000-000000000003";
 const profileId = "00000000-0000-4000-8000-000000000004";
+const duplicateProjectId = "00000000-0000-4000-8000-000000000005";
+const duplicateLexiconId = "00000000-0000-4000-8000-000000000006";
 
 async function temporaryDatabase(name: string) {
   return join(await mkdtemp(join(tmpdir(), name)), "studynarrator.sqlite");
@@ -150,6 +152,45 @@ describe("StudyNarratorRepository", () => {
     const second = repository.createProject({ name: "Second" });
     expect(repository.getProject(first.id).paragraphPause).toEqual({ enabled: true, pauseId: "pause_medium", durationMs: 750 });
     expect(second.paragraphPause).toEqual({ enabled: false, pauseId: "pause_medium", durationMs: 1200 });
+    repository.close();
+  });
+
+  it("duplicates a complete project atomically with fresh owned IDs", async () => {
+    const repository = await openStudyNarratorRepository({
+      Database: DatabaseAdapter,
+      databasePath: await temporaryDatabase("studynarrator-g05-duplicate-"),
+      now: () => new Date("2026-08-12T12:00:00.000Z"),
+      idFactory: ids(projectId, lexiconId, duplicateProjectId, duplicateLexiconId)
+    });
+    const source = repository.createProject({ name: "Source", description: "Copy everything" });
+    const configured = repository.replaceProject(source.id, {
+      name: source.name,
+      description: source.description,
+      scriptSource: "[speaker_teacher] SQL",
+      connectionProfileId: null,
+      speakerMappings: [{ speakerId: "teacher", displayName: "Teacher", voiceId: "voice_teacher", speed: 1, gainDb: 0, roleDescription: "Guide", sampleText: "SQL" }],
+      pausePresets: source.pausePresets,
+      paragraphPause: source.paragraphPause,
+      lexiconEntries: [{ id: lexiconId, scope: "project", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel" }]
+    });
+
+    const duplicate = repository.duplicateProject(source.id, { name: "Source copy" });
+    expect(duplicate).toMatchObject({
+      id: duplicateProjectId,
+      name: "Source copy",
+      description: configured.description,
+      scriptSource: configured.scriptSource,
+      scriptHash: configured.scriptHash,
+      connectionProfileId: configured.connectionProfileId,
+      speakerMappings: configured.speakerMappings,
+      pausePresets: configured.pausePresets,
+      paragraphPause: configured.paragraphPause
+    });
+    expect(duplicate.lexiconEntries).toHaveLength(1);
+    expect(duplicate.lexiconEntries[0]).toMatchObject({ id: duplicateLexiconId, displayText: "SQL", spokenText: "sequel" });
+    expect(duplicate.lexiconEntries[0]?.id).not.toBe(configured.lexiconEntries[0]?.id);
+    expect(repository.getProject(source.id)).toEqual(configured);
+    expect(repository.listProjects()).toHaveLength(2);
     repository.close();
   });
 

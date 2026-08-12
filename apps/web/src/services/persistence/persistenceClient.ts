@@ -64,6 +64,7 @@ export function createRestPersistenceClient(fetchInput: typeof fetch = fetch): P
       create: async (input) => await request("/api/projects", ProjectDetailSchema, { method: "POST", body: body(input) }),
       get: async (projectId) => await request(`/api/projects/${encodeURIComponent(projectId)}`, ProjectDetailSchema),
       replace: async (projectId, input) => await request(`/api/projects/${encodeURIComponent(projectId)}`, ProjectDetailSchema, { method: "PUT", body: body(input) }),
+      duplicate: async (projectId, input) => await request(`/api/projects/${encodeURIComponent(projectId)}/duplicate`, ProjectDetailSchema, { method: "POST", body: body(input) }),
       async delete(projectId) {
         await request(`/api/projects/${encodeURIComponent(projectId)}`, EmptyResponseSchema, { method: "DELETE" });
       }

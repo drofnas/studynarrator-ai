@@ -24,6 +24,7 @@ export function createPreloadBridge(invoke: (channel: string, input?: unknown) =
       async create(input) { return ProjectDetailSchema.parse(await invoke(PERSISTENCE_CHANNELS.projectsCreate, input)); },
       async get(projectId) { return ProjectDetailSchema.parse(await invoke(PERSISTENCE_CHANNELS.projectsGet, { projectId })); },
       async replace(projectId, project) { return ProjectDetailSchema.parse(await invoke(PERSISTENCE_CHANNELS.projectsReplace, { projectId, project })); },
+      async duplicate(projectId, duplicate) { return ProjectDetailSchema.parse(await invoke(PERSISTENCE_CHANNELS.projectsDuplicate, { projectId, duplicate })); },
       async delete(projectId) { EmptyResponseSchema.parse(await invoke(PERSISTENCE_CHANNELS.projectsDelete, { projectId })); }
     },
     settings: {

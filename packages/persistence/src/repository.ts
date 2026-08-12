@@ -18,6 +18,7 @@ import {
   PersistenceReadyStatusSchema,
   ProjectCreateInputSchema,
   ProjectDetailSchema,
+  ProjectDuplicateInputSchema,
   ProjectIdSchema,
   ProjectReplaceInputSchema,
   ProjectSummaryCollectionSchema,
@@ -29,6 +30,7 @@ import {
   type PersistenceStatus,
   type ProjectCreateInput,
   type ProjectDetail,
+  type ProjectDuplicateInput,
   type ProjectReplaceInput,
   type ProjectSummary,
   type SystemPacingDefaults
@@ -119,6 +121,7 @@ export interface StudyNarratorRepository {
   createProject(input: ProjectCreateInput): ProjectDetail;
   getProject(projectId: string): ProjectDetail;
   replaceProject(projectId: string, input: ProjectReplaceInput): ProjectDetail;
+  duplicateProject(projectId: string, input: ProjectDuplicateInput): ProjectDetail;
   deleteProject(projectId: string): void;
   getSystemPacing(): SystemPacingDefaults;
   updateSystemPacing(input: SystemPacingDefaults): SystemPacingDefaults;
@@ -400,6 +403,50 @@ function createRepository(options: {
       const updated = getProject(projectId);
       if (updated.createdAt !== prior.createdAt) throw new Error("Project creation timestamp changed unexpectedly.");
       return updated;
+    },
+    duplicateProject(projectIdInput, inputValue) {
+      assertOpen();
+      const projectId = ProjectIdSchema.parse(projectIdInput);
+      const input = ProjectDuplicateInputSchema.parse(inputValue);
+      const source = getProject(projectId);
+      const duplicateId = ProjectIdSchema.parse(nextId());
+      const timestamp = options.now().toISOString();
+      transaction(() => {
+        database.prepare(`
+          INSERT INTO projects (
+            id, name, description, script_source, script_hash, connection_profile_id,
+            paragraph_pause_enabled, paragraph_pause_id, paragraph_pause_duration_ms, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          duplicateId, input.name, source.description, source.scriptSource, source.scriptHash, source.connectionProfileId,
+          booleanToSql(source.paragraphPause.enabled), source.paragraphPause.pauseId,
+          source.paragraphPause.durationMs, timestamp, timestamp
+        );
+        const insertSpeaker = database.prepare(`
+          INSERT INTO speaker_mappings (
+            project_id, speaker_id, ordinal, display_name, voice_id, speed, gain_db, role_description, sample_text
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        source.speakerMappings.forEach((speaker, ordinal) => insertSpeaker.run(
+          duplicateId, speaker.speakerId, ordinal, speaker.displayName, speaker.voiceId, speaker.speed,
+          speaker.gainDb, speaker.roleDescription, speaker.sampleText
+        ));
+        const insertPause = database.prepare("INSERT INTO pause_presets (project_id, pause_id, ordinal, duration_ms, description) VALUES (?, ?, ?, ?, ?)");
+        source.pausePresets.forEach((pause, ordinal) => insertPause.run(duplicateId, pause.pauseId, ordinal, pause.durationMs, pause.description));
+        replaceLexicon("project", duplicateId, source.lexiconEntries.map((entry) => ({
+          scope: entry.scope,
+          entryType: entry.entryType,
+          displayText: entry.displayText,
+          ...(entry.senseId === undefined ? {} : { senseId: entry.senseId }),
+          spokenText: entry.spokenText,
+          caseSensitive: entry.caseSensitive,
+          wholeWord: entry.wholeWord,
+          priority: entry.priority,
+          enabled: entry.enabled,
+          notes: entry.notes
+        })), timestamp);
+      });
+      return getProject(duplicateId);
     },
     deleteProject(projectIdInput) {
       assertOpen();

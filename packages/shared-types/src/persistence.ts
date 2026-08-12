@@ -11,13 +11,14 @@ import {
 import { z } from "zod";
 
 export const DATABASE_SCHEMA_VERSION = 2;
-export const PERSISTENCE_CONTRACT_VERSION = 1;
+export const PERSISTENCE_CONTRACT_VERSION = 2;
 export const PERSISTENCE_CHANNELS = Object.freeze({
   status: "persistence.status",
   projectsList: "projects.list",
   projectsCreate: "projects.create",
   projectsGet: "projects.get",
   projectsReplace: "projects.replace",
+  projectsDuplicate: "projects.duplicate",
   projectsDelete: "projects.delete",
   pacingGet: "settings.pacing.get",
   pacingUpdate: "settings.pacing.update",
@@ -124,6 +125,11 @@ export const ProjectCreateInputSchema = z.object({
 }).strict();
 export type ProjectCreateInput = z.input<typeof ProjectCreateInputSchema>;
 
+export const ProjectDuplicateInputSchema = z.object({
+  name: z.string().trim().min(1).max(200)
+}).strict();
+export type ProjectDuplicateInput = z.input<typeof ProjectDuplicateInputSchema>;
+
 const ProjectAggregateShape = {
   name: z.string().trim().min(1).max(200),
   description: z.string().max(10_000),
@@ -214,6 +220,7 @@ export const ConnectionProfileCollectionSchema = z.array(ConnectionProfilePlaceh
 export const ConnectionProfileIdInputSchema = z.object({ profileId: DurableIdSchema }).strict();
 export const ProjectIdInputSchema = z.object({ projectId: ProjectIdSchema }).strict();
 export const ProjectReplaceRequestSchema = z.object({ projectId: ProjectIdSchema, project: ProjectReplaceInputSchema }).strict();
+export const ProjectDuplicateRequestSchema = z.object({ projectId: ProjectIdSchema, duplicate: ProjectDuplicateInputSchema }).strict();
 export const ConnectionProfileReplaceRequestSchema = z.object({
   profileId: DurableIdSchema,
   profile: ConnectionProfileAuthoringSchema
@@ -248,6 +255,7 @@ export interface ProjectsClient {
   create(input: ProjectCreateInput): Promise<ProjectDetail>;
   get(projectId: string): Promise<ProjectDetail>;
   replace(projectId: string, input: ProjectReplaceInput): Promise<ProjectDetail>;
+  duplicate(projectId: string, input: ProjectDuplicateInput): Promise<ProjectDetail>;
   delete(projectId: string): Promise<void>;
 }
 
