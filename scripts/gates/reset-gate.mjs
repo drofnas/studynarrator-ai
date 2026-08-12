@@ -7,9 +7,10 @@ import { fileURLToPath } from "node:url";
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(scriptDirectory, "../..");
 const gate = process.argv[2];
+const allowedGates = new Set(["G01", "G02"]);
 
 function fail(message) {
-  process.stderr.write(`GATE G01 RESET: ERROR: ${message}\n`);
+  process.stderr.write(`GATE RESET: ERROR: ${message}\n`);
   process.exitCode = 1;
 }
 
@@ -32,20 +33,20 @@ async function assertNoSymbolicLinks(path) {
   }
 }
 
-if (gate !== "G01" || process.argv.length !== 3) {
-  fail("usage: npm run gate:reset -- G01");
+if (!gate || !allowedGates.has(gate) || process.argv.length !== 3) {
+  fail("usage: npm run gate:reset -- G01|G02");
 } else {
   const root = await realpath(repositoryRoot);
-  const target = resolve(root, ".tmp/gates/G01");
-  const expected = join(root, ".tmp", "gates", "G01");
+  const target = resolve(root, ".tmp", "gates", gate);
+  const expected = join(root, ".tmp", "gates", gate);
   const targetRelative = relative(root, target);
   if (target !== expected || targetRelative.startsWith("..") || isAbsolute(targetRelative)) {
-    fail("resolved target is outside the repository G01 temporary directory");
+    fail(`resolved target is outside the repository ${gate} temporary directory`);
   } else {
     try {
       await assertNoSymbolicLinks(target);
       await rm(target, { recursive: true, force: true });
-      process.stdout.write("GATE G01 RESET: removed .tmp/gates/G01\n");
+      process.stdout.write(`GATE RESET: removed .tmp/gates/${gate}\n`);
     } catch (error) {
       fail(error instanceof Error ? error.message : "reset failed");
     }

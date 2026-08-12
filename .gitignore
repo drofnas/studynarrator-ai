@@ -8,3 +8,4 @@ node_modules/
 dist/
 coverage/
 *.tsbuildinfo
+fixtures/gates/study-guide-valid-confirm-copy.txt

@@ -6,6 +6,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SystemDiagnostics } from "@studynarrator/shared-types";
 import { App } from "./App.js";
 
+const unusedParser = { parse: vi.fn() };
+
 afterEach(cleanup);
 
 const passingDiagnostics: SystemDiagnostics = {
@@ -44,7 +46,7 @@ describe("G01 status screen", () => {
     const user = userEvent.setup();
     let finish: ((value: SystemDiagnostics) => void) | undefined;
     const pending = new Promise<SystemDiagnostics>((resolve) => { finish = resolve; });
-    render(<App client={{ diagnostics: async () => await pending }} />);
+    render(<App client={{ diagnostics: async () => await pending }} parser={unusedParser} initialView="diagnostics" />);
 
     await user.click(screen.getByRole("button", { name: "Run self-test" }));
     expect(screen.getByRole("button", { name: "Checking signal…" })).toBeDisabled();
@@ -56,7 +58,7 @@ describe("G01 status screen", () => {
   it("shows the idle state then all required Web/REST pass lines", async () => {
     const user = userEvent.setup();
     const diagnostics = vi.fn(async () => passingDiagnostics);
-    render(<App client={{ diagnostics }} />);
+    render(<App client={{ diagnostics }} parser={unusedParser} initialView="diagnostics" />);
 
     expect(screen.getAllByText("NOT RUN")).toHaveLength(3);
     await user.click(screen.getByRole("button", { name: "Run self-test" }));
@@ -68,7 +70,7 @@ describe("G01 status screen", () => {
 
   it("renders Electron/IPC metadata from the same contract", async () => {
     const user = userEvent.setup();
-    render(<App client={{ diagnostics: async () => ({
+    render(<App parser={unusedParser} initialView="diagnostics" client={{ diagnostics: async () => ({
       ...passingDiagnostics,
       client: "electron",
       transport: "ipc",
@@ -100,7 +102,7 @@ describe("G01 status screen", () => {
         }
       })
       .mockResolvedValueOnce(passingDiagnostics);
-    render(<App client={{ diagnostics }} />);
+    render(<App client={{ diagnostics }} parser={unusedParser} initialView="diagnostics" />);
     await user.click(screen.getByRole("button", { name: "Run self-test" }));
     expect(await screen.findByText(/FFmpeg was not found\./u)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Run again" }));
@@ -110,7 +112,7 @@ describe("G01 status screen", () => {
 
   it("turns a boundary error into actionable recovery copy", async () => {
     const user = userEvent.setup();
-    render(<App client={{ diagnostics: async () => { throw new Error("Local API is unavailable."); } }} />);
+    render(<App client={{ diagnostics: async () => { throw new Error("Local API is unavailable."); } }} parser={unusedParser} initialView="diagnostics" />);
     await user.click(screen.getByRole("button", { name: "Run self-test" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Local API is unavailable.");
     expect(screen.getByRole("alert")).toHaveTextContent("run the self-test again");

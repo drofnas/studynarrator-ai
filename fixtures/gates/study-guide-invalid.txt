@@ -1,0 +1,5 @@
+[speaker_1bad] This speaker name begins with a number and can be mapped later.
+[section Database indexes]
+[pause_short] This speech follows the pause on [pause_short] {{resume|cv the same line.
+[section Database indexes]
+[speaker_1bad] This annotation [speaker_teacher] is not closed: {{resume|cv

@@ -211,18 +211,18 @@ Contents:
 ```text
 [section: Resumes and background processing]
 
-[teacher] Today we will compare two meanings of the word {{resume|cv}}.
+[speaker_teacher] Today we will compare two meanings of the word {{resume|cv}}.
 [pause_short]
-[student] That is the document I send with a job application.
+[speaker_student] That is the document I send with a job application.
 [pause_short]
-[teacher] Correct. A paused job can {{resume|continue}} after a restart.
+[speaker_teacher] Correct. A paused job can {{resume|continue}} after a restart.
 [pause_long]
 
 [section: SQL pronunciation]
 
-[teacher] SQL indexes can speed up database reads.
+[speaker_teacher] SQL indexes can speed up database reads.
 [pause_short]
-[student] In this project, SQL is pronounced using the project lexicon.
+[speaker_student] In this project, SQL is pronounced using the project lexicon.
 ```
 
 Expected discoveries:
@@ -274,13 +274,14 @@ fixtures/gates/study-guide-invalid.txt
 Contents:
 
 ```text
-[1bad] This speaker ID is invalid.
-[pause_short] This pause incorrectly contains speech.
+[speaker_1bad] This speaker name begins with a number and can be mapped later.
 [section Database indexes]
-[teacher] This annotation is not closed: {{resume|cv
+[pause_short] This speech follows the pause on [pause_short] {{resume|cv the same line.
+[section Database indexes]
+[speaker_1bad] This annotation [speaker_teacher] is not closed: {{resume|cv
 ```
 
-Every invalid line must produce an actionable line-specific error. None of the malformed directives may be silently spoken as ordinary text.
+The fixture discovers `1bad` and `teacher`, emits both `pause_short` occurrences in source order, and splits speech around the inline pause and speaker tokens. The inline speaker changes the active speaker to `teacher`. Both malformed sections and both malformed annotations produce actionable diagnostics and remain literal speech; ignoring either focused pattern suppresses both matching errors without changing recovered speech.
 
 ### 5.4 Audio assembly fixture
 
@@ -517,6 +518,8 @@ Prove that StudyNarrator understands its deterministic script language before an
 - Versioned grammar and parser in the shared core package.
 - Canonical intermediate representation schemas.
 - Structured parse errors with line, column, code, offending text, and suggested correction.
+- Exact diagnostic suppression input and an in-memory Script Lab ignore list; durable personal storage is deferred to G04.
+- Inline pause and speaker control tokens that split speech at their exact source position; inline speaker state persists until the next speaker token.
 - Discovery summary for speakers, pauses, sections, and pronunciation annotations.
 - A minimal Script Lab screen in the shared React UI.
 - Original source remains byte-for-byte unchanged in parser output.
@@ -530,7 +533,7 @@ Required parser tests include all cases from PRD Section 19.1 plus:
 - Stable output across repeated parsing.
 - Unix and Windows line-ending equivalence.
 - No timestamps or random IDs in deterministic parser output.
-- Invalid fixture errors remain stable and line-specific.
+- Invalid fixture recovery and its remaining errors stay stable and line-specific.
 
 Run:
 
@@ -554,22 +557,25 @@ npm run verify:gate -- G02
 6. Confirm each node displays its source line.
 7. Confirm the source editor text has not changed.
 8. Paste `study-guide-invalid.txt`.
-9. Confirm every malformed line receives a blocking, line-specific error.
-10. Confirm no invalid beginning-of-line directive appears as ordinary speech.
-11. Paste a sentence containing brackets in the middle of speech and verify those brackets remain spoken text.
-12. Test an escaped beginning-of-line bracket and confirm the escape is removed only in the readable representation.
+9. Confirm `[speaker_1bad]` discovers `1bad`, both pause tokens emit pause nodes, and line 3 is split into speech, pause, and speech in source order.
+10. Confirm line 5 splits at `[speaker_teacher]`, its trailing speech uses `teacher`, and a following plain line remains assigned to `teacher` until another speaker token.
+11. Confirm both malformed sections and annotations receive blocking, line-specific errors and remain literal speech.
+12. Ignore either repeated section or annotation pattern, confirm both matching errors disappear while all speech nodes remain, then restore the pattern.
+13. Escape an inline pause as `\[pause_short]` and confirm it remains readable text without creating a pause node.
 
 ### Pass criteria
 
 - All expected counts are correct.
 - Node ordering and source locations are correct.
-- Invalid syntax never silently degrades into speech.
+- Inline control tokens split speech correctly, and active-speaker state persists across lines.
+- Invalid syntax is diagnosed and retained as explicit literal speech, never misclassified as a speaker.
 - Parsing the same input twice produces structurally identical output.
 - The human reviewer agrees that error messages explain how to fix the source.
 
 ### Explicitly excluded
 
 - Saving projects.
+- Persisting ignored diagnostic preferences.
 - Voice mappings.
 - Pause duration configuration.
 - Lexicon replacement.
@@ -658,6 +664,7 @@ Prove that user work survives application restart and schema upgrades before the
   - Script source.
   - Speaker mappings.
   - Pause presets.
+  - Personal ignored-diagnostic patterns.
   - Global lexicon entries.
   - Project lexicon entries.
   - Connection-profile placeholders without real connectivity behavior.

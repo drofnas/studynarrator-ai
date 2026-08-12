@@ -3,6 +3,7 @@
   "references": [
     { "path": "tsconfig.tools.json" },
     { "path": "packages/shared-types" },
+    { "path": "packages/core" },
     { "path": "packages/application" },
     { "path": "packages/persistence" },
     { "path": "packages/runtime" },

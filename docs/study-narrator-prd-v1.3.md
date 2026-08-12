@@ -474,7 +474,7 @@ The format must be:
 - Backward compatible with a simple one-speaker text file.
 - Strict enough to validate before synthesis.
 
-The parser is line-oriented. Directives are recognized only at the beginning of a line, after optional whitespace. Bracketed text elsewhere in a sentence is ordinary spoken text.
+Sections and paragraph boundaries are line-oriented. Valid `speaker_` and `pause_` control tokens are recognized anywhere in speech and split the canonical speech nodes at their exact source position. Other bracketed text is ordinary spoken text unless it is malformed reserved control syntax.
 
 ### 9.2 Speaker directives
 
@@ -483,21 +483,21 @@ A speaker directive changes the active speaker and remains active until another 
 Supported forms:
 
 ```text
-[person_a]
+[speaker_person_a]
 This is spoken by person A.
 ```
 
 ```text
-[person_a] This is also spoken by person A.
+[speaker_person_a] This is also spoken by person A.
 ```
 
 Rules:
 
-- Speaker IDs may contain letters, numbers, underscores, and hyphens.
-- Speaker IDs must begin with a letter.
+- Only a directive beginning with `speaker_` declares a speaker; the prefix is not part of the discovered name.
+- Speaker names may contain letters, numbers, underscores, and hyphens and must begin with a letter or number.
 - Speaker IDs are case-sensitive in the script but the UI should warn about IDs that differ only by case.
-- Speaker IDs beginning with `pause_` are reserved.
-- A speaker tag may contain text on the same line.
+- A speaker tag may occur anywhere in a line. Text before it uses the previous speaker; text after it uses the new speaker.
+- The selected speaker remains active across subsequent lines until another speaker tag appears.
 - Text before the first speaker tag uses the configured default speaker.
 - If no default speaker is configured, text before the first speaker tag is a blocking validation error.
 - A speaker may be mapped to the same voice as another speaker.
@@ -517,7 +517,7 @@ A pause directive inserts digital silence with an exact configured duration.
 Rules:
 
 - Any directive whose ID begins with `pause_` is treated as a pause preset.
-- Pause directives must be on their own line in the MVP.
+- A pause directive may occur anywhere in a line. Speech before and after it becomes separate speech nodes with the pause emitted between them.
 - Pause presets are automatically discovered from the script.
 - A project may define pause presets that do not currently appear in the script.
 - Duration is stored internally in milliseconds.
@@ -587,10 +587,11 @@ Rules:
 - Sense names use letters, numbers, underscores, and hyphens.
 - Sense lookup is exact and deterministic.
 - The harness does not infer a sense from surrounding prose.
+- Malformed annotation markup produces a diagnostic and remains literal speech unless the author fixes it.
 
 ### 9.6 Escaping directives
 
-To speak text that resembles a directive at the beginning of a line, prefix the opening bracket with a backslash.
+To speak text that resembles a control token anywhere in a line, prefix the opening bracket with a backslash.
 
 ```text
 \[not_a_speaker] This line is spoken literally.
@@ -602,7 +603,7 @@ To speak literal pronunciation markup, escape its opening braces.
 \{{example|literal}}
 ```
 
-The readable transcript removes only the escape character.
+The readable transcript removes only the escape character. This also prevents an escaped inline `speaker_` or `pause_` token from changing the CIR.
 
 ### 9.7 Blank lines and paragraphs
 
@@ -612,31 +613,32 @@ The project may configure an automatic paragraph pause. Explicit pause directive
 
 ### 9.8 Unknown directives
 
-A bracketed token at the beginning of a line is interpreted as one of the following:
+A bracketed token is interpreted as one of the following:
 
-1. A known reserved directive such as `pause_*` or `section:`.
-2. A speaker ID.
-3. An invalid directive if it does not match the grammar.
+1. A valid `pause_*` or `speaker_*` control token anywhere in speech.
+2. A valid `section:` directive when it occupies its own line.
+3. A malformed reserved token when it uses reserved syntax but fails validation.
+4. Ordinary literal bracketed speech otherwise.
 
-The parser must never silently speak an invalid beginning-of-line directive.
+An unknown or malformed directive produces a blocking diagnostic and remains literal speech under the active speaker. It is never inferred to be a speaker. Diagnostics retain the full offending line for context and a focused malformed-token pattern for suppression. The user may suppress every occurrence matching the same diagnostic code and token pattern, regardless of surrounding sentence text; suppression keeps literal speech unchanged. G02 holds these preferences in memory, and G04 persists them as personal application data.
 
 ### 9.9 Example script
 
 ```text
 [section: Resumes and background processing]
 
-[teacher] Today we will compare two meanings of the word {{resume|cv}}.
+[speaker_teacher] Today we will compare two meanings of the word {{resume|cv}}.
 [pause_short]
-[student] That is the document I send with a job application.
+[speaker_student] That is the document I send with a job application.
 [pause_short]
-[teacher] Correct. In a different context, a paused job can {{resume|continue}} after a restart.
+[speaker_teacher] Correct. In a different context, a paused job can {{resume|continue}} after a restart.
 [pause_long]
 
 [section: SQL pronunciation]
 
-[teacher] In this project, SQL is pronounced according to the project lexicon.
+[speaker_teacher] In this project, SQL is pronounced according to the project lexicon.
 [pause_short]
-[student] The lexicon can use sequel here while another project could use S Q L.
+[speaker_student] The lexicon can use sequel here while another project could use S Q L.
 ```
 
 ---
@@ -1947,9 +1949,9 @@ The Web API is local application infrastructure, not a supported public integrat
 
 Examples:
 
-- Invalid speaker ID.
+- Invalid `speaker_` directive.
 - Malformed section directive.
-- Pause directive containing trailing speech.
+- Unknown or malformed control directive.
 - Unclosed pronunciation annotation.
 - Unknown or unresolved pronunciation sense.
 - Text before the first speaker when no default speaker exists.
@@ -2157,6 +2159,12 @@ Required cases:
 - Consecutive pauses.
 - Pause at beginning and end.
 - Malformed directives.
+- Numeric-leading speaker names using the explicit `speaker_` prefix.
+- Speech following a pause on the same line.
+- Multiple inline pauses and speaker switches with exact speech splitting.
+- Active-speaker persistence after an inline speaker switch.
+- Escaped inline control tokens.
+- Literal recovery and token-pattern diagnostic suppression for malformed directives and annotations, including repeated patterns in different sentences.
 
 ### 19.2 Lexicon unit tests
 
@@ -2270,7 +2278,7 @@ The fixture should produce a stable manifest and segment sequence. Audio hashes 
 
 ### AC-1: Speaker discovery
 
-Given a script containing `[person_a]` and `[person_b]`, the parser lists exactly those two speakers and shows every occurrence.
+Given a script containing `[speaker_person_a]` and `[speaker_person_b]`, the parser lists exactly `person_a` and `person_b` and shows every occurrence.
 
 ### AC-2: Pause discovery
 
@@ -2294,7 +2302,7 @@ A configured `pause_short` of 350 milliseconds and `pause_long` of 1,500 millise
 
 ### AC-7: Parse before render
 
-An unmapped speaker, malformed directive, or unresolved sense prevents render start and identifies the exact source location.
+An unmapped speaker, an unsuppressed malformed-directive diagnostic, or an unresolved sense prevents render start and identifies the exact source location. An exact suppressed malformed directive remains intentional literal speech.
 
 ### AC-8: Preview parity
 
@@ -2568,36 +2576,36 @@ Before each public release:
 ```text
 [section: Introduction]
 
-[teacher] Today we are going to discuss database queries and job application documents.
+[speaker_teacher] Today we are going to discuss database queries and job application documents.
 [pause_short]
-[student] Those sound unrelated.
+[speaker_student] Those sound unrelated.
 [pause_short]
-[teacher] They are, but both contain words that text-to-speech systems may pronounce differently than we want.
+[speaker_teacher] They are, but both contain words that text-to-speech systems may pronounce differently than we want.
 [pause_long]
 
 [section: SQL]
 
-[teacher] SQL lets an application read and modify relational data.
+[speaker_teacher] SQL lets an application read and modify relational data.
 [pause_short]
-[student] In this project, should SQL sound like sequel or S Q L?
+[speaker_student] In this project, should SQL sound like sequel or S Q L?
 [pause_short]
-[teacher] The project lexicon decides. The visible transcript still contains SQL.
+[speaker_teacher] The project lexicon decides. The visible transcript still contains SQL.
 [pause_long]
 
 [section: Resume]
 
-[teacher] A {{resume|cv}} summarizes a candidate's professional experience.
+[speaker_teacher] A {{resume|cv}} summarizes a candidate's professional experience.
 [pause_short]
-[student] What happens after a paused background job restarts?
+[speaker_student] What happens after a paused background job restarts?
 [pause_short]
-[teacher] The job can {{resume|continue}} from its last safe checkpoint.
+[speaker_teacher] The job can {{resume|continue}} from its last safe checkpoint.
 [pause_long]
 
 [section: Summary]
 
-[teacher] Speaker tags choose voices, pause tags control silence, and the lexicon controls pronunciation.
+[speaker_teacher] Speaker tags choose voices, pause tags control silence, and the lexicon controls pronunciation.
 [pause_short]
-[student] The original text remains available for review.
+[speaker_student] The original text remains available for review.
 ```
 
 Expected automatic discovery:
@@ -2639,8 +2647,8 @@ OUTPUT CONTRACT
 - Do not wrap the output in a Markdown code fence.
 - Do not add an introduction, explanation, notes, or a summary outside the script.
 - Use only the directives and speaker IDs listed below.
-- Put pause and section directives on their own lines.
-- A speaker tag may be followed by speech on the same line.
+- Put section directives on their own lines. Pause directives may appear between words when a dramatic pause is needed.
+- Speaker tags may appear between spoken phrases; the new speaker remains active until the next speaker tag.
 - Keep each spoken turn reasonably short.
 - Preserve technical accuracy.
 - Expand or explain dense visual material so it makes sense when heard without looking at a screen.
@@ -2649,8 +2657,8 @@ OUTPUT CONTRACT
 - Do not invent pronunciations. Use the supplied pronunciation aliases when an ambiguous term requires one.
 
 ALLOWED SPEAKERS
-- [teacher]: Explains concepts clearly and accurately.
-- [student]: Asks concise clarifying questions and checks understanding.
+- [speaker_teacher]: Explains concepts clearly and accurately.
+- [speaker_student]: Asks concise clarifying questions and checks understanding.
 
 ALLOWED PAUSES
 - [pause_short]: Brief pause between speakers or closely related ideas.
@@ -2671,11 +2679,11 @@ Available aliases:
 VALID EXAMPLE
 [section: Caching]
 
-[teacher] A cache stores a reusable result close to where it is needed.
+[speaker_teacher] A cache stores a reusable result close to where it is needed.
 [pause_short]
-[student] What happens when the original data changes?
+[speaker_student] What happens when the original data changes?
 [pause_short]
-[teacher] The application needs an invalidation strategy so it does not keep serving stale data.
+[speaker_teacher] The application needs an invalidation strategy so it does not keep serving stale data.
 [pause_long]
 
 SCRIPTING GUIDANCE

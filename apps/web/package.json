@@ -9,6 +9,7 @@
     "dev": "vite --host 127.0.0.1"
   },
   "dependencies": {
+    "@studynarrator/core": "0.1.0",
     "@studynarrator/shared-types": "0.1.0",
     "react": "19.2.8",
     "react-dom": "19.2.8"

@@ -1,148 +1,30 @@
-import { useState, type ReactNode } from "react";
-import type { CheckStatus, SystemClient, SystemDiagnostics } from "@studynarrator/shared-types";
+import { useState } from "react";
+import type { SystemClient } from "@studynarrator/shared-types";
+import { DiagnosticsView } from "./DiagnosticsView.js";
+import type { ScriptParser } from "./parser-client.js";
+import { ScriptLab } from "./ScriptLab.js";
 import "./styles.css";
 
 interface AppProps {
   client: SystemClient;
+  parser: ScriptParser;
+  initialView?: "script-lab" | "diagnostics";
 }
 
-type ViewState =
-  | { phase: "idle" }
-  | { phase: "loading" }
-  | { phase: "loaded"; diagnostics: SystemDiagnostics }
-  | { phase: "error"; message: string };
-
-function StatusValue({ status, children }: { status: CheckStatus | undefined; children: ReactNode }) {
-  return (
-    <span className={`status-value status-${status ?? "idle"}`}>
-      <span className="status-lamp" aria-hidden="true" />
-      {children}
-    </span>
-  );
-}
-
-function statusLabel(status?: CheckStatus) {
-  if (!status) return "NOT RUN";
-  return status.toUpperCase();
-}
-
-export function App({ client }: AppProps) {
-  const [state, setState] = useState<ViewState>({ phase: "idle" });
-  const diagnostics = state.phase === "loaded" ? state.diagnostics : undefined;
-  const loading = state.phase === "loading";
-
-  async function runDiagnostics() {
-    setState({ phase: "loading" });
-    try {
-      setState({ phase: "loaded", diagnostics: await client.diagnostics() });
-    } catch (error) {
-      setState({
-        phase: "error",
-        message: error instanceof Error ? error.message : "Diagnostics could not be completed."
-      });
-    }
-  }
-
-  const sharedStatus = diagnostics?.checks.sharedCore.status;
-  const storageStatus = diagnostics?.checks.storage.status;
-  const ffmpegStatus = diagnostics?.checks.ffmpeg.status;
-
+export function App({ client, parser, initialView = "script-lab" }: AppProps) {
+  const [view, setView] = useState(initialView);
   return (
     <main className="shell">
       <header className="masthead">
-        <div>
-          <p className="eyebrow">Gate G01 · Architecture signal check</p>
-          <h1>Can every runtime hear the same signal?</h1>
-        </div>
-        <p className="lede">
-          One diagnostic crosses the browser or desktop boundary, writes to SQLite, and verifies FFmpeg.
-        </p>
+        <div><p className="eyebrow">Gate G02 · Grammar before audio</p><h1>See exactly what the script means.</h1></div>
+        <p className="lede">Parse speakers, pauses, sections, and pronunciation annotations without persistence or synthesis.</p>
       </header>
-
-      <section className="console" aria-labelledby="console-title">
-        <div className="console-heading">
-          <div>
-            <p className="console-kicker">Live path</p>
-            <h2 id="console-title">Runtime self-test</h2>
-          </div>
-          <button type="button" onClick={() => void runDiagnostics()} disabled={loading}>
-            {loading ? "Checking signal…" : diagnostics ? "Run again" : "Run self-test"}
-          </button>
-        </div>
-
-        <div className="signal-rail" aria-live="polite" aria-busy={loading}>
-          <div className="signal-row">
-            <span>Shared core</span>
-            <StatusValue status={sharedStatus}>{loading ? "CHECKING" : statusLabel(sharedStatus)}</StatusValue>
-          </div>
-          <div className="signal-row">
-            <span>Storage write/read</span>
-            <StatusValue status={storageStatus}>{loading ? "CHECKING" : statusLabel(storageStatus)}</StatusValue>
-          </div>
-          <div className="signal-row">
-            <span>FFmpeg</span>
-            <StatusValue status={ffmpegStatus}>{loading ? "CHECKING" : statusLabel(ffmpegStatus)}</StatusValue>
-          </div>
-          <div className="signal-row metadata-row">
-            <span>Transport</span>
-            <strong>{diagnostics?.transport.toUpperCase() ?? "—"}</strong>
-          </div>
-          <div className="signal-row metadata-row">
-            <span>Client</span>
-            <strong>{diagnostics ? (diagnostics.client === "web" ? "Web" : "Electron") : "—"}</strong>
-          </div>
-        </div>
-
-        {state.phase === "error" ? (
-          <div className="failure-panel" role="alert">
-            <strong>The diagnostic boundary did not respond.</strong>
-            <span>{state.message} Check the local application process, then run the self-test again.</span>
-          </div>
-        ) : null}
-
-        {diagnostics ? (
-          <div className="evidence-grid">
-            <article>
-              <p>Data directory</p>
-              <code>{diagnostics.runtime.dataDirectory}</code>
-            </article>
-            <article>
-              <p>Runtime</p>
-              <code>
-                {diagnostics.runtime.runtimeName} {diagnostics.runtime.runtimeVersion}
-                {diagnostics.runtime.electronVersion ? ` · Electron ${diagnostics.runtime.electronVersion}` : ""}
-              </code>
-            </article>
-            <article>
-              <p>Persistent marker</p>
-              <code>
-                {diagnostics.checks.storage.status === "pass"
-                  ? `${diagnostics.checks.storage.markerValue} · ${diagnostics.checks.storage.createdAt}`
-                  : diagnostics.checks.storage.message}
-              </code>
-            </article>
-            <article>
-              <p>Native tools</p>
-              <code>
-                {diagnostics.checks.storage.status === "pass"
-                  ? `SQLite ${diagnostics.checks.storage.sqliteVersion}`
-                  : "SQLite unavailable"}
-                {" · "}
-                {diagnostics.checks.ffmpeg.status === "pass"
-                  ? diagnostics.checks.ffmpeg.version
-                  : diagnostics.checks.ffmpeg.message}
-              </code>
-            </article>
-          </div>
-        ) : (
-          <p className="empty-note">Run the self-test to create the disposable persistence marker and inspect the complete path.</p>
-        )}
-      </section>
-
-      <footer>
-        <span>StudyNarrator 0.1.0</span>
-        <span>Speaches remains external and is not contacted by this gate.</span>
-      </footer>
+      <nav className="view-nav" aria-label="StudyNarrator tools">
+        <button type="button" aria-current={view === "script-lab" ? "page" : undefined} onClick={() => setView("script-lab")}>Script Lab</button>
+        <button type="button" aria-current={view === "diagnostics" ? "page" : undefined} onClick={() => setView("diagnostics")}>Runtime diagnostics</button>
+      </nav>
+      {view === "script-lab" ? <ScriptLab parser={parser} /> : <DiagnosticsView client={client} />}
+      <footer><span>StudyNarrator 0.1.0</span><span>Parser output is local, deterministic, and never sent to Speaches.</span></footer>
     </main>
   );
 }

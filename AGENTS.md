@@ -11,3 +11,17 @@ Before every commit:
 - If it is unclear whether a file is safe or intended for source control, do not stage or commit it until the user confirms.
 
 Never include automated attribution metadata, AI bylines, or `Co-authored-by` lines in commits.
+
+## Incremental commit discipline
+
+During implementation work, create small, coherent checkpoint commits instead of waiting until an entire feature or gate is finished.
+
+- Commit after each independently understandable and validated slice of work, such as a schema or parser change, its UI integration, or its documentation and test updates.
+- Create a checkpoint before moving to a materially different concern, beginning a risky refactor, or making changes that would make the current working state harder to reconstruct.
+- Keep unrelated changes in separate commits. Do not sweep pre-existing or user-authored working-tree changes into a checkpoint unless they are confirmed to be part of the same task.
+- Run the relevant focused checks before each checkpoint. A checkpoint must not knowingly leave the branch in a broken build or failing-test state.
+- Run the cumulative gate verifier at gate-level milestones; focused validation is sufficient for smaller intermediate commits when the full verifier would be disproportionate.
+- Use concise commit messages that state the completed behavior. Do not use vague messages such as `WIP`, `updates`, or `misc changes`.
+- Do not rewrite, squash, or discard checkpoint commits unless the user explicitly asks.
+
+When the user has authorized implementation on the current branch, these checkpoint commits are part of the normal implementation workflow and should not require a separate reminder after every slice.

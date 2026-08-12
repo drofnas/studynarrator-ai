@@ -1,0 +1,36 @@
+{
+  "grammarVersion": 1,
+  "cirSchemaVersion": 1,
+  "nodes": [
+    { "ordinal": 1, "type": "speech", "line": 1, "value": "1bad: This speaker name begins with a number and can be mapped later." },
+    { "ordinal": 2, "type": "speech", "line": 2, "value": "1bad: [section Database indexes]" },
+    { "ordinal": 3, "type": "pause", "line": 3, "value": "pause_short" },
+    { "ordinal": 4, "type": "speech", "line": 3, "value": "1bad: This speech follows the pause on" },
+    { "ordinal": 5, "type": "pause", "line": 3, "value": "pause_short" },
+    { "ordinal": 6, "type": "speech", "line": 3, "value": "1bad: {{resume|cv the same line." },
+    { "ordinal": 7, "type": "speech", "line": 4, "value": "1bad: [section Database indexes]" },
+    { "ordinal": 8, "type": "speech", "line": 5, "value": "1bad: This annotation" },
+    { "ordinal": 9, "type": "speech", "line": 5, "value": "teacher: is not closed: {{resume|cv" }
+  ],
+  "speakers": ["1bad", "teacher"],
+  "pauses": ["pause_short"],
+  "sections": [],
+  "pronunciations": [],
+  "summary": {
+    "speakerCount": 2,
+    "pauseIdCount": 1,
+    "sectionCount": 0,
+    "speechSegmentCount": 7,
+    "explicitPauseSegmentCount": 2,
+    "pronunciationAnnotationCount": 0,
+    "paragraphBreakCount": 0,
+    "characterCount": 297
+  },
+  "errors": [
+    "MALFORMED_SECTION_DIRECTIVE@2:1",
+    "UNCLOSED_PRONUNCIATION_ANNOTATION@3:62",
+    "MALFORMED_SECTION_DIRECTIVE@4:1",
+    "UNCLOSED_PRONUNCIATION_ANNOTATION@5:65"
+  ],
+  "warnings": []
+}

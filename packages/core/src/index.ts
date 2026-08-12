@@ -1,0 +1,26 @@
+export {
+  CIR_SCHEMA_VERSION,
+  CirNodeSchema,
+  DiagnosticSchema,
+  IgnoredDiagnosticSchema,
+  ParagraphBreakNodeSchema,
+  ParseScriptInputSchema,
+  ParseScriptResultSchema,
+  PauseNodeSchema,
+  PronunciationAnnotationSchema,
+  PronunciationDiscoverySchema,
+  SCRIPT_GRAMMAR_VERSION,
+  SectionNodeSchema,
+  SourcePositionSchema,
+  SourceRangeSchema,
+  SpeakerIdSchema,
+  SpeechNodeSchema,
+  type CirNode,
+  type IgnoredDiagnostic,
+  type ParseDiagnostic,
+  type ParseScriptInput,
+  type ParseScriptResult,
+  type PronunciationAnnotation,
+  type SourceRange
+} from "./schemas.js";
+export { parseScript } from "./parser.js";

@@ -1,0 +1,36 @@
+{
+  "grammarVersion": 1,
+  "cirSchemaVersion": 1,
+  "nodes": [
+    { "ordinal": 1, "type": "section", "line": 1, "value": "Resumes and background processing" },
+    { "ordinal": 2, "type": "paragraphBreak", "line": 2, "value": "1" },
+    { "ordinal": 3, "type": "speech", "line": 3, "value": "teacher: Today we will compare two meanings of the word resume." },
+    { "ordinal": 4, "type": "pause", "line": 4, "value": "pause_short" },
+    { "ordinal": 5, "type": "speech", "line": 5, "value": "student: That is the document I send with a job application." },
+    { "ordinal": 6, "type": "pause", "line": 6, "value": "pause_short" },
+    { "ordinal": 7, "type": "speech", "line": 7, "value": "teacher: Correct. A paused job can resume after a restart." },
+    { "ordinal": 8, "type": "pause", "line": 8, "value": "pause_long" },
+    { "ordinal": 9, "type": "paragraphBreak", "line": 9, "value": "1" },
+    { "ordinal": 10, "type": "section", "line": 10, "value": "SQL pronunciation" },
+    { "ordinal": 11, "type": "paragraphBreak", "line": 11, "value": "1" },
+    { "ordinal": 12, "type": "speech", "line": 12, "value": "teacher: SQL indexes can speed up database reads." },
+    { "ordinal": 13, "type": "pause", "line": 13, "value": "pause_short" },
+    { "ordinal": 14, "type": "speech", "line": 14, "value": "student: In this project, SQL is pronounced using the project lexicon." }
+  ],
+  "speakers": ["teacher", "student"],
+  "pauses": ["pause_short", "pause_long"],
+  "sections": ["Resumes and background processing", "SQL pronunciation"],
+  "pronunciations": ["resume|cv@3:66", "resume|continue@7:45"],
+  "summary": {
+    "speakerCount": 2,
+    "pauseIdCount": 2,
+    "sectionCount": 2,
+    "speechSegmentCount": 5,
+    "explicitPauseSegmentCount": 4,
+    "pronunciationAnnotationCount": 2,
+    "paragraphBreakCount": 3,
+    "characterCount": 502
+  },
+  "errors": [],
+  "warnings": []
+}
