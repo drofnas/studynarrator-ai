@@ -21,13 +21,16 @@ interface ReadableProjection {
     readableEnd: number;
     sourceStartOffset: number;
     sourceEndOffset: number;
+    annotationStartOffset: number;
+    annotationEndOffset: number;
   }>;
 }
 
 interface ReplacementEvent {
   readableStart: number;
   readableEnd: number;
-  replacement: string;
+  readableReplacement?: string;
+  ttsReplacement: string;
   audit?: LexiconMatchAudit;
 }
 
@@ -150,7 +153,9 @@ function projectReadableText(
       readableStart,
       readableEnd: text.length,
       sourceStartOffset: nodeStartOffset + displayStart,
-      sourceEndOffset: nodeStartOffset + displayStart + annotation.displayText.length
+      sourceEndOffset: nodeStartOffset + displayStart + annotation.displayText.length,
+      annotationStartOffset: nodeStartOffset + relativeStart,
+      annotationEndOffset: nodeStartOffset + relativeEnd
     });
     cursor = relativeEnd;
     annotationIndex += 1;
@@ -198,13 +203,14 @@ function conflictWarning(
     sourceStartOffset,
     sourceEndOffset,
     offendingText: originalText,
+    ignorePattern: originalText,
     suggestion: "Disable or reprioritize overlapping entries if the selected pronunciation is not intended."
   };
 }
 
 export function transformScript(input: TransformScriptInput): TransformScriptResult {
   const parsedInput = TransformScriptInputSchema.parse(input);
-  const { parsedScript } = parsedInput;
+  const { parsedScript, ignoredDiagnostics = [] } = parsedInput;
   const entries = parsedInput.entries.filter((entry) => entry.enabled && entry.spokenText.trim().length > 0);
   const namedEntries = entries.filter((entry) => entry.entryType === "namedSense");
   const ordinaryEntries = entries.filter((entry) => entry.entryType !== "namedSense");
@@ -231,15 +237,22 @@ export function transformScript(input: TransformScriptInput): TransformScriptRes
       ).sort(compareNamed);
       const selected = candidates[0];
       if (!selected) {
-        errors.push({
+        warnings.push({
           code: "UNRESOLVED_NAMED_SENSE",
           message: `No enabled lexicon entry resolves ${projected.annotation.displayText}|${projected.annotation.senseId}.`,
           nodeOrdinal: node.ordinal,
-          range: rangeFromOffsets(lineStarts, projected.sourceStartOffset, projected.sourceEndOffset),
-          sourceStartOffset: projected.sourceStartOffset,
-          sourceEndOffset: projected.sourceEndOffset,
+          range: rangeFromOffsets(lineStarts, projected.annotationStartOffset, projected.annotationEndOffset),
+          sourceStartOffset: projected.annotationStartOffset,
+          sourceEndOffset: projected.annotationEndOffset,
           offendingText: projected.annotation.rawText,
-          suggestion: `Add a named-sense entry for ${projected.annotation.displayText} + ${projected.annotation.senseId}.`
+          ignorePattern: projected.annotation.rawText,
+          suggestion: `Add a named-sense entry for ${projected.annotation.displayText} + ${projected.annotation.senseId}, or leave the annotation literal.`
+        });
+        events.push({
+          readableStart: projected.readableStart,
+          readableEnd: projected.readableEnd,
+          readableReplacement: projected.annotation.rawText,
+          ttsReplacement: projected.annotation.rawText
         });
         continue;
       }
@@ -254,7 +267,7 @@ export function transformScript(input: TransformScriptInput): TransformScriptRes
       events.push({
         readableStart: projected.readableStart,
         readableEnd: projected.readableEnd,
-        replacement: selected.spokenText,
+        ttsReplacement: selected.spokenText,
         audit
       });
       const warning = conflictWarning(
@@ -291,7 +304,7 @@ export function transformScript(input: TransformScriptInput): TransformScriptRes
       const sourceEndOffset = projection.sourceEnds[readableEnd - 1] ?? nodeStartOffset + node.rawText.length;
       const originalText = projection.text.slice(index, readableEnd);
       const audit = auditFor(selected, originalText, node.ordinal, sourceStartOffset, sourceEndOffset, lineStarts);
-      events.push({ readableStart: index, readableEnd, replacement: selected.spokenText, audit });
+      events.push({ readableStart: index, readableEnd, ttsReplacement: selected.spokenText, audit });
       const warning = conflictWarning(
         candidates,
         node.ordinal,
@@ -305,25 +318,39 @@ export function transformScript(input: TransformScriptInput): TransformScriptRes
     }
 
     events.sort((left, right) => left.readableStart - right.readableStart);
+    let readableText = "";
     let ttsText = "";
     let cursor = 0;
     const matches: LexiconMatchAudit[] = [];
     for (const event of events) {
-      ttsText += projection.text.slice(cursor, event.readableStart) + event.replacement;
+      const unchanged = projection.text.slice(cursor, event.readableStart);
+      const original = projection.text.slice(event.readableStart, event.readableEnd);
+      readableText += unchanged + (event.readableReplacement ?? original);
+      ttsText += unchanged + event.ttsReplacement;
       cursor = event.readableEnd;
       if (event.audit) matches.push(event.audit);
     }
+    readableText += projection.text.slice(cursor);
     ttsText += projection.text.slice(cursor);
     allMatches.push(...matches);
     segments.push({
       nodeOrdinal: node.ordinal,
       speakerId: node.speakerId,
       sourceRange: node.range,
-      readableText: projection.text,
+      readableText,
       ttsText,
       matches
     });
   }
+
+  const isIgnored = (diagnostic: TransformDiagnostic): boolean => ignoredDiagnostics.some((item) =>
+    item.code === diagnostic.code && item.pattern === diagnostic.ignorePattern
+  );
+  const visibleErrors = errors.filter((diagnostic) => !isIgnored(diagnostic));
+  const visibleWarnings = warnings.filter((diagnostic) => !isIgnored(diagnostic));
+  const visibleParseErrors = parsedScript.errors.filter((diagnostic) => !ignoredDiagnostics.some((item) =>
+    item.code === diagnostic.code && item.pattern === diagnostic.ignorePattern
+  ));
 
   const result: TransformScriptResult = {
     transformVersion: LEXICON_TRANSFORM_VERSION,
@@ -332,9 +359,9 @@ export function transformScript(input: TransformScriptInput): TransformScriptRes
     readableTranscript: segments.map(({ readableText }) => readableText).join("\n"),
     ttsTranscript: segments.map(({ ttsText }) => ttsText).join("\n"),
     matches: allMatches,
-    errors,
-    warnings,
-    synthesisReady: parsedScript.errors.length === 0 && errors.length === 0
+    errors: visibleErrors,
+    warnings: visibleWarnings,
+    synthesisReady: visibleParseErrors.length === 0 && visibleErrors.length === 0
   };
   return TransformScriptResultSchema.parse(result);
 }

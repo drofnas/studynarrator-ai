@@ -119,14 +119,31 @@ describe("G03 lexicon transformation", () => {
     expect(stableId.warnings[0]?.code).toBe("LEXICON_MATCH_CONFLICT");
   });
 
-  it("resolves named senses before ordinary rules and blocks missing senses", () => {
+  it("resolves named senses before ordinary rules and preserves missing senses literally", () => {
     const source = "[speaker_teacher] {{resume|cv}} and resume.";
     const ordinary = entry({ id: "ordinary-resume", displayText: "resume", spokenText: "ordinary" });
     const unresolved = transformScript({ parsedScript: parseScript({ source }), entries: [ordinary] });
-    expect(unresolved.readableTranscript).toBe("resume and resume.");
-    expect(unresolved.ttsTranscript).toBe("resume and ordinary.");
-    expect(unresolved.errors).toMatchObject([{ code: "UNRESOLVED_NAMED_SENSE", offendingText: "{{resume|cv}}" }]);
-    expect(unresolved.synthesisReady).toBe(false);
+    expect(unresolved.readableTranscript).toBe("{{resume|cv}} and resume.");
+    expect(unresolved.ttsTranscript).toBe("{{resume|cv}} and ordinary.");
+    expect(unresolved.errors).toEqual([]);
+    expect(unresolved.warnings).toMatchObject([{
+      code: "UNRESOLVED_NAMED_SENSE",
+      offendingText: "{{resume|cv}}",
+      ignorePattern: "{{resume|cv}}",
+      sourceStartOffset: source.indexOf("{{resume|cv}}"),
+      sourceEndOffset: source.indexOf("{{resume|cv}}") + "{{resume|cv}}".length
+    }]);
+    expect(unresolved.synthesisReady).toBe(true);
+
+    const ignored = transformScript({
+      parsedScript: parseScript({ source }),
+      entries: [ordinary],
+      ignoredDiagnostics: [{ code: "UNRESOLVED_NAMED_SENSE", pattern: "{{resume|cv}}" }]
+    });
+    expect(ignored.warnings).toEqual([]);
+    expect(ignored.readableTranscript).toBe(unresolved.readableTranscript);
+    expect(ignored.ttsTranscript).toBe(unresolved.ttsTranscript);
+    expect(ignored.synthesisReady).toBe(true);
 
     const resolved = transformScript({
       parsedScript: parseScript({ source }),
@@ -138,6 +155,45 @@ describe("G03 lexicon transformation", () => {
     });
     expect(resolved.ttsTranscript).toBe("project-cv and ordinary.");
     expect(resolved.matches.map(({ entryId }) => entryId)).toEqual(["project-cv", "ordinary-resume"]);
+  });
+
+  it("uses the literal fallback for every ineligible named-sense entry", () => {
+    const source = "[speaker_teacher] {{resume|cv}} {{Resume|cv}} {{resume|missing}}";
+    const result = transformScript({
+      parsedScript: parseScript({ source }),
+      entries: [
+        entry({ id: "disabled", entryType: "namedSense", displayText: "resume", senseId: "cv", spokenText: "disabled", enabled: false }),
+        entry({ id: "empty", entryType: "namedSense", displayText: "resume", senseId: "cv", spokenText: "   " }),
+        entry({ id: "case-mismatch", entryType: "namedSense", displayText: "RESUME", senseId: "cv", spokenText: "wrong case" })
+      ]
+    });
+    expect(result.readableTranscript).toBe("{{resume|cv}} {{Resume|cv}} {{resume|missing}}");
+    expect(result.ttsTranscript).toBe(result.readableTranscript);
+    expect(result.matches).toEqual([]);
+    expect(result.warnings).toHaveLength(3);
+    expect(result.synthesisReady).toBe(true);
+  });
+
+  it("suppresses repeated transformation warnings by exact code and pattern", () => {
+    const source = "[speaker_teacher] {{resume|cv}} and {{resume|cv}}.";
+    const ignored = transformScript({
+      parsedScript: parseScript({ source }),
+      entries: [],
+      ignoredDiagnostics: [{ code: "UNRESOLVED_NAMED_SENSE", pattern: "{{resume|cv}}" }]
+    });
+    expect(ignored.warnings).toEqual([]);
+    expect(ignored.ttsTranscript).toBe("{{resume|cv}} and {{resume|cv}}.");
+
+    const conflict = transformScript({
+      parsedScript: parseScript({ source: "[speaker_teacher] SQL" }),
+      entries: [
+        entry({ id: "b-entry", displayText: "SQL", spokenText: "bee" }),
+        entry({ id: "a-entry", displayText: "SQL", spokenText: "aye" })
+      ],
+      ignoredDiagnostics: [{ code: "LEXICON_MATCH_CONFLICT", pattern: "SQL" }]
+    });
+    expect(conflict.warnings).toEqual([]);
+    expect(conflict.ttsTranscript).toBe("aye");
   });
 
   it("never applies ordinary replacement to directives or metadata", () => {

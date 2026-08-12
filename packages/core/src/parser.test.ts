@@ -97,9 +97,20 @@ describe("G02 script parser", () => {
   });
 
   it("warns when speaker IDs differ only by case", () => {
-    const result = parseScript({ source: "[speaker_Teacher] First.\n[speaker_teacher] Second." });
+    const source = "[speaker_Teacher] First.\n[speaker_teacher] Second.";
+    const result = parseScript({ source });
     expect(result.warnings).toHaveLength(1);
-    expect(result.warnings[0]?.code).toBe("SPEAKER_ID_CASE_COLLISION");
+    expect(result.warnings[0]).toMatchObject({
+      code: "SPEAKER_ID_CASE_COLLISION",
+      ignorePattern: "[speaker_teacher] Second."
+    });
+
+    const ignored = parseScript({
+      source,
+      ignoredDiagnostics: [{ code: "SPEAKER_ID_CASE_COLLISION", pattern: "[speaker_teacher] Second." }]
+    });
+    expect(ignored.warnings).toEqual([]);
+    expect(ignored.nodes).toEqual(result.nodes);
   });
 
   it("parses sections, multiple pauses, consecutive pauses, and edge pauses", () => {

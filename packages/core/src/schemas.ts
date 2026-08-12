@@ -192,7 +192,8 @@ export type LexiconEntry = z.infer<typeof LexiconEntrySchema>;
 
 export const TransformScriptInputSchema = z.object({
   parsedScript: ParseScriptResultSchema,
-  entries: z.array(LexiconEntrySchema)
+  entries: z.array(LexiconEntrySchema),
+  ignoredDiagnostics: z.array(IgnoredDiagnosticSchema).optional()
 }).strict();
 export type TransformScriptInput = z.infer<typeof TransformScriptInputSchema>;
 
@@ -204,6 +205,7 @@ export const TransformDiagnosticSchema = z.object({
   sourceStartOffset: z.number().int().nonnegative(),
   sourceEndOffset: z.number().int().nonnegative(),
   offendingText: z.string().min(1),
+  ignorePattern: z.string().min(1),
   suggestion: z.string().min(1)
 }).strict();
 export type TransformDiagnostic = z.infer<typeof TransformDiagnosticSchema>;

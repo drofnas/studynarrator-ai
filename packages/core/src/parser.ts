@@ -211,6 +211,13 @@ export function parseScript(input: ParseScriptInput): ParseScriptResult {
     if (!ignored) errors.push(error);
   }
 
+  function recordWarning(warning: ParseDiagnostic): void {
+    const ignored = ignoredDiagnostics.some((item) =>
+      item.code === warning.code && item.pattern === warning.ignorePattern
+    );
+    if (!ignored) warnings.push(warning);
+  }
+
   function recordSpeaker(id: string, occurrenceRange: SourceRange, lineText: string): void {
     const existing = speakerMap.get(id);
     if (existing) {
@@ -220,7 +227,7 @@ export function parseScript(input: ParseScriptInput): ParseScriptResult {
 
     const collision = [...speakerMap.keys()].find((candidate) => candidate.toLowerCase() === id.toLowerCase());
     if (collision) {
-      warnings.push(diagnostic(
+      recordWarning(diagnostic(
         "SPEAKER_ID_CASE_COLLISION",
         `Speaker IDs ${collision} and ${id} differ only by case.`,
         occurrenceRange.start.line,
