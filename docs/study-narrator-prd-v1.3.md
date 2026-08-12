@@ -241,7 +241,7 @@ A script should remain understandable in a text editor and should not require a 
 
 ### 6.4 Errors should be caught before synthesis
 
-Unknown directives, unmapped speakers, invalid pause values, and unresolved pronunciation aliases should be shown during parsing rather than after a long render begins.
+Unknown directives, unmapped speakers, invalid pause values, and unresolved pronunciation aliases should be shown during analysis rather than after a long render begins. Every parser and transformation diagnostic can be suppressed by exact code and pattern for users who intentionally want the recovered literal text.
 
 ### 6.5 Correct only what changed
 
@@ -581,9 +581,9 @@ The lexicon may contain:
 
 Rules:
 
-- The readable transcript displays only the display text.
-- The transformed TTS transcript contains the spoken form.
-- An unresolved sense is a blocking validation error.
+- A resolved annotation displays only the display text in the readable transcript.
+- A resolved annotation contributes the configured spoken form to the transformed TTS transcript.
+- An unresolved sense produces a source-linked, non-blocking warning and remains byte-for-byte literal in both transcripts.
 - Sense names use letters, numbers, underscores, and hyphens.
 - Sense lookup is exact and deterministic.
 - The harness does not infer a sense from surrounding prose.
@@ -1953,10 +1953,10 @@ Examples:
 - Malformed section directive.
 - Unknown or malformed control directive.
 - Unclosed pronunciation annotation.
-- Unknown or unresolved pronunciation sense.
+- Invalid pronunciation-sense syntax.
 - Text before the first speaker when no default speaker exists.
 
-Parse errors include line, column, offending text, and a suggested correction.
+Parse errors include line, column, offending text, and a suggested correction. A valid annotation whose named sense is absent from the lexicon is instead a non-blocking transformation warning and remains literal in both transcripts.
 
 ### 16.2 Configuration errors
 
@@ -2294,7 +2294,7 @@ Given a whole-word project entry `SQL → sequel`, the transformed TTS text uses
 
 ### AC-5: Ambiguous pronunciation
 
-Given `{{resume|cv}}` and `{{resume|continue}}`, the transformed TTS text uses two different configured spoken forms. Removing either named-sense lexicon entry blocks rendering with a source-linked error.
+Given `{{resume|cv}}` and `{{resume|continue}}`, the transformed TTS text uses two different configured spoken forms. Removing either named-sense lexicon entry produces a source-linked warning and preserves that exact annotation in both transcripts without blocking rendering.
 
 ### AC-6: Exact pauses
 
@@ -2302,7 +2302,7 @@ A configured `pause_short` of 350 milliseconds and `pause_long` of 1,500 millise
 
 ### AC-7: Parse before render
 
-An unmapped speaker, an unsuppressed malformed-directive diagnostic, or an unresolved sense prevents render start and identifies the exact source location. An exact suppressed malformed directive remains intentional literal speech.
+An unmapped speaker or unsuppressed malformed-directive diagnostic prevents render start and identifies the exact source location. An exact suppressed diagnostic remains intentional literal speech. An unresolved named sense is always non-blocking, remains literal, and may also be suppressed from the warning list.
 
 ### AC-8: Preview parity
 

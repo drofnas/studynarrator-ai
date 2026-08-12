@@ -45,12 +45,13 @@ Use the Web development client and disposable data only. Lexicon entries are int
 ## Missing sense and restoration
 
 1. Delete the Project `resume + cv` entry and select **Analyze** again.
-2. Confirm an `UNRESOLVED_NAMED_SENSE` blocking diagnostic points to the CV annotation's source location.
-3. Confirm both transcript views preserve `resume` for that unresolved annotation and do not apply an ordinary `resume` rule inside it.
-4. Confirm the status reads **Blocking issues**.
-5. Restore `resume + cv`, select **Analyze**, and confirm the diagnostic clears and **Synthesis ready** returns.
-6. Copy **Script source** to a diff tool and confirm it remains byte-for-byte identical to `fixtures/gates/study-guide-valid.txt`.
-7. Delete any entry so it appears under **Removed this session**, then save `[]` through **Edit as JSON**. Confirm both the active list and restore history are cleared.
+2. Confirm an `UNRESOLVED_NAMED_SENSE` warning points to the complete CV annotation's source location.
+3. Confirm both transcript views preserve the exact `{{resume|cv}}` markup and do not apply an ordinary `resume` rule inside it.
+4. Confirm the status remains **Synthesis ready**.
+5. Select **Ignore this pattern** on the warning. Confirm it disappears, `UNRESOLVED_NAMED_SENSE` plus `{{resume|cv}}` appear under **Ignored diagnostic patterns**, and both transcripts remain unchanged.
+6. Select **Restore this pattern** and confirm the warning returns. Restore `resume + cv`, select **Analyze**, and confirm the warning clears while the resolved readable and TTS values return.
+7. Copy **Script source** to a diff tool and confirm it remains byte-for-byte identical to `fixtures/gates/study-guide-valid.txt`.
+8. Delete any entry so it appears under **Removed this session**, then save `[]` through **Edit as JSON**. Confirm both the active list and restore history are cleared.
 
 ## Determinism, responsiveness, and isolation
 
@@ -59,7 +60,7 @@ Use the Web development client and disposable data only. Lexicon entries are int
 3. During separate long analyses, edit the source, default speaker, and lexicon. Confirm each edit marks the result stale and the old worker result is discarded.
 4. Refresh the page. Confirm all lexicon entries are gone; no session entry is persisted.
 5. Open browser developer tools before adding entries and analyzing. Confirm there are no project persistence, lexicon REST, Electron IPC, audio preview, or Speaches requests.
-6. Replay the invalid G02 fixture and its ignore/restore flow. Confirm canonical ordering, literal recovery, diagnostics, and source preservation still work.
+6. Replay the invalid G02 fixture and its ignore/restore flow. Confirm parser errors and warnings offer the same shared controls, canonical ordering, literal recovery, diagnostics, and source preservation still work.
 7. Open Runtime diagnostics and run the G01 self-test once to confirm the previously approved screen and behavior remain intact.
 
 ## Review record

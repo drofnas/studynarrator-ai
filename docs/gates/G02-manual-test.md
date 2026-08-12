@@ -26,7 +26,7 @@ Use the Web development client and disposable data only. Speaches is not require
 4. Confirm line 5 emits `This annotation` under `1bad`, changes speaker at `[speaker_teacher]`, and emits the remaining speech under `teacher`.
 5. Add a plain speech line after line 5 and parse. Confirm it remains assigned to `teacher` until another speaker token appears.
 6. Confirm lines 2 through 5 contain two section and two annotation errors with codes, locations, offending text, focused patterns, and suggestions. Confirm all malformed source remains literal speech.
-7. Select **Ignore this pattern** for either malformed annotation. Confirm both annotation errors disappear, both speech nodes remain, and only `{{resume|cv` appears under **Ignored error patterns**.
+7. Select **Ignore this pattern** for either malformed annotation. Confirm both annotation errors disappear, both speech nodes remain, and only `{{resume|cv` appears under **Ignored diagnostic patterns**.
 8. Ignore either malformed section and confirm both matching section errors disappear without changing their speech nodes.
 9. Restore both patterns and confirm all four errors return. These choices are intentionally limited to the current Script Lab session until G04 adds persistence.
 10. Enter `Speak \[pause_short] literally.`, set the default speaker to `narrator`, and parse. Confirm `[pause_short]` remains readable speech and no pause node is created.

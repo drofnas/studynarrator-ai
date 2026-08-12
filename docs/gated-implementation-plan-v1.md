@@ -631,8 +631,8 @@ npm run verify:gate -- G03
    - Both whole-word `SQL` occurrences become `sequel`.
 7. Open the match audit and confirm the source entry and rule are shown for each change.
 8. Delete the `resume + cv` sense and rerun validation.
-9. Confirm the unresolved annotation becomes a blocking error rather than being guessed.
-10. Restore the entry and verify the error clears.
+9. Confirm the unresolved annotation remains byte-for-byte literal in both transcripts and produces a source-linked, non-blocking warning rather than being guessed.
+10. Ignore the warning and verify it moves to the shared session diagnostic list without changing either transcript; restore it, then restore the entry and verify the warning clears.
 11. Copy the original source and compare it with the fixture; it must remain unchanged.
 
 ### Pass criteria
@@ -640,7 +640,8 @@ npm run verify:gate -- G03
 - Readable and TTS transcripts differ only where deterministic rules require it.
 - Named senses never use context guessing.
 - Every change has an inspectable reason.
-- Missing senses block synthesis-ready validation.
+- Missing senses remain literal, produce non-blocking warnings, and never disable synthesis-ready validation.
+- Parser and transformation errors or warnings can be ignored and restored by exact code and pattern for the current session.
 
 ### Explicitly excluded
 

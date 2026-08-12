@@ -78,19 +78,35 @@ if (gate === "G03") {
       'packages/core/src/lexicon.test.ts',
       'fixtures/gates/expected/study-guide-valid.transform.json',
       'apps/web/src/features/script-lab/components/LexiconEditor.tsx',
+      'apps/web/src/features/script-lab/components/TransformDiagnostics.tsx',
+      'apps/web/src/features/script-lab/components/IgnoredDiagnostics.tsx',
       'apps/web/src/features/script-lab/components/TranscriptTabs.tsx',
       'docs/gates/G03-manual-test.md'
     ]) if (!fs.existsSync(path)) process.exit(1);
     const coreIndex = fs.readFileSync('packages/core/src/index.ts', 'utf8');
+    const schemas = fs.readFileSync('packages/core/src/schemas.ts', 'utf8');
     const transformer = fs.readFileSync('packages/core/src/transformer.ts', 'utf8');
     const lexiconEditor = fs.readFileSync('apps/web/src/features/script-lab/components/LexiconEditor.tsx', 'utf8');
+    const transformDiagnostics = fs.readFileSync('apps/web/src/features/script-lab/components/TransformDiagnostics.tsx', 'utf8');
+    const ignoredDiagnostics = fs.readFileSync('apps/web/src/features/script-lab/components/IgnoredDiagnostics.tsx', 'utf8');
+    const workerProtocol = fs.readFileSync('apps/web/src/workers/parser/parserWorkerProtocol.ts', 'utf8');
+    const manualTest = fs.readFileSync('docs/gates/G03-manual-test.md', 'utf8');
     if (
       !coreIndex.includes('transformer.js')
       || !coreIndex.includes('lexicon.js')
       || !coreIndex.includes('LexiconEntryAuthoringCollectionSchema')
+      || !schemas.includes('ignorePattern: z.string().min(1)')
+      || !schemas.includes('ignoredDiagnostics: z.array(IgnoredDiagnosticSchema).optional()')
       || !transformer.includes('export function transformScript')
+      || !transformer.includes('readableReplacement: projected.annotation.rawText')
+      || !transformer.includes('ttsReplacement: projected.annotation.rawText')
       || !lexiconEditor.includes('Edit as JSON')
       || !lexiconEditor.includes('Save JSON')
+      || !transformDiagnostics.includes('Ignore this pattern')
+      || !ignoredDiagnostics.includes('Ignored diagnostic patterns')
+      || !workerProtocol.includes('ignoredDiagnostics: input.ignoredDiagnostics')
+      || !manualTest.includes('non-blocking')
+      || !manualTest.includes('{{resume|cv}}')
     ) process.exit(1);
     const forbidden = new RegExp('fetch\\\\s*\\\\(|localStorage|indexedDB|/api/|speaches|system\\\\.[A-Za-z]', 'iu');
     for (const path of [
