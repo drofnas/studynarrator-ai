@@ -7,14 +7,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SystemClient } from "@studynarrator/shared-types";
 import { App } from "./App.js";
 
-const unusedParser = { parse: vi.fn() };
+const unusedAnalyzer = { analyze: vi.fn() };
 
 afterEach(cleanup);
 
 function renderApp(route: string, client: SystemClient = { diagnostics: vi.fn() }) {
   return render(
     <MemoryRouter initialEntries={[route]}>
-      <App client={client} parser={unusedParser} />
+      <App analyzer={unusedAnalyzer} client={client} />
     </MemoryRouter>
   );
 }

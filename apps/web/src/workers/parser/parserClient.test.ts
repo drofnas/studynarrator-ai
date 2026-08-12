@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { parseScript } from "@studynarrator/core";
-import { ScriptParserWorkerClient, createScriptParserWorkerClient } from "./parserClient.js";
+import { parseScript, transformScript } from "@studynarrator/core";
+import { ScriptAnalysisWorkerClient, createScriptAnalysisWorkerClient } from "./parserClient.js";
 
 class FakeWorker {
   readonly postMessage = vi.fn<(value: unknown) => void>();
@@ -18,29 +18,31 @@ class FakeWorker {
   }
 }
 
-describe("parser worker client", () => {
-  it("posts validated parser input and resolves validated output", async () => {
+describe("script analysis worker client", () => {
+  it("posts validated analysis input and resolves validated parser and transform output", async () => {
     const worker = new FakeWorker();
-    const client = new ScriptParserWorkerClient(worker);
-    const pending = client.parse({ source: "[speaker_teacher] Hello." });
-    expect(worker.postMessage).toHaveBeenCalledWith({ requestId: 1, input: { source: "[speaker_teacher] Hello." } });
-    worker.respond({ requestId: 1, ok: true, result: parseScript({ source: "[speaker_teacher] Hello." }) });
-    await expect(pending).resolves.toMatchObject({ summary: { speechSegmentCount: 1 } });
+    const client = new ScriptAnalysisWorkerClient(worker);
+    const input = { source: "[speaker_teacher] Hello.", entries: [] };
+    const pending = client.analyze(input);
+    expect(worker.postMessage).toHaveBeenCalledWith({ requestId: 1, input });
+    const parseResult = parseScript({ source: input.source });
+    worker.respond({ requestId: 1, ok: true, result: { parseResult, transformResult: transformScript({ parsedScript: parseResult, entries: [] }) } });
+    await expect(pending).resolves.toMatchObject({ parseResult: { summary: { speechSegmentCount: 1 } }, transformResult: { synthesisReady: true } });
   });
 
   it("rejects worker failures and invalid result envelopes", async () => {
     const worker = new FakeWorker();
-    const client = new ScriptParserWorkerClient(worker);
-    const failed = client.parse({ source: "text", defaultSpeakerId: "narrator" });
+    const client = new ScriptAnalysisWorkerClient(worker);
+    const failed = client.analyze({ source: "text", defaultSpeakerId: "narrator", entries: [] });
     worker.respond({ requestId: 1, ok: false, error: "Worker failed safely." });
     await expect(failed).rejects.toThrow("Worker failed safely.");
 
-    const invalid = client.parse({ source: "[speaker_teacher] Text." });
+    const invalid = client.analyze({ source: "[speaker_teacher] Text.", entries: [] });
     worker.respond({ requestId: 2, ok: true, result: { secret: "invalid" } });
     await expect(invalid).rejects.toThrow("failed validation");
   });
 
-  it("constructs a module Worker instead of parsing on the UI thread", () => {
+  it("constructs a module Worker instead of analyzing on the UI thread", () => {
     const instances: Array<{ url: string; options?: WorkerOptions }> = [];
     class WorkerStub extends FakeWorker {
       constructor(url: URL, options?: WorkerOptions) {
@@ -49,8 +51,8 @@ describe("parser worker client", () => {
       }
     }
     vi.stubGlobal("Worker", WorkerStub);
-    const client = createScriptParserWorkerClient();
-    expect(client).toBeInstanceOf(ScriptParserWorkerClient);
+    const client = createScriptAnalysisWorkerClient();
+    expect(client).toBeInstanceOf(ScriptAnalysisWorkerClient);
     expect(instances).toHaveLength(1);
     expect(instances[0]?.url).toContain("parser.worker.ts");
     expect(instances[0]?.options).toEqual({ type: "module" });

@@ -1,13 +1,17 @@
 import {
-  ParseScriptInputSchema,
-  ParseScriptResultSchema,
-  type ParseScriptInput,
-  type ParseScriptResult
+  type LexiconEntry,
+  type ParseScriptInput
 } from "@studynarrator/core";
-import type { ParserWorkerResponse } from "./parserWorkerProtocol.js";
+import {
+  validateScriptAnalysisInput,
+  validateScriptAnalysisResult,
+  type ParserWorkerResponse,
+  type ScriptAnalysisInput,
+  type ScriptAnalysisResult
+} from "./parserWorkerProtocol.js";
 
-export interface ScriptParser {
-  parse(input: ParseScriptInput): Promise<ParseScriptResult>;
+export interface ScriptAnalyzer {
+  analyze(input: ParseScriptInput & { entries: LexiconEntry[] }): Promise<ScriptAnalysisResult>;
 }
 
 interface WorkerPort {
@@ -18,11 +22,11 @@ interface WorkerPort {
 }
 
 interface PendingRequest {
-  resolve(result: ParseScriptResult): void;
+  resolve(result: ScriptAnalysisResult): void;
   reject(error: Error): void;
 }
 
-export class ScriptParserWorkerClient implements ScriptParser {
+export class ScriptAnalysisWorkerClient implements ScriptAnalyzer {
   readonly #worker: WorkerPort;
   readonly #pending = new Map<number, PendingRequest>();
   #nextRequestId = 1;
@@ -33,8 +37,8 @@ export class ScriptParserWorkerClient implements ScriptParser {
     worker.addEventListener("error", (event) => this.#failAll(event.message || "The parser worker stopped unexpectedly."));
   }
 
-  parse(input: ParseScriptInput): Promise<ParseScriptResult> {
-    const validatedInput = ParseScriptInputSchema.parse(input);
+  analyze(input: ScriptAnalysisInput): Promise<ScriptAnalysisResult> {
+    const validatedInput = validateScriptAnalysisInput(input);
     const requestId = this.#nextRequestId;
     this.#nextRequestId += 1;
     return new Promise((resolve, reject) => {
@@ -62,9 +66,9 @@ export class ScriptParserWorkerClient implements ScriptParser {
       return;
     }
     try {
-      pending.resolve(ParseScriptResultSchema.parse(response.result));
+      pending.resolve(validateScriptAnalysisResult(response.result));
     } catch {
-      pending.reject(new Error("The parser worker returned data that failed validation."));
+      pending.reject(new Error("The analysis worker returned data that failed validation."));
     }
   }
 
@@ -74,6 +78,6 @@ export class ScriptParserWorkerClient implements ScriptParser {
   }
 }
 
-export function createScriptParserWorkerClient(): ScriptParserWorkerClient {
-  return new ScriptParserWorkerClient(new Worker(new URL("./parser.worker.ts", import.meta.url), { type: "module" }));
+export function createScriptAnalysisWorkerClient(): ScriptAnalysisWorkerClient {
+  return new ScriptAnalysisWorkerClient(new Worker(new URL("./parser.worker.ts", import.meta.url), { type: "module" }));
 }

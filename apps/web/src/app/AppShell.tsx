@@ -6,15 +6,15 @@ export function AppShell() {
   return (
     <main className={styles.shell}>
       <header className={styles.masthead}>
-        <div><p className={styles.eyebrow}>Gate G02 · Grammar before audio</p><h1 className={styles.title}>See exactly what the script means.</h1></div>
-        <p className={styles.lede}>Parse speakers, pauses, sections, and pronunciation annotations without persistence or synthesis.</p>
+        <div><p className={styles.eyebrow}>Gate G03 · Pronunciation without guessing</p><h1 className={styles.title}>See what readers see. Control what TTS says.</h1></div>
+        <p className={styles.lede}>Compare source, readable text, and deterministic speech transformations without persistence or synthesis.</p>
       </header>
       <nav className={styles.navigation} aria-label="StudyNarrator tools">
         <NavLink to={APP_PATHS.scriptLab}>Script Lab</NavLink>
         <NavLink to={APP_PATHS.diagnostics}>Runtime diagnostics</NavLink>
       </nav>
       <Outlet />
-      <footer className={styles.footer}><span>StudyNarrator 0.1.0</span><span>Parser output is local, deterministic, and never sent to Speaches.</span></footer>
+      <footer className={styles.footer}><span>StudyNarrator 0.1.0</span><span>Parser and lexicon output stay local, deterministic, and offline.</span></footer>
     </main>
   );
 }

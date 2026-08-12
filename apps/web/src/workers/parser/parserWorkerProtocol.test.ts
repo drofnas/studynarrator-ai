@@ -1,20 +1,45 @@
 import { describe, expect, it } from "vitest";
+import { LexiconEntrySchema } from "@studynarrator/core";
 import { handleParserWorkerRequest } from "./parserWorkerProtocol.js";
 
-describe("parser worker protocol", () => {
-  it("parses a 100,000-character script through the worker handler", () => {
-    const source = `[speaker_teacher] ${"a".repeat(99_982)}`;
-    expect(source).toHaveLength(100_000);
-    const response = handleParserWorkerRequest({ requestId: 7, input: { source } });
-    expect(response).toMatchObject({ requestId: 7, ok: true });
-    if (response.ok) {
-      expect(response.result.source).toBe(source);
-      expect(response.result.summary).toMatchObject({ characterCount: 100_000, speechSegmentCount: 1 });
-    }
+describe("script analysis worker protocol", () => {
+  it("parses and transforms a validated request", () => {
+    const entry = LexiconEntrySchema.parse({
+      id: "sql",
+      scope: "global",
+      entryType: "exactTerm",
+      displayText: "SQL",
+      spokenText: "sequel",
+      caseSensitive: true,
+      wholeWord: true,
+      priority: 0,
+      enabled: true,
+      notes: "",
+      createdAt: "2026-08-11T00:00:00.000Z",
+      updatedAt: "2026-08-11T00:00:00.000Z"
+    });
+    const response = handleParserWorkerRequest({ requestId: 4, input: { source: "[speaker_teacher] SQL", entries: [entry] } });
+    expect(response).toMatchObject({ requestId: 4, ok: true, result: { transformResult: { ttsTranscript: "sequel" } } });
   });
 
-  it("returns a serializable failure for invalid API input", () => {
-    const response = handleParserWorkerRequest({ requestId: 9, input: { source: "text", defaultSpeakerId: "bad speaker" } });
-    expect(response).toMatchObject({ requestId: 9, ok: false });
+  it("returns a safe error for invalid messages", () => {
+    expect(handleParserWorkerRequest({ requestId: 9, input: { source: "text" } })).toMatchObject({ requestId: 9, ok: false });
+    expect(handleParserWorkerRequest(null)).toMatchObject({ requestId: -1, ok: false });
+  });
+
+  it("analyzes a 100,000-character script without changing its source", () => {
+    const source = `[speaker_teacher] ${"a".repeat(99_982)}`;
+    expect(source).toHaveLength(100_000);
+
+    const response = handleParserWorkerRequest({ requestId: 12, input: { source, entries: [] } });
+
+    expect(response).toMatchObject({
+      requestId: 12,
+      ok: true,
+      result: {
+        parseResult: { source },
+        transformResult: { source, readableTranscript: "a".repeat(99_982), ttsTranscript: "a".repeat(99_982) }
+      }
+    });
   });
 });

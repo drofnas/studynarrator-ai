@@ -1,13 +1,13 @@
 import type { SystemClient } from "@studynarrator/shared-types";
 import { AppRoutes } from "./routes.js";
-import type { ScriptParser } from "@/workers/parser/parserClient.js";
+import type { ScriptAnalyzer } from "@/workers/parser/parserClient.js";
 import "./styles/global.css";
 
 export interface AppProps {
   client: SystemClient;
-  parser: ScriptParser;
+  analyzer: ScriptAnalyzer;
 }
 
-export function App({ client, parser }: AppProps) {
-  return <AppRoutes client={client} parser={parser} />;
+export function App({ analyzer, client }: AppProps) {
+  return <AppRoutes analyzer={analyzer} client={client} />;
 }
