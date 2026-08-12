@@ -56,16 +56,31 @@ describe("G02 and G03 Script Lab", () => {
     expect(editor).toHaveValue(source);
   });
 
-  it("uses an optional default speaker without persisting or mutating source", async () => {
+  it("uses the system narrator when the optional session override is blank", async () => {
     const user = userEvent.setup();
     const worker = analyzer();
     render(<ScriptLabPage analyzer={worker} />);
+    const override = screen.getByLabelText(/Default speaker override/u);
+    expect(override).toHaveAttribute("placeholder", "System Default (narrator)");
+    expect(screen.getByText(/Leave blank to use System Default/u)).toHaveTextContent("narrator");
+
     fireEvent.change(screen.getByLabelText("Script source"), { target: { value: "Opening narration." } });
-    await user.type(screen.getByLabelText(/Default speaker ID/u), "narrator");
     await user.click(screen.getByRole("button", { name: "Analyze" }));
     expect(await screen.findByLabelText("Speaker narrator")).toBeInTheDocument();
     expect(screen.getByRole("table", { name: "Ordered canonical nodes" })).toHaveTextContent("Opening narration.");
-    expect(worker.analyze).toHaveBeenCalledWith({ source: "Opening narration.", defaultSpeakerId: "narrator", entries: [] });
+    expect(worker.analyze).toHaveBeenLastCalledWith({ source: "Opening narration.", entries: [] });
+
+    await user.type(override, "host");
+    expect(await screen.findByText(/stale result was discarded/u)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Analyze" }));
+    expect(await screen.findByLabelText("Speaker host")).toBeInTheDocument();
+    expect(worker.analyze).toHaveBeenLastCalledWith({ source: "Opening narration.", defaultSpeakerId: "host", entries: [] });
+
+    await user.clear(override);
+    expect(await screen.findByText(/stale result was discarded/u)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Analyze" }));
+    expect(await screen.findByLabelText("Speaker narrator")).toBeInTheDocument();
+    expect(worker.analyze).toHaveBeenLastCalledWith({ source: "Opening narration.", entries: [] });
   });
 
   it("shows ordered parse errors while retaining malformed text as speech", async () => {

@@ -17,4 +17,6 @@
   line-height: 1.55;
 }
 .grid input { max-width: 380px; min-height: 44px; margin-bottom: 10px; padding: 0 12px; }
+.grid .help { margin: -12px 0 10px; color: #5d7481; font-size: 0.8rem; }
+.grid .help code { color: var(--ink); }
 .grid textarea:focus-visible, .grid input:focus-visible { outline: 3px solid var(--copper); outline-offset: 2px; }
