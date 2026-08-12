@@ -12,7 +12,8 @@
     "@studynarrator/core": "0.1.0",
     "@studynarrator/shared-types": "0.1.0",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "react-router": "^8.3.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "6.0.5",

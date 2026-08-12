@@ -90,8 +90,10 @@ button:focus-visible { outline: 3px solid var(--copper); outline-offset: 3px; }
 button:disabled { cursor: wait; opacity: 0.6; }
 
 .view-nav { display: flex; gap: 10px; margin-top: 24px; padding: 0 8px; }
-.view-nav button { min-height: 40px; padding: 0 16px; color: var(--ink); background: transparent; }
-.view-nav button[aria-current="page"] { color: white; background: var(--ink); }
+.view-nav a { display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px; color: var(--ink); background: transparent; border: 2px solid var(--ink); border-radius: 2px; font-weight: 700; text-decoration: none; }
+.view-nav a:hover { color: white; background: var(--signal); transform: translateY(-2px); }
+.view-nav a:focus-visible { outline: 3px solid var(--copper); outline-offset: 3px; }
+.view-nav a[aria-current="page"] { color: white; background: var(--ink); }
 
 .signal-rail { position: relative; border-top: 1px solid var(--line); }
 .signal-rail::before {

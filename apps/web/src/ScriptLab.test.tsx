@@ -2,9 +2,10 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseScript, type ParseScriptResult } from "@studynarrator/core";
-import { App } from "./App.js";
+import { App } from "@/app/App.js";
 import { ScriptLab } from "./ScriptLab.js";
 
 afterEach(cleanup);
@@ -14,7 +15,7 @@ describe("G02 Script Lab", () => {
     const user = userEvent.setup();
     const diagnostics = vi.fn();
     const parser = { parse: vi.fn(async (input: { source: string; defaultSpeakerId?: string }) => parseScript(input)) };
-    render(<App client={{ diagnostics }} parser={parser} />);
+    render(<MemoryRouter initialEntries={["/script-lab"]}><App client={{ diagnostics }} parser={parser} /></MemoryRouter>);
 
     expect(screen.getByRole("heading", { name: "Script Lab" })).toBeInTheDocument();
     const source = "[section: Topic]\n\n[speaker_teacher] Read {{resume|cv}}.\n[pause_short]";
@@ -124,9 +125,9 @@ describe("G02 Script Lab", () => {
 
   it("preserves the G01 diagnostics screen behind navigation", async () => {
     const user = userEvent.setup();
-    render(<App client={{ diagnostics: vi.fn() }} parser={{ parse: vi.fn() }} />);
-    await user.click(screen.getByRole("button", { name: "Runtime diagnostics" }));
+    render(<MemoryRouter initialEntries={["/script-lab"]}><App client={{ diagnostics: vi.fn() }} parser={{ parse: vi.fn() }} /></MemoryRouter>);
+    await user.click(screen.getByRole("link", { name: "Runtime diagnostics" }));
     expect(screen.getByRole("heading", { name: "Runtime self-test" })).toBeInTheDocument();
-    expect(within(screen.getByRole("navigation")).getByRole("button", { name: "Runtime diagnostics" })).toHaveAttribute("aria-current", "page");
+    expect(within(screen.getByRole("navigation")).getByRole("link", { name: "Runtime diagnostics" })).toHaveAttribute("aria-current", "page");
   });
 });
