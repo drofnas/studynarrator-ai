@@ -39,6 +39,11 @@ function deepFreeze(value: unknown): void {
 describe("G03 lexicon transformation", () => {
   it("transforms the canonical fixture while preserving its readable transcript and source", () => {
     const source = readFileSync(resolve(process.cwd(), "fixtures/gates/study-guide-valid.txt"), "utf8");
+    const expected = JSON.parse(readFileSync(resolve(process.cwd(), "fixtures/gates/expected/study-guide-valid.transform.json"), "utf8")) as {
+      readableTranscript: string;
+      ttsTranscript: string;
+      matches: Array<Record<string, unknown>>;
+    };
     const parsedScript = parseScript({ source });
     const entries = [
       entry({ id: "global-sql", displayText: "SQL", spokenText: "sequel" }),
@@ -49,17 +54,18 @@ describe("G03 lexicon transformation", () => {
     const result = transformScript({ parsedScript, entries });
 
     expect(result.source).toBe(source);
-    expect(result.readableTranscript).toContain("word resume.");
-    expect(result.readableTranscript).toContain("SQL indexes");
-    expect(result.ttsTranscript).toContain("word rez-oo-may.");
-    expect(result.ttsTranscript).toContain("job can ree-zoom after");
-    expect(result.ttsTranscript.match(/sequel/gu)).toHaveLength(2);
-    expect(result.matches.map(({ entryId }) => entryId)).toEqual([
-      "project-resume-cv",
-      "project-resume-continue",
-      "global-sql",
-      "global-sql"
-    ]);
+    expect(result.readableTranscript).toBe(expected.readableTranscript);
+    expect(result.ttsTranscript).toBe(expected.ttsTranscript);
+    expect(result.matches.map((match) => ({
+      entryId: match.entryId,
+      originalText: match.originalText,
+      replacement: match.replacement,
+      nodeOrdinal: match.nodeOrdinal,
+      sourceStartOffset: match.sourceStartOffset,
+      sourceEndOffset: match.sourceEndOffset,
+      line: match.range.start.line,
+      column: match.range.start.column
+    }))).toEqual(expected.matches);
     expect(result.matches.every((match) => source.slice(match.sourceStartOffset, match.sourceEndOffset) === match.originalText)).toBe(true);
     expect(result.errors).toEqual([]);
     expect(result.synthesisReady).toBe(true);
@@ -174,9 +180,11 @@ describe("G03 lexicon transformation", () => {
     expect(result.synthesisReady).toBe(false);
   });
 
-  it("validates named-sense fields and rejects empty replacements", () => {
+  it("validates named-sense fields and ignores empty replacements", () => {
     expect(() => entry({ id: "missing-sense", entryType: "namedSense", displayText: "resume", spokenText: "spoken" })).toThrow();
     expect(() => entry({ id: "term-with-sense", displayText: "resume", senseId: "cv", spokenText: "spoken" })).toThrow();
-    expect(() => entry({ id: "empty", displayText: "SQL", spokenText: "   " })).toThrow();
+    const result = transform("SQL", [entry({ id: "empty", displayText: "SQL", spokenText: "   " })]);
+    expect(result.ttsTranscript).toBe("SQL");
+    expect(result.matches).toEqual([]);
   });
 });

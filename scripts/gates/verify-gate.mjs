@@ -6,7 +6,7 @@ import { spawnSync } from "node:child_process";
 
 const gate = process.argv[2];
 const repositoryRoot = resolve(import.meta.dirname, "../..");
-const supportedGates = new Set(["G01", "G02"]);
+const supportedGates = new Set(["G01", "G02", "G03"]);
 
 function fail(message) {
   process.stderr.write(`GATE ${gate ?? "UNKNOWN"}: ERROR: ${message}\n`);
@@ -32,11 +32,12 @@ function requireApprovedGate(approvedGate) {
 }
 
 if (!gate || !supportedGates.has(gate) || process.argv.length !== 3) {
-  fail("usage: npm run verify:gate -- G01|G02");
+  fail("usage: npm run verify:gate -- G01|G02|G03");
 }
 
 requireApprovedGate("G00");
-if (gate === "G02") requireApprovedGate("G01");
+if (gate === "G02" || gate === "G03") requireApprovedGate("G01");
+if (gate === "G03") requireApprovedGate("G02");
 
 run("node", ["-e", `
   const fs = require('node:fs');
@@ -50,7 +51,7 @@ if (gate === "G02") {
   run("node", ["-e", `
     const fs = require('node:fs');
     const plan = fs.readFileSync('docs/gated-implementation-plan-v1.md', 'utf8');
-    if (!plan.includes('- [ ] G02 —')) process.exit(1);
+    if (!plan.includes('- [x] G02 —')) process.exit(1);
     for (const path of [
       'docs/script-grammar-v1.md',
       'fixtures/gates/study-guide-valid.txt',
@@ -62,6 +63,31 @@ if (gate === "G02") {
     const server = fs.readFileSync('apps/server/src/app.ts', 'utf8');
     const desktop = fs.readFileSync('apps/desktop/src/ipc.ts', 'utf8');
     if ((server.includes('/api/projects/') && server.includes('/parse')) || desktop.includes('scripts.parse')) process.exit(1);
+  `]);
+}
+
+if (gate === "G03") {
+  run("node", ["-e", `
+    const fs = require('node:fs');
+    const plan = fs.readFileSync('docs/gated-implementation-plan-v1.md', 'utf8');
+    if (!plan.includes('- [x] G02 —') || !plan.includes('- [ ] G03 —')) process.exit(1);
+    for (const path of [
+      'packages/core/src/transformer.ts',
+      'packages/core/src/transformer.test.ts',
+      'fixtures/gates/expected/study-guide-valid.transform.json',
+      'apps/web/src/features/script-lab/components/LexiconEditor.tsx',
+      'apps/web/src/features/script-lab/components/TranscriptTabs.tsx',
+      'docs/gates/G03-manual-test.md'
+    ]) if (!fs.existsSync(path)) process.exit(1);
+    const coreIndex = fs.readFileSync('packages/core/src/index.ts', 'utf8');
+    const transformer = fs.readFileSync('packages/core/src/transformer.ts', 'utf8');
+    if (!coreIndex.includes('transformer.js') || !transformer.includes('export function transformScript')) process.exit(1);
+    const forbidden = new RegExp('fetch\\\\s*\\\\(|localStorage|indexedDB|/api/|speaches|system\\\\.[A-Za-z]', 'iu');
+    for (const path of [
+      'packages/core/src/transformer.ts',
+      'apps/web/src/features/script-lab/useScriptLab.ts',
+      'apps/web/src/workers/parser/parserWorkerProtocol.ts'
+    ]) if (forbidden.test(fs.readFileSync(path, 'utf8'))) process.exit(1);
   `]);
 }
 

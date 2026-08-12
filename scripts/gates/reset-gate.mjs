@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(scriptDirectory, "../..");
 const gate = process.argv[2];
-const allowedGates = new Set(["G01", "G02"]);
+const allowedGates = new Set(["G01", "G02", "G03"]);
 
 function fail(message) {
   process.stderr.write(`GATE RESET: ERROR: ${message}\n`);
@@ -34,7 +34,7 @@ async function assertNoSymbolicLinks(path) {
 }
 
 if (!gate || !allowedGates.has(gate) || process.argv.length !== 3) {
-  fail("usage: npm run gate:reset -- G01|G02");
+  fail("usage: npm run gate:reset -- G01|G02|G03");
 } else {
   const root = await realpath(repositoryRoot);
   const target = resolve(root, ".tmp", "gates", gate);

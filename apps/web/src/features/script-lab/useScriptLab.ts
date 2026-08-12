@@ -62,6 +62,10 @@ export function useScriptLab(analyzer: ScriptAnalyzer) {
   }
 
   function addEntry(draft: LexiconEntryDraft): boolean {
+    if (!draft.spokenText.trim()) {
+      setLexiconError("Spoken text is required.");
+      return false;
+    }
     const timestamp = new Date().toISOString();
     const candidate = LexiconEntrySchema.safeParse({
       id: `g03-${draft.scope}-${String(nextEntryId.current).padStart(3, "0")}`,

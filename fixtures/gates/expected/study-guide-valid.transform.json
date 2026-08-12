@@ -1,0 +1,46 @@
+{
+  "readableTranscript": "Today we will compare two meanings of the word resume.\nThat is the document I send with a job application.\nCorrect. A paused job can resume after a restart.\nSQL indexes can speed up database reads.\nIn this project, SQL is pronounced using the project lexicon.",
+  "ttsTranscript": "Today we will compare two meanings of the word rez-oo-may.\nThat is the document I send with a job application.\nCorrect. A paused job can ree-zoom after a restart.\nsequel indexes can speed up database reads.\nIn this project, sequel is pronounced using the project lexicon.",
+  "matches": [
+    {
+      "entryId": "project-resume-cv",
+      "originalText": "resume",
+      "replacement": "rez-oo-may",
+      "nodeOrdinal": 3,
+      "sourceStartOffset": 113,
+      "sourceEndOffset": 119,
+      "line": 3,
+      "column": 68
+    },
+    {
+      "entryId": "project-resume-continue",
+      "originalText": "resume",
+      "replacement": "ree-zoom",
+      "nodeOrdinal": 7,
+      "sourceStartOffset": 270,
+      "sourceEndOffset": 276,
+      "line": 7,
+      "column": 47
+    },
+    {
+      "entryId": "global-sql",
+      "originalText": "SQL",
+      "replacement": "sequel",
+      "nodeOrdinal": 12,
+      "sourceStartOffset": 367,
+      "sourceEndOffset": 370,
+      "line": 12,
+      "column": 19
+    },
+    {
+      "entryId": "global-sql",
+      "originalText": "SQL",
+      "replacement": "sequel",
+      "nodeOrdinal": 14,
+      "sourceStartOffset": 457,
+      "sourceEndOffset": 460,
+      "line": 14,
+      "column": 36
+    }
+  ]
+}

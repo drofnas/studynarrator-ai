@@ -138,7 +138,7 @@ export const LexiconEntrySchema = z.object({
   entryType: LexiconEntryTypeSchema,
   displayText: z.string().min(1),
   senseId: z.string().regex(/^[A-Za-z0-9_-]+$/u).optional(),
-  spokenText: z.string().trim().min(1),
+  spokenText: z.string(),
   caseSensitive: z.boolean(),
   wholeWord: z.boolean(),
   priority: z.number().int(),

@@ -205,7 +205,7 @@ function conflictWarning(
 export function transformScript(input: TransformScriptInput): TransformScriptResult {
   const parsedInput = TransformScriptInputSchema.parse(input);
   const { parsedScript } = parsedInput;
-  const entries = parsedInput.entries.filter((entry) => entry.enabled);
+  const entries = parsedInput.entries.filter((entry) => entry.enabled && entry.spokenText.trim().length > 0);
   const namedEntries = entries.filter((entry) => entry.entryType === "namedSense");
   const ordinaryEntries = entries.filter((entry) => entry.entryType !== "namedSense");
   const lineStarts = sourceLineStarts(parsedScript.source);
