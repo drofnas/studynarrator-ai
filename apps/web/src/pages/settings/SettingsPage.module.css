@@ -1,0 +1,49 @@
+.page { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(300px, 0.6fr); gap: 20px; }
+.page > header { grid-column: 1 / -1; padding-bottom: 22px; border-bottom: 2px solid var(--ink); }
+.page > header p, .sectionHeading p, .pacing > div p, .diagnosticHeader p { margin: 0 0 7px; color: var(--signal); font: 800 0.68rem ui-monospace, monospace; letter-spacing: 0.12em; text-transform: uppercase; }
+.page > header h2 { margin: 0; font: 700 clamp(2.7rem, 6vw, 5.2rem)/0.9 "Avenir Next Condensed", "Arial Narrow", sans-serif; letter-spacing: -0.045em; }
+.page > header span { display: block; max-width: 700px; margin-top: 12px; color: #557080; }
+.page > .error, .page > .status { grid-column: 1 / -1; margin: 0; }
+.error { color: var(--fault); font-weight: 800; }
+.status { color: #557080; font-size: 0.8rem; }
+.connections, .catalog, .pacing { padding: 22px; background: var(--paper); border: 1px solid var(--line); border-top: 5px solid var(--signal); }
+.connections { grid-column: 1 / -1; }
+.catalog { border-top-color: var(--copper); }
+.sectionHeading, .diagnosticHeader { display: flex; justify-content: space-between; gap: 16px; align-items: center; margin-bottom: 16px; }
+.sectionHeading h3, .diagnosticHeader h4, .pacing h3 { margin: 0; }
+.connectionGrid { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 18px; }
+.profileList { display: grid; gap: 6px; align-content: start; }
+.profileList button { display: grid; gap: 4px; min-height: 0; padding: 12px; color: var(--ink); text-align: left; background: white; border: 1px solid var(--line); }
+.profileList button[data-active="true"] { color: white; background: var(--ink); border-left: 5px solid var(--signal); }
+.profileList span { font-size: 0.67rem; }
+.profileForm { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; padding: 16px; background: var(--mist); }
+.profileForm > label, .pacing label, .catalog > label { display: grid; gap: 5px; font-size: 0.74rem; font-weight: 800; }
+.profileForm input, .profileForm select, .catalog input, .catalog textarea, .pacing input { width: 100%; padding: 9px 10px; color: var(--ink); background: white; border: 1px solid #91a9b2; }
+.profileForm input:disabled { color: #607481; background: #dbe4e6; }
+.managed, .keyState { grid-column: 1 / -1; margin: 0; padding: 10px; background: #d4e4e6; font-size: 0.73rem; font-weight: 800; }
+.inline { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.inline label { display: grid; gap: 5px; font-size: 0.74rem; font-weight: 800; }
+.check { display: flex !important; align-items: center; gap: 7px !important; }
+.check input { width: auto; }
+.actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 7px; }
+.secondary { color: var(--ink); background: transparent; }
+.danger { color: white; background: var(--fault); border-color: var(--fault); }
+.diagnostics { margin-top: 20px; padding-top: 18px; border-top: 2px solid var(--ink); }
+.diagnostics ol { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; margin: 0; padding: 0; list-style: none; }
+.diagnostics li { min-width: 0; padding: 10px; background: white; border-top: 5px solid var(--line); }
+.diagnostics li[data-status="pass"] { border-top-color: var(--signal); }
+.diagnostics li[data-status="fail"] { border-top-color: var(--fault); }
+.diagnostics li > b { color: #78909b; font: 700 0.62rem ui-monospace, monospace; }
+.diagnostics li div { display: grid; gap: 5px; margin-top: 8px; }
+.diagnostics li strong { text-transform: capitalize; }
+.diagnostics li code, .diagnostics li span { overflow-wrap: anywhere; font-size: 0.62rem; }
+.voiceList { display: grid; gap: 5px; max-height: 420px; margin: 12px 0; overflow: auto; }
+.voiceList article { display: grid; gap: 3px; padding: 10px; background: white; border-left: 4px solid var(--signal); }
+.voiceList article[data-enabled="false"] { opacity: 0.55; border-left-color: var(--line); }
+.voiceList code, .voiceList span { font-size: 0.66rem; }
+.catalog textarea { resize: vertical; font-family: ui-monospace, monospace; }
+.attribution { color: #557080; font-size: 0.7rem; line-height: 1.5; }
+.pacing { align-self: start; }
+.pacing label { margin: 13px 0; }
+@media (max-width: 960px) { .page { grid-template-columns: 1fr; } .connections, .page > header, .page > .error, .page > .status { grid-column: 1; } .diagnostics ol { grid-template-columns: repeat(4, 1fr); } }
+@media (max-width: 700px) { .connectionGrid, .profileForm { grid-template-columns: 1fr; } .managed, .keyState, .actions { grid-column: 1; } .diagnostics ol { grid-template-columns: repeat(2, 1fr); } }

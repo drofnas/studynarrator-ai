@@ -1,26 +1,22 @@
 import {
-  ConnectionProfileAuthoringSchema,
-  ConnectionProfileCollectionSchema,
-  ConnectionProfilePlaceholderSchema,
-  DurableIdSchema,
   GlobalLexiconEntryCollectionSchema,
   GlobalLexiconReplaceInputSchema,
   IgnoredDiagnosticCollectionSchema,
   PersistenceStatusSchema,
   ProjectCreateInputSchema,
   ProjectDetailSchema,
+  ProjectDuplicateInputSchema,
   ProjectIdSchema,
   ProjectReplaceInputSchema,
   ProjectSummaryCollectionSchema,
   SystemPacingDefaultsSchema,
-  type ConnectionProfileAuthoring,
-  type ConnectionProfilePlaceholder,
   type GlobalLexiconReplaceInput,
   type IgnoredDiagnosticCollection,
   type PersistenceClient,
   type PersistenceStatus,
   type ProjectCreateInput,
   type ProjectDetail,
+  type ProjectDuplicateInput,
   type ProjectReplaceInput,
   type ProjectSummary,
   type SystemPacingDefaults
@@ -33,6 +29,7 @@ export interface PersistenceRepository {
   createProject(input: ProjectCreateInput): ProjectDetail;
   getProject(projectId: string): ProjectDetail;
   replaceProject(projectId: string, input: ProjectReplaceInput): ProjectDetail;
+  duplicateProject(projectId: string, input: ProjectDuplicateInput): ProjectDetail;
   deleteProject(projectId: string): void;
   getSystemPacing(): SystemPacingDefaults;
   updateSystemPacing(input: SystemPacingDefaults): SystemPacingDefaults;
@@ -40,10 +37,6 @@ export interface PersistenceRepository {
   replaceIgnoredDiagnostics(input: IgnoredDiagnosticCollection): IgnoredDiagnosticCollection;
   listGlobalLexicon(): LexiconEntry[];
   replaceGlobalLexicon(input: GlobalLexiconReplaceInput): LexiconEntry[];
-  listConnectionProfiles(): ConnectionProfilePlaceholder[];
-  createConnectionProfile(input: ConnectionProfileAuthoring): ConnectionProfilePlaceholder;
-  replaceConnectionProfile(profileId: string, input: ConnectionProfileAuthoring): ConnectionProfilePlaceholder;
-  deleteConnectionProfile(profileId: string): void;
 }
 
 export class PersistenceUnavailableError extends Error {
@@ -68,6 +61,9 @@ export function createPersistenceService(repository: PersistenceRepository): Per
       },
       replace(projectId, input) {
         return execute(() => ProjectDetailSchema.parse(repository.replaceProject(ProjectIdSchema.parse(projectId), ProjectReplaceInputSchema.parse(input))));
+      },
+      duplicate(projectId, input) {
+        return execute(() => ProjectDetailSchema.parse(repository.duplicateProject(ProjectIdSchema.parse(projectId), ProjectDuplicateInputSchema.parse(input))));
       },
       delete(projectId) {
         return execute(() => { repository.deleteProject(ProjectIdSchema.parse(projectId)); });
@@ -96,20 +92,6 @@ export function createPersistenceService(repository: PersistenceRepository): Per
       replace(input) {
         return execute(() => GlobalLexiconEntryCollectionSchema.parse(repository.replaceGlobalLexicon(GlobalLexiconReplaceInputSchema.parse(input))));
       }
-    },
-    connectionProfiles: {
-      list() {
-        return execute(() => ConnectionProfileCollectionSchema.parse(repository.listConnectionProfiles()));
-      },
-      create(input) {
-        return execute(() => ConnectionProfilePlaceholderSchema.parse(repository.createConnectionProfile(ConnectionProfileAuthoringSchema.parse(input))));
-      },
-      replace(profileId, input) {
-        return execute(() => ConnectionProfilePlaceholderSchema.parse(repository.replaceConnectionProfile(DurableIdSchema.parse(profileId), ConnectionProfileAuthoringSchema.parse(input))));
-      },
-      delete(profileId) {
-        return execute(() => { repository.deleteConnectionProfile(DurableIdSchema.parse(profileId)); });
-      }
     }
   };
 }
@@ -121,10 +103,9 @@ export function createUnavailablePersistenceService(statusInput: PersistenceStat
   );
   return {
     status() { return Promise.resolve(status); },
-    projects: { list: unavailable, create: unavailable, get: unavailable, replace: unavailable, delete: unavailable },
+    projects: { list: unavailable, create: unavailable, get: unavailable, replace: unavailable, duplicate: unavailable, delete: unavailable },
     settings: { getPacing: unavailable, updatePacing: unavailable },
     preferences: { getIgnoredDiagnostics: unavailable, replaceIgnoredDiagnostics: unavailable },
-    globalLexicon: { list: unavailable, replace: unavailable },
-    connectionProfiles: { list: unavailable, create: unavailable, replace: unavailable, delete: unavailable }
+    globalLexicon: { list: unavailable, replace: unavailable }
   };
 }

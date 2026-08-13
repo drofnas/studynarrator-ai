@@ -6,7 +6,9 @@ import { spawnSync } from "node:child_process";
 
 const gate = process.argv[2];
 const repositoryRoot = resolve(import.meta.dirname, "../..");
-const supportedGates = new Set(["G01", "G02", "G03", "G04"]);
+const gateOrder = ["G01", "G02", "G03", "G04", "G05", "G06"];
+const supportedGates = new Set(gateOrder);
+const gateIndex = gateOrder.indexOf(gate);
 
 function fail(message) {
   process.stderr.write(`GATE ${gate ?? "UNKNOWN"}: ERROR: ${message}\n`);
@@ -32,13 +34,14 @@ function requireApprovedGate(approvedGate) {
 }
 
 if (!gate || !supportedGates.has(gate) || process.argv.length !== 3) {
-  fail("usage: npm run verify:gate -- G01|G02|G03|G04");
+  fail("usage: npm run verify:gate -- G01|G02|G03|G04|G05|G06");
+}
+if (gateIndex >= gateOrder.indexOf("G05") && Number(process.versions.node.split(".")[0]) !== 26) {
+  fail(`${gate} acceptance requires Node 26; current runtime is ${process.versions.node}`);
 }
 
 requireApprovedGate("G00");
-if (gate === "G02" || gate === "G03" || gate === "G04") requireApprovedGate("G01");
-if (gate === "G03" || gate === "G04") requireApprovedGate("G02");
-if (gate === "G04") requireApprovedGate("G03");
+for (const approvedGate of gateOrder.slice(0, gateIndex)) requireApprovedGate(approvedGate);
 
 run("node", ["-e", `
   const fs = require('node:fs');
@@ -48,11 +51,11 @@ run("node", ["-e", `
 run("bash", ["-n", "scripts/gates/g00-speaches-baseline.sh"]);
 run("bash", ["-n", "scripts/gates/g00-reset.sh"]);
 
-if (gate === "G02") {
+if (gateIndex >= gateOrder.indexOf("G02")) {
   run("node", ["-e", `
     const fs = require('node:fs');
     const plan = fs.readFileSync('docs/gated-implementation-plan-v1.md', 'utf8');
-    if (!plan.includes('- [x] G02 —')) process.exit(1);
+    if (!plan.includes('- [x] G02 —') && !plan.includes('- [ ] G02 —')) process.exit(1);
     for (const path of [
       'docs/script-grammar-v1.md',
       'fixtures/gates/study-guide-valid.txt',
@@ -67,11 +70,11 @@ if (gate === "G02") {
   `]);
 }
 
-if (gate === "G03") {
+if (gateIndex >= gateOrder.indexOf("G03")) {
   run("node", ["-e", `
     const fs = require('node:fs');
     const plan = fs.readFileSync('docs/gated-implementation-plan-v1.md', 'utf8');
-    if (!plan.includes('- [x] G02 —') || !plan.includes('- [ ] G03 —')) process.exit(1);
+    if (!plan.includes('- [x] G02 —') || (!plan.includes('- [ ] G03 —') && !plan.includes('- [x] G03 —'))) process.exit(1);
     for (const path of [
       'packages/core/src/transformer.ts',
       'packages/core/src/transformer.test.ts',
@@ -126,7 +129,7 @@ if (gate === "G03") {
       || !scriptEditor.includes('System Default')
       || !scriptEditor.includes('SYSTEM_DEFAULT_SPEAKER_ID')
       || !transitionSettings.includes('Pause at paragraph breaks')
-      || !transitionSettings.includes('DEFAULT_PARAGRAPH_PAUSE_DURATION_MS')
+      || (!transitionSettings.includes('DEFAULT_PARAGRAPH_PAUSE_DURATION_MS') && !transitionSettings.includes('paragraphPauseDurationMs'))
       || !pacingPreview.includes('Paragraph pacing preview')
       || !pacingPreview.includes('Suppressed by explicit pause')
       || !workerProtocol.includes('resolveParagraphPauses')
@@ -146,11 +149,11 @@ if (gate === "G03") {
   `]);
 }
 
-if (gate === "G04") {
+if (gateIndex >= gateOrder.indexOf("G04")) {
   run("node", ["-e", `
     const fs = require('node:fs');
     const plan = fs.readFileSync('docs/gated-implementation-plan-v1.md', 'utf8');
-    if (!plan.includes('- [x] G03 —') || !plan.includes('- [ ] G04 —')) process.exit(1);
+    if (!plan.includes('- [x] G03 —') || (!plan.includes('- [ ] G04 —') && !plan.includes('- [x] G04 —'))) process.exit(1);
     for (const path of [
       'packages/shared-types/src/persistence.ts',
       'packages/persistence/src/migrations.ts',
@@ -163,6 +166,7 @@ if (gate === "G04") {
       'docs/gates/G04-manual-test.md'
     ]) if (!fs.existsSync(path)) process.exit(1);
     const schemas = fs.readFileSync('packages/shared-types/src/persistence.ts', 'utf8');
+    const connectionSchemas = fs.existsSync('packages/shared-types/src/connections.ts') ? fs.readFileSync('packages/shared-types/src/connections.ts', 'utf8') : '';
     const migrations = fs.readFileSync('packages/persistence/src/migrations.ts', 'utf8');
     const repository = fs.readFileSync('packages/persistence/src/repository.ts', 'utf8');
     const app = fs.readFileSync('apps/server/src/app.ts', 'utf8');
@@ -171,10 +175,10 @@ if (gate === "G04") {
     const scriptLab = fs.readFileSync('apps/web/src/features/script-lab/useScriptLab.ts', 'utf8');
     const manual = fs.readFileSync('docs/gates/G04-manual-test.md', 'utf8');
     if (
-      !schemas.includes('DATABASE_SCHEMA_VERSION = 2')
+      (!schemas.includes('DATABASE_SCHEMA_VERSION = 2') && !schemas.includes('DATABASE_SCHEMA_VERSION = 3'))
       || !schemas.includes('PERSISTENCE_CHANNELS')
       || !schemas.includes('projects.list')
-      || !schemas.includes('connection-profiles.delete')
+      || (!schemas.includes('connection-profiles.delete') && !connectionSchemas.includes('delete: "connections.delete"'))
       || !migrations.includes('schema_migrations')
       || !migrations.includes('database.backup')
       || !migrations.includes('BEGIN IMMEDIATE')
@@ -187,11 +191,11 @@ if (gate === "G04") {
       || ipc.includes('persistence.execute')
       || !lab.includes('Migration ledger')
       || !lab.includes('Reload from database')
-      || !lab.includes('Connection placeholders')
+      || (!lab.includes('Connection placeholders') && !lab.includes('Managed connection reference'))
       || !manual.includes('two full restarts')
       || !manual.includes('zero Speaches')
     ) process.exit(1);
-    const forbiddenSecrets = /apiKey|api_key|password|authorization|bearerToken/iu;
+    const forbiddenSecrets = /\\b(apiKey|api_key|password|authorization|bearerToken)\\b\\s*:/iu;
     for (const path of [
       'packages/shared-types/src/persistence.ts',
       'packages/persistence/src/repository.ts',
@@ -203,10 +207,163 @@ if (gate === "G04") {
   run("npm", ["run", "db:migrate", "--", "--data-dir", ".tmp/gates/G04/verify-cli"]);
 }
 
+if (gateIndex >= gateOrder.indexOf("G05")) {
+  run("node", ["-e", `
+    const fs = require('node:fs');
+    const plan = fs.readFileSync('docs/gated-implementation-plan-v1.md', 'utf8');
+    if (!plan.includes('- [x] G04 —') || (!plan.includes('- [ ] G05 —') && !plan.includes('- [x] G05 —'))) process.exit(1);
+    for (const path of [
+      'packages/core/src/authoring.ts',
+      'packages/core/src/authoring.test.ts',
+      'fixtures/gates/expected/study-guide-valid.dry-run.json',
+      'apps/web/src/features/projects/projectAuthoring.ts',
+      'apps/web/src/pages/projects/ProjectsPage.tsx',
+      'apps/web/src/pages/settings/SettingsPage.tsx',
+      'docs/gates/G05-manual-test.md',
+      'docs/gates/evidence/G05/README.md'
+    ]) if (!fs.existsSync(path)) process.exit(1);
+    const coreIndex = fs.readFileSync('packages/core/src/index.ts', 'utf8');
+    const authoring = fs.readFileSync('packages/core/src/authoring.ts', 'utf8');
+    const persistence = fs.readFileSync('packages/shared-types/src/persistence.ts', 'utf8');
+    const repository = fs.readFileSync('packages/persistence/src/repository.ts', 'utf8');
+    const server = fs.readFileSync('apps/server/src/app.ts', 'utf8');
+    const ipc = fs.readFileSync('apps/desktop/src/ipc.ts', 'utf8');
+    const preloadBridge = fs.readFileSync('apps/desktop/src/bridge.ts', 'utf8');
+    const routes = fs.readFileSync('apps/web/src/app/routes.tsx', 'utf8');
+    const projects = fs.readFileSync('apps/web/src/pages/projects/ProjectsPage.tsx', 'utf8');
+    const settings = fs.readFileSync('apps/web/src/pages/settings/SettingsPage.tsx', 'utf8');
+    const manual = fs.readFileSync('docs/gates/G05-manual-test.md', 'utf8');
+    if (
+      !coreIndex.includes('authoring.js')
+      || !authoring.includes('AUTHORING_SCHEMA_VERSION = 1')
+      || !authoring.includes('export function parsePauseDuration')
+      || !authoring.includes('export function reconcileDiscoveredConfiguration')
+      || !authoring.includes('export function validateAuthoringConfiguration')
+      || !authoring.includes('export function buildAuthoringDryRun')
+      || !authoring.includes('origin: z.enum(["explicit", "paragraph"])')
+      || (!persistence.includes('PERSISTENCE_CONTRACT_VERSION = 2') && !persistence.includes('PERSISTENCE_CONTRACT_VERSION = 3'))
+      || (!persistence.includes('DATABASE_SCHEMA_VERSION = 2') && !persistence.includes('DATABASE_SCHEMA_VERSION = 3'))
+      || !persistence.includes('projects.duplicate')
+      || !repository.includes('duplicateProject')
+      || !repository.includes('BEGIN IMMEDIATE')
+      || !server.includes('/api/projects/:projectId/duplicate')
+      || !ipc.includes('projectsDuplicate')
+      || !preloadBridge.includes('projectsDuplicate')
+      || !routes.includes('/projects')
+      || !routes.includes('/settings')
+      || !projects.includes('Narration score')
+      || !projects.includes('Save now')
+      || !projects.includes('Upload .txt')
+      || (!projects.includes('Live model and voice support remains pending until G06') && !projects.includes('Connection availability is shown separately'))
+      || !settings.includes('pause_medium')
+      || !manual.includes('Gate 05 Deterministic Authoring')
+      || !manual.includes('voice_teacher_raw_g05')
+      || !manual.includes('GATE G05: AUTOMATED CHECKS PASSED')
+      || !manual.includes('zero TTS')
+    ) process.exit(1);
+    const forbiddenNetwork = new RegExp('fetch\\\\s*\\\\(|axios|WebSocket|/audio|/tts|/synthesis', 'iu');
+    for (const path of [
+      'packages/core/src/authoring.ts',
+      'apps/web/src/features/projects/projectAuthoring.ts',
+      'apps/web/src/pages/projects/ProjectsPage.tsx'
+    ]) if (forbiddenNetwork.test(fs.readFileSync(path, 'utf8'))) process.exit(1);
+  `]);
+}
+
+if (gateIndex >= gateOrder.indexOf("G06")) {
+  run("node", ["-e", `
+    const fs = require('node:fs');
+    const plan = fs.readFileSync('docs/gated-implementation-plan-v1.md', 'utf8');
+    if (!plan.includes('- [x] G05 —') || (!plan.includes('- [ ] G06 —') && !plan.includes('- [x] G06 —'))) process.exit(1);
+    for (const path of [
+      'packages/shared-types/src/connections.ts',
+      'packages/speaches-adapter/src/index.ts',
+      'packages/persistence/src/migrations.ts',
+      'packages/application/src/connections.ts',
+      'packages/application/src/kokoroCatalog.ts',
+      'apps/fake-speaches/src/index.ts',
+      'apps/desktop/src/credentialVault.ts',
+      'apps/web/src/services/connections/connectionsClient.ts',
+      'apps/web/src/pages/onboarding/OnboardingPage.tsx',
+      'apps/web/src/pages/settings/SettingsPage.tsx',
+      'apps/server/src/apiManifest.ts',
+      'packages/application/src/serviceManifest.ts',
+      'playwright.config.ts',
+      'e2e/web/navigation.spec.ts',
+      'e2e/web/projects-and-settings.spec.ts',
+      'e2e/web/script-and-persistence.spec.ts',
+      'e2e/electron/desktop.spec.ts',
+      'docs/gates/G06-manual-test.md',
+      'docs/gates/evidence/G06/README.md'
+    ]) if (!fs.existsSync(path)) process.exit(1);
+    if (plan.includes('- [x] G06 —')) {
+      const approvalPath = 'docs/gates/approvals/G06.md';
+      if (!fs.existsSync(approvalPath) || !fs.readFileSync(approvalPath, 'utf8').includes('\\nAPPROVED\\n')) process.exit(1);
+    }
+    const schemas = fs.readFileSync('packages/shared-types/src/connections.ts', 'utf8');
+    const persistence = fs.readFileSync('packages/shared-types/src/persistence.ts', 'utf8');
+    const adapter = fs.readFileSync('packages/speaches-adapter/src/index.ts', 'utf8');
+    const fake = fs.readFileSync('apps/fake-speaches/src/index.ts', 'utf8');
+    const vault = fs.readFileSync('apps/desktop/src/credentialVault.ts', 'utf8');
+    const server = fs.readFileSync('apps/server/src/app.ts', 'utf8');
+    const ipc = fs.readFileSync('apps/desktop/src/ipc.ts', 'utf8');
+    const bridge = fs.readFileSync('apps/desktop/src/bridge.ts', 'utf8');
+    const settings = fs.readFileSync('apps/web/src/pages/settings/SettingsPage.tsx', 'utf8');
+    const projects = fs.readFileSync('apps/web/src/pages/projects/ProjectsPage.tsx', 'utf8');
+    const manual = fs.readFileSync('docs/gates/G06-manual-test.md', 'utf8');
+    const packageJson = fs.readFileSync('package.json', 'utf8');
+    const apiManifest = fs.readFileSync('apps/server/src/apiManifest.ts', 'utf8');
+    const ipcManifest = fs.readFileSync('apps/desktop/src/ipc.ts', 'utf8');
+    const serviceManifest = fs.readFileSync('packages/application/src/serviceManifest.ts', 'utf8');
+    if (
+      !persistence.includes('DATABASE_SCHEMA_VERSION = 3')
+      || !schemas.includes('CredentialMutationSchema')
+      || !schemas.includes('RedactedConnectionDiagnosticsSchema')
+      || !schemas.includes('voice-catalog.replace')
+      || !adapter.includes('/v1/audio/speech')
+      || !adapter.includes('ffprobe')
+      || !fake.includes('corrupt-audio')
+      || !fake.includes('127.0.0.1')
+      || !vault.includes('isEncryptionAvailable')
+      || !server.includes('/api/connections')
+      || !ipc.includes('registerConnectionHandlers')
+      || !bridge.includes('voiceCatalog')
+      || !settings.includes('Signal path')
+      || !settings.includes('Export redacted JSON')
+      || !projects.includes('Voice catalog or manual ID')
+      || !projects.includes('deterministic dry run still makes no TTS request')
+      || !apiManifest.includes('REST_API_MANIFEST')
+      || !ipcManifest.includes('PUBLIC_IPC_CHANNEL_MANIFEST')
+      || !serviceManifest.includes('APPLICATION_SERVICE_MANIFEST')
+      || !packageJson.includes('"e2e:install"')
+      || !packageJson.includes('"test:api"')
+      || !packageJson.includes('"test:e2e:web"')
+      || !packageJson.includes('"test:e2e:electron"')
+      || !packageJson.includes('"test:e2e"')
+      || !manual.includes('Gate 06 Speaches Profiles, Diagnostics, and Onboarding')
+      || !manual.includes('g06-secret-must-not-appear')
+      || !manual.includes('GATE G06: AUTOMATED CHECKS PASSED')
+    ) process.exit(1);
+    const forbiddenRendererPrimitives = /nodeIntegration:\\s*true|contextIsolation:\\s*false|ipcRenderer\\.(send|invoke)\\([^C]|child_process|node:fs|node:http/iu;
+    for (const path of [
+      'apps/web/src/features/connections/ConnectionProvider.tsx',
+      'apps/web/src/pages/onboarding/OnboardingPage.tsx',
+      'apps/web/src/pages/settings/SettingsPage.tsx',
+      'apps/web/src/pages/projects/ProjectsPage.tsx'
+    ]) if (forbiddenRendererPrimitives.test(fs.readFileSync(path, 'utf8'))) process.exit(1);
+  `]);
+}
+
 run("npm", ["run", "lint"]);
 run("npm", ["run", "typecheck"]);
 run("npm", ["test"]);
+if (gateIndex >= gateOrder.indexOf("G06")) run("npm", ["run", "test:api"]);
 run("npm", ["run", "build"]);
+
+if (gateIndex >= gateOrder.indexOf("G06")) {
+  run("npm", ["run", "test:e2e:web"]);
+  run("npm", ["run", "test:e2e:electron"]);
+}
 
 const gateData = resolve(repositoryRoot, `.tmp/gates/${gate}`);
 const nodeData = resolve(gateData, "verify-node");

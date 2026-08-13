@@ -63,3 +63,35 @@ export {
 } from "./lexicon.js";
 export { transformScript } from "./transformer.js";
 export { resolveParagraphPauses } from "./pacing.js";
+export {
+  AUTHORING_SCHEMA_VERSION,
+  AuthoringDryRunResultSchema,
+  AuthoringPauseConfigurationSchema,
+  AuthoringPauseRowSchema,
+  AuthoringSectionRowSchema,
+  AuthoringSpeakerConfigurationSchema,
+  AuthoringSpeakerRowSchema,
+  AuthoringValidationIssueSchema,
+  AuthoringValidationResultSchema,
+  DryRunPauseRowSchema,
+  DryRunRowSchema,
+  DryRunSectionRowSchema,
+  DryRunSpeechRowSchema,
+  PauseDurationParseResultSchema,
+  ReconciledAuthoringConfigurationSchema,
+  buildAuthoringDryRun,
+  parsePauseDuration,
+  reconcileDiscoveredConfiguration,
+  validateAuthoringConfiguration,
+  type AuthoringDryRunResult,
+  type AuthoringPauseConfiguration,
+  type AuthoringPauseRow,
+  type AuthoringSectionRow,
+  type AuthoringSpeakerConfiguration,
+  type AuthoringSpeakerRow,
+  type AuthoringValidationIssue,
+  type AuthoringValidationResult,
+  type DryRunRow,
+  type PauseDurationParseResult,
+  type ReconciledAuthoringConfiguration
+} from "./authoring.js";

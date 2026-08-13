@@ -1,21 +1,35 @@
+import { useRef } from "react";
 import { NavLink, Outlet } from "react-router";
 import { APP_PATHS } from "./routes.js";
+import { useConnections, type ShellConnectionState } from "@/features/connections/ConnectionProvider.js";
 import styles from "./AppShell.module.css";
 
 export function AppShell() {
+  const reviewTools = useRef<HTMLDetailsElement>(null);
+  const connections = useConnections();
+  const closeReviewTools = () => reviewTools.current?.removeAttribute("open");
+  const labels: Record<ShellConnectionState, string> = {
+    connected: "Connected",
+    testing: "Testing",
+    modelUnavailable: "Model unavailable",
+    voiceUnavailable: "Voice unavailable",
+    authenticationRequired: "Authentication required",
+    disconnected: "Disconnected",
+    configurationError: "Configuration error",
+    invalidAudio: "Configuration error"
+  };
   return (
     <main className={styles.shell}>
       <header className={styles.masthead}>
-        <div><p className={styles.eyebrow}>Gate G04 · Durable by inspection</p><h1 className={styles.title}>Keep the source exact. Make every migration visible.</h1></div>
-        <p className={styles.lede}>Review deterministic script analysis alongside transactional project storage, restart evidence, and recoverable schema upgrades.</p>
+        <div><p className={styles.eyebrow}>StudyNarrator</p><h1 className={styles.title}>Write the source. Inspect the score.</h1></div>
+        <p className={styles.lede}>A deterministic authoring room for turning study guides into configured narration—before a single audio request is made.</p>
       </header>
       <nav className={styles.navigation} aria-label="StudyNarrator tools">
-        <NavLink to={APP_PATHS.scriptLab}>Script Lab</NavLink>
-        <NavLink to={APP_PATHS.persistenceLab}>Persistence Lab</NavLink>
-        <NavLink to={APP_PATHS.diagnostics}>Runtime diagnostics</NavLink>
+        <div className={styles.primaryLinks}><NavLink to={APP_PATHS.projects}>Projects</NavLink><NavLink to={APP_PATHS.settings}>Settings</NavLink><NavLink className={styles.connection ?? ""} data-state={connections.shellState} to={APP_PATHS.onboarding}><span aria-hidden="true" />{labels[connections.shellState]}</NavLink></div>
+        <details ref={reviewTools} className={styles.reviewTools}><summary>Review tools</summary><div><NavLink onClick={closeReviewTools} to={APP_PATHS.scriptLab}>Script Lab</NavLink><NavLink onClick={closeReviewTools} to={APP_PATHS.persistenceLab}>Persistence Lab</NavLink><NavLink onClick={closeReviewTools} to={APP_PATHS.diagnostics}>Runtime diagnostics</NavLink></div></details>
       </nav>
       <Outlet />
-      <footer className={styles.footer}><span>StudyNarrator 0.1.0</span><span>Local SQLite persistence. No credentials, synthesis, or external traffic.</span></footer>
+      <footer className={styles.footer}><span>StudyNarrator 0.1.0 · Gate G06</span><span>Connection diagnostics may request one discarded WAV. Project dry runs remain synthesis-free.</span></footer>
     </main>
   );
 }

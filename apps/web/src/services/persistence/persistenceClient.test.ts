@@ -14,6 +14,13 @@ describe("persistence client", () => {
     expect(new Headers(fetchInput.mock.calls[0]?.[1]?.headers).get("accept")).toBe("application/json");
   });
 
+  it("uses the narrow duplicate endpoint with an encoded project ID", async () => {
+    const fetchInput = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify([]), { status: 200, headers: { "content-type": "application/json" } }));
+    await expect(createRestPersistenceClient(fetchInput).projects.duplicate("project/one", { name: "Copy" })).rejects.toThrow();
+    expect(fetchInput.mock.calls[0]?.[0]).toBe("/api/projects/project%2Fone/duplicate");
+    expect(fetchInput.mock.calls[0]?.[1]).toMatchObject({ method: "POST", body: JSON.stringify({ name: "Copy" }) });
+  });
+
   it("surfaces safe path-specific boundary issues", async () => {
     const fetchInput = vi.fn(async () => new Response(JSON.stringify({
       error: { code: "VALIDATION_ERROR", message: "Invalid project.", issues: [{ path: "$.name", message: "Required" }] }

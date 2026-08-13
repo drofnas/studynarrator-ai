@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { PERSISTENCE_CHANNELS, SYSTEM_DIAGNOSTICS_CHANNEL } from "@studynarrator/shared-types";
+import { CONNECTION_CHANNELS, PERSISTENCE_CHANNELS, SYSTEM_DIAGNOSTICS_CHANNEL } from "@studynarrator/shared-types";
 import { createPreloadBridge } from "./bridge.js";
-import { registerDiagnosticsHandler, registerPersistenceHandlers } from "./ipc.js";
-import { SECURE_WEB_PREFERENCES } from "./security.js";
+import { PUBLIC_IPC_CHANNEL_MANIFEST, registerConnectionHandlers, registerDiagnosticsHandler, registerPersistenceHandlers } from "./ipc.js";
+import { isApprovedExternalUrl, SECURE_WEB_PREFERENCES } from "./security.js";
 
 const diagnostics = {
   schemaVersion: 2,
@@ -27,37 +27,51 @@ const diagnostics = {
 } as const;
 
 const persistenceStatus = {
-  contractVersion: 1 as const,
+  contractVersion: 3 as const,
   state: "ready" as const,
-  databaseSchemaVersion: 2 as const,
-  targetDatabaseSchemaVersion: 2 as const,
+  databaseSchemaVersion: 3 as const,
+  targetDatabaseSchemaVersion: 3 as const,
   databasePath: "/tmp/studynarrator.sqlite",
   latestBackupPath: null
 };
 
 const persistence = {
   status: vi.fn(async () => persistenceStatus),
-  projects: { list: vi.fn(async () => []), create: vi.fn(), get: vi.fn(), replace: vi.fn(), delete: vi.fn() },
+  projects: { list: vi.fn(async () => []), create: vi.fn(), get: vi.fn(), replace: vi.fn(), duplicate: vi.fn(), delete: vi.fn() },
   settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() },
   preferences: { getIgnoredDiagnostics: vi.fn(async () => []), replaceIgnoredDiagnostics: vi.fn() },
-  globalLexicon: { list: vi.fn(async () => []), replace: vi.fn() },
-  connectionProfiles: { list: vi.fn(async () => []), create: vi.fn(), replace: vi.fn(), delete: vi.fn() }
+  globalLexicon: { list: vi.fn(async () => []), replace: vi.fn() }
 };
+
+const connections = {
+  list: vi.fn(async () => []),
+  create: vi.fn(),
+  replace: vi.fn(),
+  delete: vi.fn(),
+  test: vi.fn(),
+  exportDiagnostics: vi.fn(),
+  getSetupState: vi.fn(async () => ({ activeProfileId: null, activeProfileLocked: false, onboardingCompletedAt: null, client: "electron" as const })),
+  setActiveProfile: vi.fn(),
+  completeOnboarding: vi.fn()
+};
+const voiceCatalog = { get: vi.fn(), replace: vi.fn() };
 
 describe("Electron boundary", () => {
   it("exposes only the validated diagnostics and persistence operations", async () => {
     const invoke = vi.fn(async (channel: string) => {
       if (channel === SYSTEM_DIAGNOSTICS_CHANNEL) return diagnostics;
-      if (channel === PERSISTENCE_CHANNELS.projectsList) return [];
+      if (channel === PERSISTENCE_CHANNELS.projectsList || channel === CONNECTION_CHANNELS.list) return [];
       return persistenceStatus;
     });
     const bridge = createPreloadBridge(invoke);
-    expect(Object.keys(bridge)).toEqual(["system", "persistence"]);
+    expect(Object.keys(bridge)).toEqual(["system", "persistence", "connections", "voiceCatalog"]);
     expect(Object.keys(bridge.system)).toEqual(["diagnostics"]);
     await expect(bridge.system.diagnostics()).resolves.toEqual(diagnostics);
     expect(invoke).toHaveBeenCalledWith(SYSTEM_DIAGNOSTICS_CHANNEL);
     await expect(bridge.persistence.projects.list()).resolves.toEqual([]);
     expect(invoke).toHaveBeenCalledWith(PERSISTENCE_CHANNELS.projectsList);
+    await expect(bridge.connections.list()).resolves.toEqual([]);
+    expect(invoke).toHaveBeenCalledWith(CONNECTION_CHANNELS.list);
   });
 
   it("rejects malformed IPC output", async () => {
@@ -79,12 +93,148 @@ describe("Electron boundary", () => {
     };
     registerDiagnosticsHandler(ipcMain, service as never, {} as never);
     registerPersistenceHandlers(ipcMain, persistence as never);
-    expect([...handlers.keys()]).toEqual([SYSTEM_DIAGNOSTICS_CHANNEL, ...Object.values(PERSISTENCE_CHANNELS)]);
+    registerConnectionHandlers(ipcMain, connections, voiceCatalog as never);
+    expect([...handlers.keys()]).toEqual(PUBLIC_IPC_CHANNEL_MANIFEST);
     expect([...handlers.keys()]).not.toContain("persistence.execute");
     await expect(handlers.get(SYSTEM_DIAGNOSTICS_CHANNEL)?.()).resolves.toEqual(diagnostics);
     await expect(handlers.get(PERSISTENCE_CHANNELS.projectsList)?.()).resolves.toEqual([]);
     await expect(handlers.get(PERSISTENCE_CHANNELS.projectsCreate)?.(undefined, { name: "", secret: "must-not-leak" }))
       .rejects.toThrow("The request does not match the persistence contract.");
+    await expect(handlers.get(CONNECTION_CHANNELS.create)?.(undefined, { profile: {}, credential: { action: "replace", apiKey: "g06-secret-must-not-appear" } }))
+      .rejects.toThrow("The request does not match the connection contract.");
+  });
+
+  it("invokes every public IPC contract with schema-valid input and output", async () => {
+    const timestamp = "2026-08-12T12:00:00.000Z";
+    const project = {
+      contractVersion: 3 as const,
+      id: "00000000-0000-4000-8000-000000000001",
+      name: "IPC project",
+      description: "",
+      scriptSource: "",
+      scriptHash: "a".repeat(64),
+      connectionProfileId: null,
+      modelId: null,
+      speakerMappings: [],
+      pausePresets: [{ pauseId: "pause_medium", durationMs: 750, description: "Paragraph" }],
+      paragraphPause: { enabled: true, pauseId: "pause_medium" as const, durationMs: 750 },
+      lexiconEntries: [],
+      createdAt: timestamp,
+      updatedAt: timestamp
+    };
+    const summary = {
+      schemaVersion: 1 as const,
+      overall: "connected" as const,
+      testedAt: timestamp,
+      httpStatus: 200,
+      stages: ["url", "dns", "tcp", "http", "authentication", "model", "voice", "audio"].map((stage) => ({
+        stage,
+        status: "pass" as const,
+        code: `${stage}-pass`,
+        message: "Passed.",
+        durationMs: 1
+      })),
+      availableModelIds: ["model"],
+      availableVoiceIds: ["voice"]
+    };
+    const profile = {
+      id: "profile",
+      name: "IPC profile",
+      baseUrl: "http://127.0.0.1:8000",
+      suppliedUrlForm: "root" as const,
+      source: "saved" as const,
+      editable: true,
+      credentialEntryAllowed: true,
+      configured: true,
+      apiKeyConfigured: false,
+      defaultModelId: "model",
+      defaultVoiceId: "voice",
+      timeoutSeconds: 120,
+      retryCount: 2,
+      responseFormat: "wav" as const,
+      lastTestedAt: timestamp,
+      lastSuccessfulTestAt: timestamp,
+      lastTestSummary: summary,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    };
+    const setup = { activeProfileId: "profile", activeProfileLocked: false, onboardingCompletedAt: timestamp, client: "electron" as const };
+    const catalog = { schemaVersion: 1 as const, modelId: "model", entries: [] };
+    persistence.projects.list.mockResolvedValue([{
+      id: project.id,
+      name: project.name,
+      description: project.description,
+      scriptHash: project.scriptHash,
+      createdAt: project.createdAt,
+      updatedAt: project.updatedAt
+    }] as never);
+    persistence.projects.create.mockResolvedValue(project);
+    persistence.projects.get.mockResolvedValue(project);
+    persistence.projects.replace.mockResolvedValue(project);
+    persistence.projects.duplicate.mockResolvedValue(project);
+    persistence.projects.delete.mockResolvedValue(undefined);
+    persistence.settings.updatePacing.mockResolvedValue({ enabled: false, durationMs: 900 });
+    persistence.preferences.replaceIgnoredDiagnostics.mockResolvedValue([]);
+    persistence.globalLexicon.replace.mockResolvedValue([]);
+    connections.list.mockResolvedValue([profile] as never);
+    connections.create.mockResolvedValue(profile);
+    connections.replace.mockResolvedValue(profile);
+    connections.delete.mockResolvedValue(undefined);
+    connections.test.mockResolvedValue(summary as never);
+    connections.exportDiagnostics.mockResolvedValue({
+      schemaVersion: 1, applicationVersion: "0.1.0", runtimeVersions: { node: "26.7.0", electron: "43.3.0" },
+      profileId: "profile", profileSource: "saved", endpointClass: "loopback", suppliedUrlForm: "root",
+      modelId: "model", voiceId: "voice", apiKeyConfigured: false,
+      requestCounts: { health: 1, models: 1, voices: 1, speech: 1 }, result: summary
+    } as never);
+    connections.setActiveProfile.mockResolvedValue(setup);
+    connections.completeOnboarding.mockResolvedValue(setup);
+    voiceCatalog.get.mockResolvedValue(catalog);
+    voiceCatalog.replace.mockResolvedValue(catalog);
+
+    const handlers = new Map<string, (event?: unknown, input?: unknown) => Promise<unknown>>();
+    const ipcMain = { removeHandler: (channel: string) => handlers.delete(channel), handle: (channel: string, handler: (event?: unknown, input?: unknown) => Promise<unknown>) => handlers.set(channel, handler) };
+    const service = { health: vi.fn(), runtime: vi.fn(), diagnostics: vi.fn(async () => diagnostics), close: vi.fn() };
+    registerDiagnosticsHandler(ipcMain, service as never, {} as never);
+    registerPersistenceHandlers(ipcMain, persistence as never);
+    registerConnectionHandlers(ipcMain, connections as never, voiceCatalog as never);
+    const projectReplace = { name: project.name, description: "", scriptSource: "", connectionProfileId: null, modelId: null, speakerMappings: [], pausePresets: project.pausePresets, paragraphPause: project.paragraphPause, lexiconEntries: [] };
+    const mutation = { profile: { id: "profile", name: "IPC profile", baseUrl: "http://127.0.0.1:8000", defaultModelId: "model", defaultVoiceId: "voice" }, credential: { action: "keep" } };
+    const inputs: Record<string, unknown> = {
+      [PERSISTENCE_CHANNELS.projectsCreate]: { name: "IPC project" },
+      [PERSISTENCE_CHANNELS.projectsGet]: { projectId: project.id },
+      [PERSISTENCE_CHANNELS.projectsReplace]: { projectId: project.id, project: projectReplace },
+      [PERSISTENCE_CHANNELS.projectsDuplicate]: { projectId: project.id, duplicate: { name: "IPC copy" } },
+      [PERSISTENCE_CHANNELS.projectsDelete]: { projectId: project.id },
+      [PERSISTENCE_CHANNELS.pacingUpdate]: { enabled: false, durationMs: 900 },
+      [PERSISTENCE_CHANNELS.ignoredReplace]: [],
+      [PERSISTENCE_CHANNELS.globalLexiconReplace]: [],
+      [CONNECTION_CHANNELS.create]: mutation,
+      [CONNECTION_CHANNELS.replace]: { profileId: "profile", mutation },
+      [CONNECTION_CHANNELS.delete]: { profileId: "profile" },
+      [CONNECTION_CHANNELS.test]: { profileId: "profile" },
+      [CONNECTION_CHANNELS.exportDiagnostics]: { profileId: "profile" },
+      [CONNECTION_CHANNELS.setupSetActive]: { profileId: "profile" },
+      [CONNECTION_CHANNELS.voiceCatalogGet]: { modelId: "model" },
+      [CONNECTION_CHANNELS.voiceCatalogReplace]: catalog
+    };
+    const invoked = new Set<string>();
+    for (const channel of PUBLIC_IPC_CHANNEL_MANIFEST) {
+      const handler = handlers.get(channel);
+      expect(handler, channel).toBeDefined();
+      try {
+        expect(await handler?.(undefined, inputs[channel]), channel).toBeDefined();
+      } catch (error) {
+        throw new Error(`Public IPC contract failed for ${channel}.`, { cause: error });
+      }
+      invoked.add(channel);
+    }
+    expect(invoked).toEqual(new Set(PUBLIC_IPC_CHANNEL_MANIFEST));
+
+    const secret = "g06-secret-must-not-appear";
+    for (const channel of Object.keys(inputs)) {
+      await expect(handlers.get(channel)?.(undefined, { malformed: true, apiKey: secret })).rejects.toThrow();
+    }
   });
 
   it("keeps the renderer sandboxed without Node integration", () => {
@@ -93,5 +243,8 @@ describe("Electron boundary", () => {
       nodeIntegration: false,
       sandbox: true
     });
+    expect(isApprovedExternalUrl("https://speaches.ai/installation/")).toBe(true);
+    expect(isApprovedExternalUrl("http://speaches.ai/installation/")).toBe(false);
+    expect(isApprovedExternalUrl("https://speaches.ai.example.test/")).toBe(false);
   });
 });

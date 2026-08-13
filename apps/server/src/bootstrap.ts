@@ -1,10 +1,16 @@
 import { resolve } from "node:path";
 import Database from "better-sqlite3";
 import {
+  createConnectionsService,
+  BUNDLED_VOICE_CATALOGS,
   createPersistenceService,
+  createRoutedCredentialStore,
   createSystemService,
   createUnavailablePersistenceService,
+  createVoiceCatalogService,
+  reconcileEnvironmentConnectionProfile,
   type DiagnosticsContext,
+  type DiagnosticRepository,
   type StorageCheck
 } from "@studynarrator/application";
 import { MigrationFailureError, openStudyNarratorRepository } from "@studynarrator/persistence";
@@ -24,10 +30,26 @@ export async function createServerServices(environment = process.env) {
   const databasePath = resolve(dataDirectory, "studynarrator.sqlite");
   let storageFailure: StorageCheck | undefined;
   let persistence: PersistenceClient;
-  let repository;
+  let repository: DiagnosticRepository;
+  let connections;
+  let voiceCatalog;
   try {
-    repository = await openStudyNarratorRepository({ Database, databasePath });
-    persistence = createPersistenceService(repository);
+    const openedRepository = await openStudyNarratorRepository({ Database, databasePath });
+    repository = openedRepository;
+    persistence = createPersistenceService(openedRepository);
+    const environmentProfile = reconcileEnvironmentConnectionProfile(openedRepository, environment);
+    const context = {
+      client: "web" as const,
+      nodeVersion: process.versions.node,
+      electronVersion: null,
+      activeProfileLocked: environmentProfile.activeProfileLocked
+    };
+    connections = createConnectionsService({
+      repository: openedRepository,
+      credentials: createRoutedCredentialStore({ environmentApiKey: environmentProfile.apiKey }),
+      context
+    });
+    voiceCatalog = createVoiceCatalogService({ repository: openedRepository, bundledCatalogs: BUNDLED_VOICE_CATALOGS });
   } catch (error) {
     if (!(error instanceof MigrationFailureError)) throw error;
     storageFailure = {
@@ -68,5 +90,12 @@ export async function createServerServices(environment = process.env) {
     architecture: process.arch,
     dataDirectory
   };
-  return { service, persistence, context };
+  return {
+    service,
+    persistence,
+    connections,
+    voiceCatalog,
+    context,
+    dispose: () => repository.close()
+  };
 }

@@ -18,6 +18,8 @@ const projectId = "00000000-0000-4000-8000-000000000001";
 const secondProjectId = "00000000-0000-4000-8000-000000000002";
 const lexiconId = "00000000-0000-4000-8000-000000000003";
 const profileId = "00000000-0000-4000-8000-000000000004";
+const duplicateProjectId = "00000000-0000-4000-8000-000000000005";
+const duplicateLexiconId = "00000000-0000-4000-8000-000000000006";
 
 async function temporaryDatabase(name: string) {
   return join(await mkdtemp(join(tmpdir(), name)), "studynarrator.sqlite");
@@ -28,18 +30,18 @@ function ids(...values: string[]) {
   return () => values[index++] ?? "00000000-0000-4000-8000-ffffffffffff";
 }
 
-describe("G04 migrations", () => {
-  it("creates schema version 2 and reruns without duplicate migrations or backups", async () => {
+describe("G06 migrations", () => {
+  it("creates schema version 3 and reruns without duplicate migrations or backups", async () => {
     const databasePath = await temporaryDatabase("studynarrator-g04-fresh-");
     const first = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-12T12:00:00.000Z") });
-    expect(first.appliedVersions).toEqual([1, 2]);
+    expect(first.appliedVersions).toEqual([1, 2, 3]);
     expect(first.backupPath).toBeNull();
     first.database.close();
 
     const second = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-13T12:00:00.000Z") });
     expect(second.appliedVersions).toEqual([]);
     expect(second.backupPath).toBeNull();
-    expect(second.database.prepare("SELECT count(*) AS count FROM schema_migrations").get()).toEqual({ count: 2 });
+    expect(second.database.prepare("SELECT count(*) AS count FROM schema_migrations").get()).toEqual({ count: 3 });
     second.database.close();
   });
 
@@ -50,14 +52,38 @@ describe("G04 migrations", () => {
     old.close();
 
     const upgraded = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-12T12:00:00.000Z") });
-    expect(upgraded.appliedVersions).toEqual([2]);
-    expect(upgraded.backupPath).toContain("-v1-to-v2-");
+    expect(upgraded.appliedVersions).toEqual([2, 3]);
+    expect(upgraded.backupPath).toContain("-v1-to-v3-");
     expect((await stat(upgraded.backupPath!)).mode & 0o777).toBe(0o600);
     expect(upgraded.database.prepare("SELECT value FROM diagnostic_kv WHERE key = 'fixture'").get()).toEqual({ value: "preserved" });
     const backup = new Database(upgraded.backupPath!, { readonly: true });
     expect(backup.prepare("SELECT value FROM diagnostic_kv WHERE key = 'fixture'").get()).toEqual({ value: "preserved" });
     expect(backup.prepare("SELECT max(version) AS version FROM schema_migrations").get()).toEqual({ version: 1 });
     backup.close();
+    upgraded.database.close();
+  });
+
+  it("backs up and upgrades a complete v2 database without losing projects", async () => {
+    const databasePath = await temporaryDatabase("studynarrator-g06-v2-");
+    const previous = await migrateDatabase({
+      Database: DatabaseAdapter,
+      databasePath,
+      migrations: STUDYNARRATOR_MIGRATIONS.slice(0, 2),
+      now: () => new Date("2026-08-12T12:00:00.000Z")
+    });
+    previous.database.prepare(`
+      INSERT INTO projects (
+        id, config_version, name, description, script_source, script_hash, connection_profile_id,
+        paragraph_pause_enabled, paragraph_pause_id, paragraph_pause_duration_ms, created_at, updated_at
+      ) VALUES (?, 1, 'V2 project', '', 'SQL', ?, NULL, 1, 'pause_medium', 750, ?, ?)
+    `).run(projectId, "a".repeat(64), "2026-08-12T12:00:00.000Z", "2026-08-12T12:00:00.000Z");
+    previous.database.close();
+
+    const upgraded = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-13T12:00:00.000Z") });
+    expect(upgraded.appliedVersions).toEqual([3]);
+    expect(upgraded.backupPath).toContain("-v2-to-v3-");
+    expect(upgraded.database.prepare("SELECT name, model_id FROM projects WHERE id = ?").get(projectId))
+      .toEqual({ name: "V2 project", model_id: null });
     upgraded.database.close();
   });
 
@@ -153,6 +179,45 @@ describe("StudyNarratorRepository", () => {
     repository.close();
   });
 
+  it("duplicates a complete project atomically with fresh owned IDs", async () => {
+    const repository = await openStudyNarratorRepository({
+      Database: DatabaseAdapter,
+      databasePath: await temporaryDatabase("studynarrator-g05-duplicate-"),
+      now: () => new Date("2026-08-12T12:00:00.000Z"),
+      idFactory: ids(projectId, lexiconId, duplicateProjectId, duplicateLexiconId)
+    });
+    const source = repository.createProject({ name: "Source", description: "Copy everything" });
+    const configured = repository.replaceProject(source.id, {
+      name: source.name,
+      description: source.description,
+      scriptSource: "[speaker_teacher] SQL",
+      connectionProfileId: null,
+      speakerMappings: [{ speakerId: "teacher", displayName: "Teacher", voiceId: "voice_teacher", speed: 1, gainDb: 0, roleDescription: "Guide", sampleText: "SQL" }],
+      pausePresets: source.pausePresets,
+      paragraphPause: source.paragraphPause,
+      lexiconEntries: [{ id: lexiconId, scope: "project", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel" }]
+    });
+
+    const duplicate = repository.duplicateProject(source.id, { name: "Source copy" });
+    expect(duplicate).toMatchObject({
+      id: duplicateProjectId,
+      name: "Source copy",
+      description: configured.description,
+      scriptSource: configured.scriptSource,
+      scriptHash: configured.scriptHash,
+      connectionProfileId: configured.connectionProfileId,
+      speakerMappings: configured.speakerMappings,
+      pausePresets: configured.pausePresets,
+      paragraphPause: configured.paragraphPause
+    });
+    expect(duplicate.lexiconEntries).toHaveLength(1);
+    expect(duplicate.lexiconEntries[0]).toMatchObject({ id: duplicateLexiconId, displayText: "SQL", spokenText: "sequel" });
+    expect(duplicate.lexiconEntries[0]?.id).not.toBe(configured.lexiconEntries[0]?.id);
+    expect(repository.getProject(source.id)).toEqual(configured);
+    expect(repository.listProjects()).toHaveLength(2);
+    repository.close();
+  });
+
   it("keeps installation data when deleting a project and nulls deleted profile references", async () => {
     const repository = await openStudyNarratorRepository({
       Database: DatabaseAdapter,
@@ -192,6 +257,44 @@ describe("StudyNarratorRepository", () => {
       paragraphPause: { ...project.paragraphPause, durationMs: 999 }, lexiconEntries: []
     })).toThrow();
     expect(repository.getProject(project.id)).toMatchObject({ name: "Atomic", scriptSource: "" });
+    repository.close();
+  });
+
+  it("persists safe connection state and voice overrides without exposing credential values", async () => {
+    const repository = await openStudyNarratorRepository({
+      Database: DatabaseAdapter,
+      databasePath: await temporaryDatabase("studynarrator-g06-connections-"),
+      now: () => new Date("2026-08-12T12:00:00.000Z"),
+      idFactory: ids(profileId)
+    });
+    const profile = repository.createConnectionProfile({
+      id: profileId,
+      name: "LAN Speaches",
+      baseUrl: "http://127.0.0.1:18080",
+      defaultModelId: "speaches-ai/Kokoro-82M-v1.0-ONNX",
+      defaultVoiceId: "af_heart"
+    });
+    expect(profile).toMatchObject({ timeoutSeconds: 120, retryCount: 2, apiKeyConfigured: false, source: "saved" });
+    repository.setConnectionCredentialReference(profile.id, "vault:opaque-reference");
+    expect(repository.getConnectionProfile(profile.id).apiKeyConfigured).toBe(true);
+    expect(JSON.stringify(repository.getConnectionProfile(profile.id))).not.toContain("opaque-reference");
+
+    repository.setActiveConnectionProfile(profile.id);
+    repository.completeConnectionOnboarding();
+    expect(repository.getConnectionSetup()).toEqual({
+      activeProfileId: profile.id,
+      onboardingCompletedAt: "2026-08-12T12:00:00.000Z"
+    });
+
+    const catalog = repository.replaceVoiceCatalogOverrides({
+      schemaVersion: 1,
+      modelId: "speaches-ai/Kokoro-82M-v1.0-ONNX",
+      entries: [{ voiceId: "af_heart", label: "Heart", enabled: false }]
+    });
+    expect(catalog.entries).toEqual([{
+      voiceId: "af_heart", label: "Heart", enabled: false, language: null, locale: null,
+      accent: null, category: null, style: null, sampleText: null
+    }]);
     repository.close();
   });
 });

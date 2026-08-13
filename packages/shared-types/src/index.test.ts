@@ -22,7 +22,7 @@ const validDiagnostics = {
       status: "pass",
       driver: "better-sqlite3",
       sqliteVersion: "3.50.0",
-      migrationVersion: 2,
+      migrationVersion: 3,
       databasePath: "/tmp/studynarrator/studynarrator.sqlite",
       latestBackupPath: null,
       markerKey: "g01.runtime-self-test",

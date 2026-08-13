@@ -16,6 +16,7 @@ const validProject = {
   description: "",
   scriptSource: "SQL",
   connectionProfileId: null,
+  modelId: null,
   speakerMappings: [],
   pausePresets: [{ pauseId: "pause_medium", durationMs: 750, description: "Paragraph" }],
   paragraphPause: { enabled: true, pauseId: "pause_medium", durationMs: 750 },

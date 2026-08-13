@@ -102,3 +102,25 @@ export {
   createUnavailablePersistenceService,
   type PersistenceRepository
 } from "./persistence.js";
+export {
+  ConnectionConfigurationError,
+  ConnectionPolicyError,
+  ENVIRONMENT_CREDENTIAL_REFERENCE,
+  classifyEndpoint,
+  createConnectionsService,
+  createRoutedCredentialStore,
+  createVoiceCatalogService,
+  reconcileEnvironmentConnectionProfile,
+  type ConnectionDiagnosticRunner,
+  type ConnectionRepository,
+  type ConnectionRuntimeContext,
+  type CredentialStore
+} from "./connections.js";
+export { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
+export {
+  BUNDLED_VOICE_CATALOGS,
+  KOKORO_V1_MODEL_ID,
+  KOKORO_V1_VOICE_CATALOG,
+  KOKORO_VOICE_CATALOG_ATTRIBUTION,
+  KOKORO_VOICE_CATALOG_SOURCE
+} from "./kokoroCatalog.js";

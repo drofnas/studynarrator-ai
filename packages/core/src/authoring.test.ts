@@ -1,0 +1,201 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { describe, expect, it } from "vitest";
+import {
+  AuthoringDryRunResultSchema,
+  buildAuthoringDryRun,
+  parsePauseDuration,
+  parseScript,
+  reconcileDiscoveredConfiguration,
+  resolveParagraphPauses,
+  transformScript,
+  validateAuthoringConfiguration,
+  type AuthoringPauseConfiguration,
+  type AuthoringSpeakerConfiguration,
+  type LexiconEntry
+} from "./index.js";
+
+const timestamp = "2026-08-12T00:00:00.000Z";
+
+function lexiconEntry(overrides: Partial<LexiconEntry> & Pick<LexiconEntry, "id" | "displayText" | "spokenText">): LexiconEntry {
+  return {
+    scope: "global",
+    entryType: "exactTerm",
+    caseSensitive: true,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: "",
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    ...overrides
+  };
+}
+
+function speaker(speakerId: string, voiceId: string | null): AuthoringSpeakerConfiguration {
+  return { speakerId, displayName: speakerId, voiceId, speed: 1, gainDb: 0, roleDescription: "", sampleText: "" };
+}
+
+function pause(pauseId: string, durationMs: number): AuthoringPauseConfiguration {
+  return { pauseId, durationMs, description: pauseId };
+}
+
+describe("G05 pause duration normalization", () => {
+  it.each([
+    ["350", 350],
+    ["350 ms", 350],
+    ["0.35 s", 350],
+    ["1.5 s", 1_500],
+    ["0 s", 0],
+    ["30 s", 30_000]
+  ])("normalizes %s to exact milliseconds", (input, expected) => {
+    expect(parsePauseDuration(input)).toEqual({ ok: true, durationMs: expected, normalized: `${String(expected)} ms` });
+  });
+
+  it("rejects negative, malformed, over-precise, and out-of-range values", () => {
+    expect(parsePauseDuration("-1 s")).toMatchObject({ ok: false, code: "NEGATIVE" });
+    expect(parsePauseDuration("1.5 ms")).toMatchObject({ ok: false, code: "INVALID_FORMAT" });
+    expect(parsePauseDuration("0.0001 s")).toMatchObject({ ok: false, code: "SUB_MILLISECOND_PRECISION" });
+    expect(parsePauseDuration("30.001 s")).toMatchObject({ ok: false, code: "OUT_OF_RANGE" });
+    expect(parsePauseDuration("later")).toMatchObject({ ok: false, code: "INVALID_FORMAT" });
+  });
+});
+
+describe("G05 discovery reconciliation", () => {
+  it("adds stable defaults and preserves unused authored configuration", () => {
+    const parseResult = parseScript({ source: "[speaker_teacher] One. [pause_short] Two. [pause_custom] Three." });
+    const first = reconcileDiscoveredConfiguration({
+      parseResult,
+      speakerMappings: [speaker("archived", "old_voice")],
+      pausePresets: [pause("pause_archived", 2_000)]
+    });
+
+    expect(first.speakers).toEqual([
+      expect.objectContaining({ speakerId: "teacher", voiceId: null, speed: 1, gainDb: 0, discovered: true, occurrenceCount: 1 }),
+      expect.objectContaining({ speakerId: "archived", voiceId: "old_voice", discovered: false, occurrenceCount: 0 })
+    ]);
+    expect(first.pauses).toEqual([
+      expect.objectContaining({ pauseId: "pause_short", durationMs: 350, discovered: true }),
+      expect.objectContaining({ pauseId: "pause_custom", durationMs: null, discovered: true }),
+      expect.objectContaining({ pauseId: "pause_archived", durationMs: 2_000, discovered: false })
+    ]);
+
+    const savedSpeakers = first.speakers.map(({ discovered: _discovered, occurrenceCount: _occurrenceCount, ...item }) => item);
+    const savedPauses = first.pauses.flatMap(({ durationMs, discovered: _discovered, occurrenceCount: _occurrenceCount, ...item }) =>
+      durationMs === null ? [] : [{ ...item, durationMs }]);
+    const reloaded = reconcileDiscoveredConfiguration({ parseResult, speakerMappings: savedSpeakers, pausePresets: savedPauses });
+    expect(reloaded).toEqual(first);
+  });
+
+  it("reports section lines and speech counts", () => {
+    const parseResult = parseScript({ source: "[section: First]\n[speaker_teacher] One.\nTwo.\n[section: Second]\nThree." });
+    const result = reconcileDiscoveredConfiguration({ parseResult, speakerMappings: [], pausePresets: [] });
+    expect(result.sections).toEqual([
+      { title: "First", sourceLine: 1, speechSegmentCount: 2 },
+      { title: "Second", sourceLine: 4, speechSegmentCount: 1 }
+    ]);
+  });
+});
+
+describe("G05 deterministic readiness and dry run", () => {
+  it("blocks exact missing speaker and pause mappings", () => {
+    const parseResult = parseScript({ source: "[speaker_teacher] Hello. [pause_custom] Continue." });
+    const transformResult = transformScript({ parsedScript: parseResult, entries: [] });
+    const reconciled = reconcileDiscoveredConfiguration({ parseResult, speakerMappings: [], pausePresets: [] });
+    const validation = validateAuthoringConfiguration({ parseResult, transformResult, speakers: reconciled.speakers, pauses: reconciled.pauses });
+
+    expect(validation.status).toBe("blocked");
+    expect(validation.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "MISSING_VOICE_MAPPING", target: { kind: "speaker", id: "teacher" } }),
+      expect.objectContaining({ code: "MISSING_PAUSE_CONFIGURATION", target: { kind: "pause", id: "pause_custom" } })
+    ]));
+  });
+
+  it("keeps original, readable, and TTS text separate in the canonical fixture", () => {
+    const source = readFileSync(resolve(process.cwd(), "fixtures/gates/study-guide-valid.txt"), "utf8");
+    const expected = JSON.parse(readFileSync(resolve(process.cwd(), "fixtures/gates/expected/study-guide-valid.dry-run.json"), "utf8")) as {
+      schemaVersion: number;
+      status: string;
+      issueCount: number;
+      rows: Array<Record<string, unknown>>;
+    };
+    const parseResult = parseScript({ source });
+    const transformResult = transformScript({
+      parsedScript: parseResult,
+      entries: [
+        lexiconEntry({ id: "global-sql", displayText: "SQL", spokenText: "sequel" }),
+        lexiconEntry({ id: "resume-cv", scope: "project", entryType: "namedSense", displayText: "resume", senseId: "cv", spokenText: "rez-oo-may" }),
+        lexiconEntry({ id: "resume-continue", scope: "project", entryType: "namedSense", displayText: "resume", senseId: "continue", spokenText: "ree-zoom" })
+      ]
+    });
+    const pacingResult = resolveParagraphPauses({ parsedScript: parseResult, configuration: { enabled: true, pauseId: "pause_medium", durationMs: 750 } });
+    const reconciled = reconcileDiscoveredConfiguration({
+      parseResult,
+      speakerMappings: [speaker("teacher", "voice_teacher"), speaker("student", "voice_student")],
+      pausePresets: [pause("pause_short", 350), pause("pause_medium", 750), pause("pause_long", 1_500)]
+    });
+    const result = buildAuthoringDryRun({ parseResult, pacingResult, transformResult, speakers: reconciled.speakers, pauses: reconciled.pauses });
+    const firstSpeech = result.rows.find((row) => row.type === "speech");
+
+    expect(result.status).toBe("ready");
+    expect(result.rows).toHaveLength(11);
+    expect(firstSpeech?.type).toBe("speech");
+    if (firstSpeech?.type !== "speech") throw new Error("Expected a speech row.");
+    expect(firstSpeech.voiceId).toBe("voice_teacher");
+    expect(firstSpeech.originalText).toContain("{{resume|cv}}");
+    expect(firstSpeech.readableText).toContain("resume");
+    expect(firstSpeech.ttsText).toContain("rez-oo-may");
+    expect(result.rows.filter((row) => row.type === "pause").map((row) => row.origin)).toEqual([
+      "explicit", "explicit", "explicit", "explicit"
+    ]);
+    expect({
+      schemaVersion: result.schemaVersion,
+      status: result.status,
+      issueCount: result.issues.length,
+      rows: result.rows.map((row) => row.type === "section"
+        ? { rowNumber: row.rowNumber, type: row.type, nodeOrdinal: row.nodeOrdinal, title: row.title }
+        : row.type === "pause"
+          ? { rowNumber: row.rowNumber, type: row.type, nodeOrdinal: row.nodeOrdinal, pauseId: row.pauseId, origin: row.origin, durationMs: row.durationMs }
+          : {
+              rowNumber: row.rowNumber,
+              type: row.type,
+              nodeOrdinal: row.nodeOrdinal,
+              speakerId: row.speakerId,
+              voiceId: row.voiceId,
+              originalText: row.originalText,
+              readableText: row.readableText,
+              ttsText: row.ttsText,
+              durationMs: row.durationMs
+            })
+    }).toEqual(expected);
+    expect(AuthoringDryRunResultSchema.parse(result)).toEqual(result);
+  });
+
+  it("inserts one automatic paragraph pause and never doubles an explicit pause", () => {
+    const automaticParse = parseScript({ source: "First.\n\nSecond." });
+    const automaticTransform = transformScript({ parsedScript: automaticParse, entries: [] });
+    const automaticPacing = resolveParagraphPauses({ parsedScript: automaticParse, configuration: { enabled: true, pauseId: "pause_medium", durationMs: 750 } });
+    const automaticConfig = reconcileDiscoveredConfiguration({
+      parseResult: automaticParse,
+      speakerMappings: [speaker("narrator", "voice_narrator")],
+      pausePresets: [pause("pause_medium", 750)]
+    });
+    const automatic = buildAuthoringDryRun({ parseResult: automaticParse, pacingResult: automaticPacing, transformResult: automaticTransform, speakers: automaticConfig.speakers, pauses: automaticConfig.pauses });
+    expect(automatic.rows.map((row) => row.type === "pause" ? `${row.type}:${row.origin}` : row.type)).toEqual([
+      "speech", "pause:paragraph", "speech"
+    ]);
+
+    const explicitParse = parseScript({ source: "First.\n[pause_short]\n\nSecond." });
+    const explicitTransform = transformScript({ parsedScript: explicitParse, entries: [] });
+    const explicitPacing = resolveParagraphPauses({ parsedScript: explicitParse, configuration: { enabled: true, pauseId: "pause_medium", durationMs: 750 } });
+    const explicitConfig = reconcileDiscoveredConfiguration({
+      parseResult: explicitParse,
+      speakerMappings: [speaker("narrator", "voice_narrator")],
+      pausePresets: [pause("pause_short", 350), pause("pause_medium", 750)]
+    });
+    const explicit = buildAuthoringDryRun({ parseResult: explicitParse, pacingResult: explicitPacing, transformResult: explicitTransform, speakers: explicitConfig.speakers, pauses: explicitConfig.pauses });
+    expect(explicit.rows.filter((row) => row.type === "pause")).toEqual([
+      expect.objectContaining({ type: "pause", origin: "explicit", pauseId: "pause_short", durationMs: 350 })
+    ]);
+  });
+});

@@ -1,27 +1,50 @@
 import express, { type ErrorRequestHandler, type Express } from "express";
+import { resolve } from "node:path";
 import {
+  ActiveConnectionProfileInputSchema,
   BoundaryErrorSchema,
-  ConnectionProfileAuthoringSchema,
   ConnectionProfileCollectionSchema,
-  ConnectionProfilePlaceholderSchema,
-  DurableIdSchema,
+  ConnectionProfileIdInputSchema,
+  ConnectionProfileMutationSchema,
+  ConnectionProfileMutationRequestSchema,
+  ConnectionSetupStateSchema,
+  ConnectionTestSummarySchema,
   GlobalLexiconEntryCollectionSchema,
   GlobalLexiconReplaceInputSchema,
   IgnoredDiagnosticCollectionSchema,
   PersistenceStatusSchema,
   ProjectCreateInputSchema,
   ProjectDetailSchema,
+  ProjectDuplicateInputSchema,
   ProjectIdSchema,
   ProjectReplaceInputSchema,
   ProjectSummaryCollectionSchema,
+  RedactedConnectionDiagnosticsSchema,
   SystemDiagnosticsSchema,
   SystemPacingDefaultsSchema,
+  VoiceCatalogModelInputSchema,
+  VoiceCatalogSchema,
+  type ConnectionsClient,
   type PersistenceClient,
-  type SystemDiagnostics
+  type SystemDiagnostics,
+  type VoiceCatalogClient
 } from "@studynarrator/shared-types";
 import type { DiagnosticsContext, SystemService } from "@studynarrator/application";
 
-export function createExpressApp(options: { service: SystemService; context: DiagnosticsContext; persistence?: PersistenceClient }): Express {
+export function attachStaticWebApplication(app: Express, distributionDirectory: string): void {
+  app.use(express.static(distributionDirectory, { index: "index.html" }));
+  app.get("/{*path}", (_request, response) => {
+    response.sendFile(resolve(distributionDirectory, "index.html"));
+  });
+}
+
+export function createExpressApp(options: {
+  service: SystemService;
+  context: DiagnosticsContext;
+  persistence?: PersistenceClient;
+  connections?: ConnectionsClient;
+  voiceCatalog?: VoiceCatalogClient;
+}): Express {
   const app = express();
   app.disable("x-powered-by");
   app.use(express.json({ limit: "6mb", strict: true }));
@@ -70,6 +93,14 @@ export function createExpressApp(options: { service: SystemService; context: Dia
         )));
       } catch (error) { next(error); }
     });
+    app.post("/api/projects/:projectId/duplicate", async (request, response, next) => {
+      try {
+        response.status(201).json(ProjectDetailSchema.parse(await persistence.projects.duplicate(
+          ProjectIdSchema.parse(request.params.projectId),
+          ProjectDuplicateInputSchema.parse(request.body)
+        )));
+      } catch (error) { next(error); }
+    });
     app.delete("/api/projects/:projectId", async (request, response, next) => {
       try {
         await persistence.projects.delete(ProjectIdSchema.parse(request.params.projectId));
@@ -94,25 +125,59 @@ export function createExpressApp(options: { service: SystemService; context: Dia
     app.put("/api/lexicon/global", async (request, response, next) => {
       try { response.json(GlobalLexiconEntryCollectionSchema.parse(await persistence.globalLexicon.replace(GlobalLexiconReplaceInputSchema.parse(request.body)))); } catch (error) { next(error); }
     });
-    app.get("/api/connection-profiles", async (_request, response, next) => {
-      try { response.json(ConnectionProfileCollectionSchema.parse(await persistence.connectionProfiles.list())); } catch (error) { next(error); }
+  }
+
+  if (options.connections && options.voiceCatalog) {
+    const connections = options.connections;
+    const voiceCatalog = options.voiceCatalog;
+    app.get("/api/connections", async (_request, response, next) => {
+      try { response.json(ConnectionProfileCollectionSchema.parse(await connections.list())); } catch (error) { next(error); }
     });
-    app.post("/api/connection-profiles", async (request, response, next) => {
-      try { response.status(201).json(ConnectionProfilePlaceholderSchema.parse(await persistence.connectionProfiles.create(ConnectionProfileAuthoringSchema.parse(request.body)))); } catch (error) { next(error); }
+    app.post("/api/connections", async (request, response, next) => {
+      try { response.status(201).json(await connections.create(ConnectionProfileMutationSchema.parse(request.body))); } catch (error) { next(error); }
     });
-    app.put("/api/connection-profiles/:profileId", async (request, response, next) => {
+    app.put("/api/connections/:profileId", async (request, response, next) => {
       try {
-        response.json(ConnectionProfilePlaceholderSchema.parse(await persistence.connectionProfiles.replace(
-          DurableIdSchema.parse(request.params.profileId),
-          ConnectionProfileAuthoringSchema.parse(request.body)
-        )));
+        const parsed = ConnectionProfileMutationRequestSchema.parse({ profileId: request.params.profileId, mutation: request.body as unknown });
+        response.json(await connections.replace(parsed.profileId, parsed.mutation));
       } catch (error) { next(error); }
     });
-    app.delete("/api/connection-profiles/:profileId", async (request, response, next) => {
+    app.delete("/api/connections/:profileId", async (request, response, next) => {
       try {
-        await persistence.connectionProfiles.delete(DurableIdSchema.parse(request.params.profileId));
+        const parsed = ConnectionProfileIdInputSchema.parse({ profileId: request.params.profileId });
+        await connections.delete(parsed.profileId);
         response.status(204).end();
       } catch (error) { next(error); }
+    });
+    app.post("/api/connections/:profileId/test", async (request, response, next) => {
+      try {
+        const parsed = ConnectionProfileIdInputSchema.parse({ profileId: request.params.profileId });
+        response.json(ConnectionTestSummarySchema.parse(await connections.test(parsed.profileId)));
+      } catch (error) { next(error); }
+    });
+    app.get("/api/connections/:profileId/diagnostics", async (request, response, next) => {
+      try {
+        const parsed = ConnectionProfileIdInputSchema.parse({ profileId: request.params.profileId });
+        response.json(RedactedConnectionDiagnosticsSchema.parse(await connections.exportDiagnostics(parsed.profileId)));
+      } catch (error) { next(error); }
+    });
+    app.get("/api/setup", async (_request, response, next) => {
+      try { response.json(ConnectionSetupStateSchema.parse(await connections.getSetupState())); } catch (error) { next(error); }
+    });
+    app.put("/api/setup/active-profile", async (request, response, next) => {
+      try { response.json(ConnectionSetupStateSchema.parse(await connections.setActiveProfile(ActiveConnectionProfileInputSchema.parse(request.body).profileId))); } catch (error) { next(error); }
+    });
+    app.post("/api/setup/complete", async (_request, response, next) => {
+      try { response.json(ConnectionSetupStateSchema.parse(await connections.completeOnboarding())); } catch (error) { next(error); }
+    });
+    app.get("/api/voice-catalog", async (request, response, next) => {
+      try {
+        const { modelId } = VoiceCatalogModelInputSchema.parse(request.query);
+        response.json(VoiceCatalogSchema.parse(await voiceCatalog.get(modelId)));
+      } catch (error) { next(error); }
+    });
+    app.put("/api/voice-catalog", async (request, response, next) => {
+      try { response.json(VoiceCatalogSchema.parse(await voiceCatalog.replace(VoiceCatalogSchema.parse(request.body)))); } catch (error) { next(error); }
     });
   }
 
@@ -146,6 +211,14 @@ export function createExpressApp(options: { service: SystemService; context: Dia
       status = 503;
       code = "PERSISTENCE_UNAVAILABLE";
       message = "Persistence is unavailable until the database migration is repaired.";
+    } else if (errorRecord?.code === "CONNECTION_POLICY") {
+      status = 409;
+      code = "CONNECTION_POLICY";
+      message = typeof errorRecord.message === "string" ? errorRecord.message : "The connection operation is managed by this installation.";
+    } else if (errorRecord?.code === "CONNECTION_CONFIGURATION") {
+      status = 409;
+      code = "CONNECTION_CONFIGURATION";
+      message = "Test this connection before exporting diagnostics.";
     }
     response.status(status).json(BoundaryErrorSchema.parse({
       error: {

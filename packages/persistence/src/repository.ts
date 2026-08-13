@@ -9,6 +9,7 @@ import {
   ConnectionProfileAuthoringSchema,
   ConnectionProfileCollectionSchema,
   ConnectionProfilePlaceholderSchema,
+  ConnectionTestSummarySchema,
   DATABASE_SCHEMA_VERSION,
   DEFAULT_SYSTEM_PACING,
   GlobalLexiconEntryCollectionSchema,
@@ -18,20 +19,26 @@ import {
   PersistenceReadyStatusSchema,
   ProjectCreateInputSchema,
   ProjectDetailSchema,
+  ProjectDuplicateInputSchema,
   ProjectIdSchema,
   ProjectReplaceInputSchema,
   ProjectSummaryCollectionSchema,
   SystemPacingDefaultsSchema,
+  VoiceCatalogSchema,
   type ConnectionProfileAuthoring,
   type ConnectionProfilePlaceholder,
+  type ConnectionTestSummary,
   type GlobalLexiconReplaceInput,
   type IgnoredDiagnosticCollection,
   type PersistenceStatus,
   type ProjectCreateInput,
   type ProjectDetail,
+  type ProjectDuplicateInput,
   type ProjectReplaceInput,
   type ProjectSummary,
-  type SystemPacingDefaults
+  type SystemPacingDefaults,
+  type VoiceCatalog,
+  type VoiceCatalogAuthoring
 } from "@studynarrator/shared-types";
 import { PersistenceConflictError, PersistenceNotFoundError } from "./errors.js";
 import {
@@ -52,6 +59,7 @@ interface ProjectRow {
   script_source: string;
   script_hash: string;
   connection_profile_id: string | null;
+  model_id: string | null;
   paragraph_pause_enabled: number;
   paragraph_pause_id: string;
   paragraph_pause_duration_ms: number;
@@ -93,12 +101,26 @@ interface ProfileRow {
   base_url: string | null;
   default_model_id: string | null;
   default_voice_id: string | null;
+  source: "saved" | "environment";
+  api_key_reference: string | null;
+  timeout_seconds: number;
+  retry_count: number;
+  response_format: "wav";
+  supplied_url_form: "root" | "v1" | "unconfigured";
+  last_tested_at: string | null;
+  last_successful_test_at: string | null;
+  last_test_summary_json: string | null;
   created_at: string;
   updated_at: string;
 }
 
 interface MarkerRow { key: string; value: string; created_at: string }
 interface VersionRow { version: string }
+
+export interface ConnectionSetupRecord {
+  activeProfileId: string | null;
+  onboardingCompletedAt: string | null;
+}
 
 export interface MarkerEvidence {
   status: "pass";
@@ -119,6 +141,7 @@ export interface StudyNarratorRepository {
   createProject(input: ProjectCreateInput): ProjectDetail;
   getProject(projectId: string): ProjectDetail;
   replaceProject(projectId: string, input: ProjectReplaceInput): ProjectDetail;
+  duplicateProject(projectId: string, input: ProjectDuplicateInput): ProjectDetail;
   deleteProject(projectId: string): void;
   getSystemPacing(): SystemPacingDefaults;
   updateSystemPacing(input: SystemPacingDefaults): SystemPacingDefaults;
@@ -127,9 +150,20 @@ export interface StudyNarratorRepository {
   listGlobalLexicon(): LexiconEntry[];
   replaceGlobalLexicon(input: GlobalLexiconReplaceInput): LexiconEntry[];
   listConnectionProfiles(): ConnectionProfilePlaceholder[];
+  getConnectionProfile(profileId: string): ConnectionProfilePlaceholder;
   createConnectionProfile(input: ConnectionProfileAuthoring): ConnectionProfilePlaceholder;
   replaceConnectionProfile(profileId: string, input: ConnectionProfileAuthoring): ConnectionProfilePlaceholder;
   deleteConnectionProfile(profileId: string): void;
+  getConnectionCredentialReference(profileId: string): string | null;
+  setConnectionCredentialReference(profileId: string, reference: string | null): ConnectionProfilePlaceholder;
+  setConnectionSuppliedUrlForm(profileId: string, suppliedUrlForm: "root" | "v1" | "unconfigured"): ConnectionProfilePlaceholder;
+  upsertEnvironmentConnectionProfile(input: ConnectionProfileAuthoring, credentialReference: string | null): ConnectionProfilePlaceholder;
+  recordConnectionTest(profileId: string, summary: ConnectionTestSummary): ConnectionProfilePlaceholder;
+  getConnectionSetup(): ConnectionSetupRecord;
+  setActiveConnectionProfile(profileId: string | null): ConnectionSetupRecord;
+  completeConnectionOnboarding(): ConnectionSetupRecord;
+  getVoiceCatalogOverrides(modelId: string): VoiceCatalog;
+  replaceVoiceCatalogOverrides(input: VoiceCatalogAuthoring): VoiceCatalog;
   close(): void;
 }
 
@@ -163,8 +197,20 @@ function profileFromRow(row: ProfileRow): ConnectionProfilePlaceholder {
     id: row.id,
     name: row.name,
     baseUrl: row.base_url,
+    source: row.source,
+    editable: row.source === "saved",
+    credentialEntryAllowed: false,
+    configured: row.base_url !== null && row.default_model_id !== null && row.default_voice_id !== null,
+    apiKeyConfigured: row.api_key_reference !== null,
     defaultModelId: row.default_model_id,
     defaultVoiceId: row.default_voice_id,
+    timeoutSeconds: row.timeout_seconds,
+    retryCount: row.retry_count,
+    responseFormat: row.response_format,
+    suppliedUrlForm: row.supplied_url_form,
+    lastTestedAt: row.last_tested_at,
+    lastSuccessfulTestAt: row.last_successful_test_at,
+    lastTestSummary: row.last_test_summary_json === null ? null : JSON.parse(row.last_test_summary_json) as unknown,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   });
@@ -282,6 +328,7 @@ function createRepository(options: {
       scriptSource: row.script_source,
       scriptHash: row.script_hash,
       connectionProfileId: row.connection_profile_id,
+      modelId: row.model_id,
       speakerMappings: speakers.map((speaker) => ({
         speakerId: speaker.speaker_id,
         displayName: speaker.display_name,
@@ -300,6 +347,46 @@ function createRepository(options: {
       lexiconEntries: readLexicon("project", projectId),
       createdAt: row.created_at,
       updatedAt: row.updated_at
+    });
+  };
+
+  const getConnectionProfile = (profileId: string): ConnectionProfilePlaceholder => {
+    assertOpen();
+    const row = database.prepare("SELECT * FROM connection_profiles WHERE id = ?").get(profileId) as ProfileRow | undefined;
+    if (!row) throw new PersistenceNotFoundError(`Connection profile ${profileId} was not found.`);
+    return profileFromRow(row);
+  };
+
+  const getConnectionSetup = (): ConnectionSetupRecord => {
+    assertOpen();
+    const row = database.prepare("SELECT active_profile_id, onboarding_completed_at FROM connection_setup WHERE singleton_id = 1")
+      .get() as { active_profile_id: string | null; onboarding_completed_at: string | null };
+    return { activeProfileId: row.active_profile_id, onboardingCompletedAt: row.onboarding_completed_at };
+  };
+
+  const getVoiceCatalogOverrides = (modelId: string): VoiceCatalog => {
+    assertOpen();
+    const rows = database.prepare(`
+      SELECT voice_id, label, enabled, language, locale, accent, category, style, sample_text
+      FROM voice_catalog_overrides WHERE model_id = ? ORDER BY ordinal ASC, voice_id ASC
+    `).all(modelId) as Array<{
+      voice_id: string; label: string; enabled: number; language: string | null; locale: string | null;
+      accent: string | null; category: string | null; style: string | null; sample_text: string | null;
+    }>;
+    return VoiceCatalogSchema.parse({
+      schemaVersion: 1,
+      modelId,
+      entries: rows.map((row) => ({
+        voiceId: row.voice_id,
+        label: row.label,
+        enabled: booleanFromSql(row.enabled),
+        language: row.language,
+        locale: row.locale,
+        accent: row.accent,
+        category: row.category,
+        style: row.style,
+        sampleText: row.sample_text
+      }))
     });
   };
 
@@ -352,9 +439,9 @@ function createRepository(options: {
       transaction(() => {
         database.prepare(`
           INSERT INTO projects (
-            id, name, description, script_source, script_hash, connection_profile_id,
+            id, name, description, script_source, script_hash, connection_profile_id, model_id,
             paragraph_pause_enabled, paragraph_pause_id, paragraph_pause_duration_ms, created_at, updated_at
-          ) VALUES (?, ?, ?, '', ?, NULL, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, '', ?, NULL, NULL, ?, ?, ?, ?, ?)
         `).run(
           id, input.name, input.description, scriptHash(""), booleanToSql(pacing.enabled),
           DEFAULT_PARAGRAPH_PAUSE_ID, pacing.durationMs, timestamp, timestamp
@@ -374,10 +461,10 @@ function createRepository(options: {
       transaction(() => {
         const result = database.prepare(`
           UPDATE projects SET name = ?, description = ?, script_source = ?, script_hash = ?,
-            connection_profile_id = ?, paragraph_pause_enabled = ?, paragraph_pause_id = ?,
+            connection_profile_id = ?, model_id = ?, paragraph_pause_enabled = ?, paragraph_pause_id = ?,
             paragraph_pause_duration_ms = ?, updated_at = ? WHERE id = ?
         `).run(
-          input.name, input.description, input.scriptSource, scriptHash(input.scriptSource), input.connectionProfileId,
+          input.name, input.description, input.scriptSource, scriptHash(input.scriptSource), input.connectionProfileId, input.modelId,
           booleanToSql(input.paragraphPause.enabled), input.paragraphPause.pauseId,
           input.paragraphPause.durationMs, timestamp, projectId
         );
@@ -400,6 +487,50 @@ function createRepository(options: {
       const updated = getProject(projectId);
       if (updated.createdAt !== prior.createdAt) throw new Error("Project creation timestamp changed unexpectedly.");
       return updated;
+    },
+    duplicateProject(projectIdInput, inputValue) {
+      assertOpen();
+      const projectId = ProjectIdSchema.parse(projectIdInput);
+      const input = ProjectDuplicateInputSchema.parse(inputValue);
+      const source = getProject(projectId);
+      const duplicateId = ProjectIdSchema.parse(nextId());
+      const timestamp = options.now().toISOString();
+      transaction(() => {
+        database.prepare(`
+          INSERT INTO projects (
+            id, name, description, script_source, script_hash, connection_profile_id, model_id,
+            paragraph_pause_enabled, paragraph_pause_id, paragraph_pause_duration_ms, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          duplicateId, input.name, source.description, source.scriptSource, source.scriptHash, source.connectionProfileId, source.modelId,
+          booleanToSql(source.paragraphPause.enabled), source.paragraphPause.pauseId,
+          source.paragraphPause.durationMs, timestamp, timestamp
+        );
+        const insertSpeaker = database.prepare(`
+          INSERT INTO speaker_mappings (
+            project_id, speaker_id, ordinal, display_name, voice_id, speed, gain_db, role_description, sample_text
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        source.speakerMappings.forEach((speaker, ordinal) => insertSpeaker.run(
+          duplicateId, speaker.speakerId, ordinal, speaker.displayName, speaker.voiceId, speaker.speed,
+          speaker.gainDb, speaker.roleDescription, speaker.sampleText
+        ));
+        const insertPause = database.prepare("INSERT INTO pause_presets (project_id, pause_id, ordinal, duration_ms, description) VALUES (?, ?, ?, ?, ?)");
+        source.pausePresets.forEach((pause, ordinal) => insertPause.run(duplicateId, pause.pauseId, ordinal, pause.durationMs, pause.description));
+        replaceLexicon("project", duplicateId, source.lexiconEntries.map((entry) => ({
+          scope: entry.scope,
+          entryType: entry.entryType,
+          displayText: entry.displayText,
+          ...(entry.senseId === undefined ? {} : { senseId: entry.senseId }),
+          spokenText: entry.spokenText,
+          caseSensitive: entry.caseSensitive,
+          wholeWord: entry.wholeWord,
+          priority: entry.priority,
+          enabled: entry.enabled,
+          notes: entry.notes
+        })), timestamp);
+      });
+      return getProject(duplicateId);
     },
     deleteProject(projectIdInput) {
       assertOpen();
@@ -450,6 +581,7 @@ function createRepository(options: {
       const rows = database.prepare("SELECT * FROM connection_profiles ORDER BY ordinal ASC, id ASC").all() as ProfileRow[];
       return ConnectionProfileCollectionSchema.parse(rows.map(profileFromRow));
     },
+    getConnectionProfile,
     createConnectionProfile(inputValue) {
       assertOpen();
       const input = ConnectionProfileAuthoringSchema.parse(inputValue);
@@ -458,9 +590,14 @@ function createRepository(options: {
       const timestamp = options.now().toISOString();
       const ordinal = (database.prepare("SELECT COALESCE(MAX(ordinal), -1) + 1 AS ordinal FROM connection_profiles").get() as { ordinal: number }).ordinal;
       database.prepare(`
-        INSERT INTO connection_profiles (id, ordinal, name, base_url, default_model_id, default_voice_id, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, ordinal, input.name, input.baseUrl, input.defaultModelId, input.defaultVoiceId, timestamp, timestamp);
+        INSERT INTO connection_profiles (
+          id, ordinal, name, base_url, default_model_id, default_voice_id,
+          timeout_seconds, retry_count, response_format, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id, ordinal, input.name, input.baseUrl, input.defaultModelId, input.defaultVoiceId,
+        input.timeoutSeconds, input.retryCount, input.responseFormat, timestamp, timestamp
+      );
       return profileFromRow(database.prepare("SELECT * FROM connection_profiles WHERE id = ?").get(id) as ProfileRow);
     },
     replaceConnectionProfile(profileIdInput, inputValue) {
@@ -471,15 +608,123 @@ function createRepository(options: {
       const existing = database.prepare("SELECT * FROM connection_profiles WHERE id = ?").get(profileId) as ProfileRow | undefined;
       if (!existing) throw new PersistenceNotFoundError(`Connection profile ${profileId} was not found.`);
       const unchanged = existing.name === input.name && existing.base_url === input.baseUrl
-        && existing.default_model_id === input.defaultModelId && existing.default_voice_id === input.defaultVoiceId;
-      database.prepare("UPDATE connection_profiles SET name = ?, base_url = ?, default_model_id = ?, default_voice_id = ?, updated_at = ? WHERE id = ?")
-        .run(input.name, input.baseUrl, input.defaultModelId, input.defaultVoiceId, unchanged ? existing.updated_at : options.now().toISOString(), profileId);
+        && existing.default_model_id === input.defaultModelId && existing.default_voice_id === input.defaultVoiceId
+        && existing.timeout_seconds === input.timeoutSeconds && existing.retry_count === input.retryCount;
+      database.prepare(`
+        UPDATE connection_profiles SET name = ?, base_url = ?, default_model_id = ?, default_voice_id = ?,
+          timeout_seconds = ?, retry_count = ?, response_format = ?, updated_at = ? WHERE id = ?
+      `).run(
+        input.name, input.baseUrl, input.defaultModelId, input.defaultVoiceId,
+        input.timeoutSeconds, input.retryCount, input.responseFormat,
+        unchanged ? existing.updated_at : options.now().toISOString(), profileId
+      );
       return profileFromRow(database.prepare("SELECT * FROM connection_profiles WHERE id = ?").get(profileId) as ProfileRow);
     },
     deleteConnectionProfile(profileId) {
       assertOpen();
+      const existing = database.prepare("SELECT source FROM connection_profiles WHERE id = ?").get(profileId) as { source: string } | undefined;
+      if (!existing) throw new PersistenceNotFoundError(`Connection profile ${profileId} was not found.`);
+      if (existing.source === "environment") throw new PersistenceConflictError("Environment-managed connection profiles cannot be deleted.");
       const result = database.prepare("DELETE FROM connection_profiles WHERE id = ?").run(profileId);
       if (Number(result.changes ?? 0) !== 1) throw new PersistenceNotFoundError(`Connection profile ${profileId} was not found.`);
+    },
+    getConnectionCredentialReference(profileId) {
+      assertOpen();
+      const row = database.prepare("SELECT api_key_reference FROM connection_profiles WHERE id = ?").get(profileId) as { api_key_reference: string | null } | undefined;
+      if (!row) throw new PersistenceNotFoundError(`Connection profile ${profileId} was not found.`);
+      return row.api_key_reference;
+    },
+    setConnectionCredentialReference(profileId, reference) {
+      assertOpen();
+      const result = database.prepare("UPDATE connection_profiles SET api_key_reference = ?, updated_at = ? WHERE id = ?")
+        .run(reference, options.now().toISOString(), profileId);
+      if (Number(result.changes ?? 0) !== 1) throw new PersistenceNotFoundError(`Connection profile ${profileId} was not found.`);
+      return getConnectionProfile(profileId);
+    },
+    setConnectionSuppliedUrlForm(profileId, suppliedUrlForm) {
+      assertOpen();
+      const result = database.prepare("UPDATE connection_profiles SET supplied_url_form = ?, updated_at = ? WHERE id = ?")
+        .run(suppliedUrlForm, options.now().toISOString(), profileId);
+      if (Number(result.changes ?? 0) !== 1) throw new PersistenceNotFoundError(`Connection profile ${profileId} was not found.`);
+      return getConnectionProfile(profileId);
+    },
+    upsertEnvironmentConnectionProfile(inputValue, credentialReference) {
+      assertOpen();
+      const input = ConnectionProfileAuthoringSchema.parse(inputValue);
+      if (!input.id) throw new PersistenceConflictError("Environment profiles require a stable ID.");
+      const existing = database.prepare("SELECT id, created_at FROM connection_profiles WHERE id = ?").get(input.id) as { id: string; created_at: string } | undefined;
+      const timestamp = options.now().toISOString();
+      if (!existing) {
+        const ordinal = (database.prepare("SELECT COALESCE(MAX(ordinal), -1) + 1 AS ordinal FROM connection_profiles").get() as { ordinal: number }).ordinal;
+        database.prepare(`
+          INSERT INTO connection_profiles (
+            id, ordinal, name, base_url, default_model_id, default_voice_id, source, api_key_reference,
+            timeout_seconds, retry_count, response_format, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, 'environment', ?, ?, ?, ?, ?, ?)
+        `).run(
+          input.id, ordinal, input.name, input.baseUrl, input.defaultModelId, input.defaultVoiceId, credentialReference,
+          input.timeoutSeconds, input.retryCount, input.responseFormat, timestamp, timestamp
+        );
+      } else {
+        database.prepare(`
+          UPDATE connection_profiles SET name = ?, base_url = ?, default_model_id = ?, default_voice_id = ?,
+            source = 'environment', api_key_reference = ?, timeout_seconds = ?, retry_count = ?, response_format = ?, updated_at = ?
+          WHERE id = ?
+        `).run(
+          input.name, input.baseUrl, input.defaultModelId, input.defaultVoiceId, credentialReference,
+          input.timeoutSeconds, input.retryCount, input.responseFormat, timestamp, input.id
+        );
+      }
+      return getConnectionProfile(input.id);
+    },
+    recordConnectionTest(profileId, summaryValue) {
+      assertOpen();
+      const summary = ConnectionTestSummarySchema.parse(summaryValue);
+      const result = database.prepare(`
+        UPDATE connection_profiles SET last_tested_at = ?, last_successful_test_at = ?,
+          last_test_summary_json = ?, updated_at = ? WHERE id = ?
+      `).run(
+        summary.testedAt,
+        summary.overall === "connected" ? summary.testedAt : getConnectionProfile(profileId).lastSuccessfulTestAt,
+        JSON.stringify(summary),
+        options.now().toISOString(),
+        profileId
+      );
+      if (Number(result.changes ?? 0) !== 1) throw new PersistenceNotFoundError(`Connection profile ${profileId} was not found.`);
+      return getConnectionProfile(profileId);
+    },
+    getConnectionSetup,
+    setActiveConnectionProfile(profileId) {
+      assertOpen();
+      if (profileId !== null) getConnectionProfile(profileId);
+      database.prepare("UPDATE connection_setup SET active_profile_id = ?, updated_at = ? WHERE singleton_id = 1")
+        .run(profileId, options.now().toISOString());
+      return getConnectionSetup();
+    },
+    completeConnectionOnboarding() {
+      assertOpen();
+      const timestamp = options.now().toISOString();
+      database.prepare("UPDATE connection_setup SET onboarding_completed_at = ?, updated_at = ? WHERE singleton_id = 1")
+        .run(timestamp, timestamp);
+      return getConnectionSetup();
+    },
+    getVoiceCatalogOverrides,
+    replaceVoiceCatalogOverrides(inputValue) {
+      assertOpen();
+      const input = VoiceCatalogSchema.parse(inputValue);
+      transaction(() => {
+        database.prepare("DELETE FROM voice_catalog_overrides WHERE model_id = ?").run(input.modelId);
+        const insert = database.prepare(`
+          INSERT INTO voice_catalog_overrides (
+            model_id, voice_id, ordinal, label, enabled, language, locale, accent, category, style, sample_text
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        input.entries.forEach((entry, ordinal) => insert.run(
+          input.modelId, entry.voiceId, ordinal, entry.label, booleanToSql(entry.enabled), entry.language,
+          entry.locale, entry.accent, entry.category, entry.style, entry.sampleText
+        ));
+      });
+      return getVoiceCatalogOverrides(input.modelId);
     },
     close() {
       if (!closed) {
@@ -510,6 +755,10 @@ export async function openStudyNarratorRepository(options: {
       singleton_id, paragraph_pause_enabled, paragraph_pause_duration_ms, updated_at
     ) VALUES (1, ?, ?, ?)
   `).run(booleanToSql(DEFAULT_SYSTEM_PACING.enabled), DEFAULT_SYSTEM_PACING.durationMs, timestamp);
+  migrated.database.prepare(`
+    INSERT OR IGNORE INTO connection_setup (singleton_id, active_profile_id, onboarding_completed_at, updated_at)
+    VALUES (1, NULL, NULL, ?)
+  `).run(timestamp);
   return createRepository({
     database: migrated.database,
     databasePath: migrated.databasePath,

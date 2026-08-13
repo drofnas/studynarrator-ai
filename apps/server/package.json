@@ -4,6 +4,11 @@
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
+  "exports": {
+    "./app": "./src/app.ts",
+    "./api-manifest": "./src/apiManifest.ts",
+    "./bootstrap": "./src/bootstrap.ts"
+  },
   "scripts": {
     "build": "node build.mjs",
     "dev": "tsx watch src/index.ts",

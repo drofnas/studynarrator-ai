@@ -7,13 +7,14 @@ import type { IgnoredDiagnosticCollection, PersistenceClient, ProjectCreateInput
 import { PersistenceLabPage } from "./PersistenceLabPage.js";
 
 const project: ProjectDetail = {
-  contractVersion: 1,
+  contractVersion: 3,
   id: "00000000-0000-4000-8000-000000000001",
   name: "Restart study",
   description: "Durable fixture",
   scriptSource: "Résumé\r\n\r\nSQL",
   scriptHash: "a".repeat(64),
   connectionProfileId: null,
+  modelId: null,
   speakerMappings: [],
   pausePresets: [{ pauseId: "pause_medium", durationMs: 750, description: "Paragraph" }],
   paragraphPause: { enabled: true, pauseId: "pause_medium", durationMs: 750 },
@@ -25,7 +26,7 @@ const project: ProjectDetail = {
 function clientFixture() {
   let stored = structuredClone(project);
   const replace = vi.fn(async (_projectId: string, input: ProjectReplaceInput) => {
-    stored = { ...stored, ...input, scriptHash: "b".repeat(64), updatedAt: "2026-08-12T13:00:00.000Z", lexiconEntries: [] };
+    stored = { ...stored, ...input, modelId: input.modelId ?? stored.modelId, scriptHash: "b".repeat(64), updatedAt: "2026-08-12T13:00:00.000Z", lexiconEntries: [] };
     return structuredClone(stored);
   });
   const remove = vi.fn(async () => undefined);
@@ -33,18 +34,18 @@ function clientFixture() {
   const replaceIgnored = vi.fn(async (input: IgnoredDiagnosticCollection) => input);
   const replaceGlobal = vi.fn(async () => []);
   const client: PersistenceClient = {
-    status: vi.fn(async () => ({ contractVersion: 1, state: "ready", databaseSchemaVersion: 2, targetDatabaseSchemaVersion: 2, databasePath: "/tmp/gates/G04/studynarrator.sqlite", latestBackupPath: null } as const)),
+    status: vi.fn(async () => ({ contractVersion: 3, state: "ready", databaseSchemaVersion: 3, targetDatabaseSchemaVersion: 3, databasePath: "/tmp/gates/G04/studynarrator.sqlite", latestBackupPath: null } as const)),
     projects: {
       list: vi.fn(async () => remove.mock.calls.length > 0 ? [] : [{ id: stored.id, name: stored.name, description: stored.description, scriptHash: stored.scriptHash, createdAt: stored.createdAt, updatedAt: stored.updatedAt }]),
       create: vi.fn(async (input: ProjectCreateInput) => ({ ...structuredClone(project), name: input.name, description: input.description ?? "" })),
       get: vi.fn(async () => structuredClone(stored)),
       replace,
+      duplicate: vi.fn(async () => structuredClone(stored)),
       delete: remove
     },
     settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing },
     preferences: { getIgnoredDiagnostics: vi.fn(async () => []), replaceIgnoredDiagnostics: replaceIgnored },
-    globalLexicon: { list: vi.fn(async () => []), replace: replaceGlobal },
-    connectionProfiles: { list: vi.fn(async () => []), create: vi.fn(), replace: vi.fn(), delete: vi.fn() }
+    globalLexicon: { list: vi.fn(async () => []), replace: replaceGlobal }
   };
   return { client, replace, remove, replaceGlobal, updatePacing };
 }
@@ -56,7 +57,7 @@ describe("Persistence Lab", () => {
     const { client } = clientFixture();
     render(<PersistenceLabPage client={client} />);
     const ledger = await screen.findByRole("region", { name: "Migration ledger" });
-    expect(within(ledger).getByText("2 / 2")).toBeInTheDocument();
+    expect(within(ledger).getByText("3 / 3")).toBeInTheDocument();
     expect(within(ledger).getByText("/tmp/gates/G04/studynarrator.sqlite")).toBeInTheDocument();
     await userEvent.click(await screen.findByRole("button", { name: /Restart study/u }));
     expect(screen.getByLabelText("Exact script source")).toHaveValue("Résumé\n\nSQL");

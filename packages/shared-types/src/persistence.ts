@@ -9,26 +9,29 @@ import {
   SpeakerIdSchema
 } from "@studynarrator/core";
 import { z } from "zod";
+import {
+  ConnectionProfileAuthoringSchema,
+  ConnectionProfileCollectionSchema,
+  ConnectionProfileIdInputSchema,
+  type ConnectionProfile
+} from "./connections.js";
 
-export const DATABASE_SCHEMA_VERSION = 2;
-export const PERSISTENCE_CONTRACT_VERSION = 1;
+export const DATABASE_SCHEMA_VERSION = 3;
+export const PERSISTENCE_CONTRACT_VERSION = 3;
 export const PERSISTENCE_CHANNELS = Object.freeze({
   status: "persistence.status",
   projectsList: "projects.list",
   projectsCreate: "projects.create",
   projectsGet: "projects.get",
   projectsReplace: "projects.replace",
+  projectsDuplicate: "projects.duplicate",
   projectsDelete: "projects.delete",
   pacingGet: "settings.pacing.get",
   pacingUpdate: "settings.pacing.update",
   ignoredGet: "preferences.ignored.get",
   ignoredReplace: "preferences.ignored.replace",
   globalLexiconList: "lexicon.global.list",
-  globalLexiconReplace: "lexicon.global.replace",
-  connectionProfilesList: "connection-profiles.list",
-  connectionProfilesCreate: "connection-profiles.create",
-  connectionProfilesReplace: "connection-profiles.replace",
-  connectionProfilesDelete: "connection-profiles.delete"
+  globalLexiconReplace: "lexicon.global.replace"
 } as const);
 
 export const ProjectIdSchema = z.uuid();
@@ -124,11 +127,17 @@ export const ProjectCreateInputSchema = z.object({
 }).strict();
 export type ProjectCreateInput = z.input<typeof ProjectCreateInputSchema>;
 
+export const ProjectDuplicateInputSchema = z.object({
+  name: z.string().trim().min(1).max(200)
+}).strict();
+export type ProjectDuplicateInput = z.input<typeof ProjectDuplicateInputSchema>;
+
 const ProjectAggregateShape = {
   name: z.string().trim().min(1).max(200),
   description: z.string().max(10_000),
   scriptSource: z.string().max(5_000_000),
   connectionProfileId: DurableIdSchema.nullable(),
+  modelId: z.string().trim().min(1).max(500).nullable().default(null),
   speakerMappings: SpeakerMappingCollectionSchema,
   pausePresets: PausePresetCollectionSchema,
   paragraphPause: ParagraphPauseConfigurationSchema
@@ -188,36 +197,18 @@ export const IgnoredDiagnosticCollectionSchema = z.array(IgnoredDiagnosticSchema
 });
 export type IgnoredDiagnosticCollection = z.infer<typeof IgnoredDiagnosticCollectionSchema>;
 
-export const ConnectionProfileAuthoringSchema = z.object({
-  id: DurableIdSchema.optional(),
-  name: z.string().trim().min(1).max(200),
-  baseUrl: z.url({ protocol: /^https?$/u }).nullable(),
-  defaultModelId: z.string().max(500).nullable(),
-  defaultVoiceId: z.string().max(500).nullable()
-}).strict();
-export type ConnectionProfileAuthoring = z.input<typeof ConnectionProfileAuthoringSchema>;
-
 export const ConnectionProfileAuthoringCollectionSchema = z.array(ConnectionProfileAuthoringSchema)
   .superRefine((items, context) => enforceUniqueOptionalIds(items, context, "connection profile"));
-
-export const ConnectionProfilePlaceholderSchema = z.object({
-  id: DurableIdSchema,
-  name: z.string().min(1).max(200),
-  baseUrl: z.url({ protocol: /^https?$/u }).nullable(),
-  defaultModelId: z.string().max(500).nullable(),
-  defaultVoiceId: z.string().max(500).nullable(),
-  createdAt: TimestampSchema,
-  updatedAt: TimestampSchema
-}).strict();
-export type ConnectionProfilePlaceholder = z.infer<typeof ConnectionProfilePlaceholderSchema>;
-export const ConnectionProfileCollectionSchema = z.array(ConnectionProfilePlaceholderSchema);
-export const ConnectionProfileIdInputSchema = z.object({ profileId: DurableIdSchema }).strict();
+export const ConnectionProfilePlaceholderSchema = ConnectionProfileCollectionSchema.element;
+export type ConnectionProfilePlaceholder = ConnectionProfile;
 export const ProjectIdInputSchema = z.object({ projectId: ProjectIdSchema }).strict();
 export const ProjectReplaceRequestSchema = z.object({ projectId: ProjectIdSchema, project: ProjectReplaceInputSchema }).strict();
+export const ProjectDuplicateRequestSchema = z.object({ projectId: ProjectIdSchema, duplicate: ProjectDuplicateInputSchema }).strict();
 export const ConnectionProfileReplaceRequestSchema = z.object({
   profileId: DurableIdSchema,
   profile: ConnectionProfileAuthoringSchema
 }).strict();
+export { ConnectionProfileAuthoringSchema, ConnectionProfileCollectionSchema, ConnectionProfileIdInputSchema };
 export const EmptyResponseSchema = z.object({}).strict();
 
 export const PersistenceReadyStatusSchema = z.object({
@@ -248,6 +239,7 @@ export interface ProjectsClient {
   create(input: ProjectCreateInput): Promise<ProjectDetail>;
   get(projectId: string): Promise<ProjectDetail>;
   replace(projectId: string, input: ProjectReplaceInput): Promise<ProjectDetail>;
+  duplicate(projectId: string, input: ProjectDuplicateInput): Promise<ProjectDetail>;
   delete(projectId: string): Promise<void>;
 }
 
@@ -266,20 +258,12 @@ export interface GlobalLexiconClient {
   replace(input: GlobalLexiconReplaceInput): Promise<z.infer<typeof GlobalLexiconEntryCollectionSchema>>;
 }
 
-export interface ConnectionProfilesClient {
-  list(): Promise<ConnectionProfilePlaceholder[]>;
-  create(input: ConnectionProfileAuthoring): Promise<ConnectionProfilePlaceholder>;
-  replace(profileId: string, input: ConnectionProfileAuthoring): Promise<ConnectionProfilePlaceholder>;
-  delete(profileId: string): Promise<void>;
-}
-
 export interface PersistenceClient {
   status(): Promise<PersistenceStatus>;
   projects: ProjectsClient;
   settings: PersistenceSettingsClient;
   preferences: PreferencesClient;
   globalLexicon: GlobalLexiconClient;
-  connectionProfiles: ConnectionProfilesClient;
 }
 
 export const DEFAULT_PROJECT_PARAGRAPH_PAUSE = Object.freeze({

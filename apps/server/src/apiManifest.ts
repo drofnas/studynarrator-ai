@@ -1,0 +1,31 @@
+export const REST_API_MANIFEST = [
+  { method: "GET", path: "/api/health" },
+  { method: "GET", path: "/api/runtime" },
+  { method: "GET", path: "/api/diagnostics" },
+  { method: "GET", path: "/api/persistence/status" },
+  { method: "GET", path: "/api/projects" },
+  { method: "POST", path: "/api/projects" },
+  { method: "GET", path: "/api/projects/:projectId" },
+  { method: "PUT", path: "/api/projects/:projectId" },
+  { method: "POST", path: "/api/projects/:projectId/duplicate" },
+  { method: "DELETE", path: "/api/projects/:projectId" },
+  { method: "GET", path: "/api/settings/pacing" },
+  { method: "PUT", path: "/api/settings/pacing" },
+  { method: "GET", path: "/api/preferences/ignored-diagnostics" },
+  { method: "PUT", path: "/api/preferences/ignored-diagnostics" },
+  { method: "GET", path: "/api/lexicon/global" },
+  { method: "PUT", path: "/api/lexicon/global" },
+  { method: "GET", path: "/api/connections" },
+  { method: "POST", path: "/api/connections" },
+  { method: "PUT", path: "/api/connections/:profileId" },
+  { method: "DELETE", path: "/api/connections/:profileId" },
+  { method: "POST", path: "/api/connections/:profileId/test" },
+  { method: "GET", path: "/api/connections/:profileId/diagnostics" },
+  { method: "GET", path: "/api/setup" },
+  { method: "PUT", path: "/api/setup/active-profile" },
+  { method: "POST", path: "/api/setup/complete" },
+  { method: "GET", path: "/api/voice-catalog" },
+  { method: "PUT", path: "/api/voice-catalog" }
+] as const;
+
+export type RestApiOperation = (typeof REST_API_MANIFEST)[number];

@@ -133,6 +133,43 @@ const MIGRATION_2_SQL = `
   CREATE INDEX lexicon_project_idx ON lexicon_entries(project_id, ordinal);
 `;
 
+const MIGRATION_3_SQL = `
+  ALTER TABLE connection_profiles ADD COLUMN source TEXT NOT NULL DEFAULT 'saved' CHECK (source IN ('saved', 'environment'));
+  ALTER TABLE connection_profiles ADD COLUMN api_key_reference TEXT;
+  ALTER TABLE connection_profiles ADD COLUMN timeout_seconds INTEGER NOT NULL DEFAULT 120 CHECK (timeout_seconds BETWEEN 1 AND 600);
+  ALTER TABLE connection_profiles ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 2 CHECK (retry_count BETWEEN 0 AND 5);
+  ALTER TABLE connection_profiles ADD COLUMN response_format TEXT NOT NULL DEFAULT 'wav' CHECK (response_format = 'wav');
+  ALTER TABLE connection_profiles ADD COLUMN supplied_url_form TEXT NOT NULL DEFAULT 'unconfigured' CHECK (supplied_url_form IN ('root', 'v1', 'unconfigured'));
+  ALTER TABLE connection_profiles ADD COLUMN last_tested_at TEXT;
+  ALTER TABLE connection_profiles ADD COLUMN last_successful_test_at TEXT;
+  ALTER TABLE connection_profiles ADD COLUMN last_test_summary_json TEXT;
+
+  ALTER TABLE projects ADD COLUMN model_id TEXT;
+  UPDATE connection_profiles SET supplied_url_form = 'root' WHERE base_url IS NOT NULL;
+
+  CREATE TABLE voice_catalog_overrides (
+    model_id TEXT NOT NULL,
+    voice_id TEXT NOT NULL,
+    ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+    label TEXT NOT NULL,
+    enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+    language TEXT,
+    locale TEXT,
+    accent TEXT,
+    category TEXT,
+    style TEXT,
+    sample_text TEXT,
+    PRIMARY KEY (model_id, voice_id)
+  );
+
+  CREATE TABLE connection_setup (
+    singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
+    active_profile_id TEXT REFERENCES connection_profiles(id) ON DELETE SET NULL,
+    onboarding_completed_at TEXT,
+    updated_at TEXT NOT NULL
+  );
+`;
+
 export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
   { version: 1, name: "g01-diagnostics", up: (database) => { database.exec(MIGRATION_1_SQL); } },
   {
@@ -140,6 +177,13 @@ export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
     name: "g04-project-persistence",
     up: (database) => {
       database.exec(MIGRATION_2_SQL);
+    }
+  },
+  {
+    version: 3,
+    name: "g06-speaches-connections",
+    up: (database) => {
+      database.exec(MIGRATION_3_SQL);
     }
   }
 ]);

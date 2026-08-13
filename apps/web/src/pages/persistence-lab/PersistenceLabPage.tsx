@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  ConnectionProfileAuthoringSchema,
   GlobalLexiconReplaceInputSchema,
   IgnoredDiagnosticCollectionSchema,
   PausePresetCollectionSchema,
   ProjectLexiconAuthoringCollectionSchema,
   ProjectReplaceInputSchema,
   SpeakerMappingCollectionSchema,
-  type ConnectionProfilePlaceholder,
   type PersistenceClient,
   type PersistenceStatus,
   type ProjectDetail,
@@ -99,13 +97,10 @@ export function PersistenceLabPage({ client }: { client: PersistenceClient }) {
   const [project, setProject] = useState<ProjectDetail>();
   const [drafts, setDrafts] = useState<ProjectDrafts>(EMPTY_DRAFTS);
   const [pacing, setPacing] = useState<SystemPacingDefaults>({ enabled: true, durationMs: 750 });
-  const [profiles, setProfiles] = useState<ConnectionProfilePlaceholder[]>([]);
   const [globalDraft, setGlobalDraft] = useState("[]");
   const [ignoredDraft, setIgnoredDraft] = useState("[]");
   const [createName, setCreateName] = useState("");
   const [createDescription, setCreateDescription] = useState("");
-  const [profileDraft, setProfileDraft] = useState({ id: "", name: "", baseUrl: "", defaultModelId: "", defaultVoiceId: "" });
-  const [editingProfileId, setEditingProfileId] = useState<string>();
   const [errors, setErrors] = useState<string[]>([]);
   const [notice, setNotice] = useState("Loading persistence state…");
   const [busy, setBusy] = useState(true);
@@ -129,15 +124,14 @@ export function PersistenceLabPage({ client }: { client: PersistenceClient }) {
         setNotice("Persistence is in diagnostics-only mode.");
         return;
       }
-      const [nextProjects, nextPacing, nextGlobal, nextIgnored, nextProfiles] = await Promise.all([
+      const [nextProjects, nextPacing, nextGlobal, nextIgnored] = await Promise.all([
         client.projects.list(), client.settings.getPacing(), client.globalLexicon.list(),
-        client.preferences.getIgnoredDiagnostics(), client.connectionProfiles.list()
+        client.preferences.getIgnoredDiagnostics()
       ]);
       setProjects(nextProjects);
       setPacing(nextPacing);
       setGlobalDraft(json(authoringLexicon(nextGlobal)));
       setIgnoredDraft(json(nextIgnored));
-      setProfiles(nextProfiles);
       if (project && nextProjects.some((item) => item.id === project.id)) await loadProject(project.id);
       else if (project) { setProject(undefined); setDrafts(EMPTY_DRAFTS); }
       setNotice("Reloaded durable state from SQLite.");
@@ -235,28 +229,6 @@ export function PersistenceLabPage({ client }: { client: PersistenceClient }) {
     await run(async () => { setIgnoredDraft(json(await client.preferences.replaceIgnoredDiagnostics(parsed.data!))); }, "Ignored diagnostic patterns replaced atomically.");
   };
 
-  const saveProfile = async () => {
-    const parsed = ConnectionProfileAuthoringSchema.safeParse({
-      ...(profileDraft.id ? { id: profileDraft.id } : {}),
-      name: profileDraft.name,
-      baseUrl: profileDraft.baseUrl || null,
-      defaultModelId: profileDraft.defaultModelId || null,
-      defaultVoiceId: profileDraft.defaultVoiceId || null
-    });
-    if (!parsed.success) {
-      setErrors(parsed.error.issues.map((issue) => `Connection profile ${issuePath(issue.path)}: ${issue.message}`));
-      setNotice("Nothing was saved.");
-      return;
-    }
-    await run(async () => {
-      if (editingProfileId) await client.connectionProfiles.replace(editingProfileId, parsed.data);
-      else await client.connectionProfiles.create(parsed.data);
-      setProfiles(await client.connectionProfiles.list());
-      setEditingProfileId(undefined);
-      setProfileDraft({ id: "", name: "", baseUrl: "", defaultModelId: "", defaultVoiceId: "" });
-    }, editingProfileId ? "Connection placeholder updated." : "Connection placeholder created.");
-  };
-
   const unavailable = status?.state === "unavailable";
 
   return (
@@ -298,7 +270,7 @@ export function PersistenceLabPage({ client }: { client: PersistenceClient }) {
             {!project ? <p className={styles.empty}>Create or load a project to inspect its complete durable aggregate.</p> : <>
               <div className={styles.twoColumns}>
                 <label>Project name<input value={drafts.name} onChange={(event) => setDrafts({ ...drafts, name: event.target.value })} /></label>
-                <label>Connection placeholder<select value={drafts.connectionProfileId} onChange={(event) => setDrafts({ ...drafts, connectionProfileId: event.target.value })}><option value="">None</option>{profiles.map((profile) => <option value={profile.id} key={profile.id}>{profile.name}</option>)}</select></label>
+                <label>Managed connection reference<input value={drafts.connectionProfileId || "None"} disabled /></label>
               </div>
               <label>Description<textarea rows={2} value={drafts.description} onChange={(event) => setDrafts({ ...drafts, description: event.target.value })} /></label>
               <label>Exact script source<textarea className={styles.source} rows={10} value={drafts.source} onChange={(event) => setDrafts({ ...drafts, source: event.target.value })} /></label>
@@ -334,19 +306,6 @@ export function PersistenceLabPage({ client }: { client: PersistenceClient }) {
         </section>
       </div>
 
-      <section className={styles.section}>
-        <h3><span>05</span> Connection placeholders</h3>
-        <p className={styles.help}>Metadata only. Credentials are not accepted, stored, or displayed, and no network request is made.</p>
-        <div className={styles.profileForm}>
-          <label>ID (optional)<input disabled={Boolean(editingProfileId)} value={profileDraft.id} onChange={(event) => setProfileDraft({ ...profileDraft, id: event.target.value })} /></label>
-          <label>Name<input value={profileDraft.name} onChange={(event) => setProfileDraft({ ...profileDraft, name: event.target.value })} /></label>
-          <label>HTTP(S) base URL<input value={profileDraft.baseUrl} onChange={(event) => setProfileDraft({ ...profileDraft, baseUrl: event.target.value })} /></label>
-          <label>Model hint<input value={profileDraft.defaultModelId} onChange={(event) => setProfileDraft({ ...profileDraft, defaultModelId: event.target.value })} /></label>
-          <label>Voice hint<input value={profileDraft.defaultVoiceId} onChange={(event) => setProfileDraft({ ...profileDraft, defaultVoiceId: event.target.value })} /></label>
-        </div>
-        <div className={styles.actions}><button type="button" disabled={busy || unavailable || profileDraft.name.trim().length === 0} onClick={() => void saveProfile()}>{editingProfileId ? "Update placeholder" : "Add placeholder"}</button>{editingProfileId ? <button type="button" className={styles.secondary} onClick={() => { setEditingProfileId(undefined); setProfileDraft({ id: "", name: "", baseUrl: "", defaultModelId: "", defaultVoiceId: "" }); }}>Cancel edit</button> : null}</div>
-        <div className={styles.profileList}>{profiles.map((profile) => <article key={profile.id}><div><strong>{profile.name}</strong><code>{profile.id} · {profile.baseUrl ?? "no URL"}</code></div><button type="button" className={styles.secondary} onClick={() => { setEditingProfileId(profile.id); setProfileDraft({ id: profile.id, name: profile.name, baseUrl: profile.baseUrl ?? "", defaultModelId: profile.defaultModelId ?? "", defaultVoiceId: profile.defaultVoiceId ?? "" }); }}>Edit</button><button type="button" className={styles.danger} onClick={() => void run(async () => { await client.connectionProfiles.delete(profile.id); setProfiles(await client.connectionProfiles.list()); if (drafts.connectionProfileId === profile.id) setDrafts({ ...drafts, connectionProfileId: "" }); }, "Connection placeholder deleted; project references were cleared.")}>Delete</button></article>)}</div>
-      </section>
     </ContentPanel>
   );
 }

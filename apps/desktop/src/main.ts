@@ -1,8 +1,8 @@
 import { join, resolve } from "node:path";
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, safeStorage, shell } from "electron";
 import { createDesktopServices } from "./bootstrap.js";
-import { registerDiagnosticsHandler, registerPersistenceHandlers } from "./ipc.js";
-import { SECURE_WEB_PREFERENCES } from "./security.js";
+import { registerConnectionHandlers, registerDiagnosticsHandler, registerPersistenceHandlers } from "./ipc.js";
+import { isApprovedExternalUrl, SECURE_WEB_PREFERENCES } from "./security.js";
 
 let runtime: Awaited<ReturnType<typeof createDesktopServices>> | undefined;
 
@@ -19,7 +19,10 @@ async function createWindow() {
     }
   });
 
-  window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (isApprovedExternalUrl(url)) void shell.openExternal(url);
+    return { action: "deny" };
+  });
   window.webContents.on("will-navigate", (event, targetUrl) => {
     if (targetUrl !== window.webContents.getURL()) event.preventDefault();
   });
@@ -37,9 +40,10 @@ async function createWindow() {
 }
 
 void app.whenReady().then(async () => {
-  runtime = await createDesktopServices({ defaultDataDirectory: app.getPath("userData") });
+  runtime = await createDesktopServices({ defaultDataDirectory: app.getPath("userData"), safeStorage });
   registerDiagnosticsHandler(ipcMain, runtime.service, runtime.context);
   registerPersistenceHandlers(ipcMain, runtime.persistence);
+  if (runtime.connections && runtime.voiceCatalog) registerConnectionHandlers(ipcMain, runtime.connections, runtime.voiceCatalog);
   await createWindow();
 });
 
