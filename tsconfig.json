@@ -9,6 +9,7 @@
     { "path": "packages/application" },
     { "path": "packages/persistence" },
     { "path": "packages/speaches-adapter" },
+    { "path": "packages/rendering" },
     { "path": "packages/runtime" },
     { "path": "apps/server" },
     { "path": "apps/web" },
