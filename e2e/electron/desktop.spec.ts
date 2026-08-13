@@ -30,7 +30,7 @@ test.describe("Electron acceptance", () => {
       };
     });
     expect(bridgeShape).toEqual({
-      bridge: ["connections", "persistence", "scratchpad", "system", "voiceCatalog"],
+      bridge: ["connections", "persistence", "projectPreview", "scratchpad", "speechCache", "system", "voiceCatalog"],
       hasRequire: false,
       hasProcess: false,
       frozen: true
