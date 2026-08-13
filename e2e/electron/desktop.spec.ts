@@ -16,7 +16,7 @@ interface ElectronEvaluationApi {
 }
 
 test.describe("Electron acceptance", () => {
-  test("uses typed IPC for route access and exposes no Node or generic primitive", async ({ electronStudyNarrator }) => {
+  test("uses typed IPC for Scratchpad playback and exposes no Node or generic primitive", async ({ electronStudyNarrator, studyNarrator }) => {
     const { page } = electronStudyNarrator;
     await continueElectronOffline(page);
     const bridgeShape = await page.evaluate(() => {
@@ -29,11 +29,24 @@ test.describe("Electron acceptance", () => {
       };
     });
     expect(bridgeShape).toEqual({
-      bridge: ["connections", "persistence", "system", "voiceCatalog"],
+      bridge: ["connections", "persistence", "scratchpad", "system", "voiceCatalog"],
       hasRequire: false,
       hasProcess: false,
       frozen: true
     });
+
+    studyNarrator.fakeSpeaches.reset();
+    await page.getByRole("link", { name: "Quick Scratchpad" }).click();
+    await expect(page.getByRole("heading", { name: "Quick Scratchpad" })).toBeVisible();
+    await page.getByLabel("Passage").fill("SQL indexes can improve database reads.");
+    await page.getByRole("button", { name: "Synthesize passage" }).click();
+    const player = page.getByLabel(/Audio player for/u);
+    await expect(player).toBeVisible();
+    await expect(player.getByRole("button", { name: "Play", exact: true })).toBeEnabled();
+    await player.getByRole("button", { name: "Play", exact: true }).click();
+    await expect(player.getByRole("status")).toHaveText("Playing");
+    await expect(player.getByRole("status")).toHaveText("Playback complete", { timeout: 5_000 });
+    expect(studyNarrator.fakeSpeaches.getState().requests.filter(({ path }) => path === "/v1/audio/speech")).toHaveLength(1);
 
     await page.getByRole("link", { name: "Settings" }).click();
     await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();

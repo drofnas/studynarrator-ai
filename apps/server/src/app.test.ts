@@ -125,6 +125,39 @@ describe("Express diagnostics API", () => {
   });
 });
 
+describe("Express Scratchpad cancellation", () => {
+  it("aborts privileged synthesis when the REST client disconnects", async () => {
+    const { service } = await fixture();
+    let markStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolveStarted) => { markStarted = resolveStarted; });
+    let markAborted: (() => void) | undefined;
+    const aborted = new Promise<void>((resolveAborted) => { markAborted = resolveAborted; });
+    const scratchpad = {
+      preview: async (_input: unknown, signal?: AbortSignal) => await new Promise<never>((_resolve, reject) => {
+        markStarted?.();
+        signal?.addEventListener("abort", () => {
+          markAborted?.();
+          reject(Object.assign(new Error("cancelled"), { code: "SCRATCHPAD_ABORTED" }));
+        }, { once: true });
+      })
+    };
+    const app = await listen(createExpressApp({ service, scratchpad, context }));
+    const address = app.address();
+    if (!address || typeof address === "string") throw new Error("Expected a loopback address.");
+    const controller = new AbortController();
+    const pending = fetch(`http://127.0.0.1:${String(address.port)}/api/scratchpad/preview`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ connectionProfileId: "profile", modelId: "model", voiceId: "voice", speed: 1, text: "Speech.", applyGlobalLexicon: false }),
+      signal: controller.signal
+    });
+    await started;
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    await expect(aborted).resolves.toBeUndefined();
+  });
+});
+
 describe("Express persistence API", () => {
   it("creates, replaces, reads, lists, and deletes complete project aggregates", async () => {
     const { app } = await fixture();

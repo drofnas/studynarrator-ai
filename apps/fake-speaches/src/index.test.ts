@@ -41,6 +41,7 @@ describe("fake Speaches diagnostic scenarios", () => {
       status: 200,
       model: FAKE_SPEACHES_MODEL_ID,
       voice: FAKE_SPEACHES_VOICE_ID,
+      speed: null,
       inputLength: 31
     });
     expect(state.requests.at(-1)?.inputHash).toMatch(/^[a-f0-9]{64}$/u);
@@ -63,7 +64,7 @@ describe("fake Speaches diagnostic scenarios", () => {
     expect(JSON.stringify(output)).not.toContain("test-secret-must-not-appear");
     expect(current.getState().requests.length).toBeGreaterThan(0);
     for (const request of current.getState().requests) {
-      expect(Object.keys(request).sort()).toEqual(["inputHash", "inputLength", "method", "model", "path", "status", "voice"].sort());
+      expect(Object.keys(request).sort()).toEqual(["inputHash", "inputLength", "method", "model", "path", "speed", "status", "voice"].sort());
     }
   });
 

@@ -187,9 +187,18 @@ export function createExpressApp(options: {
 
   if (options.scratchpad) {
     app.post("/api/scratchpad/preview", async (request, response, next) => {
+      const controller = new AbortController();
+      const abort = () => controller.abort();
+      request.once("aborted", abort);
+      const abortIfDisconnected = () => { if (!response.writableEnded) abort(); };
+      response.once("close", abortIfDisconnected);
       try {
-        response.json(ScratchpadPreviewResultSchema.parse(await options.scratchpad!.preview(ScratchpadPreviewInputSchema.parse(request.body))));
+        response.json(ScratchpadPreviewResultSchema.parse(await options.scratchpad!.preview(ScratchpadPreviewInputSchema.parse(request.body), controller.signal)));
       } catch (error) { next(error); }
+      finally {
+        request.off("aborted", abort);
+        response.off("close", abortIfDisconnected);
+      }
     });
   }
 
