@@ -134,6 +134,8 @@ test.describe("Projects connected authoring", () => {
     await page.getByLabel("Script source").fill("[section Topic]\n[speaker_teacher] Second.");
 
     await expect(page.getByText("MALFORMED_SECTION_DIRECTIVE")).toBeVisible();
+    await page.getByRole("button", { name: "Save now" }).click();
+    await expect(page.getByText("All changes saved.")).toBeVisible();
     await page.getByRole("button", { name: "Ignore this pattern" }).click();
     await expect(page.getByRole("region", { name: "Ignored diagnostic patterns" })).toContainText("MALFORMED_SECTION_DIRECTIVE");
     await page.reload();

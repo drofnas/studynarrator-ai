@@ -39,7 +39,7 @@ test.describe("Electron acceptance", () => {
     await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
     await page.getByRole("link", { name: "System diagnostics" }).click();
     await page.getByRole("button", { name: "Run self-test" }).click();
-    await expect(page.getByText("IPC")).toBeVisible();
+    await expect(page.getByText("IPC", { exact: true })).toBeVisible();
     await expect(page.getByText(/Electron 43/u)).toBeVisible();
   });
 

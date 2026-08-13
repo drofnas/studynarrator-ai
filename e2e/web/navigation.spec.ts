@@ -43,7 +43,7 @@ test.describe("shell, onboarding, and runtime routes", () => {
     await page.getByRole("button", { name: "Run self-test" }).click();
     await expect(page.getByText(/SQLite 3/u)).toBeVisible();
     await expect(page.getByText(/diagnostics schema 3/u)).toBeVisible();
-    await expect(page.getByText("REST")).toBeVisible();
+    await expect(page.getByText("REST", { exact: true })).toBeVisible();
     await navigation.getByRole("link", { name: "Projects" }).click();
     await expect(page.getByRole("heading", { name: "Projects", exact: true })).toBeVisible();
   });
