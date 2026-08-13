@@ -1,6 +1,6 @@
 # G06 Review Evidence Template
 
-This directory is for reviewer-produced G06 evidence. Implementation QA artifacts do not approve the gate.
+Implementation QA artifacts do not approve the gate. Functional acceptance is automated; the human record is UX-only after automation is green.
 
 ## Environment
 
@@ -11,89 +11,64 @@ This directory is for reviewer-produced G06 evidence. Implementation QA artifact
 - Browser and version:
 - Electron version:
 - Node version (must be 26.x):
-- SQLite version:
 - FFmpeg/ffprobe version:
-- Web data directory:
-- Electron data directory:
-- Fake server port:
-- Real Speaches values source (ignored local file/manual; do not record values):
+- Disposable Web data directory:
+- Disposable Electron data directory:
+- Real Speaches values source, if used (ignored local file/manual; never record values):
 
 ## Automated result
 
-- Command: `npm run verify:gate -- G06`
+- `npm run test:api`: PASS / FAIL
+- REST manifest: 27 operations matched and exercised
+- Public IPC manifest: PASS / FAIL
+- Application-service manifest: PASS / FAIL
+- Chromium Web Playwright project: PASS / FAIL
+- Electron Playwright project: PASS / FAIL
+- `npm run verify:gate -- G06`: PASS / FAIL
 - Exact final line: `GATE G06: AUTOMATED CHECKS PASSED`
-- Full log artifact:
+- CI or full-log artifact:
 
-## Onboarding, profile, and shell result
+## Human Web UX review
 
-- First-run redirect:
-- Continue-offline persistence:
-- Setup reopened from shell indicator:
-- Profile CRUD and active selection:
-- Environment profile lock/unconfigured reconciliation:
-- Shell state screenshots:
-- Project reference preservation/nulling:
-- Project before/after diagnostic snapshots:
+- Onboarding clarity and offline recovery:
+- Navigation and setup discoverability:
+- Profile/diagnostic/catalog information hierarchy:
+- Shell and announced state transitions:
+- Projects connection/model/voice usability:
+- Keyboard and focus experience:
+- Narrow/mobile responsive behavior:
+- Perceived timing or jank:
+- Visual/accessibility concerns:
 
-## Fake diagnostics matrix
+## Human Electron UX review
 
-| Scenario | Expected | Observed | Stage evidence |
-| --- | --- | --- | --- |
-| healthy | connected | | |
-| timeout | disconnected | | |
-| unauthorized | authenticationRequired | | |
-| missing-model | modelUnavailable | | |
-| rejected-voice | voiceUnavailable | | |
-| empty-body | invalidAudio | | |
-| invalid-content-type | invalidAudio | | |
-| corrupt-audio | invalidAudio | | |
-| closed port | disconnected | | |
+- Window, scrolling, and focus behavior:
+- IPC timing feel:
+- One-shot credential feedback:
+- System-browser link transition:
+- Relaunch/startup feel:
+- OS-native interaction concerns:
 
-- Root request inspection:
-- `/v1` request inspection:
-- Confirmed no `/v1/v1`:
-- Confirmed one speech request and no retry:
-- Sanitized fake request log:
+## Optional real-server UX observations
 
-## Credential and redaction result
-
-- Electron `safeStorage` persistence:
-- Encryption-unavailable refusal:
-- Replace/clear/delete behavior:
-- Compensation/orphan cleanup evidence:
-- Sentinel `g06-secret-must-not-appear` absent from SQLite, renderer storage, logs, exceptions, REST/IPC, export, and fake server:
-- Redacted diagnostics export artifact:
-- Endpoint represented only by classification:
-- Raw hostname, headers, response body, diagnostic text, key, and audio absent:
-
-## Catalog and Projects result
-
-- Kokoro friendly label/raw ID/search evidence:
-- Apache-2.0/source attribution:
-- Strict replacement success:
-- Strict invalid replacement rejection and preservation:
-- Bundled fallback preservation:
-- Project profile/model selection:
-- Available/unavailable/unverified voice states:
-- Manual-ID fallback:
-- Dry Run semantics unchanged:
-- Project editing and Dry Run fake request delta: 0
-- Preview/audio controls present: none
-
-## Real G00 integration result
-
-- Initial connected test:
-- Outage classification without StudyNarrator restart:
-- Projects remained usable:
-- Approved support-link handling:
-- Recovery without StudyNarrator restart:
-- Updated last-successful-test time:
+- Connection/outage/recovery language:
+- Guidance usefulness:
+- Perceived diagnostic timing:
 - Diagnostic audio persisted or playable: no
+
+## Findings and regression status
+
+- Functional findings discovered during UX review:
+- Regression test added for each functional finding:
+- Focused tests rerun:
+- Cumulative verifier rerun:
+- Remaining UX-only findings:
 
 ## Reviewer decision
 
 - Decision: pending
 - Blocking findings:
-- Follow-up notes:
+- Known non-blocking limitations:
+- Notes:
 
 Only after explicit human approval may the gate-plan checkbox, `docs/gates/approvals/G06.md`, approval commit, and annotated `gate-G06-approved` tag be created.

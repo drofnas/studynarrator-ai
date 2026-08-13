@@ -1,6 +1,6 @@
 # StudyNarrator
 
-## Gate-Driven Implementation and Human Validation Plan
+## Gate-Driven Implementation, Automation, and Human UX Validation Plan
 
 **Document status:** Implementation companion to `StudyNarrator PRD v1.3`  
 **PRD status:** Unchanged  
@@ -25,7 +25,7 @@ The PRD describes the complete Version 1 product, but its delivery phases are to
 
 Building all of those at once would make failures difficult to isolate. It would also make it easy for an AI coding agent to create a large amount of plausible-looking code before any of it has been proven against the real Speaches server or the user’s listening workflow.
 
-This plan replaces that approach with **human-in-the-loop gates**. Every gate must produce something observable, include automated checks, provide exact manual test steps, and receive an explicit approval or rejection. Work on the next gate does not begin until the current gate is approved.
+This plan replaces that approach with **automation-first, human-approved gates**. Every gate must produce something observable, include unit and backend contract checks, exercise every new or changed user workflow through Playwright, and receive an explicit approval or rejection. Human review begins only after automation is green and is limited to UX qualities that automation cannot judge reliably.
 
 ---
 
@@ -55,7 +55,7 @@ Gates must be implemented and approved in numeric order from G00 through G17. Th
 - If the current gate is rejected, leave it unchecked and continue work only on that gate until it is approved.
 - Later gate sections may inform architectural boundaries, but their deliverables must not be started early.
 
-Check a gate only after its automated and manual validation pass and its approval record contains either `APPROVED` or `APPROVED WITH DOCUMENTED DEFERRED ISSUE`. The deferred-issue form counts only under the rules in Section 2.6. Update the checklist in the same approval commit that records the decision, then create the approved tag for that checkpoint. A rejected gate remains unchecked and blocks every later gate.
+Check a gate only after its automated validation and UX review pass and its approval record contains either `APPROVED` or `APPROVED WITH DOCUMENTED DEFERRED ISSUE`. The deferred-issue form counts only under the rules in Section 2.6. Update the checklist in the same approval commit that records the decision, then create the approved tag for that checkpoint. A rejected gate remains unchecked and blocks every later gate.
 
 ### 2.3 No speculative next-gate work
 
@@ -69,27 +69,28 @@ A gate implementation must not add unfinished code for later gates. In particula
 
 A small interface or placeholder is acceptable only when the current gate needs it to prove an architectural boundary. It must be labeled clearly and must not pretend to be working functionality.
 
-### 2.4 Every gate includes four kinds of evidence
+### 2.4 Every gate includes five kinds of evidence
 
 Each gate must provide:
 
-1. **Automated evidence** — tests, type checking, linting, and builds.
-2. **Observable output** — a UI state, JSON artifact, audio artifact, database record, or packaged application.
-3. **Manual validation** — exact actions for the human reviewer.
-4. **Approval record** — the commit, environment, results, known limitations, and approval decision.
+1. **Unit and backend contract evidence** — tests for every application service method, REST operation, and typed IPC channel added or changed by the gate.
+2. **Playwright acceptance evidence** — real Web workflows and focused Electron parity for every added or changed route, navigation path, dialog, or access method.
+3. **Cumulative automated evidence** — the current `verify:gate` command, including earlier regressions, type checking, linting, and builds.
+4. **Observable output and UX review** — inspectable UI or artifacts followed by a short human assessment of visual quality, accessibility feel, responsive behavior, perceived timing, audio perception, and OS-native interactions only.
+5. **Approval record** — the commit, environment, automated results, UX findings, known limitations, and approval decision.
 
-Manual test instructions must be runnable without requiring the reviewer to infer fixture contents or reverse-engineer schemas. Whenever a step requires pasted or entered data, the gate's manual checklist must include the complete copy/paste-ready value next to the workflow, including as applicable:
+Automation fixtures must be runnable without requiring a reviewer to infer fixture contents or reverse-engineer schemas. Whenever a workflow requires pasted or entered data, its Playwright fixture or UX checklist must include the complete value, including as applicable:
 
 - Full JSON roots with every required property, valid IDs, and valid cross-references between editors or records.
 - Exact source text, prompts, filenames, URLs, commands, environment variables, form values, and confirmation text.
 - Separate replacement payloads when a later step changes only part of an earlier value.
 - A specific invalid payload and the expected error path/message when validation failure is part of the test.
 
-Examples must be valid for the implementation at the reviewed checkpoint. JSON examples must parse and satisfy the same exported schemas used by the product boundary; when practical, an automated contract test should load the manual checklist and validate its examples so documentation cannot silently drift from the schema. Do not use placeholders such as “add mappings,” “enter suitable JSON,” or “use the valid fixture” unless the exact referenced content is included inline or linked directly and can be copied without additional construction.
+Examples must be valid for the implementation at the reviewed checkpoint. JSON examples must parse and satisfy the same exported schemas used by the product boundary. Do not use placeholders such as “add mappings,” “enter suitable JSON,” or “use the valid fixture” unless the exact referenced content is included directly. Human review must never be the first validation of functionality; any functional defect found during UX review requires a regression test before approval.
 
 ### 2.5 Previously approved behavior must continue to pass
 
-The automated gate command must run the current gate’s checks and all previously approved regression checks. A later gate does not get to break an earlier gate merely because its own new tests pass.
+The automated gate command must run the current gate’s unit/API contracts, Web and Electron Playwright acceptance where applicable, builds and smoke checks, plus all previously approved regression checks. A later gate does not get to break an earlier gate merely because its own new tests pass. Any changed way of reaching a UI component must update the corresponding Playwright workflow in the same checkpoint.
 
 The repository should expose one command beginning in Gate G01:
 
@@ -129,7 +130,7 @@ This provides a known-good rollback point and makes it easy to compare behavior 
 
 ### 2.8 Use disposable test data
 
-Manual tests must not use the user’s permanent StudyNarrator data directory. Development and gate validation should use a disposable location such as:
+Automated tests and human UX review must not use the user’s permanent StudyNarrator data directory. Development and gate validation should use a unique disposable location such as:
 
 ```text
 .tmp/gates/G05/data
@@ -156,7 +157,7 @@ These choices keep the project lightweight and make the gates reproducible:
 - **Desktop transport:** typed Electron preload and IPC commands.
 - **Schema validation:** Zod or an equivalent runtime TypeScript validator.
 - **Unit/integration tests:** Vitest or an equivalent fast TypeScript test runner.
-- **Browser tests:** Playwright, introduced only when a gate has stable browser behavior worth testing.
+- **Browser tests:** pinned Playwright, mandatory from G06 onward and backfilled at G06 for every current user-facing route. Chromium runs at every gate; Firefox joins the required matrix at G14 and WebKit at G17.
 - **Persistence:** SQLite behind repository interfaces. The concrete driver is accepted only after the G01 Node/Electron compatibility spike.
 - **Audio processing:** FFmpeg launched with argument arrays; no shell interpolation of user input.
 - **Real TTS:** external Speaches server configured through environment variables or a local desktop connection profile.
@@ -340,7 +341,7 @@ The checked G00 through G05 entries are supported by their records under `docs/g
 
 ### 6.2 Gate outcomes
 
-| Gate | Outcome proven to the human reviewer | Real Speaches required? |
+| Gate | Outcome proven by automation before UX review | Real Speaches required? |
 |---|---|---:|
 | G00 | Existing server and shell path can produce a known-good baseline | Yes |
 | G01 | React, Node, Electron, SQLite, and FFmpeg can coexist in the chosen architecture | No |
@@ -348,7 +349,7 @@ The checked G00 through G05 entries are supported by their records under `docs/g
 | G03 | Lexicon and named senses produce deterministic readable and TTS transcripts | No |
 | G04 | Projects and settings survive restart and migrate safely | No |
 | G05 | A complete project can be authored, discovered, configured, and dry-run without TTS | No |
-| G06 | Connection profiles diagnose real and simulated Speaches failures accurately | Mock + one real check |
+| G06 | Connection profiles diagnose simulated Speaches failures accurately and present recovery clearly | Mock; real check optional for UX |
 | G07 | Scratchpad produces and plays one real speech result | Yes |
 | G08 | Segment preview and content-addressed cache reuse only valid audio | Yes for listening; mock for counts |
 | G09 | A frozen render plan and exact silence segments are correct before synthesis | No |
@@ -396,7 +397,7 @@ This gate may use a temporary script, but it must verify:
 - FFmpeg/FFprobe can decode the result.
 - Model and voice values are recorded without recording an API key.
 
-### Human test
+### Historical human acceptance evidence
 
 1. Start or verify the existing Speaches server.
 2. Run the existing shell conversion against `speaches-smoke.txt`.
@@ -482,7 +483,7 @@ Required tests:
 - FFmpeg is invoked without shell interpolation.
 - Electron renderer has no unrestricted Node.js access.
 
-### Human test: Web
+### Historical human acceptance evidence: Web
 
 1. Set a disposable data directory.
 2. Start the server and Web development environment.
@@ -493,7 +494,7 @@ Required tests:
 7. Start it again with the same disposable data directory.
 8. Verify the diagnostic record created before restart still exists.
 
-### Human test: Electron
+### Historical human acceptance evidence: Electron
 
 1. Start the Electron development application.
 2. Open the same status screen.
@@ -552,7 +553,7 @@ Run:
 npm run verify:gate -- G02
 ```
 
-### Human test
+### Historical human acceptance evidence
 
 1. Open Script Lab in the Web UI.
 2. Paste `study-guide-valid.txt`.
@@ -634,7 +635,7 @@ Run:
 npm run verify:gate -- G03
 ```
 
-### Human test
+### Historical human acceptance evidence
 
 1. Load the valid fixture.
 2. Add the global `SQL → sequel` entry.
@@ -718,7 +719,7 @@ Run:
 npm run verify:gate -- G04
 ```
 
-### Human test
+### Historical human acceptance evidence
 
 1. Reset the G04 disposable data directory.
 2. Create a project named `Gate 04 Persistence`.
@@ -789,7 +790,7 @@ Run:
 npm run verify:gate -- G05
 ```
 
-### Human test
+### Historical human acceptance evidence
 
 1. Disconnect or stop Speaches to prove offline operation.
 2. Create a project and upload the valid fixture.
@@ -855,7 +856,7 @@ Prove the external service boundary independently of normal synthesis workflows.
 
 ### Automated checks
 
-The fake server must cover:
+G06 establishes the automation baseline for the current application. The fake server must cover:
 
 - Healthy response.
 - Connection refused.
@@ -868,43 +869,54 @@ The fake server must cover:
 - Root and `/v1` URL inputs.
 - API key never returned to the browser or logs.
 
+Required repository commands:
+
+```bash
+npm run test:api
+npm run test:e2e:web
+npm run test:e2e:electron
+npm run test:e2e
+```
+
+The API suite must use explicit manifests covering all 27 current REST operations, every public typed IPC channel, and every System, Persistence, Connections, Setup, and Voice Catalog service method. A route, channel, or service added or removed without a corresponding contract case must fail the suite. Tests cover successful schemas, input validation, expected policy and availability failures, persistence, credential compensation, environment locking, catalog fallback/replacement, and sanitized errors.
+
+Playwright must run the built applications against dynamic loopback ports and a unique disposable data directory per test. Chromium Web acceptance covers:
+
+- Shell navigation, runtime diagnostics, onboarding, and offline recovery.
+- Script Lab parsing, transformations, pacing, warnings, and source preservation.
+- Persistence Lab validation, CRUD, reload, and deletion.
+- Projects creation, autosave/reload, configuration, catalog and manual voices, and deterministic Dry Run.
+- Settings pacing, profile CRUD, environment locking, catalog replacement, staged diagnostics, shell states, and redacted export.
+- Healthy and failing fake-Speaches scenarios, root and `/v1` normalization, and proof that project editing and Dry Run make no TTS request.
+- Keyboard traversal, mobile viewport overflow, and announced state transitions.
+
+Focused Electron acceptance uses Playwright's Electron launcher with a separate data directory and one worker. It covers IPC transport, route access, persistence across relaunch, narrow preload exposure, one-shot credential behavior, and approved external-link handling. Locators use semantic roles and labels, fixed sleeps are forbidden, and failures retain screenshots and traces in ignored artifact directories. No production test-reset endpoint may be added.
+
 Run:
 
 ```bash
 npm run verify:gate -- G06
 ```
 
-### Human test with fake server
+### Human UX review
 
-1. Start the fake server in healthy mode.
-2. Create a profile and test it.
-3. Confirm every diagnostic stage reports success.
-4. Switch the fake server to unauthorized mode.
-5. Confirm the UI reports an authentication failure, not a generic offline error.
-6. Switch to missing-model mode and confirm the selected model is named in the error.
-7. Switch to invalid-audio mode and confirm HTTP reachability passes while audio validation fails.
-8. Enter both a root URL and the same URL ending in `/v1`; confirm requests do not contain `/v1/v1`.
-9. Export redacted diagnostics and inspect them for API keys.
-
-### Human test with the real server
-
-1. Create a profile using the baseline values from G00.
-2. Run the connection test.
-3. Confirm model, voice, and audio-response checks pass.
-4. Stop the real Speaches server and retest.
-5. Confirm the application stays usable and shows the appropriate upstream setup links.
-6. Restart Speaches and retest without restarting StudyNarrator.
+Only after `verify:gate -- G06` is green, use the copy-ready checklist in `docs/gates/G06-manual-test.md`. Review visual hierarchy, understandable connection-state language, keyboard focus visibility, responsive layout, perceived diagnostic timing, and Electron's OS-native credential and external-link interactions. A real Speaches server may be used to assess recovery feel, but it is not the first functional validation. Any functional finding must receive a Playwright or API regression test before G06 can be approved.
 
 ### Pass criteria
 
 - Each simulated failure is classified correctly.
-- A real server can disconnect and reconnect without restarting StudyNarrator.
+- The fake and adapter boundary can disconnect and reconnect without restarting StudyNarrator; optional real-server review may confirm the same recovery feel.
 - No API key reaches browser-visible state or redacted exports.
 - Connection testing does not create or modify a project.
+- All current user-facing routes have Playwright acceptance coverage.
+- Every current REST operation, public IPC channel, and application service method appears in its manifest-driven suite.
+- The cumulative verifier finishes with `GATE G06: AUTOMATED CHECKS PASSED` before human UX review begins.
 
 ---
 
 ## G07 — Quick Scratchpad and first audible output
+
+From G07 onward, every numbered workflow under a **Playwright acceptance** heading is an automated requirement, not a functional manual checklist. Each gate updates those workflows in the same checkpoint whenever UI behavior or its access path changes. Human review is listed separately and is restricted to UX judgment; listening remains human only when audio perception is the quality being judged.
 
 ### Goal
 
@@ -937,9 +949,11 @@ Run:
 npm run verify:gate -- G07
 ```
 
-### Human test
+### Playwright acceptance: Scratchpad workflow
 
-1. Open Scratchpad with the real connection profile.
+Run against the deterministic fake Speaches server:
+
+1. Open Scratchpad with a healthy connection profile.
 2. Enter:
 
 ```text
@@ -949,12 +963,16 @@ SQL indexes can improve database reads.
 3. Enable the global lexicon.
 4. Confirm transformed text shows `sequel` while the entered text remains `SQL`.
 5. Select a known voice and synthesize.
-6. Play the entire result.
-7. Confirm the sentence is complete and uses the selected voice.
-8. Change the voice and synthesize again; confirm the audible voice changes.
+6. Start playback and assert the player reaches its playing and completed states.
+7. Assert the request log contains the complete transformed sentence and selected voice ID.
+8. Change the voice and synthesize again; assert the request uses the new voice and the player exposes the new result.
 9. Enter a deliberately bad voice ID and confirm the error is actionable.
 10. Open an existing project before and after Scratchpad use; confirm it is unchanged.
-11. Stop Speaches, attempt synthesis, and confirm the typed text remains available for retry.
+11. Switch the fake server to unavailable, attempt synthesis, and confirm the typed text remains available for retry.
+
+### Human audio UX review
+
+After automation passes, synthesize the fixed sentence with real Speaches and judge only intelligibility, voice distinction, playback controls, and perceived response timing.
 
 ### Pass criteria
 
@@ -1000,7 +1018,7 @@ Run:
 npm run verify:gate -- G08
 ```
 
-### Human test with fake server counters
+### Playwright acceptance: fake-server request accounting
 
 1. Reset the G08 cache and fake-server request counter.
 2. Preview the first speech segment.
@@ -1013,10 +1031,10 @@ npm run verify:gate -- G08
 9. Confirm exactly one additional request.
 10. Restore the original sentence and confirm the original cached audio is reusable.
 11. Change the speaker’s voice and confirm one new request.
-12. Manually corrupt the cached test file using the supplied test helper and preview again.
+12. Have the isolated fixture corrupt the cached test file, then preview again.
 13. Confirm StudyNarrator rejects the corrupt file and synthesizes a replacement.
 
-### Human listening test
+### Human audio UX review
 
 Repeat selected cases against real Speaches and confirm the cached replay is the same audio rather than a newly generated variation.
 
@@ -1064,7 +1082,7 @@ Run:
 npm run verify:gate -- G09
 ```
 
-### Human test
+### Playwright acceptance
 
 1. Open the canonical project and create a render plan.
 2. Inspect the plan and verify sections, speech, and explicit pauses follow source order.
@@ -1075,7 +1093,11 @@ npm run verify:gate -- G09
 7. Enable an automatic speaker-change pause while leaving explicit pauses in the script.
 8. Verify the plan does not insert duplicate pauses at explicit handoffs.
 9. Set one pause to zero and confirm the plan remains valid without producing audible silence.
-10. Use FFprobe or the supplied verification command on generated silence files.
+10. Inspect the surfaced duration metadata; the service contract independently verifies generated files with FFprobe.
+
+### Human UX review
+
+Review whether the render-plan hierarchy, frozen-versus-current values, and pacing labels are understandable without consulting raw JSON.
 
 ### Pass criteria
 
@@ -1121,19 +1143,19 @@ npm run fixtures:audio
 npm run verify:gate -- G10
 ```
 
-### Human test
+### Playwright acceptance
 
-1. Generate the four canonical audio components.
-2. Run the assembly command.
-3. Play the final MP3.
-4. Confirm the first and second tones are distinct and occur in the expected order.
-5. Confirm a short gap separates them and a longer trailing gap follows.
-6. Run the supplied FFprobe summary command.
-7. Verify reported duration is approximately 3.850 seconds within tolerance.
-8. Open the assembly manifest and confirm the four components and timestamps.
-9. Start the long synthetic assembly while observing process memory.
-10. Confirm memory remains bounded rather than growing in proportion to the full decoded timeline.
-11. Cancel an assembly and confirm no incomplete file is displayed as a successful artifact.
+1. Open the deterministic assembly fixture through the application workflow.
+2. Start assembly and assert that progress and completion states are announced.
+3. Start the final MP3 and assert the player reaches playing and completed states.
+4. Verify the displayed duration is approximately 3.850 seconds within tolerance.
+5. Open the assembly manifest and confirm the four components and monotonic timestamps.
+6. Start the long synthetic assembly and confirm the UI remains responsive while the backend memory contract enforces its bound.
+7. Cancel an assembly and confirm no incomplete file is displayed as a successful artifact.
+
+### Human audio UX review
+
+Listen to the deterministic fixture and judge only tone order, the perceptible short and long gaps, clicks, clipping, and player responsiveness. FFprobe correctness and bounded memory remain automated requirements.
 
 ### Pass criteria
 
@@ -1191,7 +1213,7 @@ Run:
 npm run verify:gate -- G11
 ```
 
-### Human test: deterministic mock workflow
+### Playwright acceptance: deterministic mock workflow
 
 1. Reset render data, cache, and fake-server counter.
 2. Render the canonical project.
@@ -1209,7 +1231,7 @@ npm run verify:gate -- G11
 14. Start another render and cancel it.
 15. Restart StudyNarrator and confirm the interrupted job is offered for recovery or cleanup.
 
-### Human test: real listening workflow
+### Human audio UX review: real listening workflow
 
 1. Render the canonical project through the real Speaches server.
 2. Listen to the entire MP3.
@@ -1220,8 +1242,7 @@ npm run verify:gate -- G11
    - Short and long pauses are perceptibly different.
    - Sections occur in the right order.
    - There are no obvious clicks, missing words, duplicate sentences, or clipped transitions.
-4. Compare the original, readable, and TTS transcripts.
-5. Verify checksums using the supplied command.
+4. Judge progress timing, transition quality, and whether retry/cancellation states feel trustworthy. Transcript and checksum correctness remain automated requirements.
 
 ### Pass criteria
 
@@ -1277,7 +1298,7 @@ Run:
 npm run verify:gate -- G12
 ```
 
-### Human test
+### Playwright acceptance
 
 1. Open a completed real render.
 2. Play the final MP3 using the shared player.
@@ -1292,6 +1313,10 @@ npm run verify:gate -- G12
 11. Run the safe temporary-cache cleanup.
 12. Reopen history and confirm removed audio is clearly marked unavailable rather than regenerated.
 13. Open About/Credits and verify the independent-project disclaimer and contributor kudos.
+
+### Human UX review
+
+Judge waveform legibility, pointer and keyboard seeking feel, control discoverability, copied-text feedback, and unavailable-audio messaging. Listen only to assess seek responsiveness and segment boundaries; request accounting remains automated.
 
 ### Pass criteria
 
@@ -1333,7 +1358,7 @@ Run:
 npm run verify:gate -- G13
 ```
 
-### Human test
+### Playwright acceptance
 
 1. Stop Speaches.
 2. Open the canonical project.
@@ -1345,12 +1370,15 @@ npm run verify:gate -- G13
    - Named pronunciation aliases.
    - The source study material.
 5. Search the export for the API key, server URL, and local data directory; none may appear.
-6. Copy the prompt into one external LLM of the reviewer’s choice.
-7. Ask it to return only the script.
-8. Paste the result into a new StudyNarrator project.
-9. Run parsing and validation.
-10. Record any recurring LLM-format mistakes as prompt-quality issues, not parser exceptions.
-11. Export and inspect the reusable skill package.
+6. Feed the exported prompt to the fixed external-LLM response fixture; StudyNarrator itself must make no LLM request.
+7. Paste the fixture response into a new StudyNarrator project.
+8. Run parsing and validation and assert the supported grammar succeeds.
+9. Paste the malformed-response fixture and assert the parser surfaces actionable grammar feedback.
+10. Export the reusable skill package and validate its download, metadata, and required files.
+
+### Human UX review
+
+Judge prompt-preview readability, copy/download feedback, secret-warning clarity, and the ease of moving content between StudyNarrator and an external tool. Export content and offline behavior are already contract-tested.
 
 ### Pass criteria
 
@@ -1399,33 +1427,21 @@ Run:
 npm run verify:gate -- G14
 ```
 
-### Human test
+### Playwright acceptance: Chromium and Firefox
 
-1. Copy `.env.example` to a local ignored `.env`.
-2. Configure an external Speaches URL.
-3. Run:
+The gate harness builds the image, asserts the Compose service list contains only StudyNarrator, verifies non-root execution and loopback binding, and launches the container with isolated data. Chromium and Firefox then run the same workflow:
 
-```bash
-docker compose config --services
-```
+1. Open the production Web UI and run diagnostics against fake Speaches.
+2. Create the canonical project and complete a deterministic render.
+3. Recreate the container without deleting its disposable volume and confirm the project and render history remain.
+4. Relaunch with an invalid Speaches URL and confirm StudyNarrator stays healthy and offline authoring works.
+5. Restore the healthy URL and reconnect without deleting application data.
+6. On Linux CI, verify the supplied host-gateway configuration against loopback fake Speaches.
+7. Assert from an isolated network probe that the default configuration is not reachable beyond loopback.
 
-4. Confirm the only application service is StudyNarrator; no Speaches service is defined.
-5. Inspect the resolved port binding and confirm the supplied default is loopback-only.
-6. Start the stack:
+### Human UX review
 
-```bash
-docker compose up -d --build
-```
-
-7. Open the Web UI and run diagnostics.
-8. Create or open the canonical project and complete a real render.
-9. Stop and remove the container without deleting the data volume.
-10. Start it again and confirm the project and render history remain.
-11. Configure an invalid Speaches URL and recreate the container.
-12. Confirm StudyNarrator remains running and offline authoring works.
-13. Restore the correct URL and reconnect without deleting application data.
-14. On Linux, test the supplied host-gateway example when Speaches runs on the Docker host.
-15. From another LAN device, confirm the default configuration is not reachable unless the reviewer explicitly changes the bind address.
+Review production page loading, responsive behavior, perceived reconnect timing, and the clarity of container-specific setup guidance. Functional persistence, networking, and browser parity must already be green.
 
 ### Pass criteria
 
@@ -1477,7 +1493,7 @@ Run:
 npm run verify:gate -- G15
 ```
 
-### Human test
+### Playwright acceptance: Electron
 
 1. Launch the Electron application in development mode.
 2. Import the valid fixture using the native file dialog.
@@ -1493,6 +1509,10 @@ npm run verify:gate -- G15
 12. Begin a render, close the application, reopen it, and verify recovery handling.
 13. Open developer tools and verify no unrestricted Node API is available to renderer scripts.
 14. Open the official setup link and verify it uses the system browser and an approved HTTPS destination.
+
+### Human UX review
+
+Judge native dialog clarity, drag/drop affordance, OS credential prompts, show-in-folder behavior, shutdown feel, and whether long work keeps the desktop UI perceptibly responsive. IPC, persistence, security, and recovery behavior must already pass Playwright.
 
 ### Pass criteria
 
@@ -1530,9 +1550,9 @@ Prove that installable Electron packages work on supported Windows, macOS, and L
 - No development server or source checkout is required.
 - Upgrade preserves compatible application data.
 
-### Human test matrix
+### Playwright acceptance matrix
 
-For each operating system, use a clean VM, clean user account, or independent tester and record:
+For each operating system, CI or a release runner installs the package into a clean VM or clean user account and records:
 
 1. OS and version.
 2. CPU architecture.
@@ -1550,9 +1570,15 @@ For each operating system, use a clean VM, clean user account, or independent te
 14. Upgrade result.
 15. Uninstall result and whether user data was intentionally retained.
 
+The matrix uses Playwright Electron for every automatable renderer/IPC workflow and platform harness assertions for installer, show-in-folder, upgrade, and uninstall behavior. Each row retains traces, screenshots, package logs, and checksums on failure.
+
+### Human UX review
+
+On each advertised platform, review native visual integration, accessibility feel, installer messaging, security prompts, perceived launch timing, and OS-specific interaction quality only after its automated matrix row is green.
+
 ### Pass criteria
 
-- Every advertised operating system has actual human execution evidence.
+- Every advertised operating system has actual clean-environment automated launch and workflow evidence plus its UX review record.
 - Build success without launch evidence is marked unverified and cannot be advertised as supported.
 - Package signing status is accurate and not implied.
 - Clean install and upgrade both preserve expected behavior.
@@ -1605,12 +1631,12 @@ Required final checks include:
 - Cache request-count suite.
 - Audio assembly duration and memory suite.
 - Render recovery suite.
-- Web browser end-to-end suite.
+- Chromium, Firefox, and WebKit browser end-to-end suites.
 - Electron IPC/security suite.
 - Docker production smoke suite.
 - Package metadata and license checks.
 
-### Human end-to-end test
+### Playwright end-to-end acceptance
 
 Perform the following once in the Docker Web distribution and once in an approved Electron package:
 
@@ -1624,7 +1650,7 @@ Perform the following once in the Docker Web distribution and once in an approve
 8. Validate and inspect Dry Run.
 9. Preview one segment twice and confirm cache reuse.
 10. Render the full project.
-11. Listen to the complete MP3.
+11. Start the complete MP3 and assert the player reaches playing and completed states.
 12. Inspect waveform and segment history.
 13. Copy readable and TTS text from the SQL segment.
 14. Export one segment.
@@ -1636,7 +1662,7 @@ Perform the following once in the Docker Web distribution and once in an approve
 20. Verify output checksums.
 21. Open About/Credits and review the license and acknowledgment.
 
-### Human listening checklist
+### Human audio UX review
 
 The reviewer explicitly answers yes or no:
 
@@ -1669,7 +1695,7 @@ The reviewer explicitly answers yes or no:
 Create one record per gate in the pull request description or under `docs/gates/approvals/`:
 
 ```markdown
-# Gate G08 Approval
+# Gate GXX Approval
 
 - Commit SHA:
 - Pull request:
@@ -1683,26 +1709,33 @@ Create one record per gate in the pull request description or under `docs/gates/
 - Speaches model:
 - Voice IDs:
 
-## Automated result
+## Automated results
 
-- `npm run verify:gate -- G08`: PASS / FAIL
+- Unit and service tests: PASS / FAIL
+- REST route manifest: PASS / FAIL / N/A
+- IPC channel manifest: PASS / FAIL / N/A
+- Playwright Web acceptance: PASS / FAIL / N/A
+- Playwright Electron acceptance: PASS / FAIL / N/A
+- `npm run verify:gate -- GXX`: PASS / FAIL
 - Report or CI link:
 
-## Manual test result
+## Human UX review
 
-- G08.1 first preview causes one request: PASS / FAIL
-- G08.2 repeat preview is a cache hit: PASS / FAIL
-- G08.3 pause-only change causes no request: PASS / FAIL
-- G08.4 text change causes one request: PASS / FAIL
-- G08.5 voice change causes one request: PASS / FAIL
-- G08.6 corrupt cache is rejected: PASS / FAIL
+- Automation was green before review: YES / NO
+- Visual quality and responsive behavior: PASS / FAIL / N/A
+- Accessibility feel and keyboard flow: PASS / FAIL / N/A
+- Perceived timing and state feedback: PASS / FAIL / N/A
+- Audio perception, when applicable: PASS / FAIL / N/A
+- OS-native interactions, when applicable: PASS / FAIL / N/A
+- Functional findings and regression-test links: None / links
 
 ## Evidence
 
 - Screenshots:
-- Audio artifacts:
-- Request-counter output:
-- Logs or manifest:
+- Playwright reports, traces, and screenshots:
+- API/IPC/service manifest output:
+- Optional audio or package artifacts:
+- Logs or diagnostics:
 
 ## Defects found
 
@@ -1742,9 +1775,11 @@ Rules:
 - Do not add hidden future features.
 - Preserve all previously approved gate behavior.
 - Use shared TypeScript domain/application services; do not duplicate behavior in REST and Electron transports.
-- Add or update automated tests for every pass criterion that can be automated.
-- Extend `npm run verify:gate -- GXX` so it runs this gate and all prior regression checks.
-- Provide exact manual test instructions matching the gate document. Include complete copy/paste-ready JSON, source text, commands, IDs, URLs, form values, linked cross-references, mutation payloads, and expected validation errors needed to execute every case; validate examples against product schemas when practical.
+- Add or update unit and manifest-driven contract tests for every changed application service method, REST route, and typed IPC channel.
+- Add or update Playwright acceptance for every added or changed user-facing route, workflow, navigation path, dialog, or access method in the same checkpoint. Use semantic roles and labels; use a test ID only when no stable accessible locator exists.
+- Cover happy paths, validation, expected failures, persistence/reload, and security/redaction wherever applicable.
+- Extend `npm run verify:gate -- GXX` so it runs the API contracts, relevant Web and Electron Playwright projects, builds, smoke checks, and all prior regressions.
+- Provide a short UX-only human checklist. Human review must not be the first functional validation.
 - Use disposable test data and never commit secrets.
 - Do not modify the PRD unless a contradiction makes implementation impossible. Document any such contradiction instead.
 - Stop after the gate deliverables are complete.
@@ -1753,7 +1788,7 @@ At completion, report:
 1. Files changed.
 2. Architecture decisions made.
 3. Automated commands run and their results.
-4. Manual test steps for the human reviewer.
+4. Playwright workflows and the UX-only human review checklist.
 5. Known limitations confined to this gate.
 6. Confirmation that no later-gate work was added.
 ```
@@ -1771,13 +1806,14 @@ Before reviewing implementation, confirm GXX is the first unchecked gate in the 
 
 Check:
 - Every required deliverable exists.
-- Every pass criterion is covered by automated or manual evidence.
+- Every functional pass criterion is covered by automated evidence; human evidence is limited to UX judgment.
 - Previously approved behavior still passes.
 - Shared domain logic is not duplicated across transports.
 - User content and secrets are not leaked.
 - Errors are honest and actionable.
 - The implementation can be reverted as one gate.
-- The manual test instructions are complete enough for a non-author to execute, with all required JSON/text/commands and linked values supplied as copy/paste-ready fixtures rather than left for the reviewer to invent.
+- Every changed route, workflow, navigation path, dialog, REST operation, IPC channel, and application service appears in its required automated suite.
+- The UX checklist avoids re-testing functionality and starts only after focused tests and the cumulative verifier pass.
 
 Return:
 1. Blocking findings.
@@ -1797,9 +1833,9 @@ When any pass criterion fails:
 2. Leave its Section 6 progress checkbox unchecked so it continues to block every later gate.
 3. Record the exact failing test and environment.
 4. Fix only the current gate or a regression it introduced.
-5. Add an automated regression test whenever the failure can be reproduced deterministically.
+5. Add an automated regression test for every functional failure, including any functional finding discovered during UX review.
 6. Rerun the entire current gate suite, including previously approved regression checks.
-7. Repeat the relevant manual test from its first setup step; do not test only the final click.
+7. Rerun the affected Playwright/API workflow from its first setup step, then repeat only the relevant UX observation if one was affected.
 8. Update the approval record.
 9. Do not start the next gate until approval is explicit and the current gate's checkbox is checked.
 
@@ -1852,7 +1888,9 @@ Before approving each gate, confirm:
 - Are real Speaches calls used only where necessary?
 - Is deterministic behavior tested with mocks or fixed fixtures?
 - Does the reviewer know exactly what success looks like?
-- Can the reviewer execute every manual step using only the supplied copy/paste-ready JSON, text, commands, IDs, URLs, and form values without inferring a schema or inventing fixture data?
+- Do manifest-driven tests cover every added or changed REST operation, IPC channel, and application service method?
+- Does Playwright cover every added or changed user workflow and the current way of reaching it, using isolated disposable data and stable accessible locators?
+- Did focused tests and the cumulative verifier pass before the human UX review began?
 - Is there a rollback tag after approval?
 - Did the implementation avoid future-version Speaches management?
 - Did the implementation preserve the original source and distinguish readable text from TTS text?

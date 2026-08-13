@@ -286,6 +286,13 @@ if (gateIndex >= gateOrder.indexOf("G06")) {
       'apps/web/src/services/connections/connectionsClient.ts',
       'apps/web/src/pages/onboarding/OnboardingPage.tsx',
       'apps/web/src/pages/settings/SettingsPage.tsx',
+      'apps/server/src/apiManifest.ts',
+      'packages/application/src/serviceManifest.ts',
+      'playwright.config.ts',
+      'e2e/web/navigation.spec.ts',
+      'e2e/web/projects-and-settings.spec.ts',
+      'e2e/web/script-and-persistence.spec.ts',
+      'e2e/electron/desktop.spec.ts',
       'docs/gates/G06-manual-test.md',
       'docs/gates/evidence/G06/README.md'
     ]) if (!fs.existsSync(path)) process.exit(1);
@@ -300,6 +307,10 @@ if (gateIndex >= gateOrder.indexOf("G06")) {
     const settings = fs.readFileSync('apps/web/src/pages/settings/SettingsPage.tsx', 'utf8');
     const projects = fs.readFileSync('apps/web/src/pages/projects/ProjectsPage.tsx', 'utf8');
     const manual = fs.readFileSync('docs/gates/G06-manual-test.md', 'utf8');
+    const packageJson = fs.readFileSync('package.json', 'utf8');
+    const apiManifest = fs.readFileSync('apps/server/src/apiManifest.ts', 'utf8');
+    const ipcManifest = fs.readFileSync('apps/desktop/src/ipc.ts', 'utf8');
+    const serviceManifest = fs.readFileSync('packages/application/src/serviceManifest.ts', 'utf8');
     if (
       !persistence.includes('DATABASE_SCHEMA_VERSION = 3')
       || !schemas.includes('CredentialMutationSchema')
@@ -317,6 +328,14 @@ if (gateIndex >= gateOrder.indexOf("G06")) {
       || !settings.includes('Export redacted JSON')
       || !projects.includes('Voice catalog or manual ID')
       || !projects.includes('deterministic dry run still makes no TTS request')
+      || !apiManifest.includes('REST_API_MANIFEST')
+      || !ipcManifest.includes('PUBLIC_IPC_CHANNEL_MANIFEST')
+      || !serviceManifest.includes('APPLICATION_SERVICE_MANIFEST')
+      || !packageJson.includes('"e2e:install"')
+      || !packageJson.includes('"test:api"')
+      || !packageJson.includes('"test:e2e:web"')
+      || !packageJson.includes('"test:e2e:electron"')
+      || !packageJson.includes('"test:e2e"')
       || !manual.includes('Gate 06 Speaches Profiles, Diagnostics, and Onboarding')
       || !manual.includes('g06-secret-must-not-appear')
       || !manual.includes('GATE G06: AUTOMATED CHECKS PASSED')
@@ -334,7 +353,13 @@ if (gateIndex >= gateOrder.indexOf("G06")) {
 run("npm", ["run", "lint"]);
 run("npm", ["run", "typecheck"]);
 run("npm", ["test"]);
+if (gateIndex >= gateOrder.indexOf("G06")) run("npm", ["run", "test:api"]);
 run("npm", ["run", "build"]);
+
+if (gateIndex >= gateOrder.indexOf("G06")) {
+  run("npm", ["run", "test:e2e:web"]);
+  run("npm", ["run", "test:e2e:electron"]);
+}
 
 const gateData = resolve(repositoryRoot, `.tmp/gates/${gate}`);
 const nodeData = resolve(gateData, "verify-node");

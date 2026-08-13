@@ -1,197 +1,49 @@
 # G06 Manual Test — Gate 06 Speaches Profiles, Diagnostics, and Onboarding
 
-Use Node 26, FFmpeg/`ffprobe`, disposable data, and the loopback fake server. This review proves connection management and diagnostics only. It must not produce a playable preview, cache audio, persist diagnostic audio, or alter project content.
+G06 functional acceptance is automated. The reviewer does not manually replay API, fake-server, persistence, credential, or route matrices. Human review begins only after the cumulative verifier is green and is limited to UX quality, accessibility feel, responsive behavior, perceived timing, audio-diagnostic feedback, and operating-system-native interaction feel.
 
-Do not check G06 in the gate plan, create an approval record, or create `gate-G06-approved` until a human explicitly approves the gate. Never commit a real endpoint or credential.
+Do not check G06 in the gate plan, create an approval record, or create `gate-G06-approved` until a human explicitly approves the UX review. Never commit a real endpoint or credential. The credential sentinel used by automation is `g06-secret-must-not-appear`.
 
-## Automated baseline and disposable data
+## Automated prerequisite
 
-1. Run `npm run gate:reset -- G06`.
-2. Confirm `node --version` reports Node 26 and `ffprobe -version` succeeds.
+1. Use Node 26 and confirm `ffprobe -version` succeeds.
+2. Run `npm run gate:reset -- G06`.
 3. Run `npm run verify:gate -- G06`.
 4. Require the exact final line `GATE G06: AUTOMATED CHECKS PASSED`.
-5. Record the full log in `docs/gates/evidence/G06/README.md` or as a linked local review artifact.
+5. Confirm the run includes `test:api`, the Chromium Web Playwright project, and the single-worker Electron Playwright project.
+6. If a functional finding appears during review, stop approval, add a regression test, and rerun the full verifier.
 
-## Start and inspect the fake server
+Automation already proves all current routes, onboarding/offline recovery, runtime diagnostics, Script Lab, Persistence Lab, Projects, Settings, every fake-Speaches scenario, root and `/v1` normalization, profile and catalog management, environment locking, project persistence, synthesis-free Dry Run, redacted export, REST/IPC/service manifests, renderer confinement, desktop persistence, one-shot credential behavior, and approved external-link policy.
 
-In terminal A, run:
+## Human Web UX review
 
-```bash
-STUDYNARRATOR_FAKE_SPEACHES_PORT=18080 npm run fake:speaches
-```
+Use a disposable local data directory and, if desired, the loopback fake server. Do not repeat the functional scenario matrix.
 
-In terminal B, these commands must work without restarting StudyNarrator:
+- Review first-run onboarding for clarity, hierarchy, readable endpoint guidance, obvious offline recovery, and understandable status transitions.
+- Review Settings profile management, staged diagnostics, catalog search, locked-field presentation, and redacted-export feedback for visual clarity and perceived timing.
+- Review Projects connection/model/voice controls, friendly labels plus raw IDs, live availability language, autosave feedback, and Narration Score readability.
+- Review Script Lab, Persistence Lab, and Runtime diagnostics navigation for discoverability and consistent focus order.
+- At a narrow mobile viewport, check that content remains usable without accidental horizontal overflow and that controls do not become unreachable.
+- Traverse primary actions by keyboard. Judge focus visibility, announced status changes, error recovery, contrast, density, and whether timing feels stalled or surprising.
 
-```bash
-npm run fake:speaches:inspect
-npm run fake:speaches:reset
-npm run fake:speaches:scenario -- healthy
-```
+## Human Electron UX review
 
-The fake endpoint is `http://127.0.0.1:18080`. Start Web with disposable data in terminal C:
+Use a separate disposable Electron data directory.
 
-```bash
-STUDYNARRATOR_DATA_DIR=.tmp/gates/G06/manual-web npm run dev:web
-```
+- Review window sizing, scrolling, focus, route transitions, and perceived IPC timing.
+- Enter a disposable value in the one-shot password field and judge whether the clearing/configured-state feedback is understandable. Do not record the value.
+- Open the official Speaches links and confirm the system-browser transition feels intentional.
+- Close and relaunch once to assess startup and persistence feel; automation already validates the persisted data.
+- Note any OS-native interaction, window-management, or timing issue that Playwright cannot meaningfully judge.
 
-## First-run onboarding and offline recovery
+## Optional real-server UX check
 
-1. Open StudyNarrator with the empty G06 data directory. Require an automatic redirect to `/onboarding`.
-2. Confirm Web guidance says keys come from `SPEACHES_API_KEY` or server-side secret injection and offers official Speaches installation and TTS links.
-3. Confirm the shell connection indicator opens onboarding/setup.
-4. Select **Continue offline**. Require Projects to open and remain usable while the indicator reports a configuration/disconnected state.
-5. Reload. Require Projects to remain open without another forced onboarding redirect.
-6. Open setup from the shell indicator and enter exactly:
-   - Profile name: `G06 Fake Root`
-   - Endpoint: `http://127.0.0.1:18080`
-   - Model ID: `speaches-ai/Kokoro-82M-v1.0-ONNX`
-   - Voice ID: `af_heart`
-7. Select **Create + Test Connection**. Require `connected`; require the shell indicator to transition through **Testing** to **Connected**.
-8. Confirm URL, DNS, TCP, HTTP, authentication, model, voice, and audio stages all pass and show stable codes and timings.
-9. Confirm there is no preview button, audio element, player, cache entry, or persisted diagnostic WAV.
+The real G00 server may be used only to judge connection feedback and recovery timing. Keep private values in ignored local configuration. Do not treat this as the first functional validation: fake and adapter behavior must already be green in automation.
 
-## Root and `/v1` normalization
-
-1. Run `npm run fake:speaches:reset`.
-2. Test `G06 Fake Root` once.
-3. Create a second profile with the same values except:
-   - Profile name: `G06 Fake V1`
-   - Endpoint: `http://127.0.0.1:18080/v1`
-4. Test it once, then run `npm run fake:speaches:inspect`.
-5. Require normalized paths such as `/health`, `/v1/models`, `/v1/audio/voices`, and `/v1/audio/speech`; require no `/v1/v1` path.
-6. Attempt each invalid endpoint and require a URL/configuration failure before network access:
-   - `ftp://127.0.0.1:18080`
-   - `http://embedded-user@127.0.0.1:18080`
-   - `http://127.0.0.1:18080?key=value`
-   - `http://127.0.0.1:18080/#fragment`
-   - `http://127.0.0.1:18080/custom/path`
-
-## Every deterministic fake scenario
-
-Before each row, run the scenario command, test `G06 Fake Root`, and inspect both the stage rail and shell indicator. A failed diagnostic is a successful UI/API operation containing the result, not a transport error from StudyNarrator.
-
-| Command | Expected overall | Required distinction |
-| --- | --- | --- |
-| `npm run fake:speaches:scenario -- healthy` | `connected` | all eight stages pass |
-| `npm run fake:speaches:scenario -- timeout` | `disconnected` | timeout guidance; exactly one attempt |
-| `npm run fake:speaches:scenario -- unauthorized` | `authenticationRequired` | HTTP reachable; authentication fails |
-| `npm run fake:speaches:scenario -- missing-model` | `modelUnavailable` | names `speaches-ai/Kokoro-82M-v1.0-ONNX` |
-| `npm run fake:speaches:scenario -- rejected-voice` | `voiceUnavailable` | model passes; speech rejects `af_heart` |
-| `npm run fake:speaches:scenario -- empty-body` | `invalidAudio` | HTTP/audio status passes before empty-body validation fails |
-| `npm run fake:speaches:scenario -- invalid-content-type` | `invalidAudio` | reports non-audio content type |
-| `npm run fake:speaches:scenario -- corrupt-audio` | `invalidAudio` | `ffprobe` decode validation fails |
-
-For connection refusal, stop the fake server, keep StudyNarrator open, and test `http://127.0.0.1:18080`. Require `disconnected` with TCP refusal. Restart the fake server in healthy mode and retest without restarting StudyNarrator; require recovery to `connected`.
-
-After the scenario matrix, run `npm run fake:speaches:inspect`. Require request logs to contain only method, normalized path, status, model, voice, input length, and input hash. They must not contain authorization values or diagnostic source text.
-
-## Profile management, locking, deletion, and project references
-
-1. In Settings, create `G06 Editable Peer` at `http://127.0.0.1:18080` with the same model and voice, timeout `120`, retries `2`, and WAV format.
-2. Edit its name, endpoint, timeout, retry count, model, and voice; reload and require exact persistence.
-3. Switch the active profile between the two saved profiles. Require the shell indicator to follow the active profile.
-4. Create project `G06 Reference Preservation`. Select `G06 Editable Peer` and set optional model override `speaches-ai/Kokoro-82M-v1.0-ONNX`. Save and reload.
-5. Test the connection repeatedly. Snapshot the project before and after; require no project field or timestamp to change because of connection testing.
-6. Delete `G06 Editable Peer`. Require the project connection reference to become null while its model override remains unchanged.
-7. Confirm an environment profile cannot be deleted.
-
-Restart Web with disposable environment configuration:
-
-```bash
-STUDYNARRATOR_DATA_DIR=.tmp/gates/G06/manual-web-locked \
-SPEACHES_BASE_URL=http://127.0.0.1:18080/v1 \
-SPEACHES_MODEL_ID=speaches-ai/Kokoro-82M-v1.0-ONNX \
-SPEACHES_VOICE_ID=af_heart \
-STUDYNARRATOR_LOCK_SPEACHES_SETTINGS=true \
-npm run dev:web
-```
-
-Require stable profile ID `environment-speaches`, locked fields with effective source **server environment**, a disabled active-profile selector, and no delete control. Stop Web and restart with the same data directory but without the Speaches environment values. Require the environment reference to remain present and become unconfigured; projects must not silently repoint.
-
-## Desktop credential boundary
-
-Run Electron against a separate directory and the healthy fake endpoint:
-
-```bash
-STUDYNARRATOR_DATA_DIR=.tmp/gates/G06/manual-electron npm run dev:desktop
-```
-
-1. Enter the sentinel `g06-secret-must-not-appear` in the one-shot password field for a saved profile.
-2. Save or Create + Test. Require the renderer password field to clear immediately after submission.
-3. Require the profile to report only **configured**, never the key value.
-4. Close and reopen Electron; require the encrypted credential to remain usable.
-5. Replace the key with another disposable value, then use **Clear stored key** and confirm configured state changes accordingly.
-6. Delete the profile and confirm its vault entry is removed.
-7. Inspect the disposable SQLite database, renderer storage, logs, errors, IPC responses, diagnostics export, and fake request log. Require the sentinel to be absent everywhere.
-8. On a test harness/mocked run where `safeStorage.isEncryptionAvailable()` is false or the backend is `basic_text`, require replacement to fail. There must be no plaintext fallback.
-
-## Voice catalog and Projects integration
-
-1. In Settings search for `Heart`, `af_heart`, and `American English`. Require `Heart — American English — af_heart`, its raw ID, enabled state, and locale metadata.
-2. Confirm the catalog attribution names `hexgrad/Kokoro-82M`, `VOICES.md`, and Apache-2.0, with no subjective quality claim.
-3. Replace the selected model overrides with this exact JSON:
-
-```json
-{
-  "schemaVersion": 1,
-  "modelId": "speaches-ai/Kokoro-82M-v1.0-ONNX",
-  "entries": [
-    {
-      "voiceId": "af_heart",
-      "label": "Heart — Course Narrator — af_heart",
-      "enabled": true,
-      "language": "American English",
-      "locale": "en-US",
-      "accent": "American",
-      "category": "narration",
-      "style": null,
-      "sampleText": "A short neutral catalog sample."
-    },
-    {
-      "voiceId": "custom_lab_voice",
-      "label": "Custom Lab Voice — custom_lab_voice",
-      "enabled": false,
-      "language": null,
-      "locale": null,
-      "accent": null,
-      "category": null,
-      "style": null,
-      "sampleText": null
-    }
-  ]
-}
-```
-
-4. Require the renamed `af_heart`, the disabled added entry, and untouched bundled entries to remain available as fallback.
-5. Submit this exact invalid replacement and require a strict validation error for the unknown `unexpected` property; the previous catalog must remain intact:
-
-```json
-{"schemaVersion":1,"modelId":"speaches-ai/Kokoro-82M-v1.0-ONNX","entries":[],"unexpected":true}
-```
-
-6. Open `G06 Reference Preservation`. Select a connection profile and optional model override. For a discovered speaker, choose `af_heart`; require the friendly label, raw ID, and **available** state.
-7. Enter manual ID `manual_voice_not_in_catalog`; require the raw ID to remain editable and display **unavailable** or **unverified** from the last diagnostic rather than changing Dry Run readiness.
-8. Run Dry Run and require the same deterministic G05 ordering and validation semantics. Require zero new fake-server requests from project editing or Dry Run.
-
-## Redacted export
-
-1. Test a profile, then select **Export redacted JSON**.
-2. Require schema/application/runtime versions; profile source; endpoint class `loopback`, `private`, or `public`; root-versus-`/v1` form; model/voice IDs; API-key-configured boolean; HTTP status; eight stage codes/timings; and sanitized request counts.
-3. Require absence of raw hostname, full endpoint, API key, authorization/header values, response body, diagnostic input text, and generated audio.
-4. Repeat after `unauthorized` and `corrupt-audio`; require useful staged detail without secret or source leakage.
-
-## Real G00 server outage and recovery
-
-Use the private G00 values only from an ignored local environment file or manual entry.
-
-1. Start the real G00 Speaches server and test its profile. Require model, voice, and WAV decoding to pass.
-2. Stop Speaches and retest without restarting StudyNarrator. Require the correct disconnected/TCP or HTTP stage, while Projects remains usable.
-3. Open both official support links from Web and Electron. Electron must open only approved HTTPS Speaches hosts externally.
-4. Restart Speaches and retest without restarting StudyNarrator. Require `connected` and a new last-successful-test time.
-5. Confirm the diagnostic sample was discarded and no playable or persistent audio artifact exists.
+- Observe connection, outage, and recovery status language without restarting StudyNarrator.
+- Judge whether the staged result helps a person understand what to do next.
+- Confirm no preview player or persistent diagnostic-audio affordance appears in G06.
 
 ## Reviewer decision
 
-Record the environment, automated log, screenshots, scenario table, redacted export inspection, project snapshots, credential-boundary evidence, and real-server outage/recovery in `docs/gates/evidence/G06/README.md`.
-
-Leave the decision pending until all checks pass. Only after explicit human approval may G06 be checked in the plan, an approval record and approval commit be created, and annotated tag `gate-G06-approved` be added.
+Record the automated log link and concise Web/Electron UX observations in `docs/gates/evidence/G06/README.md`. Leave the decision pending for any functional, accessibility, responsive, timing, or native-integration defect. A functional defect requires an automated regression test before approval.
