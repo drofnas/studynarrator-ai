@@ -140,6 +140,11 @@ export {
   type RenderPlanServiceErrorCode
 } from "./renderPlan.js";
 export {
+  createRenderService,
+  type RenderRepository,
+  type RenderService
+} from "./render.js";
+export {
   ScratchpadServiceError,
   createScratchpadService,
   type ScratchpadRepository,

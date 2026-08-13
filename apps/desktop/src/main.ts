@@ -1,5 +1,5 @@
 import { join, resolve } from "node:path";
-import { app, BrowserWindow, ipcMain, safeStorage, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from "electron";
 import { createDesktopServices } from "./bootstrap.js";
 import {
   registerConnectionHandlers,
@@ -7,6 +7,7 @@ import {
   registerPersistenceHandlers,
   registerProjectPreviewHandlers,
   registerRenderPlanHandlers,
+  registerRenderHandlers,
   registerScratchpadHandlers,
   registerSpeechCacheHandlers
 } from "./ipc.js";
@@ -55,11 +56,18 @@ void app.whenReady().then(async () => {
   if (runtime.scratchpad) registerScratchpadHandlers(ipcMain, runtime.scratchpad);
   if (runtime.projectPreview) registerProjectPreviewHandlers(ipcMain, runtime.projectPreview);
   if (runtime.renderPlans) registerRenderPlanHandlers(ipcMain, runtime.renderPlans);
+  if (runtime.renders) registerRenderHandlers(ipcMain, runtime.renders, dialog);
   registerSpeechCacheHandlers(ipcMain, runtime.speechCache);
   await createWindow();
 });
 
 app.on("window-all-closed", () => app.quit());
-app.on("before-quit", () => {
-  runtime?.service.close();
+let shutdownComplete = false;
+app.on("before-quit", (event) => {
+  if (shutdownComplete || !runtime) return;
+  event.preventDefault();
+  void runtime.dispose().finally(() => {
+    shutdownComplete = true;
+    app.quit();
+  });
 });

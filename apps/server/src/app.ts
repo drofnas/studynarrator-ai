@@ -1,4 +1,5 @@
 import express, { type ErrorRequestHandler, type Express } from "express";
+import { createReadStream } from "node:fs";
 import { resolve } from "node:path";
 import {
   ActiveConnectionProfileInputSchema,
@@ -24,6 +25,11 @@ import {
   RenderPlanIdSchema,
   RenderPlanSchema,
   RenderPlanSummaryCollectionSchema,
+  RenderArtifactIdSchema,
+  RenderArtifactCollectionSchema,
+  RenderIdSchema,
+  RenderJobCollectionSchema,
+  RenderJobSchema,
   RedactedConnectionDiagnosticsSchema,
   ScratchpadPreviewInputSchema,
   ScratchpadPreviewResultSchema,
@@ -44,7 +50,7 @@ import {
   type SystemDiagnostics,
   type VoiceCatalogClient
 } from "@studynarrator/shared-types";
-import type { DiagnosticsContext, SystemService } from "@studynarrator/application";
+import type { DiagnosticsContext, RenderService, SystemService } from "@studynarrator/application";
 
 export function attachStaticWebApplication(app: Express, distributionDirectory: string): void {
   app.use(express.static(distributionDirectory, { index: "index.html" }));
@@ -62,6 +68,7 @@ export function createExpressApp(options: {
   scratchpad?: ScratchpadClient;
   projectPreview?: ProjectPreviewClient;
   renderPlans?: RenderPlanClient;
+  renders?: RenderService;
   speechCache?: SpeechCacheClient;
 }): Express {
   const app = express();
@@ -267,6 +274,36 @@ export function createExpressApp(options: {
     app.get("/api/render-plans/:planId", async (request, response, next) => {
       try {
         response.json(RenderPlanSchema.parse(await options.renderPlans!.get(RenderPlanIdSchema.parse(request.params.planId))));
+      } catch (error) { next(error); }
+    });
+  }
+
+  if (options.renders) {
+    app.post("/api/render-plans/:planId/renders", async (request, response, next) => {
+      try { response.status(202).json(RenderJobSchema.parse(await options.renders!.start(RenderPlanIdSchema.parse(request.params.planId)))); } catch (error) { next(error); }
+    });
+    app.get("/api/projects/:projectId/renders", async (request, response, next) => {
+      try { response.json(RenderJobCollectionSchema.parse(await options.renders!.list(ProjectIdSchema.parse(request.params.projectId)))); } catch (error) { next(error); }
+    });
+    app.get("/api/renders/:renderId", async (request, response, next) => {
+      try { response.json(RenderJobSchema.parse(await options.renders!.get(RenderIdSchema.parse(request.params.renderId)))); } catch (error) { next(error); }
+    });
+    app.post("/api/renders/:renderId/cancel", async (request, response, next) => {
+      try { response.json(RenderJobSchema.parse(await options.renders!.cancel(RenderIdSchema.parse(request.params.renderId)))); } catch (error) { next(error); }
+    });
+    app.post("/api/renders/:renderId/retry", async (request, response, next) => {
+      try { response.status(202).json(RenderJobSchema.parse(await options.renders!.retry(RenderIdSchema.parse(request.params.renderId)))); } catch (error) { next(error); }
+    });
+    app.get("/api/renders/:renderId/artifacts", async (request, response, next) => {
+      try { response.json(RenderArtifactCollectionSchema.parse(await options.renders!.listArtifacts(RenderIdSchema.parse(request.params.renderId)))); } catch (error) { next(error); }
+    });
+    app.get("/api/render-artifacts/:artifactId", async (request, response, next) => {
+      try {
+        const { artifact, path } = await options.renders!.resolveArtifact(RenderArtifactIdSchema.parse(request.params.artifactId));
+        const safeFileName = artifact.fileName.replace(/["\\\r\n]/gu, "_");
+        response.setHeader("content-disposition", `attachment; filename="${safeFileName}"`);
+        response.setHeader("content-type", artifact.type === "mp3" ? "audio/mpeg" : artifact.type === "manifest" || artifact.type === "projectSnapshot" ? "application/json" : "text/plain; charset=utf-8");
+        createReadStream(path).once("error", next).pipe(response);
       } catch (error) { next(error); }
     });
   }

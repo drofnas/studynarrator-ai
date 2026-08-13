@@ -16,6 +16,11 @@ import {
   RENDER_PLAN_CHANNELS,
   RenderPlanSchema,
   RenderPlanSummaryCollectionSchema,
+  RENDER_CHANNELS,
+  RenderArtifactCollectionSchema,
+  RenderArtifactExportResultSchema,
+  RenderJobCollectionSchema,
+  RenderJobSchema,
   SYSTEM_DIAGNOSTICS_CHANNEL,
   SystemDiagnosticsSchema,
   SystemPacingDefaultsSchema,
@@ -31,6 +36,7 @@ import {
   type PersistenceClient,
   type ProjectPreviewClient,
   type RenderPlanClient,
+  type RenderClient,
   type ScratchpadClient,
   type SpeechCacheClient,
   type StudyNarratorBridge,
@@ -113,6 +119,15 @@ export function createPreloadBridge(invoke: (channel: string, input?: unknown) =
       return RenderPlanSchema.parse(await invoke(RENDER_PLAN_CHANNELS.get, { planId }));
     }
   };
+  const renders: RenderClient = {
+    async start(planId) { return RenderJobSchema.parse(await invoke(RENDER_CHANNELS.start, { planId })); },
+    async list(projectId) { return RenderJobCollectionSchema.parse(await invoke(RENDER_CHANNELS.list, { projectId })); },
+    async get(renderId) { return RenderJobSchema.parse(await invoke(RENDER_CHANNELS.get, { renderId })); },
+    async cancel(renderId) { return RenderJobSchema.parse(await invoke(RENDER_CHANNELS.cancel, { renderId })); },
+    async retry(renderId) { return RenderJobSchema.parse(await invoke(RENDER_CHANNELS.retry, { renderId })); },
+    async listArtifacts(renderId) { return RenderArtifactCollectionSchema.parse(await invoke(RENDER_CHANNELS.artifacts, { renderId })); },
+    async exportArtifact(artifactId) { return RenderArtifactExportResultSchema.parse(await invoke(RENDER_CHANNELS.exportArtifact, { artifactId })); }
+  };
   return Object.freeze({
     system: Object.freeze({
       async diagnostics(): Promise<SystemDiagnostics> {
@@ -125,6 +140,7 @@ export function createPreloadBridge(invoke: (channel: string, input?: unknown) =
     scratchpad: Object.freeze(scratchpad),
     projectPreview: Object.freeze(projectPreview),
     speechCache: Object.freeze(speechCache),
-    renderPlans: Object.freeze(renderPlans)
+    renderPlans: Object.freeze(renderPlans),
+    renders: Object.freeze(renders)
   });
 }

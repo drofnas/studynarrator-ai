@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { spawn } from "node:child_process";
 import { constants } from "node:fs";
 import { chmod, lstat, mkdir, open, readdir, rename, rm, unlink, writeFile } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
@@ -583,6 +584,93 @@ export const RENDER_PLAN_CHANNELS = 1;
 export const RENDER_PLAN_BITS_PER_SAMPLE = 16;
 const MAX_RENDER_PLAN_JSON_BYTES = 12 * 1024 * 1024;
 
+export interface AudioProbeMetadata {
+  decodable: boolean;
+  durationMs: number;
+  bitRate: number | null;
+  formatName: string | null;
+}
+
+function processError(name: string): Error {
+  return new Error(`${name} could not complete the audio operation.`);
+}
+
+async function runAudioProcess(command: string, args: readonly string[], signal?: AbortSignal): Promise<string> {
+  if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new DOMException("The operation was aborted.", "AbortError");
+  return await new Promise<string>((resolveProcess, reject) => {
+    const child = spawn(command, args, { shell: false, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    let stdout = "";
+    let stderrBytes = 0;
+    let settled = false;
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      signal?.removeEventListener("abort", onAbort);
+      callback();
+    };
+    const onAbort = () => {
+      child.kill("SIGKILL");
+      finish(() => reject(signal?.reason instanceof Error ? signal.reason : new DOMException("The operation was aborted.", "AbortError")));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => { if (stdout.length < 256_000) stdout += chunk.slice(0, 256_000 - stdout.length); });
+    child.stderr.on("data", (chunk: Buffer) => { stderrBytes += chunk.byteLength; });
+    child.once("error", () => finish(() => reject(processError(command))));
+    child.once("close", (code) => finish(() => code === 0 && stderrBytes <= 256_000 ? resolveProcess(stdout) : reject(processError(command))));
+  });
+}
+
+export async function normalizeSpeechWav(options: {
+  inputPath: string; outputPath: string; gainDb: number; ffmpegPath?: string; signal?: AbortSignal;
+}): Promise<void> {
+  await runAudioProcess(options.ffmpegPath ?? "ffmpeg", [
+    "-y", "-v", "error", "-i", options.inputPath,
+    "-af", `volume=${String(options.gainDb)}dB,alimiter=limit=0.95`,
+    "-ar", String(RENDER_PLAN_SAMPLE_RATE), "-ac", String(RENDER_PLAN_CHANNELS),
+    "-c:a", "pcm_s16le", options.outputPath
+  ], options.signal);
+}
+
+export async function concatenateWavs(options: {
+  listPath: string; outputPath: string; ffmpegPath?: string; signal?: AbortSignal;
+}): Promise<void> {
+  await runAudioProcess(options.ffmpegPath ?? "ffmpeg", [
+    "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", options.listPath,
+    "-ar", String(RENDER_PLAN_SAMPLE_RATE), "-ac", String(RENDER_PLAN_CHANNELS),
+    "-c:a", "pcm_s16le", options.outputPath
+  ], options.signal);
+}
+
+export async function encodeMp3(options: {
+  inputPath: string; outputPath: string; ffmpegPath?: string; signal?: AbortSignal;
+}): Promise<void> {
+  await runAudioProcess(options.ffmpegPath ?? "ffmpeg", [
+    "-y", "-v", "error", "-i", options.inputPath, "-c:a", "libmp3lame", "-b:a", "192k", options.outputPath
+  ], options.signal);
+}
+
+export async function probeAudioFile(options: {
+  inputPath: string; ffprobePath?: string; signal?: AbortSignal;
+}): Promise<AudioProbeMetadata> {
+  const stdout = await runAudioProcess(options.ffprobePath ?? "ffprobe", [
+    "-v", "error", "-show_entries", "format=format_name,duration,bit_rate:stream=codec_type", "-of", "json", options.inputPath
+  ], options.signal);
+  try {
+    const value = JSON.parse(stdout) as { format?: { format_name?: unknown; duration?: unknown; bit_rate?: unknown }; streams?: Array<{ codec_type?: unknown }> };
+    const duration = typeof value.format?.duration === "string" ? Number(value.format.duration) : Number.NaN;
+    const bitRate = typeof value.format?.bit_rate === "string" ? Number(value.format.bit_rate) : null;
+    return {
+      decodable: value.streams?.some(({ codec_type }) => codec_type === "audio") === true && Number.isFinite(duration),
+      durationMs: Number.isFinite(duration) ? Math.max(0, Math.round(duration * 1_000)) : 0,
+      bitRate: bitRate !== null && Number.isFinite(bitRate) ? Math.round(bitRate) : null,
+      formatName: typeof value.format?.format_name === "string" ? value.format.format_name : null
+    };
+  } catch {
+    return { decodable: false, durationMs: 0, bitRate: null, formatName: null };
+  }
+}
+
 export function hashJson(value: unknown): string {
   return sha256(JSON.stringify(value));
 }
@@ -643,6 +731,7 @@ export interface RenderPlanStore {
   save(snapshot: ProjectSnapshot, plan: RenderPlan, silenceAssets: ReadonlyMap<string, Uint8Array>): Promise<RenderPlan>;
   list(projectId: string): Promise<RenderPlanSummary[]>;
   get(planId: string): Promise<RenderPlan>;
+  load(planId: string): Promise<{ snapshot: ProjectSnapshot; plan: RenderPlan; silenceAssets: ReadonlyMap<string, Uint8Array> }>;
 }
 
 function verifiedSnapshotHash(snapshot: ProjectSnapshot): boolean {
@@ -761,6 +850,17 @@ export function createRenderPlanStore(rootDirectoryInput: string): RenderPlanSto
     async get(planId) {
       await ensureRoot();
       return (await readBundle(planId)).plan;
+    },
+    async load(planId) {
+      await ensureRoot();
+      const bundle = await readBundle(planId);
+      const directory = join(rootDirectory, bundle.plan.id);
+      const silenceAssets = new Map<string, Uint8Array>();
+      for (const entry of bundle.plan.entries) {
+        if (entry.type !== "pause" || !entry.silence || silenceAssets.has(entry.silence.checksum)) continue;
+        silenceAssets.set(entry.silence.checksum, await boundedRead(join(directory, entry.silence.relativePath), entry.silence.byteLength));
+      }
+      return { ...bundle, silenceAssets };
     }
   };
 }

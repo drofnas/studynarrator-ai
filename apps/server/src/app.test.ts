@@ -171,10 +171,29 @@ async function fixture() {
     }] : [],
     get: async () => lastRenderPlan
   };
+  const renderId = "00000000-0000-4000-8000-000000000003";
+  const artifactId = "00000000-0000-4000-8000-000000000004";
+  const renderJob = () => ({
+    contractVersion: 1 as const, id: renderId, projectId: lastRenderPlan.projectId, planId: lastRenderPlan.id,
+    retryOfRenderId: null, state: "complete" as const,
+    progress: { phase: "complete" as const, sectionTitle: null, sectionOrdinal: 0, sectionCount: 0, entryOrdinal: null, speechOrdinal: 0, speechCount: 0, chunkOrdinal: null, completedChunks: 0, totalChunks: 0, cacheHits: 0, cacheMisses: 0, ttsRequests: 0, speakerId: null, voiceId: null, excerpt: null, elapsedMs: 1 },
+    error: null, createdAt: lastRenderPlan.createdAt, startedAt: lastRenderPlan.createdAt, finishedAt: lastRenderPlan.createdAt
+  });
+  const artifact = {
+    contractVersion: 1 as const, id: artifactId, renderId, type: "manifest" as const, fileName: "package.json",
+    sizeBytes: 1, checksum: "d".repeat(64), durationMs: null, createdAt: lastRenderPlan.createdAt
+  };
+  const renders = {
+    start: async () => renderJob(), list: async () => [renderJob()], get: async () => renderJob(),
+    cancel: async () => renderJob(), retry: async () => renderJob(), listArtifacts: async () => [artifact],
+    exportArtifact: async () => ({ disposition: "download" as const, fileName: artifact.fileName }),
+    resolveArtifact: async () => ({ artifact, path: join(import.meta.dirname, "../../../package.json") }),
+    close: async () => undefined
+  };
   openServices.add(service);
   return {
-    service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache, renderPlans,
-    app: await listen(createExpressApp({ service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache, renderPlans, context }))
+    service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache, renderPlans, renders,
+    app: await listen(createExpressApp({ service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache, renderPlans, renders, context }))
   };
 }
 
@@ -293,7 +312,7 @@ describe("Express persistence API", () => {
       contractVersion: 4,
       state: "unavailable",
       databaseSchemaVersion: 1,
-      targetDatabaseSchemaVersion: 4,
+      targetDatabaseSchemaVersion: 5,
       databasePath: "/tmp/studynarrator.sqlite",
       latestBackupPath: "/tmp/backups/recovery.sqlite",
       code: "MIGRATION_FAILED",
@@ -336,8 +355,8 @@ interface ExpressRouteLayer {
 
 describe("REST API operation manifest", () => {
   it("matches every registered method and path exactly", async () => {
-    const { service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache, renderPlans } = await fixture();
-    const application = createExpressApp({ service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache, renderPlans, context });
+    const { service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache, renderPlans, renders } = await fixture();
+    const application = createExpressApp({ service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache, renderPlans, renders, context });
     const layers = (application as unknown as { router: { stack: ExpressRouteLayer[] } }).router.stack;
     const registered = layers.flatMap((layer) => layer.route
       ? Object.entries(layer.route.methods)
@@ -346,15 +365,18 @@ describe("REST API operation manifest", () => {
       : []);
     const declared = REST_API_MANIFEST.map(({ method, path }) => `${method} ${path}`);
     expect(registered.sort()).toEqual([...declared].sort());
-    expect(new Set(declared).size).toBe(37);
+    expect(new Set(declared).size).toBe(44);
   });
 
-  it("exercises a successful schema-valid response for all 37 operations", async () => {
+  it("exercises a successful schema-valid response for all 44 operations", async () => {
     const { app } = await fixture();
     const covered = new Set<string>();
     const call = async (method: string, path: string, expected: number, body?: string | object) => {
       covered.add(`${method} ${path
+        .replace(/^\/api\/render-plans\/[0-9a-f-]{36}\/renders$/u, "/api/render-plans/:planId/renders")
         .replace(/^\/api\/render-plans\/[0-9a-f-]{36}$/u, "/api/render-plans/:planId")
+        .replace(/^\/api\/render-artifacts\/[0-9a-f-]{36}$/u, "/api/render-artifacts/:artifactId")
+        .replace(/^\/api\/renders\/[0-9a-f-]{36}(?=\/|$)/u, "/api/renders/:renderId")
         .replace(/\/[0-9a-f-]{36}(?=\/|$)/gu, "/:projectId")
         .replace(/\/manifest-profile(?=\/|$)/gu, "/:profileId")
         .replace(/\/[a-f0-9]{64}(?=\/|$)/gu, "/:cacheKey")}`);
@@ -416,6 +438,13 @@ describe("REST API operation manifest", () => {
     const renderPlan = RenderPlanSchema.parse((await call("POST", `/api/projects/${created.id}/render-plans`, 201)).body as unknown);
     RenderPlanSummaryCollectionSchema.parse((await call("GET", `/api/projects/${created.id}/render-plans`, 200)).body as unknown);
     RenderPlanSchema.parse((await call("GET", `/api/render-plans/${renderPlan.id}`, 200)).body as unknown);
+    const render = (await call("POST", `/api/render-plans/${renderPlan.id}/renders`, 202)).body as { id: string };
+    await call("GET", `/api/projects/${created.id}/renders`, 200);
+    await call("GET", `/api/renders/${render.id}`, 200);
+    await call("POST", `/api/renders/${render.id}/cancel`, 200);
+    await call("POST", `/api/renders/${render.id}/retry`, 202);
+    const artifacts = (await call("GET", `/api/renders/${render.id}/artifacts`, 200)).body as Array<{ id: string }>;
+    await call("GET", `/api/render-artifacts/${artifacts[0]!.id}`, 200);
     SpeechCacheStatusSchema.parse((await call("GET", "/api/speech-cache", 200)).body as unknown);
     SpeechCacheCleanupResultSchema.parse((await call("DELETE", `/api/projects/${created.id}/speech-cache`, 200)).body as unknown);
     SpeechCacheCleanupResultSchema.parse((await call("DELETE", `/api/speech-cache/${"a".repeat(64)}`, 200)).body as unknown);
@@ -452,6 +481,13 @@ describe("REST API operation manifest", () => {
       request(app).post("/api/projects/not-a-uuid/render-plans").expect(400),
       request(app).get("/api/projects/not-a-uuid/render-plans").expect(400),
       request(app).get("/api/render-plans/not-a-uuid").expect(400),
+      request(app).post("/api/render-plans/not-a-uuid/renders").expect(400),
+      request(app).get("/api/projects/not-a-uuid/renders").expect(400),
+      request(app).get("/api/renders/not-a-uuid").expect(400),
+      request(app).post("/api/renders/not-a-uuid/cancel").expect(400),
+      request(app).post("/api/renders/not-a-uuid/retry").expect(400),
+      request(app).get("/api/renders/not-a-uuid/artifacts").expect(400),
+      request(app).get("/api/render-artifacts/not-a-uuid").expect(400),
       request(app).delete("/api/projects/not-a-uuid/speech-cache").expect(400),
       request(app).delete("/api/speech-cache/not-a-key").expect(400)
     ];
@@ -459,7 +495,7 @@ describe("REST API operation manifest", () => {
     expect(JSON.stringify(responses.map((response) => response.body as unknown))).not.toContain(secret);
 
     const unavailable = createUnavailablePersistenceService({
-      contractVersion: 4, state: "unavailable", databaseSchemaVersion: 2, targetDatabaseSchemaVersion: 4,
+      contractVersion: 4, state: "unavailable", databaseSchemaVersion: 2, targetDatabaseSchemaVersion: 5,
       databasePath: "/redacted/data.sqlite", latestBackupPath: null, code: "MIGRATION_FAILED", message: "Unavailable."
     });
     const degraded = await listen(createExpressApp({ service, persistence: unavailable, context }));

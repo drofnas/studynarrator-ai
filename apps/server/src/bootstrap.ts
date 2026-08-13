@@ -8,6 +8,7 @@ import {
   createPersistenceService,
   createProjectPreviewService,
   createRenderPlanService,
+  createRenderService,
   createRoutedCredentialStore,
   createScratchpadService,
   createSpeechCacheService,
@@ -17,6 +18,7 @@ import {
   reconcileEnvironmentConnectionProfile,
   type DiagnosticsContext,
   type DiagnosticRepository,
+  type RenderService,
   type StorageCheck
 } from "@studynarrator/application";
 import { MigrationFailureError, openStudyNarratorRepository } from "@studynarrator/persistence";
@@ -45,6 +47,7 @@ export async function createServerServices(environment = process.env) {
   let scratchpad;
   let projectPreview;
   let renderPlans;
+  let renders: RenderService | undefined;
   try {
     const openedRepository = await openStudyNarratorRepository({ Database, databasePath });
     repository = openedRepository;
@@ -66,10 +69,18 @@ export async function createServerServices(environment = process.env) {
     const speech = createCachedSpeechSynthesis({ repository: openedRepository, credentials, cache });
     scratchpad = createScratchpadService({ repository: openedRepository, credentials, cache });
     projectPreview = createProjectPreviewService({ repository: openedRepository, speech });
+    const planStore = createRenderPlanStore(resolve(dataDirectory, "render-plans"));
     renderPlans = createRenderPlanService({
       repository: openedRepository,
       cache,
-      store: createRenderPlanStore(resolve(dataDirectory, "render-plans"))
+      store: planStore
+    });
+    renders = await createRenderService({
+      repository: openedRepository,
+      plans: planStore,
+      speech,
+      dataDirectory,
+      ...(environment.STUDYNARRATOR_FFMPEG_PATH ? { ffmpegPath: environment.STUDYNARRATOR_FFMPEG_PATH } : {})
     });
   } catch (error) {
     if (!(error instanceof MigrationFailureError)) throw error;
@@ -119,8 +130,12 @@ export async function createServerServices(environment = process.env) {
     scratchpad,
     projectPreview,
     renderPlans,
+    renders,
     speechCache,
     context,
-    dispose: () => repository.close()
+    dispose: async () => {
+      await renders?.close();
+      repository.close();
+    }
   };
 }
