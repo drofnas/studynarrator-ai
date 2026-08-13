@@ -27,6 +27,7 @@ export function draftFromProject(project: ProjectDetail): ProjectDraft {
     description: project.description,
     scriptSource: project.scriptSource,
     connectionProfileId: project.connectionProfileId,
+    modelId: project.modelId,
     speakerMappings: project.speakerMappings,
     pausePresets: project.pausePresets,
     paragraphPause: project.paragraphPause,

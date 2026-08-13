@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import Database from "better-sqlite3";
 import {
   createConnectionsService,
+  BUNDLED_VOICE_CATALOGS,
   createPersistenceService,
   createRoutedCredentialStore,
   createSystemService,
@@ -48,7 +49,7 @@ export async function createServerServices(environment = process.env) {
       credentials: createRoutedCredentialStore({ environmentApiKey: environmentProfile.apiKey }),
       context
     });
-    voiceCatalog = createVoiceCatalogService({ repository: openedRepository, bundledCatalogs: new Map() });
+    voiceCatalog = createVoiceCatalogService({ repository: openedRepository, bundledCatalogs: BUNDLED_VOICE_CATALOGS });
   } catch (error) {
     if (!(error instanceof MigrationFailureError)) throw error;
     storageFailure = {

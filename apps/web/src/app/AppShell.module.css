@@ -40,6 +40,12 @@
 .navigation a:hover { color: white; background: var(--signal); transform: translateY(-2px); }
 .navigation a:focus-visible { outline: 3px solid var(--copper); outline-offset: 3px; }
 .navigation a[aria-current="page"] { color: white; background: var(--ink); }
+.connection { gap: 8px; }
+.connection span { width: 9px; height: 9px; background: var(--fault); border-radius: 50%; box-shadow: 0 0 0 3px rgb(166 61 73 / 14%); }
+.connection[data-state="connected"] span { background: var(--signal); box-shadow: 0 0 0 3px var(--signal-pale); }
+.connection[data-state="testing"] span { background: var(--copper); animation: connection-pulse 1s steps(2, end) infinite; }
+.connection[data-state="modelUnavailable"] span, .connection[data-state="voiceUnavailable"] span { background: var(--copper); }
+@keyframes connection-pulse { 50% { opacity: 0.3; } }
 .reviewTools { position: relative; }
 .reviewTools summary { display: flex; align-items: center; min-height: 40px; padding: 0 14px; border: 1px solid var(--line); cursor: pointer; font-weight: 700; list-style: none; }
 .reviewTools summary::-webkit-details-marker { display: none; }

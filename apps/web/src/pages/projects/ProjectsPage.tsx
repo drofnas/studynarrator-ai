@@ -14,9 +14,11 @@ import {
 import {
   ProjectReplaceInputSchema,
   type IgnoredDiagnosticCollection,
+  type ConnectionProfile,
   type PersistenceClient,
   type ProjectDetail,
-  type ProjectSummary
+  type ProjectSummary,
+  type VoiceCatalog
 } from "@studynarrator/shared-types";
 import type { ScriptAnalyzer } from "@/workers/parser/parserClient.js";
 import type { ScriptAnalysisResult } from "@/workers/parser/parserWorkerProtocol.js";
@@ -30,6 +32,7 @@ import {
   type ProjectDraft
 } from "@/features/projects/projectAuthoring.js";
 import styles from "./ProjectsPage.module.css";
+import { useConnections } from "@/features/connections/ConnectionProvider.js";
 
 type SaveState = "saved" | "unsaved" | "saving" | "invalid" | "failed";
 type AnalysisState = "idle" | "parsing" | "ready" | "failed";
@@ -52,6 +55,7 @@ function sameDraft(left: ProjectDraft, right: ProjectDraft): boolean {
     && left.description === right.description
     && left.scriptSource === right.scriptSource
     && left.connectionProfileId === right.connectionProfileId
+    && left.modelId === right.modelId
     && left.speakerMappings === right.speakerMappings
     && left.pausePresets === right.pausePresets
     && left.paragraphPause === right.paragraphPause
@@ -59,7 +63,15 @@ function sameDraft(left: ProjectDraft, right: ProjectDraft): boolean {
 }
 function message(error: unknown): string { return error instanceof Error ? error.message : "The operation failed."; }
 
+function voiceAvailability(profile: ConnectionProfile | null, voiceId: string | null): "available" | "unavailable" | "unverified" {
+  if (!profile?.lastTestSummary || !voiceId) return "unverified";
+  const voices = profile.lastTestSummary.availableVoiceIds;
+  if (voices) return voices.includes(voiceId) ? "available" : "unavailable";
+  return profile.lastTestSummary.overall === "connected" && profile.defaultVoiceId === voiceId ? "available" : "unverified";
+}
+
 export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; analyzer: ScriptAnalyzer }) {
+  const connections = useConnections();
   const { projectId } = useParams();
   const navigate = useNavigate();
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
@@ -92,6 +104,7 @@ export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; 
   const [sample, setSample] = useState("");
   const [sampleSpeaker, setSampleSpeaker] = useState("");
   const [copySource, setCopySource] = useState<Record<string, string>>({});
+  const [voiceCatalog, setVoiceCatalog] = useState<VoiceCatalog | null>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const revisionRef = useRef(0);
   const savedRevisionRef = useRef(0);
@@ -102,6 +115,17 @@ export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; 
 
   draftRef.current = draft;
   const isDirty = saveState === "unsaved" || saveState === "saving" || saveState === "invalid" || saveState === "failed";
+  const selectedConnection = connections.profiles.find(({ id }) => id === draft?.connectionProfileId) ?? null;
+  const effectiveModelId = draft?.modelId ?? selectedConnection?.defaultModelId ?? null;
+
+  useEffect(() => {
+    if (!effectiveModelId) { setVoiceCatalog(null); return; }
+    let active = true;
+    void connections.getCatalog(effectiveModelId).then((catalog) => { if (active) setVoiceCatalog(catalog); }).catch(() => { if (active) setVoiceCatalog(null); });
+    return () => { active = false; };
+  }, [connections, effectiveModelId]);
+
+  const voiceById = useMemo(() => new Map(voiceCatalog?.entries.map((entry) => [entry.voiceId, entry]) ?? []), [voiceCatalog]);
 
   const reloadProjects = useCallback(async () => setProjects(await client.projects.list()), [client]);
 
@@ -183,6 +207,17 @@ export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; 
       }
     }
   }, [clearAutosave, scheduleAutosave]);
+
+  const updateSpeaker = useCallback((speakerId: string, patch: Partial<Pick<AuthoringSpeakerRow, "displayName" | "voiceId" | "speed" | "gainDb">>) => {
+    setConfiguration((current) => ({
+      ...current,
+      speakers: current.speakers.map((item) => item.speakerId === speakerId ? { ...item, ...patch } : item)
+    }));
+    updateDraft((current) => ({
+      ...current,
+      speakerMappings: current.speakerMappings.map((item) => item.speakerId === speakerId ? { ...item, ...patch } : item)
+    }));
+  }, [updateDraft]);
 
   const performSave = useCallback(async (): Promise<boolean> => {
     const current = draftRef.current;
@@ -423,7 +458,7 @@ export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; 
   return (
     <div className={styles.page}>
       <header className={styles.pageHeader}>
-        <div><p className={styles.kicker}>G05 · Deterministic authoring</p><h2>Projects</h2><p>Shape the script, map every discovered cue, then read the narration score before audio exists.</p></div>
+        <div><p className={styles.kicker}>G06 · Connected authoring</p><h2>Projects</h2><p>Shape the script, map every discovered cue, then read the narration score before audio exists.</p></div>
         <div className={styles.status} data-state={saveState}><span>{analysisState === "parsing" ? "Parsing" : analysisState === "failed" ? "Parser failed" : dryRun?.status === "ready" ? "Ready to render" : dryRun?.status === "readyWithWarnings" ? "Ready with warnings" : "Blocked by errors"}</span><strong>{saveState === "saved" ? "Saved" : saveState === "saving" ? "Saving…" : saveState === "invalid" ? "Invalid" : saveState === "failed" ? "Save failed" : "Unsaved"}</strong></div>
       </header>
       {errors.length > 0 ? <div className={styles.alert} role="alert"><strong>Review these items</strong><ul>{errors.map((item) => <li key={item}>{item}</li>)}</ul><button type="button" onClick={() => setErrors([])}>Dismiss</button></div> : null}
@@ -440,6 +475,13 @@ export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; 
 
         {!draft || !project ? <section className={styles.empty}><h3>Start with a project</h3><p>Create a project or choose one from the rail. Speaches can remain offline throughout this workflow.</p></section> : <>
           <main className={styles.editorColumn}>
+            <section className={styles.connectionPanel}>
+              <div><span>Voice backend</span><h3>Project connection</h3></div>
+              <label>Connection profile<select value={draft.connectionProfileId ?? ""} onChange={(event) => updateDraft((current) => ({ ...current, connectionProfileId: event.target.value || null }))}><option value="">No connection</option>{connections.profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name} — {profile.source}</option>)}</select></label>
+              <label>Optional model override<input list="project-models" value={draft.modelId ?? ""} placeholder={selectedConnection?.defaultModelId ?? "Use profile default"} onChange={(event) => updateDraft((current) => ({ ...current, modelId: event.target.value || null }))} /></label>
+              <datalist id="project-models">{selectedConnection?.lastTestSummary?.availableModelIds.map((modelId) => <option key={modelId} value={modelId} />)}</datalist>
+              <p data-state={selectedConnection?.lastTestSummary?.overall ?? "unverified"}>{selectedConnection ? `${selectedConnection.lastTestSummary?.overall ?? "unverified"} · ${effectiveModelId ?? "no model"}` : "Offline · no profile selected"}</p>
+            </section>
             <section className={styles.projectIdentity}>
               <label>Project name<input value={draft.name} onChange={(event) => updateDraft((current) => ({ ...current, name: event.target.value }))} /></label>
               <label>Description<input value={draft.description} onChange={(event) => updateDraft((current) => ({ ...current, description: event.target.value }))} /></label>
@@ -455,7 +497,7 @@ export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; 
           </main>
 
           <aside className={styles.configRail} aria-label="Discovered configuration">
-            <section><div className={styles.sectionHeading}><div><span>Discovered</span><h3>Speakers</h3></div><b>{configuration.speakers.filter(({ discovered }) => discovered).length}</b></div>{configuration.speakers.map((row) => <article className={!row.discovered ? styles.unused : ""} key={row.speakerId}><header><code>{row.speakerId}</code><span>{row.occurrenceCount} uses{!row.discovered ? " · unused" : ""}</span></header><div className={styles.sourceLinks}>{analysis?.parseResult.discoveries.speakers.find(({ id }) => id === row.speakerId)?.occurrences.map(({ range }, index) => <button type="button" className={styles.sourceLink} key={`${row.speakerId}:${String(index)}`} onClick={() => focusLine(range.start.line)}>Line {range.start.line}</button>)}</div><label>Display name<input value={row.displayName} onChange={(event) => updateDraft((current) => ({ ...current, speakerMappings: current.speakerMappings.map((item) => item.speakerId === row.speakerId ? { ...item, displayName: event.target.value } : item) }))} /></label><label>Raw voice ID<input value={row.voiceId ?? ""} onChange={(event) => updateDraft((current) => ({ ...current, speakerMappings: current.speakerMappings.map((item) => item.speakerId === row.speakerId ? { ...item, voiceId: event.target.value || null } : item) }))} /></label><div className={styles.inlineFields}><label>Speed<input type="number" step="0.05" min="0.01" max="4" value={row.speed} onChange={(event) => updateDraft((current) => ({ ...current, speakerMappings: current.speakerMappings.map((item) => item.speakerId === row.speakerId ? { ...item, speed: Number(event.target.value) } : item) }))} /></label><label>Gain dB<input type="number" min="-60" max="24" value={row.gainDb} onChange={(event) => updateDraft((current) => ({ ...current, speakerMappings: current.speakerMappings.map((item) => item.speakerId === row.speakerId ? { ...item, gainDb: Number(event.target.value) } : item) }))} /></label></div><div className={styles.copyRow}><select aria-label={`Copy settings for ${row.speakerId}`} value={copySource[row.speakerId] ?? ""} onChange={(event) => setCopySource((current) => ({ ...current, [row.speakerId]: event.target.value }))}><option value="">Copy another speaker…</option>{configuration.speakers.filter((item) => item.speakerId !== row.speakerId).map((item) => <option key={item.speakerId} value={item.speakerId}>{item.speakerId}</option>)}</select><button type="button" className={styles.secondary} onClick={() => { const source = draft.speakerMappings.find((item) => item.speakerId === copySource[row.speakerId]); if (source) updateDraft((current) => ({ ...current, speakerMappings: current.speakerMappings.map((item) => item.speakerId === row.speakerId ? { ...source, speakerId: row.speakerId, displayName: item.displayName } : item) })); }}>Copy</button></div></article>)}</section>
+            <section><div className={styles.sectionHeading}><div><span>Discovered</span><h3>Speakers</h3></div><b>{configuration.speakers.filter(({ discovered }) => discovered).length}</b></div><datalist id="project-voices">{voiceCatalog?.entries.filter(({ enabled }) => enabled).map((entry) => <option key={entry.voiceId} value={entry.voiceId}>{entry.label}</option>)}</datalist>{configuration.speakers.map((row) => <article className={!row.discovered ? styles.unused : ""} key={row.speakerId}><header><code>{row.speakerId}</code><span>{row.occurrenceCount} uses{!row.discovered ? " · unused" : ""}</span></header><div className={styles.sourceLinks}>{analysis?.parseResult.discoveries.speakers.find(({ id }) => id === row.speakerId)?.occurrences.map(({ range }, index) => <button type="button" className={styles.sourceLink} key={`${row.speakerId}:${String(index)}`} onClick={() => focusLine(range.start.line)}>Line {range.start.line}</button>)}</div><label>Display name<input value={row.displayName} onChange={(event) => updateSpeaker(row.speakerId, { displayName: event.target.value })} /></label><label>Voice catalog or manual ID<input list="project-voices" value={row.voiceId ?? ""} onChange={(event) => updateSpeaker(row.speakerId, { voiceId: event.target.value || null })} /></label><div className={styles.voiceMeta}><strong>{voiceById.get(row.voiceId ?? "")?.label ?? "Manual voice ID"}</strong><code>{row.voiceId || "no raw ID"}</code><span data-state={voiceAvailability(selectedConnection, row.voiceId)}>{voiceAvailability(selectedConnection, row.voiceId)}</span></div><div className={styles.inlineFields}><label>Speed<input type="number" step="0.05" min="0.01" max="4" value={row.speed} onChange={(event) => updateSpeaker(row.speakerId, { speed: Number(event.target.value) })} /></label><label>Gain dB<input type="number" min="-60" max="24" value={row.gainDb} onChange={(event) => updateSpeaker(row.speakerId, { gainDb: Number(event.target.value) })} /></label></div><div className={styles.copyRow}><select aria-label={`Copy settings for ${row.speakerId}`} value={copySource[row.speakerId] ?? ""} onChange={(event) => setCopySource((current) => ({ ...current, [row.speakerId]: event.target.value }))}><option value="">Copy another speaker…</option>{configuration.speakers.filter((item) => item.speakerId !== row.speakerId).map((item) => <option key={item.speakerId} value={item.speakerId}>{item.speakerId}</option>)}</select><button type="button" className={styles.secondary} onClick={() => { const source = draft.speakerMappings.find((item) => item.speakerId === copySource[row.speakerId]); if (source) { setConfiguration((current) => ({ ...current, speakers: current.speakers.map((item) => item.speakerId === row.speakerId ? { ...item, voiceId: source.voiceId, speed: source.speed, gainDb: source.gainDb, roleDescription: source.roleDescription, sampleText: source.sampleText } : item) })); updateDraft((current) => ({ ...current, speakerMappings: current.speakerMappings.map((item) => item.speakerId === row.speakerId ? { ...source, speakerId: row.speakerId, displayName: item.displayName } : item) })); } }}>Copy</button></div></article>)}</section>
             <section><div className={styles.sectionHeading}><div><span>Timing</span><h3>Pauses</h3></div><b>{configuration.pauses.filter(({ discovered }) => discovered).length}</b></div><label className={styles.check}><input type="checkbox" checked={draft.paragraphPause.enabled} onChange={(event) => updateDraft((current) => ({ ...current, paragraphPause: { ...current.paragraphPause, enabled: event.target.checked } }))} />Pause at paragraph breaks</label>{configuration.pauses.map((row) => <article className={!row.discovered ? styles.unused : ""} key={row.pauseId}><header><code>{row.pauseId}</code><span>{row.occurrenceCount} uses{!row.discovered ? " · unused" : ""}</span></header><div className={styles.sourceLinks}>{analysis?.parseResult.discoveries.pauses.find(({ id }) => id === row.pauseId)?.occurrences.map(({ range }, index) => <button type="button" className={styles.sourceLink} key={`${row.pauseId}:${String(index)}`} onClick={() => focusLine(range.start.line)}>Line {range.start.line}</button>)}</div><label>Duration<input aria-invalid={invalidPauseRef.current[row.pauseId] !== undefined} value={pauseInputs[row.pauseId] ?? ""} onChange={(event) => updatePause(row, event.target.value)} /></label>{invalidPauseRef.current[row.pauseId] ? <p className={styles.fieldError}>{invalidPauseRef.current[row.pauseId]}</p> : null}<label>Description<input value={row.description} onChange={(event) => updateDraft((current) => ({ ...current, pausePresets: current.pausePresets.map((item) => item.pauseId === row.pauseId ? { ...item, description: event.target.value } : item) }))} /></label></article>)}</section>
             <section><div className={styles.sectionHeading}><div><span>Outline</span><h3>Sections</h3></div><b>{configuration.sections.length}</b></div>{configuration.sections.length === 0 ? <p>No sections discovered.</p> : configuration.sections.map((section) => <button type="button" className={styles.sectionLink} key={`${section.sourceLine}:${section.title}`} onClick={() => focusLine(section.sourceLine)}><strong>{section.title}</strong><span>Line {section.sourceLine} · {section.speechSegmentCount} speech segments</span></button>)}</section>
           </aside>
@@ -473,7 +515,7 @@ export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; 
         <section className={styles.validationPanel}>
           <div className={styles.sectionHeading}><div><span>Offline validation</span><h3>Narration score</h3></div><b>{dryRun?.rows.length ?? 0} ordered rows</b></div>
           {analysisError ? <p className={styles.fieldError}>{analysisError}</p> : null}
-          <div className={styles.validationSummary} data-state={dryRun?.status ?? "blocked"}><strong>{analysisState === "parsing" ? "Parsing…" : dryRun?.status === "ready" ? "Ready to render" : dryRun?.status === "readyWithWarnings" ? "Ready with warnings" : "Blocked by errors"}</strong><span>Live model and voice support remains pending until G06. This dry run makes no TTS request.</span></div>
+          <div className={styles.validationSummary} data-state={dryRun?.status ?? "blocked"}><strong>{analysisState === "parsing" ? "Parsing…" : dryRun?.status === "ready" ? "Ready to render" : dryRun?.status === "readyWithWarnings" ? "Ready with warnings" : "Blocked by errors"}</strong><span>Connection availability is shown separately. This deterministic dry run still makes no TTS request.</span></div>
           {dryRun && dryRun.issues.length > 0 ? <ul className={styles.issues}>{dryRun.issues.map((issue, index) => <li data-severity={issue.severity} key={`${issue.code}:${issue.target?.id ?? String(index)}`}><button type="button" onClick={() => issue.line && focusLine(issue.line)}>{issue.code}</button><span>{issue.message}</span></li>)}</ul> : null}
           <div className={styles.score} aria-label="Dry run ordered segment table"><div className={styles.scoreHeader}><span>#</span><span>Type</span><span>Speaker / cue</span><span>Original</span><span>Readable</span><span>TTS text</span></div>{dryRun?.rows.map((row) => <button type="button" className={styles.scoreRow} data-type={row.type} data-valid={row.validationStatus} key={row.rowNumber} onClick={() => focusLine(row.sourceRange.start.line)}><b>{String(row.rowNumber).padStart(2, "0")}</b><span className={styles.scoreType}>{row.type === "pause" ? `${row.origin} pause` : row.type}</span>{row.type === "section" ? <><strong>{row.title}</strong><small>Line {row.sourceRange.start.line}</small></> : row.type === "pause" ? <><strong>{row.pauseId}</strong><small>{row.durationMs === null ? "Missing duration" : `${String(row.durationMs)} ms`}</small></> : <><span className={styles.speakerChip} aria-label={`Speaker ${row.speakerId}. ${row.voiceId ? `Voice ID ${row.voiceId}` : "Voice ID not configured"}`} title={row.voiceId ? `Voice ID: ${row.voiceId}` : "Voice ID not configured"}><span className={styles.speakerLabel} aria-hidden="true">speaker</span><span className={styles.speakerName} aria-hidden="true">{row.speakerId}</span></span><span>{row.originalText}</span><span>{row.readableText}</span><span>{row.ttsText}</span></>}</button>)}</div>
         </section>

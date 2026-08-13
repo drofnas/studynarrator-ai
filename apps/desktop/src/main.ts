@@ -1,8 +1,8 @@
 import { join, resolve } from "node:path";
-import { app, BrowserWindow, ipcMain, safeStorage } from "electron";
+import { app, BrowserWindow, ipcMain, safeStorage, shell } from "electron";
 import { createDesktopServices } from "./bootstrap.js";
 import { registerConnectionHandlers, registerDiagnosticsHandler, registerPersistenceHandlers } from "./ipc.js";
-import { SECURE_WEB_PREFERENCES } from "./security.js";
+import { isApprovedExternalUrl, SECURE_WEB_PREFERENCES } from "./security.js";
 
 let runtime: Awaited<ReturnType<typeof createDesktopServices>> | undefined;
 
@@ -19,7 +19,10 @@ async function createWindow() {
     }
   });
 
-  window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (isApprovedExternalUrl(url)) void shell.openExternal(url);
+    return { action: "deny" };
+  });
   window.webContents.on("will-navigate", (event, targetUrl) => {
     if (targetUrl !== window.webContents.getURL()) event.preventDefault();
   });

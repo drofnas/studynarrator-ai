@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { CONNECTION_CHANNELS, PERSISTENCE_CHANNELS, SYSTEM_DIAGNOSTICS_CHANNEL } from "@studynarrator/shared-types";
 import { createPreloadBridge } from "./bridge.js";
 import { registerConnectionHandlers, registerDiagnosticsHandler, registerPersistenceHandlers } from "./ipc.js";
-import { SECURE_WEB_PREFERENCES } from "./security.js";
+import { isApprovedExternalUrl, SECURE_WEB_PREFERENCES } from "./security.js";
 
 const diagnostics = {
   schemaVersion: 2,
@@ -110,5 +110,8 @@ describe("Electron boundary", () => {
       nodeIntegration: false,
       sandbox: true
     });
+    expect(isApprovedExternalUrl("https://speaches.ai/installation/")).toBe(true);
+    expect(isApprovedExternalUrl("http://speaches.ai/installation/")).toBe(false);
+    expect(isApprovedExternalUrl("https://speaches.ai.example.test/")).toBe(false);
   });
 });

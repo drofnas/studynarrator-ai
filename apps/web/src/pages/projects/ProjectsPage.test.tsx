@@ -1,13 +1,15 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { Link, MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseScript, resolveParagraphPauses, transformScript } from "@studynarrator/core";
-import type { PersistenceClient, ProjectDetail, ProjectReplaceInput } from "@studynarrator/shared-types";
+import type { ConnectionProfile, PersistenceClient, ProjectDetail, ProjectReplaceInput, VoiceCatalog } from "@studynarrator/shared-types";
 import type { ScriptAnalyzer } from "@/workers/parser/parserClient.js";
 import type { ScriptAnalysisInput } from "@/workers/parser/parserWorkerProtocol.js";
 import { ProjectsPage } from "./ProjectsPage.js";
+import { ConnectionProvider } from "@/features/connections/ConnectionProvider.js";
 
 const project: ProjectDetail = {
   contractVersion: 3,
@@ -65,8 +67,15 @@ function fixture(sourceProject = project) {
   return { client, analyze, replace, duplicate };
 }
 
-function renderPage(client: PersistenceClient, analyze: ScriptAnalyzer["analyze"]) {
-  return render(<MemoryRouter initialEntries={[`/projects/${project.id}`]}><Link to="/settings">Settings test link</Link><Routes><Route path="/projects/:projectId" element={<ProjectsPage client={client} analyzer={{ analyze }} />} /><Route path="/settings" element={<p>Settings destination</p>} /></Routes></MemoryRouter>);
+function renderPage(client: PersistenceClient, analyze: ScriptAnalyzer["analyze"], options: { profiles?: ConnectionProfile[]; catalog?: VoiceCatalog } = {}) {
+  const profiles = options.profiles ?? [];
+  const connections = {
+    list: vi.fn(async () => profiles), create: vi.fn(), replace: vi.fn(), delete: vi.fn(), test: vi.fn(), exportDiagnostics: vi.fn(),
+    getSetupState: vi.fn(async () => ({ activeProfileId: profiles[0]?.id ?? null, activeProfileLocked: false, onboardingCompletedAt: "2026-08-12T12:00:00.000Z", client: "web" as const })),
+    setActiveProfile: vi.fn(), completeOnboarding: vi.fn()
+  };
+  const voiceCatalog = { get: vi.fn(async (modelId: string) => options.catalog ?? ({ schemaVersion: 1 as const, modelId, entries: [] })), replace: vi.fn() };
+  return render(<ConnectionProvider connections={connections} voiceCatalog={voiceCatalog}><MemoryRouter initialEntries={[`/projects/${project.id}`]}><Link to="/settings">Settings test link</Link><Routes><Route path="/projects/:projectId" element={<ProjectsPage client={client} analyzer={{ analyze }} />} /><Route path="/settings" element={<p>Settings destination</p>} /></Routes></MemoryRouter></ConnectionProvider>);
 }
 
 function deferred<T>() {
@@ -78,6 +87,31 @@ function deferred<T>() {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe("G05 Projects workbench", () => {
+  it("selects a managed profile/model and maps searchable friendly voices with raw IDs", async () => {
+    const { client, analyze, replace } = fixture();
+    const summary = {
+      schemaVersion: 1 as const, overall: "connected" as const, testedAt: "2026-08-12T12:00:00.000Z", httpStatus: 200,
+      stages: ["url", "dns", "tcp", "http", "authentication", "model", "voice", "audio"].map((stage) => ({ stage: stage as "url", status: "pass" as const, code: `${stage}-pass`, message: "Passed.", durationMs: 1 })),
+      availableModelIds: ["speaches-ai/Kokoro-82M-v1.0-ONNX"], availableVoiceIds: ["af_heart"]
+    };
+    const profile: ConnectionProfile = {
+      id: "local", name: "Local Speaches", baseUrl: "http://127.0.0.1:8000", suppliedUrlForm: "root", source: "saved", editable: true,
+      credentialEntryAllowed: false, configured: true, apiKeyConfigured: false, defaultModelId: "speaches-ai/Kokoro-82M-v1.0-ONNX", defaultVoiceId: "af_heart",
+      timeoutSeconds: 120, retryCount: 2, responseFormat: "wav", lastTestedAt: summary.testedAt, lastSuccessfulTestAt: summary.testedAt,
+      lastTestSummary: summary as ConnectionProfile["lastTestSummary"], createdAt: summary.testedAt, updatedAt: summary.testedAt
+    };
+    const catalog: VoiceCatalog = { schemaVersion: 1, modelId: profile.defaultModelId!, entries: [{ voiceId: "af_heart", label: "Heart — American English — af_heart", enabled: true, language: "American English", locale: "en-US", accent: "American", category: null, style: null, sampleText: null }] };
+    renderPage(client, analyze, { profiles: [profile], catalog });
+    await userEvent.selectOptions(await screen.findByLabelText("Connection profile"), profile.id);
+    await waitFor(() => expect(analyze).toHaveBeenCalled());
+    expect((await screen.findAllByText("Heart — American English — af_heart")).length).toBeGreaterThan(0);
+    expect(screen.getByText("voice_teacher")).toBeInTheDocument();
+    expect(screen.getByText("unavailable")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Voice catalog or manual ID"), { target: { value: "af_heart" } });
+    expect(await screen.findByText("available")).toBeInTheDocument();
+    await waitFor(() => expect(replace).toHaveBeenCalledWith(project.id, expect.objectContaining({ connectionProfileId: profile.id, modelId: null })));
+  });
+
   it("analyzes offline, renders the narration score, and autosaves edits", async () => {
     const { client, analyze, replace } = fixture();
     const fetchSpy = vi.spyOn(globalThis, "fetch");
@@ -142,8 +176,8 @@ describe("G05 Projects workbench", () => {
     const timerSpy = vi.spyOn(window, "setTimeout");
     renderPage(client, analyze);
 
-    expect(await screen.findByLabelText("Raw voice ID")).toHaveValue("");
     await waitFor(() => expect(analyze).toHaveBeenCalled());
+    expect(await screen.findByLabelText("Voice catalog or manual ID")).toHaveValue("");
     expect(timerSpy.mock.calls.filter(([, delay]) => delay === 800)).toHaveLength(0);
     expect(replace).not.toHaveBeenCalled();
     expect(screen.getByText("Saved")).toBeInTheDocument();

@@ -116,3 +116,10 @@ export {
   type ConnectionRuntimeContext,
   type CredentialStore
 } from "./connections.js";
+export {
+  BUNDLED_VOICE_CATALOGS,
+  KOKORO_V1_MODEL_ID,
+  KOKORO_V1_VOICE_CATALOG,
+  KOKORO_VOICE_CATALOG_ATTRIBUTION,
+  KOKORO_VOICE_CATALOG_SOURCE
+} from "./kokoroCatalog.js";
