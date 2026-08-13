@@ -27,6 +27,7 @@ import {
   SCRATCHPAD_CHANNELS,
   ScratchpadPreviewInputSchema,
   ScratchpadPreviewResultSchema,
+  SpeechCatalogSchema,
   VoiceCatalogModelInputSchema,
   VoiceCatalogSchema,
   type ConnectionsClient,
@@ -124,6 +125,7 @@ export function registerConnectionHandlers(
         /* eslint-disable preserve-caught-error */
         if (record && Array.isArray(record.issues)) throw new Error("The request does not match the connection contract.");
         if (record?.code === "CONNECTION_POLICY" && typeof record.message === "string") throw new Error(record.message);
+        if (typeof record?.code === "string" && record.code.startsWith("CONNECTION_CATALOG_") && typeof record.message === "string") throw new Error(record.message);
         if (record?.code === "PERSISTENCE_NOT_FOUND") throw new Error("The requested connection profile does not exist.");
         throw new Error("StudyNarrator could not complete the connection operation.");
         /* eslint-enable preserve-caught-error */
@@ -141,6 +143,7 @@ export function registerConnectionHandlers(
     return EmptyResponseSchema.parse({});
   });
   handle(CONNECTION_CHANNELS.test, async (input) => ConnectionTestSummarySchema.parse(await connections.test(ConnectionProfileIdInputSchema.parse(input).profileId)));
+  handle(CONNECTION_CHANNELS.speechCatalogDiscover, async (input) => SpeechCatalogSchema.parse(await connections.discoverSpeechCatalog(ConnectionProfileIdInputSchema.parse(input).profileId)));
   handle(CONNECTION_CHANNELS.exportDiagnostics, async (input) => RedactedConnectionDiagnosticsSchema.parse(await connections.exportDiagnostics(ConnectionProfileIdInputSchema.parse(input).profileId)));
   handle(CONNECTION_CHANNELS.setupGet, async () => ConnectionSetupStateSchema.parse(await connections.getSetupState()));
   handle(CONNECTION_CHANNELS.setupSetActive, async (input) => ConnectionSetupStateSchema.parse(await connections.setActiveProfile(ActiveConnectionProfileInputSchema.parse(input).profileId)));

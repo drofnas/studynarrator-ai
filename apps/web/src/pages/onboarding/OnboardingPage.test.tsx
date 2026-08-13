@@ -37,6 +37,7 @@ function clients(client: "web" | "electron") {
     list: vi.fn(async () => []),
     create: vi.fn(async () => profile), replace: vi.fn(), delete: vi.fn(),
     test: vi.fn(async () => summary), exportDiagnostics: vi.fn(),
+    discoverSpeechCatalog: vi.fn(async (profileId: string) => ({ schemaVersion: 1 as const, profileId, models: [] })),
     getSetupState: vi.fn(async () => ({ activeProfileId: null, activeProfileLocked: false, onboardingCompletedAt: null, client })),
     setActiveProfile: vi.fn(async () => ({ activeProfileId: profile.id, activeProfileLocked: false, onboardingCompletedAt: null, client })),
     completeOnboarding

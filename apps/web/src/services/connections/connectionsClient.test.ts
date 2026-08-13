@@ -47,6 +47,13 @@ describe("connection REST clients", () => {
     expect(fetchInput.mock.calls[0]?.[1]).toMatchObject({ method: "PUT" });
   });
 
+  it("discovers a profile speech catalog through the encoded privileged route", async () => {
+    const catalog = { schemaVersion: 1, profileId: "profile/one", models: [{ modelId: "model", voices: [{ voiceId: "voice", name: null, language: null, gender: null }] }] };
+    const fetchInput = vi.fn(async (_input?: RequestInfo | URL) => new Response(JSON.stringify(catalog), { status: 200 }));
+    await expect(createRestConnectionsClient(fetchInput).discoverSpeechCatalog("profile/one")).resolves.toEqual(catalog);
+    expect(fetchInput.mock.calls[0]?.[0]).toBe("/api/connections/profile%2Fone/speech-catalog");
+  });
+
   it("never accepts malformed secret-bearing output", async () => {
     const fetchInput = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify([{ ...profile, apiKey: "test-secret-must-not-appear" }]), { status: 200 }));
     await expect(createRestConnectionsClient(fetchInput).list()).rejects.toThrow();

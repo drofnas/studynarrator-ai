@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { diagnoseSpeaches, MAX_AUDIO_BYTES, normalizeSpeachesUrl, probeAudioWithFfprobe, synthesizeSpeech } from "./index.js";
+import { diagnoseSpeaches, discoverSpeachesSpeechCatalog, MAX_AUDIO_BYTES, normalizeSpeachesUrl, probeAudioWithFfprobe, synthesizeSpeech } from "./index.js";
 import type { SpeachesSynthesisError } from "./index.js";
 
 describe("normalizeSpeachesUrl", () => {
@@ -48,6 +48,41 @@ describe("probeAudioWithFfprobe", () => {
 });
 
 describe("diagnoseSpeaches failure boundaries", () => {
+  it("uses model-scoped voices and parses the top-level voices fallback", async () => {
+    const scopedResponses = [
+      new Response("{}", { status: 200 }),
+      new Response(JSON.stringify({ data: [{ id: "model" }] }), { status: 200 }),
+      new Response(JSON.stringify({ models: [{ id: "model", voices: [{ id: "voice" }] }] }), { status: 200 }),
+      new Response(new Uint8Array([1]), { status: 200, headers: { "content-type": "audio/wav" } })
+    ];
+    const scoped = await diagnoseSpeaches(
+      { baseUrl: "http://127.0.0.1:8000", modelId: "model", voiceId: "voice", timeoutSeconds: 1 },
+      {
+        connect: vi.fn().mockResolvedValue(undefined),
+        fetch: vi.fn(async () => scopedResponses.shift() ?? new Response(null, { status: 500 })),
+        probeAudio: vi.fn(async () => ({ decodable: true, formatName: "wav" }))
+      }
+    );
+    expect(scoped.summary.availableVoiceIds).toEqual(["voice"]);
+    expect(scoped.summary.stages[6]).toMatchObject({ code: "voice-listed-for-model" });
+
+    const responses = [
+      new Response("{}", { status: 200 }),
+      new Response(JSON.stringify({ data: [{ id: "model" }] }), { status: 200 }),
+      new Response(null, { status: 404 }),
+      new Response(JSON.stringify({ voices: [{ id: "voice" }] }), { status: 200 }),
+      new Response(new Uint8Array([1]), { status: 200, headers: { "content-type": "audio/wav" } })
+    ];
+    const fallback = await diagnoseSpeaches(
+      { baseUrl: "http://127.0.0.1:8000", modelId: "model", voiceId: "voice", timeoutSeconds: 1 },
+      {
+        connect: vi.fn().mockResolvedValue(undefined),
+        fetch: vi.fn(async () => responses.shift() ?? new Response(null, { status: 500 })),
+        probeAudio: vi.fn(async () => ({ decodable: true, formatName: "wav" }))
+      }
+    );
+    expect(fallback.summary.availableVoiceIds).toEqual(["voice"]);
+  });
   it("classifies DNS failures and skips later stages", async () => {
     const output = await diagnoseSpeaches(
       { baseUrl: "http://does-not-resolve.invalid", modelId: "model", voiceId: "voice", timeoutSeconds: 1 },
@@ -108,6 +143,73 @@ describe("diagnoseSpeaches failure boundaries", () => {
     expect(output.summary.overall).toBe("invalidAudio");
     expect(output.summary.stages[7]).toMatchObject({ status: "fail", code: "audio-too-large" });
     expect(probeAudio).not.toHaveBeenCalled();
+  });
+});
+
+describe("discoverSpeachesSpeechCatalog", () => {
+  const input = {
+    profileId: "profile",
+    baseUrl: "http://127.0.0.1:8000/v1",
+    apiKey: "test-secret-must-not-appear",
+    timeoutSeconds: 2,
+    retryCount: 1
+  };
+
+  it("preserves model-scoped voice metadata and deduplicates identifiers", async () => {
+    const fetchInput = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      expect(init?.headers).toMatchObject({ Authorization: "Bearer test-secret-must-not-appear", Accept: "application/json" });
+      return new Response(JSON.stringify({ models: [
+        { id: "model-a", voices: [{ id: "voice-a", name: "Voice A", language: "English", gender: "female", ignored: "private" }, "voice-b", { id: "voice-a" }] },
+        { id: "model-b", voices: [{ voice_id: "voice-c", name: "Voice C" }] }
+      ] }), { status: 200 });
+    });
+    await expect(discoverSpeachesSpeechCatalog(input, { fetch: fetchInput as typeof fetch })).resolves.toEqual({
+      schemaVersion: 1,
+      profileId: "profile",
+      models: [
+        { modelId: "model-a", voices: [
+          { voiceId: "voice-a", name: "Voice A", language: "English", gender: "female" },
+          { voiceId: "voice-b", name: null, language: null, gender: null }
+        ] },
+        { modelId: "model-b", voices: [{ voiceId: "voice-c", name: "Voice C", language: null, gender: null }] }
+      ]
+    });
+    expect(fetchInput).toHaveBeenCalledWith("http://127.0.0.1:8000/v1/audio/models", expect.any(Object));
+  });
+
+  it("retries transient failures but not authentication or invalid metadata", async () => {
+    const transient = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ models: [] }), { status: 200 }));
+    await expect(discoverSpeachesSpeechCatalog(input, { fetch: transient, sleep: vi.fn(async () => undefined) }))
+      .resolves.toMatchObject({ models: [] });
+    expect(transient).toHaveBeenCalledTimes(2);
+
+    const secretBody = JSON.stringify({ secret: "upstream-private" });
+    const authentication = vi.fn(async () => new Response(secretBody, { status: 401 }));
+    await expect(discoverSpeachesSpeechCatalog(input, { fetch: authentication })).rejects.toMatchObject({ code: "authenticationRequired", retryable: false });
+    expect(authentication).toHaveBeenCalledOnce();
+    try { await discoverSpeachesSpeechCatalog(input, { fetch: authentication }); } catch (error) {
+      expect(String(error)).not.toContain("upstream-private");
+      expect(String(error)).not.toContain(input.apiKey);
+    }
+
+    const invalid = vi.fn(async () => new Response(JSON.stringify({ models: [{ id: "model", voices: [null] }] }), { status: 200 }));
+    await expect(discoverSpeachesSpeechCatalog(input, { fetch: invalid })).rejects.toMatchObject({ code: "invalidResponse", retryable: false });
+    expect(invalid).toHaveBeenCalledOnce();
+  });
+
+  it("bounds discovery responses and stops on abort", async () => {
+    await expect(discoverSpeachesSpeechCatalog(input, {
+      fetch: vi.fn(async () => new Response(JSON.stringify({ models: [], padding: "x".repeat(2_000_001) }), { status: 200 }))
+    })).rejects.toMatchObject({ code: "invalidResponse", retryable: false });
+
+    const controller = new AbortController();
+    controller.abort();
+    const fetchInput = vi.fn();
+    await expect(discoverSpeachesSpeechCatalog({ ...input, signal: controller.signal }, { fetch: fetchInput }))
+      .rejects.toMatchObject({ code: "aborted", retryable: false });
+    expect(fetchInput).not.toHaveBeenCalled();
   });
 });
 

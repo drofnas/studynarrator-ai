@@ -49,6 +49,7 @@ const connections = {
   replace: vi.fn(),
   delete: vi.fn(),
   test: vi.fn(),
+  discoverSpeechCatalog: vi.fn(),
   exportDiagnostics: vi.fn(),
   getSetupState: vi.fn(async () => ({ activeProfileId: null, activeProfileLocked: false, onboardingCompletedAt: null, client: "electron" as const })),
   setActiveProfile: vi.fn(),
@@ -178,6 +179,7 @@ describe("Electron boundary", () => {
     };
     const setup = { activeProfileId: "profile", activeProfileLocked: false, onboardingCompletedAt: timestamp, client: "electron" as const };
     const catalog = { schemaVersion: 1 as const, modelId: "model", entries: [] };
+    const speechCatalog = { schemaVersion: 1 as const, profileId: "profile", models: [{ modelId: "model", voices: [{ voiceId: "voice", name: "Voice", language: null, gender: null }] }] };
     persistence.projects.list.mockResolvedValue([{
       id: project.id,
       name: project.name,
@@ -199,6 +201,7 @@ describe("Electron boundary", () => {
     connections.replace.mockResolvedValue(profile);
     connections.delete.mockResolvedValue(undefined);
     connections.test.mockResolvedValue(summary as never);
+    connections.discoverSpeechCatalog.mockResolvedValue(speechCatalog);
     connections.exportDiagnostics.mockResolvedValue({
       schemaVersion: 1, applicationVersion: "0.1.0", runtimeVersions: { node: "26.7.0", electron: "43.3.0" },
       profileId: "profile", profileSource: "saved", endpointClass: "loopback", suppliedUrlForm: "root",
@@ -232,6 +235,7 @@ describe("Electron boundary", () => {
       [CONNECTION_CHANNELS.replace]: { profileId: "profile", mutation },
       [CONNECTION_CHANNELS.delete]: { profileId: "profile" },
       [CONNECTION_CHANNELS.test]: { profileId: "profile" },
+      [CONNECTION_CHANNELS.speechCatalogDiscover]: { profileId: "profile" },
       [CONNECTION_CHANNELS.exportDiagnostics]: { profileId: "profile" },
       [CONNECTION_CHANNELS.setupSetActive]: { profileId: "profile" },
       [CONNECTION_CHANNELS.voiceCatalogGet]: { modelId: "model" },

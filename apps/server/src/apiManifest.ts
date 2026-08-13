@@ -20,6 +20,7 @@ export const REST_API_MANIFEST = [
   { method: "PUT", path: "/api/connections/:profileId" },
   { method: "DELETE", path: "/api/connections/:profileId" },
   { method: "POST", path: "/api/connections/:profileId/test" },
+  { method: "GET", path: "/api/connections/:profileId/speech-catalog" },
   { method: "GET", path: "/api/connections/:profileId/diagnostics" },
   { method: "GET", path: "/api/setup" },
   { method: "PUT", path: "/api/setup/active-profile" },

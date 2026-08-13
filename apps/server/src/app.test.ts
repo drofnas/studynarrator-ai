@@ -15,7 +15,7 @@ import {
   type DiagnosticsContext
 } from "@studynarrator/application";
 import { openStudyNarratorRepository, type DatabaseConstructor } from "@studynarrator/persistence";
-import { BoundaryErrorSchema, HealthSchema, ProjectDetailSchema, ProjectSummaryCollectionSchema, RuntimeSchema, SystemDiagnosticsSchema } from "@studynarrator/shared-types";
+import { BoundaryErrorSchema, HealthSchema, ProjectDetailSchema, ProjectSummaryCollectionSchema, RuntimeSchema, SpeechCatalogSchema, SystemDiagnosticsSchema } from "@studynarrator/shared-types";
 import { createExpressApp } from "./app.js";
 import { REST_API_MANIFEST } from "./apiManifest.js";
 
@@ -67,7 +67,8 @@ async function fixture() {
   const connections = createConnectionsService({
     repository,
     credentials: createRoutedCredentialStore({ environmentApiKey: null }),
-    context: { client: "web", nodeVersion: "26.7.0", electronVersion: null, activeProfileLocked: false }
+    context: { client: "web", nodeVersion: "26.7.0", electronVersion: null, activeProfileLocked: false },
+    discoverCatalog: async ({ profileId }) => ({ schemaVersion: 1, profileId, models: [{ modelId: "model", voices: [{ voiceId: "voice", name: "Voice", language: null, gender: null }] }] })
   });
   const voiceCatalog = createVoiceCatalogService({ repository, bundledCatalogs: new Map() });
   const scratchpad = {
@@ -260,10 +261,10 @@ describe("REST API operation manifest", () => {
       : []);
     const declared = REST_API_MANIFEST.map(({ method, path }) => `${method} ${path}`);
     expect(registered.sort()).toEqual([...declared].sort());
-    expect(new Set(declared).size).toBe(28);
+    expect(new Set(declared).size).toBe(29);
   });
 
-  it("exercises a successful schema-valid response for all 28 operations", async () => {
+  it("exercises a successful schema-valid response for all 29 operations", async () => {
     const { app } = await fixture();
     const covered = new Set<string>();
     const call = async (method: string, path: string, expected: number, body?: string | object) => {
@@ -307,6 +308,7 @@ describe("REST API operation manifest", () => {
     await call("POST", "/api/connections", 201, profileMutation);
     await call("PUT", "/api/connections/manifest-profile", 200, { ...profileMutation, profile: { ...profileMutation.profile, name: "Updated manifest" } });
     await call("POST", "/api/connections/manifest-profile/test", 200);
+    SpeechCatalogSchema.parse((await call("GET", "/api/connections/manifest-profile/speech-catalog", 200)).body as unknown);
     await call("GET", "/api/connections/manifest-profile/diagnostics", 200);
     await call("GET", "/api/setup", 200);
     await call("PUT", "/api/setup/active-profile", 200, { profileId: "manifest-profile" });

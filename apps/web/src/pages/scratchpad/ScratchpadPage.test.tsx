@@ -28,6 +28,7 @@ const persistence = {
 } as unknown as PersistenceClient;
 const connections = {
   list: vi.fn(async () => [profile]), create: vi.fn(), replace: vi.fn(), delete: vi.fn(), test: vi.fn(), exportDiagnostics: vi.fn(),
+  discoverSpeechCatalog: vi.fn(async (profileId: string) => ({ schemaVersion: 1 as const, profileId, models: [{ modelId: "model", voices: [{ voiceId: "voice", name: "Teacher", language: null, gender: null }] }] })),
   getSetupState: vi.fn(async () => ({ activeProfileId: "local", activeProfileLocked: false, onboardingCompletedAt: timestamp, client: "web" as const })),
   setActiveProfile: vi.fn(), completeOnboarding: vi.fn()
 };

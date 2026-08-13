@@ -5,8 +5,11 @@ import { spawn } from "node:child_process";
 import type {
   ConnectionDiagnosticStage,
   ConnectionTestOverall,
-  ConnectionTestSummary
+  ConnectionTestSummary,
+  SpeechCatalog,
+  SpeechCatalogVoice
 } from "@studynarrator/shared-types";
+import { SpeechCatalogSchema } from "@studynarrator/shared-types";
 
 const DIAGNOSTIC_TEXT = "StudyNarrator connection check.";
 export const MAX_AUDIO_BYTES = 5 * 1024 * 1024;
@@ -87,6 +90,33 @@ export interface SpeachesSynthesisResult {
   bytes: Uint8Array;
   mimeType: "audio/wav";
   attempts: number;
+}
+
+export type SpeachesCatalogErrorCode =
+  | "aborted"
+  | "authenticationRequired"
+  | "configurationError"
+  | "invalidResponse"
+  | "unavailable";
+
+export class SpeachesCatalogError extends Error {
+  constructor(
+    readonly code: SpeachesCatalogErrorCode,
+    message: string,
+    readonly retryable: boolean,
+    readonly httpStatus: number | null = null
+  ) {
+    super(message);
+  }
+}
+
+export interface SpeachesCatalogInput {
+  profileId: string;
+  baseUrl: string;
+  apiKey?: string | undefined;
+  timeoutSeconds: number;
+  retryCount: number;
+  signal?: AbortSignal | undefined;
 }
 
 class DiagnosticFailure extends Error {
@@ -289,7 +319,9 @@ export async function probeAudioWithFfprobe(bytes: Uint8Array, signal?: AbortSig
 }
 
 function parseIdentifiers(payload: unknown, keys: readonly string[]): string[] {
-  const candidate = typeof payload === "object" && payload !== null && "data" in payload ? payload.data : payload;
+  const candidate = typeof payload === "object" && payload !== null
+    ? "data" in payload ? payload.data : "voices" in payload ? payload.voices : payload
+    : payload;
   if (!Array.isArray(candidate)) return [];
   const identifiers = new Set<string>();
   for (const item of candidate) {
@@ -307,6 +339,59 @@ function parseIdentifiers(payload: unknown, keys: readonly string[]): string[] {
   return [...identifiers].sort();
 }
 
+function optionalString(record: Record<string, unknown>, key: string): string | null {
+  const value = record[key];
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function parseCatalogVoice(value: unknown): SpeechCatalogVoice {
+  if (typeof value === "string" && value.trim().length > 0) {
+    return { voiceId: value.trim(), name: null, language: null, gender: null };
+  }
+  if (typeof value !== "object" || value === null) {
+    throw new SpeachesCatalogError("invalidResponse", "Speaches returned invalid speech-model voice metadata.", false);
+  }
+  const record = value as Record<string, unknown>;
+  const voiceId = optionalString(record, "id") ?? optionalString(record, "voice_id") ?? optionalString(record, "voice");
+  if (!voiceId) throw new SpeachesCatalogError("invalidResponse", "Speaches returned a voice without an identifier.", false);
+  return {
+    voiceId,
+    name: optionalString(record, "name"),
+    language: optionalString(record, "language"),
+    gender: optionalString(record, "gender")
+  };
+}
+
+function parseSpeechCatalog(payload: unknown, profileId: string): SpeechCatalog {
+  if (typeof payload !== "object" || payload === null || !("models" in payload) || !Array.isArray(payload.models)) {
+    throw new SpeachesCatalogError("invalidResponse", "Speaches returned invalid speech-model discovery data.", false);
+  }
+  if (payload.models.length > 2_000) throw new SpeachesCatalogError("invalidResponse", "Speaches returned too many speech models.", false);
+  const models = new Map<string, Map<string, SpeechCatalogVoice>>();
+  for (const value of payload.models) {
+    if (typeof value !== "object" || value === null) {
+      throw new SpeachesCatalogError("invalidResponse", "Speaches returned invalid speech-model metadata.", false);
+    }
+    const record = value as Record<string, unknown>;
+    const modelId = optionalString(record, "id") ?? optionalString(record, "model");
+    if (!modelId || !Array.isArray(record.voices)) {
+      throw new SpeachesCatalogError("invalidResponse", "Speaches returned a speech model without valid voice metadata.", false);
+    }
+    if (record.voices.length > 10_000) throw new SpeachesCatalogError("invalidResponse", "Speaches returned too many voices for one speech model.", false);
+    const voices = models.get(modelId) ?? new Map<string, SpeechCatalogVoice>();
+    for (const voiceValue of record.voices) {
+      const voice = parseCatalogVoice(voiceValue);
+      if (!voices.has(voice.voiceId)) voices.set(voice.voiceId, voice);
+    }
+    models.set(modelId, voices);
+  }
+  return SpeechCatalogSchema.parse({
+    schemaVersion: 1,
+    profileId,
+    models: [...models].map(([modelId, voices]) => ({ modelId, voices: [...voices.values()] }))
+  });
+}
+
 async function readJson(response: Response): Promise<unknown> {
   const text = await response.text();
   if (text.length > 2_000_000) throw new DiagnosticFailure("response-too-large", "The endpoint returned an unexpectedly large discovery response.", "invalid-response");
@@ -319,6 +404,73 @@ async function readJson(response: Response): Promise<unknown> {
 
 function headers(apiKey?: string): HeadersInit {
   return apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
+}
+
+function catalogFailure(error: unknown, externalSignal?: AbortSignal): SpeachesCatalogError {
+  if (error instanceof SpeachesCatalogError) return error;
+  if (error instanceof DiagnosticFailure) {
+    if (error.kind === "invalid-response") return new SpeachesCatalogError("invalidResponse", "Speaches returned invalid speech-model metadata.", false);
+    if (error.kind === "aborted") return new SpeachesCatalogError("aborted", "Speech catalog discovery was cancelled.", false);
+    return new SpeachesCatalogError("unavailable", "The configured Speaches service could not provide its speech catalog.", true);
+  }
+  if (externalSignal?.aborted || (error instanceof DOMException && error.name === "AbortError")) {
+    return new SpeachesCatalogError("aborted", "Speech catalog discovery was cancelled.", false);
+  }
+  if (error instanceof DOMException && error.name === "TimeoutError") {
+    return new SpeachesCatalogError("unavailable", "Speech catalog discovery timed out.", true);
+  }
+  return new SpeachesCatalogError("unavailable", "The configured Speaches service could not provide its speech catalog.", true);
+}
+
+export async function discoverSpeachesSpeechCatalog(
+  input: SpeachesCatalogInput,
+  dependencies: SpeachesAdapterDependencies = {}
+): Promise<SpeechCatalog> {
+  if (!input.profileId.trim() || !Number.isInteger(input.timeoutSeconds) || input.timeoutSeconds < 1 || input.timeoutSeconds > 600
+    || !Number.isInteger(input.retryCount) || input.retryCount < 0 || input.retryCount > 5) {
+    throw new SpeachesCatalogError("configurationError", "The selected connection profile cannot discover speech models.", false);
+  }
+  let normalized: NormalizedSpeachesUrl;
+  try {
+    normalized = normalizeSpeachesUrl(input.baseUrl);
+  } catch {
+    throw new SpeachesCatalogError("configurationError", "The selected connection profile has an invalid Speaches URL.", false);
+  }
+  const fetchImpl = dependencies.fetch ?? fetch;
+  const sleep = dependencies.sleep ?? defaultSleep;
+  const maximumAttempts = input.retryCount + 1;
+  let lastFailure: SpeachesCatalogError | undefined;
+  for (let attempt = 1; attempt <= maximumAttempts; attempt += 1) {
+    if (input.signal?.aborted) throw new SpeachesCatalogError("aborted", "Speech catalog discovery was cancelled.", false);
+    const signal = combinedSignal(input.timeoutSeconds, input.signal);
+    try {
+      const response = await fetchImpl(`${normalized.rootUrl}/v1/audio/models`, {
+        method: "GET",
+        headers: { ...headers(input.apiKey), Accept: "application/json" },
+        signal
+      });
+      if (response.status === 401 || response.status === 403) {
+        throw new SpeachesCatalogError("authenticationRequired", "Speaches rejected authentication for speech catalog discovery.", false, response.status);
+      }
+      if (response.status === 429 || response.status >= 500) {
+        throw new SpeachesCatalogError("unavailable", "Speaches is temporarily unavailable for speech catalog discovery.", true, response.status);
+      }
+      if (!response.ok) {
+        throw new SpeachesCatalogError("invalidResponse", "Speaches rejected speech catalog discovery.", false, response.status);
+      }
+      return parseSpeechCatalog(await readJson(response), input.profileId);
+    } catch (error) {
+      const failure = catalogFailure(error, input.signal);
+      if (!failure.retryable || attempt === maximumAttempts) throw failure;
+      lastFailure = failure;
+      try {
+        await sleep(Math.min(1_000, 100 * 2 ** (attempt - 1)), input.signal);
+      } catch (sleepError) {
+        throw catalogFailure(sleepError, input.signal);
+      }
+    }
+  }
+  throw lastFailure ?? new SpeachesCatalogError("unavailable", "Speech catalog discovery did not complete.", true);
 }
 
 function result(
@@ -437,12 +589,19 @@ export async function diagnoseSpeaches(
   started = performance.now();
   let voices: string[] | null = null;
   try {
-    const voiceResponse = await fetchImpl(`${normalized.rootUrl}/v1/audio/voices`, { method: "GET", headers: headers(input.apiKey), signal });
-    if (voiceResponse.ok) {
-      voices = parseIdentifiers(await readJson(voiceResponse), ["id", "voice_id", "voice"]);
-      stages.push(stage("voice", "pass", voices.includes(input.voiceId ?? "") ? "voice-listed" : "voice-list-checked", "The optional voice catalog was checked; speech remains definitive.", elapsed(started)));
+    const catalogResponse = await fetchImpl(`${normalized.rootUrl}/v1/audio/models`, { method: "GET", headers: headers(input.apiKey), signal });
+    if (catalogResponse.ok) {
+      const catalog = parseSpeechCatalog(await readJson(catalogResponse), "diagnostic");
+      voices = catalog.models.find(({ modelId }) => modelId === input.modelId)?.voices.map(({ voiceId }) => voiceId) ?? [];
+      stages.push(stage("voice", "pass", voices.includes(input.voiceId ?? "") ? "voice-listed-for-model" : "model-voice-list-checked", "The selected model's voice catalog was checked; speech remains definitive.", elapsed(started)));
     } else {
-      stages.push(stage("voice", "skipped", "voice-list-unavailable", "The optional voice catalog is unavailable; speech will verify the voice.", elapsed(started)));
+      const voiceResponse = await fetchImpl(`${normalized.rootUrl}/v1/audio/voices`, { method: "GET", headers: headers(input.apiKey), signal });
+      if (voiceResponse.ok) {
+        voices = parseIdentifiers(await readJson(voiceResponse), ["id", "voice_id", "voice"]);
+        stages.push(stage("voice", "pass", voices.includes(input.voiceId ?? "") ? "voice-listed" : "voice-list-checked", "The optional installation voice catalog was checked; speech remains definitive.", elapsed(started)));
+      } else {
+        stages.push(stage("voice", "skipped", "voice-list-unavailable", "The optional voice catalog is unavailable; speech will verify the voice.", elapsed(started)));
+      }
     }
   } catch {
     stages.push(stage("voice", "skipped", "voice-list-unavailable", "The optional voice catalog is unavailable; speech will verify the voice.", elapsed(started)));

@@ -22,6 +22,7 @@ import {
   RedactedConnectionDiagnosticsSchema,
   ScratchpadPreviewInputSchema,
   ScratchpadPreviewResultSchema,
+  SpeechCatalogSchema,
   SystemDiagnosticsSchema,
   SystemPacingDefaultsSchema,
   VoiceCatalogModelInputSchema,
@@ -159,6 +160,21 @@ export function createExpressApp(options: {
         response.json(ConnectionTestSummarySchema.parse(await connections.test(parsed.profileId)));
       } catch (error) { next(error); }
     });
+    app.get("/api/connections/:profileId/speech-catalog", async (request, response, next) => {
+      const controller = new AbortController();
+      const abort = () => controller.abort();
+      request.once("aborted", abort);
+      const abortIfDisconnected = () => { if (!response.writableEnded) abort(); };
+      response.once("close", abortIfDisconnected);
+      try {
+        const parsed = ConnectionProfileIdInputSchema.parse({ profileId: request.params.profileId });
+        response.json(SpeechCatalogSchema.parse(await connections.discoverSpeechCatalog(parsed.profileId, controller.signal)));
+      } catch (error) { next(error); }
+      finally {
+        request.off("aborted", abort);
+        response.off("close", abortIfDisconnected);
+      }
+    });
     app.get("/api/connections/:profileId/diagnostics", async (request, response, next) => {
       try {
         const parsed = ConnectionProfileIdInputSchema.parse({ profileId: request.params.profileId });
@@ -240,6 +256,17 @@ export function createExpressApp(options: {
       status = 409;
       code = "CONNECTION_CONFIGURATION";
       message = "Test this connection before exporting diagnostics.";
+    } else if (typeof errorRecord?.code === "string" && errorRecord.code.startsWith("CONNECTION_CATALOG_")) {
+      code = errorRecord.code;
+      const catalogStatus: Record<string, number> = {
+        CONNECTION_CATALOG_ABORTED: 499,
+        CONNECTION_CATALOG_AUTHENTICATION: 401,
+        CONNECTION_CATALOG_CONFIGURATION: 409,
+        CONNECTION_CATALOG_INVALID_RESPONSE: 502,
+        CONNECTION_CATALOG_UNAVAILABLE: 503
+      };
+      status = catalogStatus[errorRecord.code] ?? 500;
+      message = typeof errorRecord.message === "string" ? errorRecord.message : "StudyNarrator could not discover supported speech models and voices.";
     } else if (typeof errorRecord?.code === "string" && errorRecord.code.startsWith("SCRATCHPAD_")) {
       code = errorRecord.code;
       const scratchpadStatus: Record<string, number> = {

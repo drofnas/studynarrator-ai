@@ -21,6 +21,7 @@ export const APPLICATION_SERVICE_MANIFEST = Object.freeze([
   "connections.replace",
   "connections.delete",
   "connections.test",
+  "connections.discoverSpeechCatalog",
   "connections.exportDiagnostics",
   "connections.getSetupState",
   "connections.setActiveProfile",
