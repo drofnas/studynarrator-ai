@@ -26,5 +26,6 @@ export const APPLICATION_SERVICE_MANIFEST = Object.freeze([
   "connections.setActiveProfile",
   "connections.completeOnboarding",
   "voiceCatalog.get",
-  "voiceCatalog.replace"
+  "voiceCatalog.replace",
+  "scratchpad.preview"
 ]);

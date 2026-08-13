@@ -5,6 +5,7 @@ import {
   BUNDLED_VOICE_CATALOGS,
   createPersistenceService,
   createRoutedCredentialStore,
+  createScratchpadService,
   createSystemService,
   createUnavailablePersistenceService,
   createVoiceCatalogService,
@@ -33,6 +34,7 @@ export async function createServerServices(environment = process.env) {
   let repository: DiagnosticRepository;
   let connections;
   let voiceCatalog;
+  let scratchpad;
   try {
     const openedRepository = await openStudyNarratorRepository({ Database, databasePath });
     repository = openedRepository;
@@ -44,12 +46,14 @@ export async function createServerServices(environment = process.env) {
       electronVersion: null,
       activeProfileLocked: environmentProfile.activeProfileLocked
     };
+    const credentials = createRoutedCredentialStore({ environmentApiKey: environmentProfile.apiKey });
     connections = createConnectionsService({
       repository: openedRepository,
-      credentials: createRoutedCredentialStore({ environmentApiKey: environmentProfile.apiKey }),
+      credentials,
       context
     });
     voiceCatalog = createVoiceCatalogService({ repository: openedRepository, bundledCatalogs: BUNDLED_VOICE_CATALOGS });
+    scratchpad = createScratchpadService({ repository: openedRepository, credentials });
   } catch (error) {
     if (!(error instanceof MigrationFailureError)) throw error;
     storageFailure = {
@@ -95,6 +99,7 @@ export async function createServerServices(environment = process.env) {
     persistence,
     connections,
     voiceCatalog,
+    scratchpad,
     context,
     dispose: () => repository.close()
   };

@@ -70,8 +70,26 @@ async function fixture() {
     context: { client: "web", nodeVersion: "26.7.0", electronVersion: null, activeProfileLocked: false }
   });
   const voiceCatalog = createVoiceCatalogService({ repository, bundledCatalogs: new Map() });
+  const scratchpad = {
+    preview: async (input: { connectionProfileId: string; modelId: string; voiceId: string; speed: number; text: string; applyGlobalLexicon: boolean }) => ({
+      schemaVersion: 1 as const,
+      id: "00000000-0000-4000-8000-000000000099",
+      createdAt: "2026-08-12T12:00:00.000Z",
+      connectionProfileId: input.connectionProfileId,
+      connectionProfileName: "Manifest",
+      modelId: input.modelId,
+      voiceId: input.voiceId,
+      speed: input.speed,
+      originalText: input.text,
+      readableText: input.text,
+      transformedText: input.text,
+      lexiconApplied: input.applyGlobalLexicon,
+      warnings: [],
+      audio: { mimeType: "audio/wav" as const, base64: "AQID", byteLength: 3 }
+    })
+  };
   openServices.add(service);
-  return { service, persistence, connections, voiceCatalog, app: await listen(createExpressApp({ service, persistence, connections, voiceCatalog, context })) };
+  return { service, persistence, connections, voiceCatalog, scratchpad, app: await listen(createExpressApp({ service, persistence, connections, voiceCatalog, scratchpad, context })) };
 }
 
 describe("Express diagnostics API", () => {
@@ -199,8 +217,8 @@ interface ExpressRouteLayer {
 
 describe("REST API operation manifest", () => {
   it("matches every registered method and path exactly", async () => {
-    const { service, persistence, connections, voiceCatalog } = await fixture();
-    const application = createExpressApp({ service, persistence, connections, voiceCatalog, context });
+    const { service, persistence, connections, voiceCatalog, scratchpad } = await fixture();
+    const application = createExpressApp({ service, persistence, connections, voiceCatalog, scratchpad, context });
     const layers = (application as unknown as { router: { stack: ExpressRouteLayer[] } }).router.stack;
     const registered = layers.flatMap((layer) => layer.route
       ? Object.entries(layer.route.methods)
@@ -209,10 +227,10 @@ describe("REST API operation manifest", () => {
       : []);
     const declared = REST_API_MANIFEST.map(({ method, path }) => `${method} ${path}`);
     expect(registered.sort()).toEqual([...declared].sort());
-    expect(new Set(declared).size).toBe(27);
+    expect(new Set(declared).size).toBe(28);
   });
 
-  it("exercises a successful schema-valid response for all 27 operations", async () => {
+  it("exercises a successful schema-valid response for all 28 operations", async () => {
     const { app } = await fixture();
     const covered = new Set<string>();
     const call = async (method: string, path: string, expected: number, body?: string | object) => {
@@ -264,6 +282,10 @@ describe("REST API operation manifest", () => {
     covered.delete("GET /api/voice-catalog?modelId=model");
     covered.add("GET /api/voice-catalog");
     await call("PUT", "/api/voice-catalog", 200, { schemaVersion: 1, modelId: "model", entries: [] });
+    await call("POST", "/api/scratchpad/preview", 200, {
+      connectionProfileId: "manifest-profile", modelId: "model", voiceId: "voice", speed: 1,
+      text: "Manifest speech.", applyGlobalLexicon: false
+    });
     await call("DELETE", "/api/connections/manifest-profile", 204);
     await call("DELETE", `/api/projects/${created.id}`, 204);
 
@@ -289,7 +311,8 @@ describe("REST API operation manifest", () => {
       request(app).get("/api/connections/not-found/diagnostics").expect(404),
       request(app).put("/api/setup/active-profile").send({ profileId: 12 }).expect(400),
       request(app).get("/api/voice-catalog").expect(400),
-      request(app).put("/api/voice-catalog").send({ schemaVersion: 1, modelId: "model", entries: [{ voiceId: "same", label: secret, apiKey: secret }] }).expect(400)
+      request(app).put("/api/voice-catalog").send({ schemaVersion: 1, modelId: "model", entries: [{ voiceId: "same", label: secret, apiKey: secret }] }).expect(400),
+      request(app).post("/api/scratchpad/preview").send({ connectionProfileId: "x", text: secret }).expect(400)
     ];
     const responses = await Promise.all(invalidCases);
     expect(JSON.stringify(responses.map((response) => response.body as unknown))).not.toContain(secret);

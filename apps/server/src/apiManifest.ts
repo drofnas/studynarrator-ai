@@ -25,7 +25,8 @@ export const REST_API_MANIFEST = [
   { method: "PUT", path: "/api/setup/active-profile" },
   { method: "POST", path: "/api/setup/complete" },
   { method: "GET", path: "/api/voice-catalog" },
-  { method: "PUT", path: "/api/voice-catalog" }
+  { method: "PUT", path: "/api/voice-catalog" },
+  { method: "POST", path: "/api/scratchpad/preview" }
 ] as const;
 
 export type RestApiOperation = (typeof REST_API_MANIFEST)[number];

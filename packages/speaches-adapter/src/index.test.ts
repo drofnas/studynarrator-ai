@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { diagnoseSpeaches, normalizeSpeachesUrl } from "./index.js";
+import { diagnoseSpeaches, normalizeSpeachesUrl, synthesizeSpeech } from "./index.js";
+import type { SpeachesSynthesisError } from "./index.js";
 
 describe("normalizeSpeachesUrl", () => {
   it.each([
@@ -85,5 +86,90 @@ describe("diagnoseSpeaches failure boundaries", () => {
     expect(output.summary.overall).toBe("invalidAudio");
     expect(output.summary.stages[7]).toMatchObject({ status: "fail", code: "audio-too-large" });
     expect(probeAudio).not.toHaveBeenCalled();
+  });
+});
+
+describe("synthesizeSpeech", () => {
+  const input = {
+    baseUrl: "http://127.0.0.1:8000/v1",
+    modelId: "model",
+    voiceId: "voice",
+    speed: 1.15,
+    text: "sequel indexes improve reads.",
+    apiKey: "test-secret-must-not-appear",
+    timeoutSeconds: 2,
+    retryCount: 2
+  };
+
+  it("sends the exact OpenAI-compatible payload and returns only validated WAV bytes", async () => {
+    const fetchInput = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      expect(init?.headers).toMatchObject({ Authorization: "Bearer test-secret-must-not-appear", Accept: "audio/wav" });
+      if (typeof init?.body !== "string") throw new Error("Expected a JSON request body.");
+      expect(JSON.parse(init.body)).toEqual({
+        model: "model",
+        voice: "voice",
+        speed: 1.15,
+        input: "sequel indexes improve reads.",
+        response_format: "wav"
+      });
+      return new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { "content-type": "audio/wav" } });
+    });
+    const result = await synthesizeSpeech(input, {
+      fetch: fetchInput as typeof fetch,
+      probeAudio: vi.fn(async () => ({ decodable: true, formatName: "wav" }))
+    });
+    expect(result).toEqual({ bytes: new Uint8Array([1, 2, 3]), mimeType: "audio/wav", attempts: 1 });
+    expect(fetchInput).toHaveBeenCalledWith("http://127.0.0.1:8000/v1/audio/speech", expect.any(Object));
+  });
+
+  it("retries transient failures and does not retry rejected selections", async () => {
+    const transient = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(new Response(new Uint8Array([1]), { status: 200, headers: { "content-type": "audio/wav" } }));
+    await expect(synthesizeSpeech(input, {
+      fetch: transient,
+      probeAudio: vi.fn(async () => ({ decodable: true, formatName: "wav" })),
+      sleep: vi.fn(async () => undefined)
+    })).resolves.toMatchObject({ attempts: 2 });
+    expect(transient).toHaveBeenCalledTimes(2);
+
+    const rejected = vi.fn(async () => new Response(JSON.stringify({ secret: "upstream-private" }), { status: 422 }));
+    await expect(synthesizeSpeech(input, { fetch: rejected })).rejects.toMatchObject({ code: "selectionRejected", retryable: false });
+    expect(rejected).toHaveBeenCalledTimes(1);
+    try { await synthesizeSpeech(input, { fetch: rejected }); } catch (error) {
+      expect(String(error)).not.toContain("upstream-private");
+      expect(String(error)).not.toContain(input.apiKey);
+    }
+  });
+
+  it.each([
+    [new Response(null, { status: 401 }), "authenticationRequired"],
+    [new Response("{}", { status: 200, headers: { "content-type": "application/json" } }), "invalidAudio"],
+    [new Response(null, { status: 200, headers: { "content-type": "audio/wav" } }), "invalidAudio"]
+  ] as const)("classifies an invalid synthesis response", async (response, code) => {
+    await expect(synthesizeSpeech({ ...input, retryCount: 0 }, { fetch: vi.fn(async () => response.clone()) }))
+      .rejects.toMatchObject({ code });
+  });
+
+  it("rejects undecodable and oversized audio without marking a result complete", async () => {
+    await expect(synthesizeSpeech({ ...input, retryCount: 0 }, {
+      fetch: vi.fn(async () => new Response(new Uint8Array([1, 2]), { status: 200, headers: { "content-type": "audio/wav" } })),
+      probeAudio: vi.fn(async () => ({ decodable: false, formatName: null }))
+    })).rejects.toMatchObject({ code: "invalidAudio" });
+
+    const oversized = new Uint8Array(5 * 1024 * 1024 + 1);
+    await expect(synthesizeSpeech({ ...input, retryCount: 0 }, {
+      fetch: vi.fn(async () => new Response(oversized, { status: 200, headers: { "content-type": "audio/wav" } })),
+      probeAudio: vi.fn()
+    })).rejects.toMatchObject({ code: "invalidAudio" });
+  });
+
+  it("stops before a request when cancelled", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const fetchInput = vi.fn();
+    await expect(synthesizeSpeech({ ...input, signal: controller.signal }, { fetch: fetchInput }))
+      .rejects.toEqual(expect.objectContaining<Partial<SpeachesSynthesisError>>({ code: "aborted", retryable: false }));
+    expect(fetchInput).not.toHaveBeenCalled();
   });
 });

@@ -24,10 +24,14 @@ import {
   SystemDiagnosticsSchema,
   SystemPacingDefaultsSchema,
   RedactedConnectionDiagnosticsSchema,
+  SCRATCHPAD_CHANNELS,
+  ScratchpadPreviewInputSchema,
+  ScratchpadPreviewResultSchema,
   VoiceCatalogModelInputSchema,
   VoiceCatalogSchema,
   type ConnectionsClient,
   type PersistenceClient,
+  type ScratchpadClient,
   type VoiceCatalogClient
 } from "@studynarrator/shared-types";
 import type { DiagnosticsContext, SystemService } from "@studynarrator/application";
@@ -35,7 +39,8 @@ import type { DiagnosticsContext, SystemService } from "@studynarrator/applicati
 export const PUBLIC_IPC_CHANNEL_MANIFEST = Object.freeze([
   SYSTEM_DIAGNOSTICS_CHANNEL,
   ...Object.values(PERSISTENCE_CHANNELS),
-  ...Object.values(CONNECTION_CHANNELS)
+  ...Object.values(CONNECTION_CHANNELS),
+  ...Object.values(SCRATCHPAD_CHANNELS)
 ]);
 
 interface IpcMainLike {
@@ -142,4 +147,22 @@ export function registerConnectionHandlers(
   handle(CONNECTION_CHANNELS.setupComplete, async () => ConnectionSetupStateSchema.parse(await connections.completeOnboarding()));
   handle(CONNECTION_CHANNELS.voiceCatalogGet, async (input) => VoiceCatalogSchema.parse(await voiceCatalog.get(VoiceCatalogModelInputSchema.parse(input).modelId)));
   handle(CONNECTION_CHANNELS.voiceCatalogReplace, async (input) => VoiceCatalogSchema.parse(await voiceCatalog.replace(VoiceCatalogSchema.parse(input))));
+}
+
+export function registerScratchpadHandlers(ipcMain: IpcMainLike, scratchpad: ScratchpadClient) {
+  ipcMain.removeHandler(SCRATCHPAD_CHANNELS.preview);
+  ipcMain.handle(SCRATCHPAD_CHANNELS.preview, async (_event, input) => {
+    try {
+      return ScratchpadPreviewResultSchema.parse(await scratchpad.preview(ScratchpadPreviewInputSchema.parse(input)));
+    } catch (error) {
+      const record = error && typeof error === "object" ? error as Record<string, unknown> : undefined;
+      /* eslint-disable preserve-caught-error */
+      if (record && Array.isArray(record.issues)) throw new Error("The request does not match the Scratchpad contract.");
+      if (typeof record?.code === "string" && record.code.startsWith("SCRATCHPAD_") && typeof record.message === "string") {
+        throw new Error(record.message);
+      }
+      throw new Error("StudyNarrator could not complete speech synthesis.");
+      /* eslint-enable preserve-caught-error */
+    }
+  });
 }

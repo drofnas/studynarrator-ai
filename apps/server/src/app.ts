@@ -20,12 +20,15 @@ import {
   ProjectReplaceInputSchema,
   ProjectSummaryCollectionSchema,
   RedactedConnectionDiagnosticsSchema,
+  ScratchpadPreviewInputSchema,
+  ScratchpadPreviewResultSchema,
   SystemDiagnosticsSchema,
   SystemPacingDefaultsSchema,
   VoiceCatalogModelInputSchema,
   VoiceCatalogSchema,
   type ConnectionsClient,
   type PersistenceClient,
+  type ScratchpadClient,
   type SystemDiagnostics,
   type VoiceCatalogClient
 } from "@studynarrator/shared-types";
@@ -44,6 +47,7 @@ export function createExpressApp(options: {
   persistence?: PersistenceClient;
   connections?: ConnectionsClient;
   voiceCatalog?: VoiceCatalogClient;
+  scratchpad?: ScratchpadClient;
 }): Express {
   const app = express();
   app.disable("x-powered-by");
@@ -181,6 +185,14 @@ export function createExpressApp(options: {
     });
   }
 
+  if (options.scratchpad) {
+    app.post("/api/scratchpad/preview", async (request, response, next) => {
+      try {
+        response.json(ScratchpadPreviewResultSchema.parse(await options.scratchpad!.preview(ScratchpadPreviewInputSchema.parse(request.body))));
+      } catch (error) { next(error); }
+    });
+  }
+
   const boundaryError: ErrorRequestHandler = (error, _request, response, _next) => {
     let status = 500;
     let code = "PERSISTENCE_BOUNDARY_ERROR";
@@ -219,6 +231,18 @@ export function createExpressApp(options: {
       status = 409;
       code = "CONNECTION_CONFIGURATION";
       message = "Test this connection before exporting diagnostics.";
+    } else if (typeof errorRecord?.code === "string" && errorRecord.code.startsWith("SCRATCHPAD_")) {
+      code = errorRecord.code;
+      const scratchpadStatus: Record<string, number> = {
+        SCRATCHPAD_ABORTED: 499,
+        SCRATCHPAD_AUTHENTICATION: 401,
+        SCRATCHPAD_CONFIGURATION: 409,
+        SCRATCHPAD_INVALID_AUDIO: 502,
+        SCRATCHPAD_SELECTION_REJECTED: 422,
+        SCRATCHPAD_UNAVAILABLE: 503
+      };
+      status = scratchpadStatus[errorRecord.code] ?? 500;
+      message = typeof errorRecord.message === "string" ? errorRecord.message : "StudyNarrator could not complete speech synthesis.";
     }
     response.status(status).json(BoundaryErrorSchema.parse({
       error: {

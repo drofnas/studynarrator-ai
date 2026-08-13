@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ConnectionsClient, VoiceCatalogClient } from "./connections.js";
 import type { PersistenceClient } from "./persistence.js";
+import type { ScratchpadClient } from "./scratchpad.js";
 
 export const APPLICATION_VERSION = "0.1.0";
 export const DIAGNOSTICS_SCHEMA_VERSION = 3;
@@ -97,7 +98,9 @@ export interface StudyNarratorBridge {
   persistence: PersistenceClient;
   connections: ConnectionsClient;
   voiceCatalog: VoiceCatalogClient;
+  scratchpad: ScratchpadClient;
 }
 
 export * from "./connections.js";
 export * from "./persistence.js";
+export * from "./scratchpad.js";

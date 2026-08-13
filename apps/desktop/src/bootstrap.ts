@@ -5,6 +5,7 @@ import {
   BUNDLED_VOICE_CATALOGS,
   createPersistenceService,
   createRoutedCredentialStore,
+  createScratchpadService,
   createSystemService,
   createUnavailablePersistenceService,
   createVoiceCatalogService,
@@ -37,6 +38,7 @@ export async function createDesktopServices(options: {
   let repository: DiagnosticRepository;
   let connections;
   let voiceCatalog;
+  let scratchpad;
   let credentialVault: ElectronCredentialVault | undefined;
   try {
     const openedRepository = await openStudyNarratorRepository({ Database, databasePath });
@@ -60,12 +62,14 @@ export async function createDesktopServices(options: {
       electronVersion: process.versions.electron ?? null,
       activeProfileLocked: environmentProfile.activeProfileLocked
     };
+    const credentials = createRoutedCredentialStore({ environmentApiKey: environmentProfile.apiKey, vault: credentialVault });
     connections = createConnectionsService({
       repository: openedRepository,
-      credentials: createRoutedCredentialStore({ environmentApiKey: environmentProfile.apiKey, vault: credentialVault }),
+      credentials,
       context
     });
     voiceCatalog = createVoiceCatalogService({ repository: openedRepository, bundledCatalogs: BUNDLED_VOICE_CATALOGS });
+    scratchpad = createScratchpadService({ repository: openedRepository, credentials });
   } catch (error) {
     if (!(error instanceof MigrationFailureError)) throw error;
     storageFailure = {
@@ -106,5 +110,5 @@ export async function createDesktopServices(options: {
     architecture: process.arch,
     dataDirectory
   };
-  return { service, persistence, connections, voiceCatalog, credentialVault, context };
+  return { service, persistence, connections, voiceCatalog, scratchpad, credentialVault, context };
 }

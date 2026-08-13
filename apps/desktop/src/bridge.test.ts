@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { CONNECTION_CHANNELS, PERSISTENCE_CHANNELS, SYSTEM_DIAGNOSTICS_CHANNEL } from "@studynarrator/shared-types";
+import { CONNECTION_CHANNELS, PERSISTENCE_CHANNELS, SCRATCHPAD_CHANNELS, SYSTEM_DIAGNOSTICS_CHANNEL } from "@studynarrator/shared-types";
 import { createPreloadBridge } from "./bridge.js";
-import { PUBLIC_IPC_CHANNEL_MANIFEST, registerConnectionHandlers, registerDiagnosticsHandler, registerPersistenceHandlers } from "./ipc.js";
+import { PUBLIC_IPC_CHANNEL_MANIFEST, registerConnectionHandlers, registerDiagnosticsHandler, registerPersistenceHandlers, registerScratchpadHandlers } from "./ipc.js";
 import { isApprovedExternalUrl, SECURE_WEB_PREFERENCES } from "./security.js";
 
 const diagnostics = {
@@ -55,6 +55,23 @@ const connections = {
   completeOnboarding: vi.fn()
 };
 const voiceCatalog = { get: vi.fn(), replace: vi.fn() };
+const scratchpadResult = {
+  schemaVersion: 1 as const,
+  id: "00000000-0000-4000-8000-000000000099",
+  createdAt: "2026-08-12T12:00:00.000Z",
+  connectionProfileId: "profile",
+  connectionProfileName: "IPC profile",
+  modelId: "model",
+  voiceId: "voice",
+  speed: 1,
+  originalText: "Speech.",
+  readableText: "Speech.",
+  transformedText: "Speech.",
+  lexiconApplied: false,
+  warnings: [],
+  audio: { mimeType: "audio/wav" as const, base64: "AQID", byteLength: 3 }
+};
+const scratchpad = { preview: vi.fn(async () => scratchpadResult) };
 
 describe("Electron boundary", () => {
   it("exposes only the validated diagnostics and persistence operations", async () => {
@@ -64,7 +81,7 @@ describe("Electron boundary", () => {
       return persistenceStatus;
     });
     const bridge = createPreloadBridge(invoke);
-    expect(Object.keys(bridge)).toEqual(["system", "persistence", "connections", "voiceCatalog"]);
+    expect(Object.keys(bridge)).toEqual(["system", "persistence", "connections", "voiceCatalog", "scratchpad"]);
     expect(Object.keys(bridge.system)).toEqual(["diagnostics"]);
     await expect(bridge.system.diagnostics()).resolves.toEqual(diagnostics);
     expect(invoke).toHaveBeenCalledWith(SYSTEM_DIAGNOSTICS_CHANNEL);
@@ -94,6 +111,7 @@ describe("Electron boundary", () => {
     registerDiagnosticsHandler(ipcMain, service as never, {} as never);
     registerPersistenceHandlers(ipcMain, persistence as never);
     registerConnectionHandlers(ipcMain, connections, voiceCatalog as never);
+    registerScratchpadHandlers(ipcMain, scratchpad);
     expect([...handlers.keys()]).toEqual(PUBLIC_IPC_CHANNEL_MANIFEST);
     expect([...handlers.keys()]).not.toContain("persistence.execute");
     await expect(handlers.get(SYSTEM_DIAGNOSTICS_CHANNEL)?.()).resolves.toEqual(diagnostics);
@@ -198,6 +216,7 @@ describe("Electron boundary", () => {
     registerDiagnosticsHandler(ipcMain, service as never, {} as never);
     registerPersistenceHandlers(ipcMain, persistence as never);
     registerConnectionHandlers(ipcMain, connections as never, voiceCatalog as never);
+    registerScratchpadHandlers(ipcMain, scratchpad);
     const projectReplace = { name: project.name, description: "", scriptSource: "", connectionProfileId: null, modelId: null, speakerMappings: [], pausePresets: project.pausePresets, paragraphPause: project.paragraphPause, lexiconEntries: [] };
     const mutation = { profile: { id: "profile", name: "IPC profile", baseUrl: "http://127.0.0.1:8000", defaultModelId: "model", defaultVoiceId: "voice" }, credential: { action: "keep" } };
     const inputs: Record<string, unknown> = {
@@ -216,7 +235,8 @@ describe("Electron boundary", () => {
       [CONNECTION_CHANNELS.exportDiagnostics]: { profileId: "profile" },
       [CONNECTION_CHANNELS.setupSetActive]: { profileId: "profile" },
       [CONNECTION_CHANNELS.voiceCatalogGet]: { modelId: "model" },
-      [CONNECTION_CHANNELS.voiceCatalogReplace]: catalog
+      [CONNECTION_CHANNELS.voiceCatalogReplace]: catalog,
+      [SCRATCHPAD_CHANNELS.preview]: { connectionProfileId: "profile", modelId: "model", voiceId: "voice", speed: 1, text: "Speech.", applyGlobalLexicon: false }
     };
     const invoked = new Set<string>();
     for (const channel of PUBLIC_IPC_CHANNEL_MANIFEST) {
