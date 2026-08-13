@@ -17,11 +17,16 @@ import {
   ProjectDetailSchema,
   ProjectDuplicateInputSchema,
   ProjectIdSchema,
+  ProjectPreviewInputSchema,
+  ProjectPreviewResultSchema,
   ProjectReplaceInputSchema,
   ProjectSummaryCollectionSchema,
   RedactedConnectionDiagnosticsSchema,
   ScratchpadPreviewInputSchema,
   ScratchpadPreviewResultSchema,
+  SpeechCacheCleanupResultSchema,
+  SpeechCacheKeyInputSchema,
+  SpeechCacheStatusSchema,
   SpeechCatalogSchema,
   SystemDiagnosticsSchema,
   SystemPacingDefaultsSchema,
@@ -29,7 +34,9 @@ import {
   VoiceCatalogSchema,
   type ConnectionsClient,
   type PersistenceClient,
+  type ProjectPreviewClient,
   type ScratchpadClient,
+  type SpeechCacheClient,
   type SystemDiagnostics,
   type VoiceCatalogClient
 } from "@studynarrator/shared-types";
@@ -49,6 +56,8 @@ export function createExpressApp(options: {
   connections?: ConnectionsClient;
   voiceCatalog?: VoiceCatalogClient;
   scratchpad?: ScratchpadClient;
+  projectPreview?: ProjectPreviewClient;
+  speechCache?: SpeechCacheClient;
 }): Express {
   const app = express();
   app.disable("x-powered-by");
@@ -218,6 +227,47 @@ export function createExpressApp(options: {
     });
   }
 
+  if (options.projectPreview) {
+    app.post("/api/projects/:projectId/preview", async (request, response, next) => {
+      const controller = new AbortController();
+      const abort = () => controller.abort();
+      request.once("aborted", abort);
+      const abortIfDisconnected = () => { if (!response.writableEnded) abort(); };
+      response.once("close", abortIfDisconnected);
+      try {
+        response.json(ProjectPreviewResultSchema.parse(await options.projectPreview!.preview(
+          ProjectIdSchema.parse(request.params.projectId),
+          ProjectPreviewInputSchema.parse(request.body),
+          controller.signal
+        )));
+      } catch (error) { next(error); }
+      finally {
+        request.off("aborted", abort);
+        response.off("close", abortIfDisconnected);
+      }
+    });
+  }
+
+  if (options.speechCache) {
+    app.get("/api/speech-cache", async (_request, response, next) => {
+      try { response.json(SpeechCacheStatusSchema.parse(await options.speechCache!.status())); } catch (error) { next(error); }
+    });
+    app.delete("/api/speech-cache", async (_request, response, next) => {
+      try { response.json(SpeechCacheCleanupResultSchema.parse(await options.speechCache!.clearAll())); } catch (error) { next(error); }
+    });
+    app.delete("/api/projects/:projectId/speech-cache", async (request, response, next) => {
+      try {
+        response.json(SpeechCacheCleanupResultSchema.parse(await options.speechCache!.clearProject(ProjectIdSchema.parse(request.params.projectId))));
+      } catch (error) { next(error); }
+    });
+    app.delete("/api/speech-cache/:cacheKey", async (request, response, next) => {
+      try {
+        const { cacheKey } = SpeechCacheKeyInputSchema.parse(request.params);
+        response.json(SpeechCacheCleanupResultSchema.parse(await options.speechCache!.clearEntry(cacheKey)));
+      } catch (error) { next(error); }
+    });
+  }
+
   const boundaryError: ErrorRequestHandler = (error, _request, response, _next) => {
     let status = 500;
     let code = "PERSISTENCE_BOUNDARY_ERROR";
@@ -279,6 +329,19 @@ export function createExpressApp(options: {
       };
       status = scratchpadStatus[errorRecord.code] ?? 500;
       message = typeof errorRecord.message === "string" ? errorRecord.message : "StudyNarrator could not complete speech synthesis.";
+    } else if (typeof errorRecord?.code === "string" && errorRecord.code.startsWith("PROJECT_PREVIEW_")) {
+      code = errorRecord.code;
+      const previewStatus: Record<string, number> = {
+        PROJECT_PREVIEW_ABORTED: 499,
+        PROJECT_PREVIEW_AUTHENTICATION: 401,
+        PROJECT_PREVIEW_CONFIGURATION: 409,
+        PROJECT_PREVIEW_INVALID_AUDIO: 502,
+        PROJECT_PREVIEW_INVALID_SEGMENT: 422,
+        PROJECT_PREVIEW_SELECTION_REJECTED: 422,
+        PROJECT_PREVIEW_UNAVAILABLE: 503
+      };
+      status = previewStatus[errorRecord.code] ?? 500;
+      message = typeof errorRecord.message === "string" ? errorRecord.message : "StudyNarrator could not complete the project preview.";
     }
     response.status(status).json(BoundaryErrorSchema.parse({
       error: {

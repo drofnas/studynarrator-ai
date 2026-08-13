@@ -118,6 +118,22 @@ export {
 } from "./connections.js";
 export { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
 export {
+  SPEACHES_CACHE_ADAPTER_ID,
+  SPEACHES_CACHE_ADAPTER_VERSION,
+  createApplicationSpeechCache,
+  createCachedSpeechSynthesis,
+  createSpeechCacheService,
+  type CachedSpeechSynthesis,
+  type CachedSpeechSynthesisInput,
+  type CachedSpeechSynthesisRunner
+} from "./cachedSpeech.js";
+export {
+  ProjectPreviewServiceError,
+  createProjectPreviewService,
+  type ProjectPreviewRepository,
+  type ProjectPreviewServiceErrorCode
+} from "./projectPreview.js";
+export {
   ScratchpadServiceError,
   createScratchpadService,
   type ScratchpadRepository,

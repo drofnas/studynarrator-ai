@@ -1,7 +1,14 @@
 import { join, resolve } from "node:path";
 import { app, BrowserWindow, ipcMain, safeStorage, shell } from "electron";
 import { createDesktopServices } from "./bootstrap.js";
-import { registerConnectionHandlers, registerDiagnosticsHandler, registerPersistenceHandlers, registerScratchpadHandlers } from "./ipc.js";
+import {
+  registerConnectionHandlers,
+  registerDiagnosticsHandler,
+  registerPersistenceHandlers,
+  registerProjectPreviewHandlers,
+  registerScratchpadHandlers,
+  registerSpeechCacheHandlers
+} from "./ipc.js";
 import { isApprovedExternalUrl, SECURE_WEB_PREFERENCES } from "./security.js";
 
 let runtime: Awaited<ReturnType<typeof createDesktopServices>> | undefined;
@@ -45,6 +52,8 @@ void app.whenReady().then(async () => {
   registerPersistenceHandlers(ipcMain, runtime.persistence);
   if (runtime.connections && runtime.voiceCatalog) registerConnectionHandlers(ipcMain, runtime.connections, runtime.voiceCatalog);
   if (runtime.scratchpad) registerScratchpadHandlers(ipcMain, runtime.scratchpad);
+  if (runtime.projectPreview) registerProjectPreviewHandlers(ipcMain, runtime.projectPreview);
+  registerSpeechCacheHandlers(ipcMain, runtime.speechCache);
   await createWindow();
 });
 

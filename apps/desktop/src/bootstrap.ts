@@ -3,9 +3,13 @@ import Database from "better-sqlite3";
 import {
   createConnectionsService,
   BUNDLED_VOICE_CATALOGS,
+  createApplicationSpeechCache,
+  createCachedSpeechSynthesis,
   createPersistenceService,
+  createProjectPreviewService,
   createRoutedCredentialStore,
   createScratchpadService,
+  createSpeechCacheService,
   createSystemService,
   createUnavailablePersistenceService,
   createVoiceCatalogService,
@@ -39,7 +43,10 @@ export async function createDesktopServices(options: {
   let connections;
   let voiceCatalog;
   let scratchpad;
+  let projectPreview;
   let credentialVault: ElectronCredentialVault | undefined;
+  const cache = createApplicationSpeechCache(dataDirectory);
+  const speechCache = createSpeechCacheService(cache);
   try {
     const openedRepository = await openStudyNarratorRepository({ Database, databasePath });
     repository = openedRepository;
@@ -69,7 +76,9 @@ export async function createDesktopServices(options: {
       context
     });
     voiceCatalog = createVoiceCatalogService({ repository: openedRepository, bundledCatalogs: BUNDLED_VOICE_CATALOGS });
-    scratchpad = createScratchpadService({ repository: openedRepository, credentials });
+    const speech = createCachedSpeechSynthesis({ repository: openedRepository, credentials, cache });
+    scratchpad = createScratchpadService({ repository: openedRepository, credentials, cache });
+    projectPreview = createProjectPreviewService({ repository: openedRepository, speech });
   } catch (error) {
     if (!(error instanceof MigrationFailureError)) throw error;
     storageFailure = {
@@ -110,5 +119,5 @@ export async function createDesktopServices(options: {
     architecture: process.arch,
     dataDirectory
   };
-  return { service, persistence, connections, voiceCatalog, scratchpad, credentialVault, context };
+  return { service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache, credentialVault, context };
 }

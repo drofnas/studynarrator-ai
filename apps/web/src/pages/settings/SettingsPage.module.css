@@ -6,7 +6,7 @@
 .page > .error, .page > .status { grid-column: 1 / -1; margin: 0; }
 .error { color: var(--fault); font-weight: 800; }
 .status { color: #557080; font-size: 0.8rem; }
-.connections, .catalog, .pacing { padding: 22px; background: var(--paper); border: 1px solid var(--line); border-top: 5px solid var(--signal); }
+.connections, .catalog, .pacing, .cache { padding: 22px; background: var(--paper); border: 1px solid var(--line); border-top: 5px solid var(--signal); }
 .connections { grid-column: 1 / -1; }
 .catalog { border-top-color: var(--copper); }
 .sectionHeading, .diagnosticHeader { display: flex; justify-content: space-between; gap: 16px; align-items: center; margin-bottom: 16px; }
@@ -45,5 +45,11 @@
 .attribution { color: #557080; font-size: 0.7rem; line-height: 1.5; }
 .pacing { align-self: start; }
 .pacing label { margin: 13px 0; }
+.cache { align-self: start; border-top-color: var(--ink); }
+.cache .sectionHeading p { margin: 0 0 7px; color: var(--signal); font: 800 0.68rem ui-monospace, monospace; letter-spacing: 0.12em; text-transform: uppercase; }
+.cacheGrid { display: grid; gap: 7px; margin-bottom: 12px; }
+.cacheGrid article { display: grid; gap: 4px; padding: 11px; background: var(--mist); border-left: 4px solid var(--signal); }
+.cacheGrid span { color: var(--signal); font-size: 0.62rem; font-weight: 800; text-transform: uppercase; }
+.cacheGrid code, .cache > p { color: #557080; font-size: 0.68rem; line-height: 1.45; }
 @media (max-width: 960px) { .page { grid-template-columns: 1fr; } .connections, .page > header, .page > .error, .page > .status { grid-column: 1; } .diagnostics ol { grid-template-columns: repeat(4, 1fr); } }
 @media (max-width: 700px) { .connectionGrid, .profileForm { grid-template-columns: 1fr; } .managed, .keyState, .actions { grid-column: 1; } .diagnostics ol { grid-template-columns: repeat(2, 1fr); } }

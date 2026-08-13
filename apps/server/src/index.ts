@@ -2,14 +2,16 @@ import { createExpressApp } from "./app.js";
 import { createServerServices } from "./bootstrap.js";
 
 const port = Number.parseInt(process.env.STUDYNARRATOR_PORT ?? "4310", 10);
-const { service, persistence, connections, voiceCatalog, scratchpad, context } = await createServerServices();
+const { service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache, context } = await createServerServices();
 const server = createExpressApp({
   service,
   persistence,
   context,
   ...(connections === undefined ? {} : { connections }),
   ...(voiceCatalog === undefined ? {} : { voiceCatalog }),
-  ...(scratchpad === undefined ? {} : { scratchpad })
+  ...(scratchpad === undefined ? {} : { scratchpad }),
+  ...(projectPreview === undefined ? {} : { projectPreview }),
+  speechCache
 }).listen(port, "127.0.0.1", () => {
   console.log(`StudyNarrator server listening on http://127.0.0.1:${port}`);
 });

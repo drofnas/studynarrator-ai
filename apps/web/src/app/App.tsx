@@ -1,4 +1,4 @@
-import type { ConnectionsClient, PersistenceClient, ScratchpadClient, SystemClient, VoiceCatalogClient } from "@studynarrator/shared-types";
+import type { ConnectionsClient, PersistenceClient, ProjectPreviewClient, ScratchpadClient, SpeechCacheClient, SystemClient, VoiceCatalogClient } from "@studynarrator/shared-types";
 import { ConnectionProvider } from "@/features/connections/ConnectionProvider.js";
 import { ScratchpadSessionProvider } from "@/features/scratchpad/ScratchpadSessionProvider.js";
 import { AppRoutes } from "./routes.js";
@@ -11,9 +11,11 @@ export interface AppProps {
   connections: ConnectionsClient;
   voiceCatalog: VoiceCatalogClient;
   scratchpad: ScratchpadClient;
+  projectPreview: ProjectPreviewClient;
+  speechCache: SpeechCacheClient;
   analyzer: ScriptAnalyzer;
 }
 
-export function App({ analyzer, client, persistence, connections, voiceCatalog, scratchpad }: AppProps) {
-  return <ConnectionProvider connections={connections} voiceCatalog={voiceCatalog}><ScratchpadSessionProvider><AppRoutes analyzer={analyzer} client={client} persistence={persistence} scratchpad={scratchpad} /></ScratchpadSessionProvider></ConnectionProvider>;
+export function App({ analyzer, client, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache }: AppProps) {
+  return <ConnectionProvider connections={connections} voiceCatalog={voiceCatalog}><ScratchpadSessionProvider><AppRoutes analyzer={analyzer} client={client} persistence={persistence} scratchpad={scratchpad} projectPreview={projectPreview} speechCache={speechCache} /></ScratchpadSessionProvider></ConnectionProvider>;
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { SpeachesSynthesisError } from "@studynarrator/speaches-adapter";
+import type { SpeechCache } from "@studynarrator/rendering";
 import { createScratchpadService, type ScratchpadRepository } from "./scratchpad.js";
 import { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
 
@@ -37,15 +38,44 @@ function repository(): ScratchpadRepository {
     listConnectionProfiles: vi.fn(), createConnectionProfile: vi.fn(), replaceConnectionProfile: vi.fn(), deleteConnectionProfile: vi.fn(),
     setConnectionCredentialReference: vi.fn(), setConnectionSuppliedUrlForm: vi.fn(), upsertEnvironmentConnectionProfile: vi.fn(),
     recordConnectionTest: vi.fn(), getConnectionSetup: vi.fn(), setActiveConnectionProfile: vi.fn(), completeConnectionOnboarding: vi.fn(),
-    getVoiceCatalogOverrides: vi.fn(), replaceVoiceCatalogOverrides: vi.fn()
+    getVoiceCatalogOverrides: vi.fn(() => ({
+      schemaVersion: 1, modelId: "model", entries: [{
+        voiceId: "voice", label: "Friendly Voice", enabled: true, language: null, locale: null,
+        accent: null, category: null, style: null, sampleText: null
+      }]
+    })), replaceVoiceCatalogOverrides: vi.fn()
   } as unknown as ScratchpadRepository;
+}
+
+function speechCache(): SpeechCache {
+  return {
+    async getOrCreate(input, _usage, synthesize, signal) {
+      const bytes = await synthesize(input.text, signal ?? new AbortController().signal);
+      return {
+        key: "a".repeat(64), status: "miss", bytes,
+        metadata: {
+          schemaVersion: 1, normalizationVersion: 1, chunkingVersion: 1,
+          adapterId: input.adapterId, adapterVersion: input.adapterVersion,
+          serverIdentityHash: "b".repeat(64), profileId: input.profileId, modelId: input.modelId,
+          voiceId: input.voiceId, speed: input.speed, textHash: "c".repeat(64), responseFormat: "wav",
+          key: "a".repeat(64), audioChecksum: "d".repeat(64), byteLength: bytes.byteLength,
+          createdAt: timestamp, lastUsedAt: timestamp, projectIds: [], scratchpadUsed: true
+        }
+      };
+    },
+    async status() { return { entryCount: 0, totalBytes: 0, lastUsedAt: null, sessionHits: 0, sessionMisses: 0, sessionWrites: 0, sessionCorruptMisses: 0, inFlight: 0 }; },
+    async clearAll() { return { entriesRemoved: 0, bytesFreed: 0 }; },
+    async clearProject() { return { entriesRemoved: 0, bytesFreed: 0 }; },
+    async clearEntry() { return { entriesRemoved: 0, bytesFreed: 0 }; }
+  };
 }
 
 describe("scratchpad service", () => {
   it("matches the public application-service manifest", () => {
     const service = createScratchpadService({
       repository: repository(),
-      credentials: { replacementAllowed: false, read: vi.fn(async () => null), write: vi.fn(), delete: vi.fn() }
+      credentials: { replacementAllowed: false, read: vi.fn(async () => null), write: vi.fn(), delete: vi.fn() },
+      cache: speechCache()
     });
     expect(Object.keys(service).map((key) => `scratchpad.${key}`)).toEqual(
       APPLICATION_SERVICE_MANIFEST.filter((path) => path.startsWith("scratchpad."))
@@ -58,6 +88,7 @@ describe("scratchpad service", () => {
     const service = createScratchpadService({
       repository: store,
       credentials: { replacementAllowed: false, read: vi.fn(async () => "test-secret-must-not-appear"), write: vi.fn(), delete: vi.fn() },
+      cache: speechCache(),
       synthesize,
       createId: () => "00000000-0000-4000-8000-000000000001",
       now: () => new Date(timestamp)
@@ -73,7 +104,10 @@ describe("scratchpad service", () => {
       timeoutSeconds: 12,
       retryCount: 2
     }));
-    expect(result).toMatchObject({ originalText: "SQL indexes.", transformedText: "sequel indexes.", audio: { base64: "AQID", byteLength: 3 } });
+    expect(result).toMatchObject({
+      schemaVersion: 2, originalText: "SQL indexes.", transformedText: "sequel indexes.",
+      voiceLabel: "Friendly Voice", cache: { status: "miss" }, audio: { base64: "AQID", byteLength: 3 }
+    });
     expect(JSON.stringify(result)).not.toContain("test-secret-must-not-appear");
     expect((store.recordConnectionTest as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(0);
     expect((store.replaceConnectionProfile as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(0);
@@ -83,6 +117,7 @@ describe("scratchpad service", () => {
     const service = createScratchpadService({
       repository: repository(),
       credentials: { replacementAllowed: false, read: vi.fn(async () => null), write: vi.fn(), delete: vi.fn() },
+      cache: speechCache(),
       synthesize: vi.fn(async () => { throw new SpeachesSynthesisError("selectionRejected", "upstream-private-body", false, 422); }),
       createId: vi.fn(() => "00000000-0000-4000-8000-000000000001")
     });
@@ -99,6 +134,7 @@ describe("scratchpad service", () => {
     const service = createScratchpadService({
       repository: repository(),
       credentials: { replacementAllowed: false, read: vi.fn(async () => null), write: vi.fn(), delete: vi.fn() },
+      cache: speechCache(),
       synthesize: vi.fn(async () => { throw new SpeachesSynthesisError("audioTooLarge", "upstream-private-body", false, 200); })
     });
     await expect(service.preview({ connectionProfileId: "local", modelId: "model", voiceId: "voice", speed: 1, text: "Keep me.", applyGlobalLexicon: false }))
@@ -113,6 +149,7 @@ describe("scratchpad service", () => {
     const service = createScratchpadService({
       repository: repository(),
       credentials: { replacementAllowed: false, read: vi.fn(async () => null), write: vi.fn(), delete: vi.fn() },
+      cache: speechCache(),
       synthesize
     });
     await expect(service.preview({ connectionProfileId: "local", modelId: "model", voiceId: "voice", speed: 1, text: "[pause_short]", applyGlobalLexicon: false }))

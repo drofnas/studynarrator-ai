@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -36,9 +36,11 @@ const voiceCatalog = { get: vi.fn(async () => ({ schemaVersion: 1 as const, mode
 
 function previewResult(text: string): ScratchpadPreviewResult {
   return {
-    schemaVersion: 1, id: crypto.randomUUID(), createdAt: timestamp, connectionProfileId: "local", connectionProfileName: "Local Speaches",
-    modelId: "model", voiceId: "voice", speed: 1, originalText: text, readableText: text, transformedText: text.replace("SQL", "sequel"),
-    lexiconApplied: true, warnings: [], audio: { mimeType: "audio/wav", base64: "AQID", byteLength: 3 }
+    schemaVersion: 2, id: crypto.randomUUID(), createdAt: timestamp, connectionProfileId: "local", connectionProfileName: "Local Speaches",
+    modelId: "model", voiceId: "voice", voiceLabel: "Teacher — voice", speed: 1, originalText: text, readableText: text, transformedText: text.replace("SQL", "sequel"),
+    lexiconApplied: true, warnings: [],
+    cache: { key: "a".repeat(64), status: "miss", byteLength: 3, createdAt: timestamp, lastUsedAt: timestamp },
+    audio: { mimeType: "audio/wav", base64: "AQID", byteLength: 3 }
   };
 }
 
@@ -75,6 +77,9 @@ describe("Quick Scratchpad", () => {
     await user.click(screen.getByRole("button", { name: "Synthesize passage" }));
     await waitFor(() => expect(preview).toHaveBeenCalledWith(expect.objectContaining({ text: "SQL indexes can improve database reads.", applyGlobalLexicon: true }), expect.any(AbortSignal)));
     expect(await screen.findByLabelText(/Audio player for Local Speaches/u)).toBeInTheDocument();
+    const resultDetail = screen.getByText(/Result · cache miss/u).closest("section");
+    expect(resultDetail).not.toBeNull();
+    expect(within(resultDetail!).getByText("Teacher — voice", { selector: "strong" })).toBeInTheDocument();
 
     const audio = container.querySelector("audio");
     expect(audio).not.toBeNull();

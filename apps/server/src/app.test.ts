@@ -15,7 +15,18 @@ import {
   type DiagnosticsContext
 } from "@studynarrator/application";
 import { openStudyNarratorRepository, type DatabaseConstructor } from "@studynarrator/persistence";
-import { BoundaryErrorSchema, HealthSchema, ProjectDetailSchema, ProjectSummaryCollectionSchema, RuntimeSchema, SpeechCatalogSchema, SystemDiagnosticsSchema } from "@studynarrator/shared-types";
+import {
+  BoundaryErrorSchema,
+  HealthSchema,
+  ProjectDetailSchema,
+  ProjectPreviewResultSchema,
+  ProjectSummaryCollectionSchema,
+  RuntimeSchema,
+  SpeechCacheCleanupResultSchema,
+  SpeechCacheStatusSchema,
+  SpeechCatalogSchema,
+  SystemDiagnosticsSchema
+} from "@studynarrator/shared-types";
 import { createExpressApp } from "./app.js";
 import { REST_API_MANIFEST } from "./apiManifest.js";
 
@@ -73,24 +84,70 @@ async function fixture() {
   const voiceCatalog = createVoiceCatalogService({ repository, bundledCatalogs: new Map() });
   const scratchpad = {
     preview: async (input: { connectionProfileId: string; modelId: string; voiceId: string; speed: number; text: string; applyGlobalLexicon: boolean }) => ({
-      schemaVersion: 1 as const,
+      schemaVersion: 2 as const,
       id: "00000000-0000-4000-8000-000000000099",
       createdAt: "2026-08-12T12:00:00.000Z",
       connectionProfileId: input.connectionProfileId,
       connectionProfileName: "Manifest",
       modelId: input.modelId,
       voiceId: input.voiceId,
+      voiceLabel: "Voice",
       speed: input.speed,
       originalText: input.text,
       readableText: input.text,
       transformedText: input.text,
       lexiconApplied: input.applyGlobalLexicon,
       warnings: [],
+      cache: {
+        key: "a".repeat(64), status: "hit" as const, byteLength: 3,
+        createdAt: "2026-08-12T12:00:00.000Z", lastUsedAt: "2026-08-12T12:00:00.000Z"
+      },
       audio: { mimeType: "audio/wav" as const, base64: "AQID", byteLength: 3 }
     })
   };
+  const projectPreview = {
+    preview: async (requestedProjectId: string, input: { mode: "segment" | "pronunciation" }) => ({
+      schemaVersion: 1 as const,
+      id: "00000000-0000-4000-8000-000000000098",
+      createdAt: "2026-08-12T12:00:00.000Z",
+      projectId: requestedProjectId,
+      mode: input.mode,
+      nodeOrdinal: input.mode === "segment" ? 1 : null,
+      sourceRange: input.mode === "segment"
+        ? { start: { line: 1, column: 1 }, end: { line: 1, column: 17 } }
+        : null,
+      connectionProfileId: "manifest-profile",
+      connectionProfileName: "Manifest",
+      modelId: "model",
+      speakerId: "narrator" as const,
+      voiceId: "voice",
+      voiceLabel: "Voice",
+      speed: 1,
+      originalText: "Manifest speech.",
+      readableText: "Manifest speech.",
+      transformedText: "Manifest speech.",
+      cache: {
+        key: "a".repeat(64), status: "hit" as const, byteLength: 3,
+        createdAt: "2026-08-12T12:00:00.000Z", lastUsedAt: "2026-08-12T12:00:00.000Z"
+      },
+      audio: { mimeType: "audio/wav" as const, base64: "AQID", byteLength: 3 }
+    })
+  };
+  const speechCache = {
+    status: async () => ({
+      contractVersion: 1 as const, entryCount: 1, totalBytes: 3,
+      lastUsedAt: "2026-08-12T12:00:00.000Z", sessionHits: 1, sessionMisses: 0,
+      sessionWrites: 0, sessionCorruptMisses: 0, inFlight: 0
+    }),
+    clearAll: async () => ({ contractVersion: 1 as const, entriesRemoved: 1, bytesFreed: 3 }),
+    clearProject: async (_projectId: string) => ({ contractVersion: 1 as const, entriesRemoved: 1, bytesFreed: 3 }),
+    clearEntry: async (_cacheKey: string) => ({ contractVersion: 1 as const, entriesRemoved: 1, bytesFreed: 3 })
+  };
   openServices.add(service);
-  return { service, persistence, connections, voiceCatalog, scratchpad, app: await listen(createExpressApp({ service, persistence, connections, voiceCatalog, scratchpad, context })) };
+  return {
+    service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache,
+    app: await listen(createExpressApp({ service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache, context }))
+  };
 }
 
 describe("Express diagnostics API", () => {
@@ -251,8 +308,8 @@ interface ExpressRouteLayer {
 
 describe("REST API operation manifest", () => {
   it("matches every registered method and path exactly", async () => {
-    const { service, persistence, connections, voiceCatalog, scratchpad } = await fixture();
-    const application = createExpressApp({ service, persistence, connections, voiceCatalog, scratchpad, context });
+    const { service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache } = await fixture();
+    const application = createExpressApp({ service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache, context });
     const layers = (application as unknown as { router: { stack: ExpressRouteLayer[] } }).router.stack;
     const registered = layers.flatMap((layer) => layer.route
       ? Object.entries(layer.route.methods)
@@ -261,14 +318,17 @@ describe("REST API operation manifest", () => {
       : []);
     const declared = REST_API_MANIFEST.map(({ method, path }) => `${method} ${path}`);
     expect(registered.sort()).toEqual([...declared].sort());
-    expect(new Set(declared).size).toBe(29);
+    expect(new Set(declared).size).toBe(34);
   });
 
-  it("exercises a successful schema-valid response for all 29 operations", async () => {
+  it("exercises a successful schema-valid response for all 34 operations", async () => {
     const { app } = await fixture();
     const covered = new Set<string>();
     const call = async (method: string, path: string, expected: number, body?: string | object) => {
-      covered.add(`${method} ${path.replace(/\/[0-9a-f-]{36}(?=\/|$)/gu, "/:projectId").replace(/\/manifest-profile(?=\/|$)/gu, "/:profileId")}`);
+      covered.add(`${method} ${path
+        .replace(/\/[0-9a-f-]{36}(?=\/|$)/gu, "/:projectId")
+        .replace(/\/manifest-profile(?=\/|$)/gu, "/:profileId")
+        .replace(/\/[a-f0-9]{64}(?=\/|$)/gu, "/:cacheKey")}`);
       const agent = request(app)[method.toLowerCase() as "get"](path);
       if (body !== undefined) agent.send(body);
       return await agent.expect(expected);
@@ -321,6 +381,13 @@ describe("REST API operation manifest", () => {
       connectionProfileId: "manifest-profile", modelId: "model", voiceId: "voice", speed: 1,
       text: "Manifest speech.", applyGlobalLexicon: false
     });
+    ProjectPreviewResultSchema.parse((await call("POST", `/api/projects/${created.id}/preview`, 200, {
+      mode: "segment", nodeOrdinal: 1
+    })).body as unknown);
+    SpeechCacheStatusSchema.parse((await call("GET", "/api/speech-cache", 200)).body as unknown);
+    SpeechCacheCleanupResultSchema.parse((await call("DELETE", `/api/projects/${created.id}/speech-cache`, 200)).body as unknown);
+    SpeechCacheCleanupResultSchema.parse((await call("DELETE", `/api/speech-cache/${"a".repeat(64)}`, 200)).body as unknown);
+    SpeechCacheCleanupResultSchema.parse((await call("DELETE", "/api/speech-cache", 200)).body as unknown);
     await call("DELETE", "/api/connections/manifest-profile", 204);
     await call("DELETE", `/api/projects/${created.id}`, 204);
 
@@ -347,7 +414,11 @@ describe("REST API operation manifest", () => {
       request(app).put("/api/setup/active-profile").send({ profileId: 12 }).expect(400),
       request(app).get("/api/voice-catalog").expect(400),
       request(app).put("/api/voice-catalog").send({ schemaVersion: 1, modelId: "model", entries: [{ voiceId: "same", label: secret, apiKey: secret }] }).expect(400),
-      request(app).post("/api/scratchpad/preview").send({ connectionProfileId: "x", text: secret }).expect(400)
+      request(app).post("/api/scratchpad/preview").send({ connectionProfileId: "x", text: secret }).expect(400),
+      request(app).post("/api/projects/not-a-uuid/preview").send({ mode: "segment", nodeOrdinal: 1 }).expect(400),
+      request(app).post("/api/projects/00000000-0000-4000-8000-000000000001/preview").send({ mode: "pronunciation", text: "" }).expect(400),
+      request(app).delete("/api/projects/not-a-uuid/speech-cache").expect(400),
+      request(app).delete("/api/speech-cache/not-a-key").expect(400)
     ];
     const responses = await Promise.all(invalidCases);
     expect(JSON.stringify(responses.map((response) => response.body as unknown))).not.toContain(secret);
