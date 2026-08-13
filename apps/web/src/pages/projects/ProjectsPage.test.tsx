@@ -8,6 +8,7 @@ import { parseScript, resolveParagraphPauses, transformScript } from "@studynarr
 import type { ConnectionProfile, IgnoredDiagnosticCollection, PersistenceClient, ProjectDetail, ProjectReplaceInput, VoiceCatalog } from "@studynarrator/shared-types";
 import type { ScriptAnalyzer } from "@/workers/parser/parserClient.js";
 import type { ScriptAnalysisInput } from "@/workers/parser/parserWorkerProtocol.js";
+import { GLOBAL_VOICE_CATALOG_MODEL_ID } from "@/features/projects/projectAuthoring.js";
 import { ProjectsPage } from "./ProjectsPage.js";
 import { ConnectionProvider } from "@/features/connections/ConnectionProvider.js";
 
@@ -33,6 +34,11 @@ const project: ProjectDetail = {
   createdAt: "2026-08-12T12:00:00.000Z",
   updatedAt: "2026-08-12T12:00:00.000Z"
 };
+
+const globalCatalog: VoiceCatalog = { schemaVersion: 1, modelId: GLOBAL_VOICE_CATALOG_MODEL_ID, entries: [
+  { voiceId: "af_heart", label: "Heart — American English — af_heart", enabled: true, language: "American English", locale: "en-US", accent: "American", category: null, style: null, sampleText: null },
+  { voiceId: "af_sky", label: "Sky — American English — af_sky", enabled: true, language: "American English", locale: "en-US", accent: "American", category: null, style: null, sampleText: null }
+] };
 
 function fixture(sourceProject = project) {
   let stored = structuredClone(sourceProject);
@@ -83,7 +89,7 @@ function renderPage(client: PersistenceClient, analyze: ScriptAnalyzer["analyze"
     setActiveProfile: vi.fn(), completeOnboarding: vi.fn()
   };
   const voiceCatalog = { get: vi.fn(async (modelId: string) => options.catalog ?? ({ schemaVersion: 1 as const, modelId, entries: [] })), replace: vi.fn() };
-  return render(<ConnectionProvider connections={connections} voiceCatalog={voiceCatalog}><MemoryRouter initialEntries={[`/projects/${project.id}`]}><Link to="/settings">Settings test link</Link><Routes><Route path="/projects/:projectId" element={<ProjectsPage client={client} analyzer={{ analyze }} />} /><Route path="/settings" element={<p>Settings destination</p>} /></Routes></MemoryRouter></ConnectionProvider>);
+  return { ...render(<ConnectionProvider connections={connections} voiceCatalog={voiceCatalog}><MemoryRouter initialEntries={[`/projects/${project.id}`]}><Link to="/settings">Settings test link</Link><Routes><Route path="/projects/:projectId" element={<ProjectsPage client={client} analyzer={{ analyze }} />} /><Route path="/settings" element={<p>Settings destination</p>} /></Routes></MemoryRouter></ConnectionProvider>), voiceCatalog };
 }
 
 function deferred<T>() {
@@ -125,6 +131,23 @@ describe("Projects workbench", () => {
     })));
     await userEvent.selectOptions(screen.getByLabelText("Voices"), "af_sky");
     expect(screen.getByLabelText("Voices")).toHaveValue("af_sky");
+  });
+
+  it("uses the global voice catalog before a project connection is selected", async () => {
+    const unreconciled = { ...project, speakerMappings: [] };
+    const { client, analyze, replace } = fixture(unreconciled);
+    const { voiceCatalog } = renderPage(client, analyze, { catalog: globalCatalog });
+
+    expect(await screen.findByLabelText("Voices")).toBeEnabled();
+    expect(screen.getByLabelText("Voices")).toHaveValue("af_heart");
+    expect(screen.getByRole("option", { name: "Sky — American English — af_sky" })).toBeInTheDocument();
+    expect(voiceCatalog.get).toHaveBeenCalledWith(GLOBAL_VOICE_CATALOG_MODEL_ID);
+    await waitFor(() => expect(replace).toHaveBeenCalledWith(project.id, expect.objectContaining({
+      connectionProfileId: null,
+      modelId: null,
+      speakerMappings: [expect.objectContaining({ speakerId: "teacher", voiceId: "af_heart" })]
+    })));
+    await waitFor(() => expect(screen.queryByText("MISSING_VOICE_MAPPING")).not.toBeInTheDocument());
   });
 
   it("analyzes offline, renders the narration score, and autosaves edits", async () => {
@@ -213,7 +236,7 @@ describe("Projects workbench", () => {
     await waitFor(() => expect(analyze).toHaveBeenCalled());
     expect(await screen.findByLabelText("Voices")).toBeDisabled();
     expect(screen.getByLabelText("Voices")).toHaveValue("");
-    expect(screen.getByText("Choose a connection profile or model.")).toBeInTheDocument();
+    expect(screen.getByText("The global voice catalog has no enabled voices.")).toBeInTheDocument();
     expect(timerSpy.mock.calls.filter(([, delay]) => delay === 800)).toHaveLength(0);
     expect(replace).not.toHaveBeenCalled();
     expect(screen.getByText("Saved")).toBeInTheDocument();

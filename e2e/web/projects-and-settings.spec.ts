@@ -104,12 +104,14 @@ test.describe("Projects connected authoring", () => {
     await page.getByRole("button", { name: "Create project" }).click();
     await expect(page.getByRole("heading", { name: "Script editor" })).toBeVisible();
 
-    await page.getByLabel("Connection profile").selectOption("environment-speaches");
-    await page.getByLabel("Optional model override").fill(modelId);
     const longScript = ["[section: Start]", ...Array.from({ length: 48 }, (_value, index) => `[speaker_teacher] Welcome line ${String(index + 1)}.`), "[pause_short] Continue."].join("\n");
     await page.getByLabel("Script source").fill(longScript);
     const voices = page.getByLabel("Voices");
     await expect(voices).toBeVisible();
+    await expect(voices).toHaveValue("af_heart");
+    await expect(page.getByLabel("Connection profile")).toHaveValue("");
+    await page.getByLabel("Connection profile").selectOption("environment-speaches");
+    await page.getByLabel("Optional model override").fill(modelId);
     await expect(voices).toHaveValue("af_heart");
     await expect(page.locator("strong").filter({ hasText: "Heart — American English — af_heart" })).toBeVisible();
     await expect(page.getByText("af_heart", { exact: true })).toBeVisible();

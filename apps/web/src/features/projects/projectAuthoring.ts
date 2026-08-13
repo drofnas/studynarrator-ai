@@ -2,6 +2,8 @@ import type { LexiconEntry, LexiconEntryAuthoring } from "@studynarrator/core";
 import type { ProjectDetail, ProjectReplaceInput, VoiceCatalogEntry } from "@studynarrator/shared-types";
 
 export const MAX_SCRIPT_CHARACTERS = 5_000_000;
+export const GLOBAL_VOICE_CATALOG_MODEL_ID = "speaches-ai/Kokoro-82M-v1.0-ONNX";
+export const GLOBAL_VOICE_CATALOG_DEFAULT_VOICE_ID = "af_heart";
 
 export type ProjectDraft = ProjectReplaceInput;
 
