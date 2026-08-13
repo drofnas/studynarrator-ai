@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { diagnoseSpeaches, normalizeSpeachesUrl, synthesizeSpeech } from "./index.js";
+import { diagnoseSpeaches, MAX_AUDIO_BYTES, normalizeSpeachesUrl, probeAudioWithFfprobe, synthesizeSpeech } from "./index.js";
 import type { SpeachesSynthesisError } from "./index.js";
 
 describe("normalizeSpeachesUrl", () => {
@@ -22,6 +22,28 @@ describe("normalizeSpeachesUrl", () => {
     "speech.example.test"
   ])("rejects unsafe or unsupported URL %s", (input) => {
     expect(() => normalizeSpeachesUrl(input)).toThrow();
+  });
+});
+
+describe("probeAudioWithFfprobe", () => {
+  it("accepts a large valid WAV when ffprobe closes stdin after reading its header", async () => {
+    const dataSize = 4 * 1024 * 1024;
+    const wav = new Uint8Array(44 + dataSize);
+    const header = new DataView(wav.buffer);
+    wav.set(new TextEncoder().encode("RIFF"), 0);
+    header.setUint32(4, 36 + dataSize, true);
+    wav.set(new TextEncoder().encode("WAVEfmt "), 8);
+    header.setUint32(16, 16, true);
+    header.setUint16(20, 1, true);
+    header.setUint16(22, 1, true);
+    header.setUint32(24, 8_000, true);
+    header.setUint32(28, 16_000, true);
+    header.setUint16(32, 2, true);
+    header.setUint16(34, 16, true);
+    wav.set(new TextEncoder().encode("data"), 36);
+    header.setUint32(40, dataSize, true);
+
+    await expect(probeAudioWithFfprobe(wav)).resolves.toMatchObject({ decodable: true, formatName: "wav" });
   });
 });
 
@@ -157,11 +179,19 @@ describe("synthesizeSpeech", () => {
       probeAudio: vi.fn(async () => ({ decodable: false, formatName: null }))
     })).rejects.toMatchObject({ code: "invalidAudio" });
 
-    const oversized = new Uint8Array(5 * 1024 * 1024 + 1);
+    const cancel = vi.fn();
+    const oversized = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(MAX_AUDIO_BYTES));
+        controller.enqueue(new Uint8Array([1]));
+      },
+      cancel
+    });
     await expect(synthesizeSpeech({ ...input, retryCount: 0 }, {
       fetch: vi.fn(async () => new Response(oversized, { status: 200, headers: { "content-type": "audio/wav" } })),
       probeAudio: vi.fn()
-    })).rejects.toMatchObject({ code: "invalidAudio" });
+    })).rejects.toMatchObject({ code: "audioTooLarge", retryable: false });
+    expect(cancel).toHaveBeenCalledOnce();
   });
 
   it("stops before a request when cancelled", async () => {

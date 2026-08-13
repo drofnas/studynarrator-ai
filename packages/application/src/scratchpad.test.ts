@@ -95,6 +95,19 @@ describe("scratchpad service", () => {
     }
   });
 
+  it("turns an oversized WAV into actionable, sanitized guidance", async () => {
+    const service = createScratchpadService({
+      repository: repository(),
+      credentials: { replacementAllowed: false, read: vi.fn(async () => null), write: vi.fn(), delete: vi.fn() },
+      synthesize: vi.fn(async () => { throw new SpeachesSynthesisError("audioTooLarge", "upstream-private-body", false, 200); })
+    });
+    await expect(service.preview({ connectionProfileId: "local", modelId: "model", voiceId: "voice", speed: 1, text: "Keep me.", applyGlobalLexicon: false }))
+      .rejects.toMatchObject({
+        code: "SCRATCHPAD_INVALID_AUDIO",
+        message: "The generated WAV exceeded the 5 MiB Scratchpad limit. Shorten the passage and retry."
+      });
+  });
+
   it("passes cancellation through and never calls synthesis for invalid control text", async () => {
     const synthesize = vi.fn();
     const service = createScratchpadService({

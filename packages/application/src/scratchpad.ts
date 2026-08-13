@@ -41,6 +41,7 @@ function safeSynthesisError(error: unknown): ScratchpadServiceError {
   if (error instanceof SpeachesSynthesisError) {
     switch (error.code) {
       case "aborted": return new ScratchpadServiceError("SCRATCHPAD_ABORTED", "Speech synthesis was cancelled.");
+      case "audioTooLarge": return new ScratchpadServiceError("SCRATCHPAD_INVALID_AUDIO", "The generated WAV exceeded the 5 MiB Scratchpad limit. Shorten the passage and retry.");
       case "authenticationRequired": return new ScratchpadServiceError("SCRATCHPAD_AUTHENTICATION", "Speaches rejected authentication. Test the profile and update its API key.");
       case "configurationError": return new ScratchpadServiceError("SCRATCHPAD_CONFIGURATION", "The selected connection profile or synthesis settings are incomplete.");
       case "invalidAudio": return new ScratchpadServiceError("SCRATCHPAD_INVALID_AUDIO", "Speaches returned WAV audio that StudyNarrator could not validate.");

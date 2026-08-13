@@ -53,6 +53,7 @@ export interface SpeachesAdapterDependencies {
 
 export type SpeachesSynthesisErrorCode =
   | "aborted"
+  | "audioTooLarge"
   | "authenticationRequired"
   | "configurationError"
   | "invalidAudio"
@@ -218,7 +219,10 @@ async function readBoundedBody(response: Response, limit: number): Promise<Uint8
       const next = await reader.read();
       if (next.done) break;
       total += next.value.byteLength;
-      if (total > limit) throw new DiagnosticFailure("audio-too-large", "The diagnostic audio exceeded the safe response limit.", "invalid-response");
+      if (total > limit) {
+        try { await reader.cancel(); } catch { /* preserve the bounded-response failure */ }
+        throw new DiagnosticFailure("audio-too-large", "The diagnostic audio exceeded the safe response limit.", "invalid-response");
+      }
       chunks.push(next.value);
     }
   } finally {
@@ -258,6 +262,11 @@ export async function probeAudioWithFfprobe(bytes: Uint8Array, signal?: AbortSig
     });
     child.stderr.on("data", (chunk: Buffer) => {
       stderrLength += chunk.byteLength;
+    });
+    child.stdin.on("error", (error: NodeJS.ErrnoException) => {
+      if (error.code === "EPIPE") return;
+      child.kill("SIGKILL");
+      finish(() => reject(new DiagnosticFailure("ffprobe-input-failed", "Audio validation could not read the response.", "invalid-response")));
     });
     child.once("error", () => finish(() => reject(new DiagnosticFailure("ffprobe-unavailable", "Audio validation is unavailable on this installation.", "invalid-response"))));
     child.once("close", (code) => {
@@ -568,7 +577,7 @@ export async function synthesizeSpeech(
       try {
         bytes = await readBoundedBody(response, MAX_AUDIO_BYTES);
       } catch {
-        throw new SpeachesSynthesisError("invalidAudio", "Speaches returned audio larger than the safe Scratchpad limit.", false, response.status);
+        throw new SpeachesSynthesisError("audioTooLarge", "Speaches returned audio larger than the safe Scratchpad limit.", false, response.status);
       }
       if (bytes.byteLength === 0) {
         throw new SpeachesSynthesisError("invalidAudio", "Speaches returned an empty audio result.", false, response.status);
