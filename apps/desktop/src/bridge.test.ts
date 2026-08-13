@@ -5,22 +5,22 @@ import { PUBLIC_IPC_CHANNEL_MANIFEST, registerConnectionHandlers, registerDiagno
 import { isApprovedExternalUrl, SECURE_WEB_PREFERENCES } from "./security.js";
 
 const diagnostics = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   overall: "fail",
   client: "electron",
   transport: "ipc",
   runtime: {
-    schemaVersion: 2,
+    schemaVersion: 3,
     applicationVersion: "0.1.0",
     runtimeName: "electron",
     runtimeVersion: "24.0.0",
     electronVersion: "43.3.0",
     platform: "darwin",
     architecture: "arm64",
-    dataDirectory: "/tmp/g01"
+    dataDirectory: "/tmp/studynarrator"
   },
   checks: {
-    sharedCore: { status: "pass", marker: "study-narrator-g01" },
+    sharedCore: { status: "pass", marker: "study-narrator-core" },
     storage: { status: "fail", code: "STORAGE_UNAVAILABLE", message: "Storage unavailable." },
     ffmpeg: { status: "fail", executable: "ffmpeg", code: "FFMPEG_NOT_FOUND", message: "FFmpeg not found." }
   }

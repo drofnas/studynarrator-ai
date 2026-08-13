@@ -120,6 +120,27 @@ describe("G06 migrations", () => {
 });
 
 describe("StudyNarratorRepository", () => {
+  it("replaces obsolete diagnostic markers with the current storage self-test", async () => {
+    const databasePath = await temporaryDatabase("studynarrator-storage-self-test-");
+    const migrated = await migrateDatabase({ Database: DatabaseAdapter, databasePath });
+    migrated.database.prepare("INSERT INTO diagnostic_kv (key, value, created_at) VALUES (?, ?, ?)")
+      .run("obsolete.runtime-marker", "obsolete", "2026-08-11T00:00:00.000Z");
+    migrated.database.close();
+
+    const repository = await openStudyNarratorRepository({ Database: DatabaseAdapter, databasePath });
+    expect(repository.runMarker()).toMatchObject({
+      markerKey: "runtime.storage-self-test",
+      markerValue: "study-narrator-storage-ok"
+    });
+    repository.close();
+
+    const inspected = new Database(databasePath, { readonly: true });
+    expect(inspected.prepare("SELECT key, value FROM diagnostic_kv").all()).toEqual([
+      { key: "runtime.storage-self-test", value: "study-narrator-storage-ok" }
+    ]);
+    inspected.close();
+  });
+
   it("persists a complete project aggregate exactly across two reopen cycles", async () => {
     const databasePath = await temporaryDatabase("studynarrator-g04-project-");
     const first = await openStudyNarratorRepository({

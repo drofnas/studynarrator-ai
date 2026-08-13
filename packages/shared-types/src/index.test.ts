@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import { SystemDiagnosticsSchema } from "./index.js";
 
 const validDiagnostics = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   overall: "pass",
   client: "web",
   transport: "rest",
   runtime: {
-    schemaVersion: 2,
+    schemaVersion: 3,
     applicationVersion: "0.1.0",
     runtimeName: "node",
     runtimeVersion: "26.7.0",
@@ -17,7 +17,7 @@ const validDiagnostics = {
     dataDirectory: "/tmp/studynarrator"
   },
   checks: {
-    sharedCore: { status: "pass", marker: "study-narrator-g01" },
+    sharedCore: { status: "pass", marker: "study-narrator-core" },
     storage: {
       status: "pass",
       driver: "better-sqlite3",
@@ -25,8 +25,8 @@ const validDiagnostics = {
       migrationVersion: 3,
       databasePath: "/tmp/studynarrator/studynarrator.sqlite",
       latestBackupPath: null,
-      markerKey: "g01.runtime-self-test",
-      markerValue: "study-narrator-g01",
+      markerKey: "runtime.storage-self-test",
+      markerValue: "study-narrator-storage-ok",
       createdAt: "2026-08-11T12:00:00.000Z"
     },
     ffmpeg: { status: "pass", executable: "ffmpeg", version: "ffmpeg version 8.1.2" }

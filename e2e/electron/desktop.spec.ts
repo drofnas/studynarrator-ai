@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import type { StudyNarratorBridge } from "@studynarrator/shared-types";
 import { continueElectronOffline, expect, test } from "../support/electronTest.js";
 
-const secret = "g06-secret-must-not-appear";
+const secret = "test-secret-must-not-appear";
 
 interface ElectronEvaluationApi {
   safeStorage: {
@@ -37,8 +37,7 @@ test.describe("Electron acceptance", () => {
 
     await page.getByRole("link", { name: "Settings" }).click();
     await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
-    await page.getByText("Review tools").click();
-    await page.getByRole("link", { name: "Runtime diagnostics" }).click();
+    await page.getByRole("link", { name: "System diagnostics" }).click();
     await page.getByRole("button", { name: "Run self-test" }).click();
     await expect(page.getByText("IPC")).toBeVisible();
     await expect(page.getByText(/Electron 43/u)).toBeVisible();

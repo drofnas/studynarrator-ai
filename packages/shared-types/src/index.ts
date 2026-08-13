@@ -3,7 +3,7 @@ import type { ConnectionsClient, VoiceCatalogClient } from "./connections.js";
 import type { PersistenceClient } from "./persistence.js";
 
 export const APPLICATION_VERSION = "0.1.0";
-export const DIAGNOSTICS_SCHEMA_VERSION = 2;
+export const DIAGNOSTICS_SCHEMA_VERSION = 3;
 export const SYSTEM_DIAGNOSTICS_CHANNEL = "system.diagnostics";
 
 export const CheckStatusSchema = z.enum(["pass", "fail"]);
@@ -34,7 +34,7 @@ const FailureSchema = z.object({
 }).strict();
 
 export const SharedCoreCheckSchema = z.discriminatedUnion("status", [
-  z.object({ status: z.literal("pass"), marker: z.literal("study-narrator-g01") }).strict(),
+  z.object({ status: z.literal("pass"), marker: z.literal("study-narrator-core") }).strict(),
   FailureSchema
 ]);
 
@@ -46,8 +46,8 @@ export const StorageCheckSchema = z.discriminatedUnion("status", [
     migrationVersion: z.literal(3),
     databasePath: z.string().min(1),
     latestBackupPath: z.string().min(1).nullable(),
-    markerKey: z.literal("g01.runtime-self-test"),
-    markerValue: z.literal("study-narrator-g01"),
+    markerKey: z.literal("runtime.storage-self-test"),
+    markerValue: z.literal("study-narrator-storage-ok"),
     createdAt: z.iso.datetime()
   }).strict(),
   FailureSchema.extend({

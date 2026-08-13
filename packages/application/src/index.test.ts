@@ -9,7 +9,7 @@ const context: DiagnosticsContext = {
   electronVersion: null,
   platform: "darwin",
   architecture: "arm64",
-  dataDirectory: "/tmp/g01"
+  dataDirectory: "/tmp/studynarrator"
 };
 
 const storagePass = {
@@ -17,10 +17,10 @@ const storagePass = {
   driver: "better-sqlite3",
   sqliteVersion: "3.50.0",
   migrationVersion: 3,
-  databasePath: "/tmp/g01/studynarrator.sqlite",
+  databasePath: "/tmp/studynarrator/studynarrator.sqlite",
   latestBackupPath: null,
-  markerKey: "g01.runtime-self-test",
-  markerValue: "study-narrator-g01",
+  markerKey: "runtime.storage-self-test",
+  markerValue: "study-narrator-storage-ok",
   createdAt: "2026-08-11T12:00:00.000Z"
 } as const;
 

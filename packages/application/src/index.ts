@@ -84,7 +84,7 @@ export function createSystemService(dependencies: {
         transport: context.transport,
         runtime: this.runtime(context),
         checks: {
-          sharedCore: { status: "pass", marker: "study-narrator-g01" },
+          sharedCore: { status: "pass", marker: "study-narrator-core" },
           storage,
           ffmpeg
         }

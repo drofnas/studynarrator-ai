@@ -43,7 +43,7 @@ export function OnboardingPage() {
 
   return (
     <div className={styles.page}>
-      <header><p>G06 · First run</p><h2>Connect the voice workshop</h2><span>Verify Speaches now, or continue authoring offline and return from the connection indicator at any time.</span></header>
+      <header><p>First run</p><h2>Connect the voice workshop</h2><span>Verify Speaches now, or continue authoring offline and return from the connection indicator at any time.</span></header>
       <section className={styles.guide}>
         <div><span>01</span><h3>Choose an endpoint</h3><p>{workspace.setup?.client === "electron" ? "Desktop can connect to loopback, LAN, or HTTPS Speaches endpoints and store a key in the operating-system vault." : "Web endpoint settings are server-side. API keys must come from SPEACHES_API_KEY or another server secret injection."}</p></div>
         <code>{workspace.setup?.client === "electron" ? "http://127.0.0.1:8000 · http://speaches.home.arpa:8000/v1" : "SPEACHES_BASE_URL=https://speech.example.test/v1"}</code>

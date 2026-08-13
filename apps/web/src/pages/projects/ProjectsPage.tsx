@@ -9,6 +9,7 @@ import {
   type AuthoringDryRunResult,
   type AuthoringPauseRow,
   type AuthoringSpeakerRow,
+  type IgnoredDiagnostic,
   type LexiconEntryAuthoring
 } from "@studynarrator/core";
 import {
@@ -62,6 +63,7 @@ function sameDraft(left: ProjectDraft, right: ProjectDraft): boolean {
     && left.lexiconEntries === right.lexiconEntries;
 }
 function message(error: unknown): string { return error instanceof Error ? error.message : "The operation failed."; }
+function diagnosticKey(item: IgnoredDiagnostic): string { return `${item.code}\u0000${item.pattern}`; }
 
 function voiceAvailability(profile: ConnectionProfile | null, voiceId: string | null): "available" | "unavailable" | "unverified" {
   if (!profile?.lastTestSummary || !voiceId) return "unverified";
@@ -272,7 +274,7 @@ export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; 
     const persistReconciliation = revisionRef.current > savedRevisionRef.current;
     setAnalysisState("parsing");
     const timer = window.setTimeout(() => {
-      const entries = materializeLexicon([...globalLexicon, ...draft.lexiconEntries], "g05-analysis");
+      const entries = materializeLexicon([...globalLexicon, ...draft.lexiconEntries], "analysis");
       void analyzer.analyze({
         source: draft.scriptSource,
         entries,
@@ -326,7 +328,7 @@ export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; 
   const sampleResult = useMemo(() => {
     if (!sample.trim()) return undefined;
     const parsed = parseScript({ source: sample, ...(sampleSpeaker ? { defaultSpeakerId: sampleSpeaker } : {}) });
-    return transformScript({ parsedScript: parsed, entries: materializeLexicon([...globalLexicon, ...(draft?.lexiconEntries ?? [])], "g05-sample") });
+    return transformScript({ parsedScript: parsed, entries: materializeLexicon([...globalLexicon, ...(draft?.lexiconEntries ?? [])], "sample") });
   }, [sample, sampleSpeaker, globalLexicon, draft?.lexiconEntries]);
 
   const createProject = async () => {
@@ -449,16 +451,48 @@ export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; 
     else updateDraft((current) => ({ ...current, lexiconEntries: current.lexiconEntries.filter((entry) => entry.id !== id) }));
   };
 
+  const replaceIgnoredDiagnostics = async (next: IgnoredDiagnosticCollection, successMessage: string) => {
+    try {
+      setIgnoredDiagnostics(await client.preferences.replaceIgnoredDiagnostics(next));
+      setNotice(successMessage);
+    } catch (error) {
+      setErrors([message(error)]);
+    }
+  };
+
+  const ignoreDiagnostic = async (item: IgnoredDiagnostic) => {
+    const key = diagnosticKey(item);
+    const next = ignoredDiagnostics.some((candidate) => diagnosticKey(candidate) === key)
+      ? ignoredDiagnostics
+      : [...ignoredDiagnostics, item];
+    await replaceIgnoredDiagnostics(next, "Diagnostic pattern ignored for every project.");
+  };
+
+  const restoreDiagnostic = async (item: IgnoredDiagnostic) => {
+    const key = diagnosticKey(item);
+    await replaceIgnoredDiagnostics(
+      ignoredDiagnostics.filter((candidate) => diagnosticKey(candidate) !== key),
+      "Diagnostic pattern restored."
+    );
+  };
+
   const allLexicon = [...globalLexicon, ...(draft?.lexiconEntries ?? [])];
   const filteredLexicon = allLexicon.filter((entry) =>
     (lexiconScope === "all" || entry.scope === lexiconScope)
     && (lexiconType === "all" || entry.entryType === lexiconType)
     && (!lexiconSearch || `${entry.displayText} ${entry.senseId ?? ""} ${entry.spokenText}`.toLocaleLowerCase().includes(lexiconSearch.toLocaleLowerCase())));
+  const activeDiagnostics: IgnoredDiagnostic[] = analysis ? [
+    ...analysis.parseResult.errors,
+    ...analysis.parseResult.warnings,
+    ...analysis.transformResult.errors,
+    ...analysis.transformResult.warnings
+  ].map((item) => ({ code: item.code, pattern: item.ignorePattern })) : [];
+  const activeDiagnosticsByKey = new Map(activeDiagnostics.map((item) => [diagnosticKey(item), item]));
 
   return (
     <div className={styles.page}>
       <header className={styles.pageHeader}>
-        <div><p className={styles.kicker}>G06 · Connected authoring</p><h2>Projects</h2><p>Shape the script, map every discovered cue, then read the narration score before audio exists.</p></div>
+        <div><p className={styles.kicker}>Connected authoring</p><h2>Projects</h2><p>Shape the script, map every discovered cue, then read the narration score before audio exists.</p></div>
         <div className={styles.status} data-state={saveState}><span>{analysisState === "parsing" ? "Parsing" : analysisState === "failed" ? "Parser failed" : dryRun?.status === "ready" ? "Ready to render" : dryRun?.status === "readyWithWarnings" ? "Ready with warnings" : "Blocked by errors"}</span><strong>{saveState === "saved" ? "Saved" : saveState === "saving" ? "Saving…" : saveState === "invalid" ? "Invalid" : saveState === "failed" ? "Save failed" : "Unsaved"}</strong></div>
       </header>
       {errors.length > 0 ? <div className={styles.alert} role="alert"><strong>Review these items</strong><ul>{errors.map((item) => <li key={item}>{item}</li>)}</ul><button type="button" onClick={() => setErrors([])}>Dismiss</button></div> : null}
@@ -516,7 +550,11 @@ export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; 
           <div className={styles.sectionHeading}><div><span>Offline validation</span><h3>Narration score</h3></div><b>{dryRun?.rows.length ?? 0} ordered rows</b></div>
           {analysisError ? <p className={styles.fieldError}>{analysisError}</p> : null}
           <div className={styles.validationSummary} data-state={dryRun?.status ?? "blocked"}><strong>{analysisState === "parsing" ? "Parsing…" : dryRun?.status === "ready" ? "Ready to render" : dryRun?.status === "readyWithWarnings" ? "Ready with warnings" : "Blocked by errors"}</strong><span>Connection availability is shown separately. This deterministic dry run still makes no TTS request.</span></div>
-          {dryRun && dryRun.issues.length > 0 ? <ul className={styles.issues}>{dryRun.issues.map((issue, index) => <li data-severity={issue.severity} key={`${issue.code}:${issue.target?.id ?? String(index)}`}><button type="button" onClick={() => issue.line && focusLine(issue.line)}>{issue.code}</button><span>{issue.message}</span></li>)}</ul> : null}
+          {dryRun && dryRun.issues.length > 0 ? <ul className={styles.issues}>{dryRun.issues.map((issue, index) => {
+            const diagnostic = issue.target ? activeDiagnosticsByKey.get(diagnosticKey({ code: issue.code, pattern: issue.target.id })) : undefined;
+            return <li data-severity={issue.severity} key={`${issue.code}:${issue.target?.id ?? String(index)}`}><button type="button" onClick={() => issue.line && focusLine(issue.line)}>{issue.code}</button><span>{issue.message}</span>{diagnostic ? <button type="button" className={styles.secondary} onClick={() => void ignoreDiagnostic(diagnostic)}>Ignore this pattern</button> : null}</li>;
+          })}</ul> : null}
+          {ignoredDiagnostics.length > 0 ? <section aria-label="Ignored diagnostic patterns"><h4>Ignored diagnostic patterns</h4><p>These exact diagnostic patterns are suppressed across projects.</p><ul className={styles.issues}>{ignoredDiagnostics.map((item) => <li key={diagnosticKey(item)}><code>{item.code}</code><span>{item.pattern}</span><button type="button" className={styles.secondary} onClick={() => void restoreDiagnostic(item)}>Restore this pattern</button></li>)}</ul></section> : null}
           <div className={styles.score} aria-label="Dry run ordered segment table"><div className={styles.scoreHeader}><span>#</span><span>Type</span><span>Speaker / cue</span><span>Original</span><span>Readable</span><span>TTS text</span></div>{dryRun?.rows.map((row) => <button type="button" className={styles.scoreRow} data-type={row.type} data-valid={row.validationStatus} key={row.rowNumber} onClick={() => focusLine(row.sourceRange.start.line)}><b>{String(row.rowNumber).padStart(2, "0")}</b><span className={styles.scoreType}>{row.type === "pause" ? `${row.origin} pause` : row.type}</span>{row.type === "section" ? <><strong>{row.title}</strong><small>Line {row.sourceRange.start.line}</small></> : row.type === "pause" ? <><strong>{row.pauseId}</strong><small>{row.durationMs === null ? "Missing duration" : `${String(row.durationMs)} ms`}</small></> : <><span className={styles.speakerChip} aria-label={`Speaker ${row.speakerId}. ${row.voiceId ? `Voice ID ${row.voiceId}` : "Voice ID not configured"}`} title={row.voiceId ? `Voice ID: ${row.voiceId}` : "Voice ID not configured"}><span className={styles.speakerLabel} aria-hidden="true">speaker</span><span className={styles.speakerName} aria-hidden="true">{row.speakerId}</span></span><span>{row.originalText}</span><span>{row.readableText}</span><span>{row.ttsText}</span></>}</button>)}</div>
         </section>
       </> : null}

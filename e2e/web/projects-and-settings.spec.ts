@@ -126,6 +126,25 @@ test.describe("Projects connected authoring", () => {
     await expect(page.getByLabel("Voice catalog or manual ID")).toHaveValue("manual_voice_id");
     expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/speech"] ?? 0).toBe(0);
   });
+
+  test("persists diagnostic suppression and supports complete project CRUD", async ({ page, studyNarrator }) => {
+    await continueOffline(page, studyNarrator);
+    await page.getByLabel("Project name").fill("Diagnostic study");
+    await page.getByRole("button", { name: "Create project" }).click();
+    await page.getByLabel("Script source").fill("[section Topic]\n[speaker_teacher] Second.");
+
+    await expect(page.getByText("MALFORMED_SECTION_DIRECTIVE")).toBeVisible();
+    await page.getByRole("button", { name: "Ignore this pattern" }).click();
+    await expect(page.getByRole("region", { name: "Ignored diagnostic patterns" })).toContainText("MALFORMED_SECTION_DIRECTIVE");
+    await page.reload();
+    await expect(page.getByRole("region", { name: "Ignored diagnostic patterns" })).toContainText("MALFORMED_SECTION_DIRECTIVE");
+
+    await page.getByRole("button", { name: "Restore this pattern" }).click();
+    await expect(page.getByText("MALFORMED_SECTION_DIRECTIVE")).toBeVisible();
+    page.on("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: "Delete" }).click();
+    await expect(page.getByText("No projects yet. Create the first study guide.")).toBeVisible();
+  });
 });
 
 test.describe("locked environment settings", () => {

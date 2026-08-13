@@ -27,7 +27,7 @@ const context: DiagnosticsContext = {
   electronVersion: null,
   platform: "darwin",
   architecture: "arm64",
-  dataDirectory: "/tmp/g01"
+  dataDirectory: "/tmp/studynarrator"
 };
 
 const openServers = new Set<Server>();
@@ -92,7 +92,7 @@ describe("Express diagnostics API", () => {
   it("sanitizes an invalid boundary result", async () => {
     const service = {
       health: () => ({ status: "ok", applicationVersion: "0.1.0" } as const),
-      runtime: () => ({ ...context, schemaVersion: 2, applicationVersion: "0.1.0" } as never),
+      runtime: () => ({ ...context, schemaVersion: 3, applicationVersion: "0.1.0" } as never),
       diagnostics: async () => ({ secret: "must-not-leak" } as never),
       close: () => undefined
     };
