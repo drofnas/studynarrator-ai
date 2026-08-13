@@ -134,6 +134,8 @@ describe("Projects workbench", () => {
 
     expect(await screen.findByRole("heading", { name: "Script editor" })).toBeInTheDocument();
     await waitFor(() => expect(analyze).toHaveBeenCalled());
+    expect(screen.getByRole("region", { name: "Script editor content" })).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("region", { name: "Narration score content" })).toHaveAttribute("tabindex", "0");
     const score = await screen.findByLabelText("Dry run ordered segment table");
     expect(within(score).getByText("Speaker / cue")).toBeInTheDocument();
     expect(within(score).getByText("Original")).toBeInTheDocument();

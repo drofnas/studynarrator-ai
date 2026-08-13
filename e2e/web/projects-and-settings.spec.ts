@@ -96,7 +96,7 @@ test.describe("Settings and connection diagnostics", () => {
 });
 
 test.describe("Projects connected authoring", () => {
-  test("autosaves configuration, reloads catalog/manual voices, and never requests TTS", async ({ page, studyNarrator }) => {
+  test("defaults and persists catalog voices in bounded editor panels without requesting TTS", async ({ page, studyNarrator }) => {
     await continueOffline(page, studyNarrator);
     studyNarrator.fakeSpeaches.reset();
     await page.getByLabel("Project name").fill("Automated narration");
@@ -106,24 +106,58 @@ test.describe("Projects connected authoring", () => {
 
     await page.getByLabel("Connection profile").selectOption("environment-speaches");
     await page.getByLabel("Optional model override").fill(modelId);
-    await page.getByLabel("Script source").fill("[section: Start]\n[speaker_teacher] Welcome.\n[pause_short] Continue.");
-    await expect(page.getByLabel("Voice catalog or manual ID")).toBeVisible();
-    await page.getByLabel("Voice catalog or manual ID").fill("af_heart");
+    const longScript = ["[section: Start]", ...Array.from({ length: 48 }, (_value, index) => `[speaker_teacher] Welcome line ${String(index + 1)}.`), "[pause_short] Continue."].join("\n");
+    await page.getByLabel("Script source").fill(longScript);
+    const voices = page.getByLabel("Voices");
+    await expect(voices).toBeVisible();
+    await expect(voices).toHaveValue("af_heart");
     await expect(page.locator("strong").filter({ hasText: "Heart — American English — af_heart" })).toBeVisible();
     await expect(page.getByText("af_heart", { exact: true })).toBeVisible();
-    await page.getByLabel("Voice catalog or manual ID").fill("manual_voice_id");
-    await expect(page.getByText("Manual voice ID")).toBeVisible();
-    await expect(page.getByText("manual_voice_id", { exact: true })).toBeVisible();
+    await voices.selectOption("af_sky");
+    await expect(voices).toHaveValue("af_sky");
+    expect(await voices.evaluate((element) => ({ tagName: element.tagName, hasManualOption: [...(element as HTMLSelectElement).options].some(({ value }) => value === "manual_voice_id") }))).toEqual({ tagName: "SELECT", hasManualOption: false });
     await page.getByRole("article").filter({ hasText: "pause_short" }).getByLabel("Duration").fill("400 ms");
-    await expect(page.getByLabel("Dry run ordered segment table")).toContainText("Welcome.");
+    await expect(page.getByLabel("Dry run ordered segment table")).toContainText("Welcome line 48.");
+
+    const scriptHeading = page.getByRole("heading", { name: "Script editor" });
+    const scoreHeading = page.getByRole("heading", { name: "Narration score" });
+    const scriptBody = page.getByRole("region", { name: "Script editor content" });
+    const scoreBody = page.getByRole("region", { name: "Narration score content" });
+    const layout = await page.evaluate(() => {
+      const script = document.querySelector('[aria-label="Script editor content"]');
+      const score = document.querySelector('[aria-label="Narration score content"]');
+      const scriptPanel = script?.closest("section");
+      const scorePanel = score?.closest("section");
+      if (!(script instanceof HTMLElement) || !(score instanceof HTMLElement) || !(scriptPanel instanceof HTMLElement) || !(scorePanel instanceof HTMLElement)) throw new Error("Expected bounded project panels.");
+      return {
+        scriptPanelHeight: scriptPanel.getBoundingClientRect().height,
+        scorePanelHeight: scorePanel.getBoundingClientRect().height,
+        scriptOverflows: script.scrollHeight > script.clientHeight,
+        scoreOverflows: score.scrollHeight > score.clientHeight
+      };
+    });
+    expect(layout.scriptPanelHeight).toBeLessThanOrEqual(600);
+    expect(layout.scorePanelHeight).toBeLessThanOrEqual(600);
+    expect(layout.scriptOverflows).toBe(true);
+    expect(layout.scoreOverflows).toBe(true);
+
+    const scriptHeadingY = (await scriptHeading.boundingBox())?.y;
+    const scoreHeadingY = (await scoreHeading.boundingBox())?.y;
+    await scriptBody.evaluate((element) => { element.scrollTop = 250; });
+    await expect.poll(() => scriptBody.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    expect(await scoreBody.evaluate((element) => element.scrollTop)).toBe(0);
+    await scoreBody.evaluate((element) => { element.scrollTop = 250; });
+    await expect.poll(() => scoreBody.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    expect((await scriptHeading.boundingBox())?.y).toBe(scriptHeadingY);
+    expect((await scoreHeading.boundingBox())?.y).toBe(scoreHeadingY);
 
     await page.getByRole("button", { name: "Save now" }).click();
     await expect(page.getByText("All changes saved.")).toBeVisible();
     await page.reload();
-    await expect(page.getByLabel("Script source")).toHaveValue("[section: Start]\n[speaker_teacher] Welcome.\n[pause_short] Continue.");
+    await expect(page.getByLabel("Script source")).toHaveValue(longScript);
     await expect(page.getByLabel("Connection profile")).toHaveValue("environment-speaches");
     await expect(page.getByLabel("Optional model override")).toHaveValue(modelId);
-    await expect(page.getByLabel("Voice catalog or manual ID")).toHaveValue("manual_voice_id");
+    await expect(page.getByLabel("Voices")).toHaveValue("af_sky");
     expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/speech"] ?? 0).toBe(0);
   });
 

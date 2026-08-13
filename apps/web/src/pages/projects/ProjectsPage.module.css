@@ -41,6 +41,9 @@
 .secondary { color: var(--ink); background: transparent; }
 .danger { color: white; background: var(--fault); border-color: var(--fault); }
 .scriptPanel, .lexiconPanel, .validationPanel { padding: 18px; border-top: 5px solid var(--signal); }
+.scriptPanel, .validationPanel { display: grid; grid-template-rows: auto minmax(0, 1fr); max-height: 600px; overflow: hidden; }
+.panelScrollBody { min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.panelScrollBody:focus-visible { outline: 3px solid var(--signal-pale); outline-offset: 2px; }
 .sectionHeading { display: flex; justify-content: space-between; gap: 16px; align-items: center; margin-bottom: 14px; }
 .sectionHeading span { display: block; }
 .sectionHeading b { min-width: 34px; padding: 8px; color: white; text-align: center; background: var(--ink); }
