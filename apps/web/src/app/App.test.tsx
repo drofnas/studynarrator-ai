@@ -17,17 +17,19 @@ const unusedPersistence: PersistenceClient = {
 };
 const unusedConnections = {
   list: vi.fn(async () => []), create: vi.fn(), replace: vi.fn(), delete: vi.fn(), test: vi.fn(), exportDiagnostics: vi.fn(),
+  discoverSpeechCatalog: vi.fn(async (profileId: string) => ({ schemaVersion: 1 as const, profileId, models: [] })),
   getSetupState: vi.fn(async () => ({ activeProfileId: null, activeProfileLocked: false, onboardingCompletedAt: "2026-08-12T12:00:00.000Z", client: "web" as const })),
   setActiveProfile: vi.fn(), completeOnboarding: vi.fn()
 };
 const unusedVoiceCatalog = { get: vi.fn(async (modelId: string) => ({ schemaVersion: 1 as const, modelId, entries: [] })), replace: vi.fn() };
+const unusedScratchpad = { preview: vi.fn() };
 
 afterEach(cleanup);
 
 function renderApp(route: string, client: SystemClient = { diagnostics: vi.fn() }, connections = unusedConnections) {
   return render(
     <MemoryRouter initialEntries={[route]}>
-      <App analyzer={unusedAnalyzer} client={client} persistence={unusedPersistence} connections={connections} voiceCatalog={unusedVoiceCatalog} />
+      <App analyzer={unusedAnalyzer} client={client} persistence={unusedPersistence} connections={connections} voiceCatalog={unusedVoiceCatalog} scratchpad={unusedScratchpad} />
     </MemoryRouter>
   );
 }
@@ -48,6 +50,14 @@ describe("application routing", () => {
     expect(screen.getByRole("heading", { name: "Runtime self-test" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "System diagnostics" })).toHaveAttribute("aria-current", "page");
     expect(screen.queryByText("Review tools")).not.toBeInTheDocument();
+  });
+
+  it("reaches Quick Scratchpad through primary navigation", async () => {
+    const user = userEvent.setup();
+    renderApp("/projects");
+    await user.click(screen.getByRole("link", { name: "Quick Scratchpad" }));
+    expect(await screen.findByRole("heading", { name: "Quick Scratchpad" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Quick Scratchpad" })).toHaveAttribute("aria-current", "page");
   });
 
   it.each(["/script-lab", "/persistence-lab"])("redirects removed review route %s to Projects", async (route) => {

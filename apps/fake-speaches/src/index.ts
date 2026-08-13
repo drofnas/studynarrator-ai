@@ -3,6 +3,9 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 
 export const FAKE_SPEACHES_MODEL_ID = "speaches-ai/Kokoro-82M-v1.0-ONNX";
 export const FAKE_SPEACHES_VOICE_ID = "af_heart";
+export const FAKE_SPEACHES_ALTERNATE_VOICE_ID = "af_sky";
+export const FAKE_SPEACHES_SECONDARY_MODEL_ID = "speaches-ai/Piper-en_US-lessac-medium";
+export const FAKE_SPEACHES_SECONDARY_VOICE_ID = "en_US-lessac-medium";
 export const FAKE_SPEACHES_SCENARIOS = [
   "healthy",
   "timeout",
@@ -21,6 +24,7 @@ export interface FakeSpeachesRequestLog {
   status: number;
   model: string | null;
   voice: string | null;
+  speed: number | null;
   inputLength: number;
   inputHash: string | null;
 }
@@ -42,7 +46,7 @@ export interface FakeSpeachesServer {
 
 function createDeterministicWav(): Buffer {
   const sampleRate = 8_000;
-  const samples = 800;
+  const samples = 8_000;
   const dataSize = samples * 2;
   const buffer = Buffer.alloc(44 + dataSize);
   buffer.write("RIFF", 0, "ascii");
@@ -131,12 +135,13 @@ export async function startFakeSpeachesServer(options: { port?: number; scenario
         body = await readJsonBody(request);
       } catch {
         sendJson(response, 400, { error: "Invalid request." });
-        requests.push({ method: request.method, path, status: 400, model: null, voice: null, inputLength: 0, inputHash: null });
+        requests.push({ method: request.method, path, status: 400, model: null, voice: null, speed: null, inputLength: 0, inputHash: null });
         return;
       }
     }
     const model = typeof body.model === "string" ? body.model : null;
     const voice = typeof body.voice === "string" ? body.voice : null;
+    const speed = typeof body.speed === "number" && Number.isFinite(body.speed) ? body.speed : null;
     const input = typeof body.input === "string" ? body.input : "";
     const log = (status: number): void => {
       requests.push({
@@ -145,6 +150,7 @@ export async function startFakeSpeachesServer(options: { port?: number; scenario
         status,
         model,
         voice,
+        speed,
         inputLength: input.length,
         inputHash: input ? createHash("sha256").update(input).digest("hex") : null
       });
@@ -167,12 +173,35 @@ export async function startFakeSpeachesServer(options: { port?: number; scenario
     }
     if (path === "/v1/models") {
       log(200);
-      sendJson(response, 200, { data: scenario === "missing-model" ? [] : [{ id: FAKE_SPEACHES_MODEL_ID }] });
+      sendJson(response, 200, { data: scenario === "missing-model" ? [] : [{ id: FAKE_SPEACHES_MODEL_ID }, { id: FAKE_SPEACHES_SECONDARY_MODEL_ID }] });
+      return;
+    }
+    if (path === "/v1/audio/models") {
+      log(200);
+      sendJson(response, 200, { object: "list", models: scenario === "missing-model" ? [] : [
+        {
+          id: FAKE_SPEACHES_MODEL_ID,
+          task: "text-to-speech",
+          voices: [
+            { id: FAKE_SPEACHES_VOICE_ID, name: "Heart", language: "American English", gender: "female" },
+            { id: FAKE_SPEACHES_ALTERNATE_VOICE_ID, name: "Sky", language: "American English", gender: "female" }
+          ]
+        },
+        {
+          id: FAKE_SPEACHES_SECONDARY_MODEL_ID,
+          task: "text-to-speech",
+          voices: [{ id: FAKE_SPEACHES_SECONDARY_VOICE_ID, name: "Lessac", language: "American English", gender: "female" }]
+        }
+      ] });
       return;
     }
     if (path === "/v1/audio/voices") {
       log(200);
-      sendJson(response, 200, { data: [{ id: FAKE_SPEACHES_VOICE_ID }] });
+      sendJson(response, 200, { object: "list", voices: [
+        { id: FAKE_SPEACHES_VOICE_ID },
+        { id: FAKE_SPEACHES_ALTERNATE_VOICE_ID },
+        { id: FAKE_SPEACHES_SECONDARY_VOICE_ID }
+      ] });
       return;
     }
     if (path === "/v1/audio/speech" && request.method === "POST") {

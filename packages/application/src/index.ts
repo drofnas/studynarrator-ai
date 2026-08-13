@@ -118,6 +118,13 @@ export {
 } from "./connections.js";
 export { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
 export {
+  ScratchpadServiceError,
+  createScratchpadService,
+  type ScratchpadRepository,
+  type ScratchpadServiceErrorCode,
+  type ScratchpadSynthesisRunner
+} from "./scratchpad.js";
+export {
   BUNDLED_VOICE_CATALOGS,
   KOKORO_V1_MODEL_ID,
   KOKORO_V1_VOICE_CATALOG,

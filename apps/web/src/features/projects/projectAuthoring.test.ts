@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { MAX_SCRIPT_CHARACTERS, readUtf8TextFile, replaceLiteral, stripSingleSurroundingCodeFence } from "./projectAuthoring.js";
+import type { VoiceCatalogEntry } from "@studynarrator/shared-types";
+import { MAX_SCRIPT_CHARACTERS, readUtf8TextFile, replaceLiteral, resolveProjectSpeakerVoiceId, stripSingleSurroundingCodeFence, supportedProjectVoices } from "./projectAuthoring.js";
+
+const voices: VoiceCatalogEntry[] = [
+  { voiceId: "voice-disabled", label: "Disabled", enabled: false, language: null, locale: null, accent: null, category: null, style: null, sampleText: null },
+  { voiceId: "voice-first", label: "First", enabled: true, language: null, locale: null, accent: null, category: null, style: null, sampleText: null },
+  { voiceId: "voice-default", label: "Default", enabled: true, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }
+];
 
 describe("authoring input helpers", () => {
   it("reads LF, CRLF, and Unicode text without rewriting it", async () => {
@@ -25,5 +32,25 @@ describe("authoring input helpers", () => {
     expect(replaceLiteral("SQL sql", "SQL", "database", true)).toBe("database sql");
     expect(replaceLiteral("SQL sql", "SQL", "database", false)).toBe("database database");
     expect(replaceLiteral("a+b a+b", "a+b", "sum", true)).toBe("sum sum");
+  });
+
+  it("resolves project speaker voices from enabled system entries", () => {
+    expect(resolveProjectSpeakerVoiceId("voice-first", "voice-default", voices)).toBe("voice-first");
+    expect(resolveProjectSpeakerVoiceId(null, "voice-default", voices)).toBe("voice-default");
+    expect(resolveProjectSpeakerVoiceId("legacy-voice", "voice-disabled", voices)).toBe("voice-first");
+    expect(resolveProjectSpeakerVoiceId("voice-disabled", null, voices)).toBe("voice-first");
+    expect(resolveProjectSpeakerVoiceId(null, null, [])).toBeNull();
+    expect(resolveProjectSpeakerVoiceId("legacy-voice", null, voices.map((voice) => ({ ...voice, enabled: false })))).toBeNull();
+  });
+
+  it("intersects catalog ordering with server support and appends newly discovered voices", () => {
+    expect(supportedProjectVoices(voices, [
+      { voiceId: "voice-default", name: "Default server name", language: null, gender: null },
+      { voiceId: "voice-disabled", name: null, language: null, gender: null },
+      { voiceId: "voice-new", name: "New voice", language: "English", gender: "neutral" }
+    ])).toEqual([
+      expect.objectContaining({ voiceId: "voice-default", label: "Default" }),
+      expect.objectContaining({ voiceId: "voice-new", label: "New voice — voice-new", language: "English", category: "neutral" })
+    ]);
   });
 });

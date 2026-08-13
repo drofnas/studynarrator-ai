@@ -3,6 +3,7 @@ import {
   ConnectionProfileMutationSchema,
   ConnectionProfileSchema,
   ConnectionTestSummarySchema,
+  SpeechCatalogSchema,
   VoiceCatalogSchema
 } from "./connections.js";
 
@@ -88,6 +89,24 @@ describe("connection contracts", () => {
       schemaVersion: 1,
       modelId: "model",
       entries: [{ voiceId: "voice", label: "Voice", apiKey: "unsafe" }]
+    })).toThrow();
+  });
+
+  it("bounds strict model-scoped speech catalogs", () => {
+    expect(SpeechCatalogSchema.parse({
+      schemaVersion: 1,
+      profileId: "local",
+      models: [{ modelId: "model", voices: [{ voiceId: "voice", name: "Voice", language: "English", gender: null }] }]
+    }).models[0]?.voices[0]).toMatchObject({ voiceId: "voice" });
+    expect(() => SpeechCatalogSchema.parse({
+      schemaVersion: 1,
+      profileId: "local",
+      models: [{ modelId: "model", voices: [{ voiceId: "same", name: null, language: null, gender: null }, { voiceId: "same", name: null, language: null, gender: null }] }]
+    })).toThrow(/Duplicate voice ID/u);
+    expect(() => SpeechCatalogSchema.parse({
+      schemaVersion: 1,
+      profileId: "local",
+      models: [{ modelId: "model", voices: [], endpoint: "private" }]
     })).toThrow();
   });
 });

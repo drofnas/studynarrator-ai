@@ -20,6 +20,7 @@ export const CONNECTION_CHANNELS = Object.freeze({
   replace: "connections.replace",
   delete: "connections.delete",
   test: "connections.test",
+  speechCatalogDiscover: "connections.discover-speech-catalog",
   exportDiagnostics: "connections.export-diagnostics",
   setupGet: "setup.get",
   setupSetActive: "setup.set-active",
@@ -141,6 +142,39 @@ export const ConnectionProfileMutationRequestSchema = z.object({
 export const ActiveConnectionProfileInputSchema = z.object({ profileId: z.string().min(1).max(128).nullable() }).strict();
 export const VoiceCatalogModelInputSchema = z.object({ modelId: z.string().trim().min(1).max(500) }).strict();
 
+export const SpeechCatalogVoiceSchema = z.object({
+  voiceId: z.string().trim().min(1).max(500),
+  name: z.string().trim().min(1).max(200).nullable(),
+  language: z.string().trim().min(1).max(100).nullable(),
+  gender: z.string().trim().min(1).max(50).nullable()
+}).strict();
+export type SpeechCatalogVoice = z.infer<typeof SpeechCatalogVoiceSchema>;
+
+export const SpeechCatalogModelSchema = z.object({
+  modelId: z.string().trim().min(1).max(500),
+  voices: z.array(SpeechCatalogVoiceSchema).max(10_000)
+}).strict().superRefine((model, context) => {
+  const seen = new Set<string>();
+  model.voices.forEach((voice, index) => {
+    if (seen.has(voice.voiceId)) context.addIssue({ code: "custom", message: `Duplicate voice ID: ${voice.voiceId}.`, path: ["voices", index, "voiceId"] });
+    seen.add(voice.voiceId);
+  });
+});
+export type SpeechCatalogModel = z.infer<typeof SpeechCatalogModelSchema>;
+
+export const SpeechCatalogSchema = z.object({
+  schemaVersion: z.literal(1),
+  profileId: z.string().min(1).max(128),
+  models: z.array(SpeechCatalogModelSchema).max(2_000)
+}).strict().superRefine((catalog, context) => {
+  const seen = new Set<string>();
+  catalog.models.forEach((model, index) => {
+    if (seen.has(model.modelId)) context.addIssue({ code: "custom", message: `Duplicate model ID: ${model.modelId}.`, path: ["models", index, "modelId"] });
+    seen.add(model.modelId);
+  });
+});
+export type SpeechCatalog = z.infer<typeof SpeechCatalogSchema>;
+
 export const RedactedConnectionDiagnosticsSchema = z.object({
   schemaVersion: z.literal(CONNECTION_DIAGNOSTIC_SCHEMA_VERSION),
   applicationVersion: z.string().min(1),
@@ -171,6 +205,7 @@ export interface ConnectionsClient {
   replace(profileId: string, input: ConnectionProfileMutation): Promise<ConnectionProfile>;
   delete(profileId: string): Promise<void>;
   test(profileId: string): Promise<ConnectionTestSummary>;
+  discoverSpeechCatalog(profileId: string, signal?: AbortSignal): Promise<SpeechCatalog>;
   exportDiagnostics(profileId: string): Promise<RedactedConnectionDiagnostics>;
   getSetupState(): Promise<ConnectionSetupState>;
   setActiveProfile(profileId: string | null): Promise<ConnectionSetupState>;

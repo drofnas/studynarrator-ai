@@ -9,6 +9,7 @@ import {
   ConnectionTestSummarySchema,
   ENVIRONMENT_CONNECTION_PROFILE_ID,
   RedactedConnectionDiagnosticsSchema,
+  SpeechCatalogSchema,
   VoiceCatalogSchema,
   type ConnectionProfile,
   type ConnectionProfileAuthoring,
@@ -17,11 +18,19 @@ import {
   type ConnectionTestSummary,
   type ConnectionsClient,
   type RedactedConnectionDiagnostics,
+  type SpeechCatalog,
   type VoiceCatalog,
   type VoiceCatalogAuthoring,
   type VoiceCatalogClient
 } from "@studynarrator/shared-types";
-import { diagnoseSpeaches, normalizeSpeachesUrl, type SpeachesDiagnosticResult } from "@studynarrator/speaches-adapter";
+import {
+  SpeachesCatalogError,
+  diagnoseSpeaches,
+  discoverSpeachesSpeechCatalog,
+  normalizeSpeachesUrl,
+  type SpeachesCatalogInput,
+  type SpeachesDiagnosticResult
+} from "@studynarrator/speaches-adapter";
 
 export const ENVIRONMENT_CREDENTIAL_REFERENCE = "environment:SPEACHES_API_KEY";
 const DEFAULT_MODEL_ID = "speaches-ai/Kokoro-82M-v1.0-ONNX";
@@ -63,12 +72,47 @@ export interface ConnectionDiagnosticRunner {
   (input: Parameters<typeof diagnoseSpeaches>[0]): Promise<SpeachesDiagnosticResult>;
 }
 
+export interface ConnectionCatalogRunner {
+  (input: SpeachesCatalogInput): Promise<SpeechCatalog>;
+}
+
 export class ConnectionPolicyError extends Error {
   readonly code = "CONNECTION_POLICY";
 }
 
 export class ConnectionConfigurationError extends Error {
   readonly code = "CONNECTION_CONFIGURATION";
+}
+
+export type ConnectionCatalogErrorCode =
+  | "CONNECTION_CATALOG_ABORTED"
+  | "CONNECTION_CATALOG_AUTHENTICATION"
+  | "CONNECTION_CATALOG_CONFIGURATION"
+  | "CONNECTION_CATALOG_INVALID_RESPONSE"
+  | "CONNECTION_CATALOG_UNAVAILABLE";
+
+export class ConnectionCatalogError extends Error {
+  constructor(readonly code: ConnectionCatalogErrorCode, message: string) {
+    super(message);
+  }
+}
+
+function safeCatalogError(error: unknown): ConnectionCatalogError {
+  if (error instanceof ConnectionCatalogError) return error;
+  if (error instanceof SpeachesCatalogError) {
+    switch (error.code) {
+      case "aborted": return new ConnectionCatalogError("CONNECTION_CATALOG_ABORTED", "Speech catalog discovery was cancelled.");
+      case "authenticationRequired": return new ConnectionCatalogError("CONNECTION_CATALOG_AUTHENTICATION", "Speaches rejected authentication. Test the profile and update its API key.");
+      case "configurationError": return new ConnectionCatalogError("CONNECTION_CATALOG_CONFIGURATION", "The selected connection profile needs a valid Speaches URL.");
+      case "invalidResponse": return new ConnectionCatalogError("CONNECTION_CATALOG_INVALID_RESPONSE", "Speaches returned invalid speech-model metadata.");
+      case "unavailable": return new ConnectionCatalogError("CONNECTION_CATALOG_UNAVAILABLE", "The configured Speaches service is unavailable. Check the connection and retry.");
+    }
+  }
+  const code = typeof error === "object" && error !== null && "code" in error ? error.code : undefined;
+  if (code === "PERSISTENCE_NOT_FOUND") {
+    return new ConnectionCatalogError("CONNECTION_CATALOG_CONFIGURATION", "The selected connection profile no longer exists.");
+  }
+  return new ConnectionCatalogError("CONNECTION_CATALOG_UNAVAILABLE", "StudyNarrator could not discover supported speech models and voices.");
 }
 
 function authoring(profile: ConnectionProfile): ConnectionProfileAuthoring {
@@ -152,8 +196,10 @@ export function createConnectionsService(dependencies: {
   credentials: CredentialStore;
   context: ConnectionRuntimeContext;
   diagnose?: ConnectionDiagnosticRunner;
+  discoverCatalog?: ConnectionCatalogRunner;
 }): ConnectionsClient {
   const diagnose = dependencies.diagnose ?? ((input) => diagnoseSpeaches(input));
+  const discoverCatalog = dependencies.discoverCatalog ?? ((input) => discoverSpeachesSpeechCatalog(input));
   const get = (profileId: string) => dependencies.repository.getConnectionProfile(profileId);
   const decorate = (profile: ConnectionProfile) => publicProfile(profile, dependencies.context);
 
@@ -247,6 +293,26 @@ export function createConnectionsService(dependencies: {
       const summary = ConnectionTestSummarySchema.parse(diagnostic.summary);
       dependencies.repository.recordConnectionTest(profileId, summary);
       return summary;
+    },
+    async discoverSpeechCatalog(profileId, signal) {
+      try {
+        const profile = get(profileId);
+        if (!profile.baseUrl) {
+          throw new ConnectionCatalogError("CONNECTION_CATALOG_CONFIGURATION", "The selected connection profile needs a Speaches URL.");
+        }
+        const reference = dependencies.repository.getConnectionCredentialReference(profileId);
+        const apiKey = reference ? await dependencies.credentials.read(reference) : null;
+        return SpeechCatalogSchema.parse(await discoverCatalog({
+          profileId,
+          baseUrl: profile.baseUrl,
+          ...(apiKey === null ? {} : { apiKey }),
+          timeoutSeconds: profile.timeoutSeconds,
+          retryCount: profile.retryCount,
+          ...(signal === undefined ? {} : { signal })
+        }));
+      } catch (error) {
+        throw safeCatalogError(error);
+      }
     },
     exportDiagnostics(profileId): Promise<RedactedConnectionDiagnostics> {
       return Promise.resolve().then(() => {

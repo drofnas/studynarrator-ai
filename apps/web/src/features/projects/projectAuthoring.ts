@@ -1,9 +1,46 @@
 import type { LexiconEntry, LexiconEntryAuthoring } from "@studynarrator/core";
-import type { ProjectDetail, ProjectReplaceInput } from "@studynarrator/shared-types";
+import type { ProjectDetail, ProjectReplaceInput, SpeechCatalogVoice, VoiceCatalogEntry } from "@studynarrator/shared-types";
 
 export const MAX_SCRIPT_CHARACTERS = 5_000_000;
+export const GLOBAL_VOICE_CATALOG_MODEL_ID = "speaches-ai/Kokoro-82M-v1.0-ONNX";
+export const GLOBAL_VOICE_CATALOG_DEFAULT_VOICE_ID = "af_heart";
 
 export type ProjectDraft = ProjectReplaceInput;
+
+export function resolveProjectSpeakerVoiceId(
+  currentVoiceId: string | null,
+  profileDefaultVoiceId: string | null,
+  catalogEntries: readonly VoiceCatalogEntry[]
+): string | null {
+  const enabledVoiceIds = new Set(catalogEntries.filter(({ enabled }) => enabled).map(({ voiceId }) => voiceId));
+  if (currentVoiceId && enabledVoiceIds.has(currentVoiceId)) return currentVoiceId;
+  if (profileDefaultVoiceId && enabledVoiceIds.has(profileDefaultVoiceId)) return profileDefaultVoiceId;
+  return catalogEntries.find(({ enabled }) => enabled)?.voiceId ?? null;
+}
+
+export function supportedProjectVoices(
+  catalogEntries: readonly VoiceCatalogEntry[],
+  supportedVoices: readonly SpeechCatalogVoice[]
+): VoiceCatalogEntry[] {
+  const supported = new Map(supportedVoices.map((voice) => [voice.voiceId, voice]));
+  const configured = new Map(catalogEntries.map((entry) => [entry.voiceId, entry]));
+  const result = catalogEntries.filter((entry) => entry.enabled && supported.has(entry.voiceId));
+  for (const voice of supportedVoices) {
+    if (configured.has(voice.voiceId)) continue;
+    result.push({
+      voiceId: voice.voiceId,
+      label: voice.name && voice.name !== voice.voiceId ? `${voice.name} — ${voice.voiceId}` : voice.voiceId,
+      enabled: true,
+      language: voice.language,
+      locale: null,
+      accent: null,
+      category: voice.gender,
+      style: null,
+      sampleText: null
+    });
+  }
+  return result;
+}
 
 export function authoringLexicon(entries: readonly LexiconEntry[]): LexiconEntryAuthoring[] {
   return entries.map((entry) => ({

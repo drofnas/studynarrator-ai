@@ -24,10 +24,15 @@ import {
   SystemDiagnosticsSchema,
   SystemPacingDefaultsSchema,
   RedactedConnectionDiagnosticsSchema,
+  SCRATCHPAD_CHANNELS,
+  ScratchpadPreviewInputSchema,
+  ScratchpadPreviewResultSchema,
+  SpeechCatalogSchema,
   VoiceCatalogModelInputSchema,
   VoiceCatalogSchema,
   type ConnectionsClient,
   type PersistenceClient,
+  type ScratchpadClient,
   type VoiceCatalogClient
 } from "@studynarrator/shared-types";
 import type { DiagnosticsContext, SystemService } from "@studynarrator/application";
@@ -35,7 +40,8 @@ import type { DiagnosticsContext, SystemService } from "@studynarrator/applicati
 export const PUBLIC_IPC_CHANNEL_MANIFEST = Object.freeze([
   SYSTEM_DIAGNOSTICS_CHANNEL,
   ...Object.values(PERSISTENCE_CHANNELS),
-  ...Object.values(CONNECTION_CHANNELS)
+  ...Object.values(CONNECTION_CHANNELS),
+  ...Object.values(SCRATCHPAD_CHANNELS)
 ]);
 
 interface IpcMainLike {
@@ -119,6 +125,7 @@ export function registerConnectionHandlers(
         /* eslint-disable preserve-caught-error */
         if (record && Array.isArray(record.issues)) throw new Error("The request does not match the connection contract.");
         if (record?.code === "CONNECTION_POLICY" && typeof record.message === "string") throw new Error(record.message);
+        if (typeof record?.code === "string" && record.code.startsWith("CONNECTION_CATALOG_") && typeof record.message === "string") throw new Error(record.message);
         if (record?.code === "PERSISTENCE_NOT_FOUND") throw new Error("The requested connection profile does not exist.");
         throw new Error("StudyNarrator could not complete the connection operation.");
         /* eslint-enable preserve-caught-error */
@@ -136,10 +143,29 @@ export function registerConnectionHandlers(
     return EmptyResponseSchema.parse({});
   });
   handle(CONNECTION_CHANNELS.test, async (input) => ConnectionTestSummarySchema.parse(await connections.test(ConnectionProfileIdInputSchema.parse(input).profileId)));
+  handle(CONNECTION_CHANNELS.speechCatalogDiscover, async (input) => SpeechCatalogSchema.parse(await connections.discoverSpeechCatalog(ConnectionProfileIdInputSchema.parse(input).profileId)));
   handle(CONNECTION_CHANNELS.exportDiagnostics, async (input) => RedactedConnectionDiagnosticsSchema.parse(await connections.exportDiagnostics(ConnectionProfileIdInputSchema.parse(input).profileId)));
   handle(CONNECTION_CHANNELS.setupGet, async () => ConnectionSetupStateSchema.parse(await connections.getSetupState()));
   handle(CONNECTION_CHANNELS.setupSetActive, async (input) => ConnectionSetupStateSchema.parse(await connections.setActiveProfile(ActiveConnectionProfileInputSchema.parse(input).profileId)));
   handle(CONNECTION_CHANNELS.setupComplete, async () => ConnectionSetupStateSchema.parse(await connections.completeOnboarding()));
   handle(CONNECTION_CHANNELS.voiceCatalogGet, async (input) => VoiceCatalogSchema.parse(await voiceCatalog.get(VoiceCatalogModelInputSchema.parse(input).modelId)));
   handle(CONNECTION_CHANNELS.voiceCatalogReplace, async (input) => VoiceCatalogSchema.parse(await voiceCatalog.replace(VoiceCatalogSchema.parse(input))));
+}
+
+export function registerScratchpadHandlers(ipcMain: IpcMainLike, scratchpad: ScratchpadClient) {
+  ipcMain.removeHandler(SCRATCHPAD_CHANNELS.preview);
+  ipcMain.handle(SCRATCHPAD_CHANNELS.preview, async (_event, input) => {
+    try {
+      return ScratchpadPreviewResultSchema.parse(await scratchpad.preview(ScratchpadPreviewInputSchema.parse(input)));
+    } catch (error) {
+      const record = error && typeof error === "object" ? error as Record<string, unknown> : undefined;
+      /* eslint-disable preserve-caught-error */
+      if (record && Array.isArray(record.issues)) throw new Error("The request does not match the Scratchpad contract.");
+      if (typeof record?.code === "string" && record.code.startsWith("SCRATCHPAD_") && typeof record.message === "string") {
+        throw new Error(record.message);
+      }
+      throw new Error("StudyNarrator could not complete speech synthesis.");
+      /* eslint-enable preserve-caught-error */
+    }
+  });
 }

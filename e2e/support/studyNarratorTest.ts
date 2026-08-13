@@ -63,7 +63,8 @@ export const test = base.extend<{
       SPEACHES_BASE_URL: fakeSpeaches.baseUrl,
       SPEACHES_MODEL_ID: "speaches-ai/Kokoro-82M-v1.0-ONNX",
       SPEACHES_VOICE_ID: "af_heart",
-      SPEACHES_TIMEOUT_SECONDS: "2"
+      SPEACHES_TIMEOUT_SECONDS: "2",
+      SPEACHES_RETRY_COUNT: "0"
     };
     const services = await createServerServices(environment);
     const application = createExpressApp({
@@ -71,7 +72,8 @@ export const test = base.extend<{
       persistence: services.persistence,
       context: services.context,
       ...(services.connections === undefined ? {} : { connections: services.connections }),
-      ...(services.voiceCatalog === undefined ? {} : { voiceCatalog: services.voiceCatalog })
+      ...(services.voiceCatalog === undefined ? {} : { voiceCatalog: services.voiceCatalog }),
+      ...(services.scratchpad === undefined ? {} : { scratchpad: services.scratchpad })
     });
     attachStaticWebApplication(application, webDistribution);
     const server = createServer(application);

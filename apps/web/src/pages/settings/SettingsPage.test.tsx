@@ -19,6 +19,7 @@ describe("System Settings", () => {
     } as unknown as PersistenceClient;
     const connections = {
       list: vi.fn(async () => []), create: vi.fn(), replace: vi.fn(), delete: vi.fn(), test: vi.fn(), exportDiagnostics: vi.fn(),
+      discoverSpeechCatalog: vi.fn(async (profileId: string) => ({ schemaVersion: 1 as const, profileId, models: [] })),
       getSetupState: vi.fn(async () => ({ activeProfileId: null, activeProfileLocked: false, onboardingCompletedAt: "2026-08-12T12:00:00.000Z", client: "web" as const })),
       setActiveProfile: vi.fn(), completeOnboarding: vi.fn()
     };
@@ -42,6 +43,7 @@ describe("System Settings", () => {
     };
     const connections = {
       list: vi.fn(async () => [environmentProfile]), create: vi.fn(), replace: vi.fn(), delete: vi.fn(), test: vi.fn(), exportDiagnostics: vi.fn(),
+      discoverSpeechCatalog: vi.fn(async (profileId: string) => ({ schemaVersion: 1 as const, profileId, models: [] })),
       getSetupState: vi.fn(async () => ({ activeProfileId: environmentProfile.id, activeProfileLocked: true, onboardingCompletedAt: timestamp, client: "web" as const })),
       setActiveProfile: vi.fn(), completeOnboarding: vi.fn()
     };

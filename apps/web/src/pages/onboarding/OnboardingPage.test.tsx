@@ -37,6 +37,7 @@ function clients(client: "web" | "electron") {
     list: vi.fn(async () => []),
     create: vi.fn(async () => profile), replace: vi.fn(), delete: vi.fn(),
     test: vi.fn(async () => summary), exportDiagnostics: vi.fn(),
+    discoverSpeechCatalog: vi.fn(async (profileId: string) => ({ schemaVersion: 1 as const, profileId, models: [] })),
     getSetupState: vi.fn(async () => ({ activeProfileId: null, activeProfileLocked: false, onboardingCompletedAt: null, client })),
     setActiveProfile: vi.fn(async () => ({ activeProfileId: profile.id, activeProfileLocked: false, onboardingCompletedAt: null, client })),
     completeOnboarding
@@ -44,7 +45,7 @@ function clients(client: "web" | "electron") {
 }
 
 function renderApp(connections: ConnectionsClient, route = "/projects") {
-  return render(<MemoryRouter initialEntries={[route]}><App analyzer={{ analyze: vi.fn() }} client={{ diagnostics: vi.fn() }} persistence={persistence} connections={connections} voiceCatalog={voiceCatalog} /></MemoryRouter>);
+  return render(<MemoryRouter initialEntries={[route]}><App analyzer={{ analyze: vi.fn() }} client={{ diagnostics: vi.fn() }} persistence={persistence} connections={connections} voiceCatalog={voiceCatalog} scratchpad={{ preview: vi.fn() }} /></MemoryRouter>);
 }
 
 describe("connection onboarding", () => {

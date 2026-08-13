@@ -64,6 +64,12 @@ export {
 export { transformScript } from "./transformer.js";
 export { resolveParagraphPauses } from "./pacing.js";
 export {
+  SCRATCHPAD_PASSAGE_MAX_CHARACTERS,
+  ScratchpadPassageError,
+  transformScratchpadPassage,
+  type ScratchpadPassageProjection
+} from "./scratchpad.js";
+export {
   AUTHORING_SCHEMA_VERSION,
   AuthoringDryRunResultSchema,
   AuthoringPauseConfigurationSchema,

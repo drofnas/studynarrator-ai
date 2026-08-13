@@ -41,6 +41,9 @@
 .secondary { color: var(--ink); background: transparent; }
 .danger { color: white; background: var(--fault); border-color: var(--fault); }
 .scriptPanel, .lexiconPanel, .validationPanel { padding: 18px; border-top: 5px solid var(--signal); }
+.scriptPanel, .validationPanel { display: grid; grid-template-rows: auto minmax(0, 1fr); max-height: 600px; overflow: hidden; }
+.panelScrollBody { min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.panelScrollBody:focus-visible { outline: 3px solid var(--signal-pale); outline-offset: 2px; }
 .sectionHeading { display: flex; justify-content: space-between; gap: 16px; align-items: center; margin-bottom: 14px; }
 .sectionHeading span { display: block; }
 .sectionHeading b { min-width: 34px; padding: 8px; color: white; text-align: center; background: var(--ink); }
@@ -75,6 +78,8 @@
 .voiceMeta span { justify-self: start; padding: 3px 6px; color: #557080; background: white; font-size: 0.6rem; font-weight: 800; text-transform: uppercase; }
 .voiceMeta span[data-state="available"] { color: #075e59; background: var(--signal-pale); }
 .voiceMeta span[data-state="unavailable"] { color: var(--fault); background: #fae8e8; }
+.voiceFieldMessage { margin: 8px 0 0; color: #557080; font-size: 0.68rem; line-height: 1.45; }
+.voiceFieldMessage button { min-height: 28px; padding: 0 7px; font-size: 0.65rem; }
 .check { display: flex !important; grid-template-columns: auto 1fr; align-items: center; gap: 7px !important; margin-bottom: 12px; }
 .check input { width: auto; }
 .fieldError { margin: 5px 0; color: var(--fault); font-size: 0.72rem; font-weight: 800; }

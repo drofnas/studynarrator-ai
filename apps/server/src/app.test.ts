@@ -15,7 +15,7 @@ import {
   type DiagnosticsContext
 } from "@studynarrator/application";
 import { openStudyNarratorRepository, type DatabaseConstructor } from "@studynarrator/persistence";
-import { BoundaryErrorSchema, HealthSchema, ProjectDetailSchema, ProjectSummaryCollectionSchema, RuntimeSchema, SystemDiagnosticsSchema } from "@studynarrator/shared-types";
+import { BoundaryErrorSchema, HealthSchema, ProjectDetailSchema, ProjectSummaryCollectionSchema, RuntimeSchema, SpeechCatalogSchema, SystemDiagnosticsSchema } from "@studynarrator/shared-types";
 import { createExpressApp } from "./app.js";
 import { REST_API_MANIFEST } from "./apiManifest.js";
 
@@ -67,11 +67,30 @@ async function fixture() {
   const connections = createConnectionsService({
     repository,
     credentials: createRoutedCredentialStore({ environmentApiKey: null }),
-    context: { client: "web", nodeVersion: "26.7.0", electronVersion: null, activeProfileLocked: false }
+    context: { client: "web", nodeVersion: "26.7.0", electronVersion: null, activeProfileLocked: false },
+    discoverCatalog: async ({ profileId }) => ({ schemaVersion: 1, profileId, models: [{ modelId: "model", voices: [{ voiceId: "voice", name: "Voice", language: null, gender: null }] }] })
   });
   const voiceCatalog = createVoiceCatalogService({ repository, bundledCatalogs: new Map() });
+  const scratchpad = {
+    preview: async (input: { connectionProfileId: string; modelId: string; voiceId: string; speed: number; text: string; applyGlobalLexicon: boolean }) => ({
+      schemaVersion: 1 as const,
+      id: "00000000-0000-4000-8000-000000000099",
+      createdAt: "2026-08-12T12:00:00.000Z",
+      connectionProfileId: input.connectionProfileId,
+      connectionProfileName: "Manifest",
+      modelId: input.modelId,
+      voiceId: input.voiceId,
+      speed: input.speed,
+      originalText: input.text,
+      readableText: input.text,
+      transformedText: input.text,
+      lexiconApplied: input.applyGlobalLexicon,
+      warnings: [],
+      audio: { mimeType: "audio/wav" as const, base64: "AQID", byteLength: 3 }
+    })
+  };
   openServices.add(service);
-  return { service, persistence, connections, voiceCatalog, app: await listen(createExpressApp({ service, persistence, connections, voiceCatalog, context })) };
+  return { service, persistence, connections, voiceCatalog, scratchpad, app: await listen(createExpressApp({ service, persistence, connections, voiceCatalog, scratchpad, context })) };
 }
 
 describe("Express diagnostics API", () => {
@@ -104,6 +123,39 @@ describe("Express diagnostics API", () => {
       }
     });
     expect(JSON.stringify(response.body)).not.toContain("must-not-leak");
+  });
+});
+
+describe("Express Scratchpad cancellation", () => {
+  it("aborts privileged synthesis when the REST client disconnects", async () => {
+    const { service } = await fixture();
+    let markStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolveStarted) => { markStarted = resolveStarted; });
+    let markAborted: (() => void) | undefined;
+    const aborted = new Promise<void>((resolveAborted) => { markAborted = resolveAborted; });
+    const scratchpad = {
+      preview: async (_input: unknown, signal?: AbortSignal) => await new Promise<never>((_resolve, reject) => {
+        markStarted?.();
+        signal?.addEventListener("abort", () => {
+          markAborted?.();
+          reject(Object.assign(new Error("cancelled"), { code: "SCRATCHPAD_ABORTED" }));
+        }, { once: true });
+      })
+    };
+    const app = await listen(createExpressApp({ service, scratchpad, context }));
+    const address = app.address();
+    if (!address || typeof address === "string") throw new Error("Expected a loopback address.");
+    const controller = new AbortController();
+    const pending = fetch(`http://127.0.0.1:${String(address.port)}/api/scratchpad/preview`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ connectionProfileId: "profile", modelId: "model", voiceId: "voice", speed: 1, text: "Speech.", applyGlobalLexicon: false }),
+      signal: controller.signal
+    });
+    await started;
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    await expect(aborted).resolves.toBeUndefined();
   });
 });
 
@@ -199,8 +251,8 @@ interface ExpressRouteLayer {
 
 describe("REST API operation manifest", () => {
   it("matches every registered method and path exactly", async () => {
-    const { service, persistence, connections, voiceCatalog } = await fixture();
-    const application = createExpressApp({ service, persistence, connections, voiceCatalog, context });
+    const { service, persistence, connections, voiceCatalog, scratchpad } = await fixture();
+    const application = createExpressApp({ service, persistence, connections, voiceCatalog, scratchpad, context });
     const layers = (application as unknown as { router: { stack: ExpressRouteLayer[] } }).router.stack;
     const registered = layers.flatMap((layer) => layer.route
       ? Object.entries(layer.route.methods)
@@ -209,10 +261,10 @@ describe("REST API operation manifest", () => {
       : []);
     const declared = REST_API_MANIFEST.map(({ method, path }) => `${method} ${path}`);
     expect(registered.sort()).toEqual([...declared].sort());
-    expect(new Set(declared).size).toBe(27);
+    expect(new Set(declared).size).toBe(29);
   });
 
-  it("exercises a successful schema-valid response for all 27 operations", async () => {
+  it("exercises a successful schema-valid response for all 29 operations", async () => {
     const { app } = await fixture();
     const covered = new Set<string>();
     const call = async (method: string, path: string, expected: number, body?: string | object) => {
@@ -256,6 +308,7 @@ describe("REST API operation manifest", () => {
     await call("POST", "/api/connections", 201, profileMutation);
     await call("PUT", "/api/connections/manifest-profile", 200, { ...profileMutation, profile: { ...profileMutation.profile, name: "Updated manifest" } });
     await call("POST", "/api/connections/manifest-profile/test", 200);
+    SpeechCatalogSchema.parse((await call("GET", "/api/connections/manifest-profile/speech-catalog", 200)).body as unknown);
     await call("GET", "/api/connections/manifest-profile/diagnostics", 200);
     await call("GET", "/api/setup", 200);
     await call("PUT", "/api/setup/active-profile", 200, { profileId: "manifest-profile" });
@@ -264,6 +317,10 @@ describe("REST API operation manifest", () => {
     covered.delete("GET /api/voice-catalog?modelId=model");
     covered.add("GET /api/voice-catalog");
     await call("PUT", "/api/voice-catalog", 200, { schemaVersion: 1, modelId: "model", entries: [] });
+    await call("POST", "/api/scratchpad/preview", 200, {
+      connectionProfileId: "manifest-profile", modelId: "model", voiceId: "voice", speed: 1,
+      text: "Manifest speech.", applyGlobalLexicon: false
+    });
     await call("DELETE", "/api/connections/manifest-profile", 204);
     await call("DELETE", `/api/projects/${created.id}`, 204);
 
@@ -289,7 +346,8 @@ describe("REST API operation manifest", () => {
       request(app).get("/api/connections/not-found/diagnostics").expect(404),
       request(app).put("/api/setup/active-profile").send({ profileId: 12 }).expect(400),
       request(app).get("/api/voice-catalog").expect(400),
-      request(app).put("/api/voice-catalog").send({ schemaVersion: 1, modelId: "model", entries: [{ voiceId: "same", label: secret, apiKey: secret }] }).expect(400)
+      request(app).put("/api/voice-catalog").send({ schemaVersion: 1, modelId: "model", entries: [{ voiceId: "same", label: secret, apiKey: secret }] }).expect(400),
+      request(app).post("/api/scratchpad/preview").send({ connectionProfileId: "x", text: secret }).expect(400)
     ];
     const responses = await Promise.all(invalidCases);
     expect(JSON.stringify(responses.map((response) => response.body as unknown))).not.toContain(secret);

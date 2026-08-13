@@ -158,7 +158,8 @@ function desktopService(repository: MemoryRepository, vault: MemoryVault) {
     repository,
     credentials: createRoutedCredentialStore({ environmentApiKey: null, vault }),
     context: { client: "electron", nodeVersion: "26.0.0", electronVersion: "43.3.0", activeProfileLocked: false },
-    diagnose: vi.fn(async () => ({ normalizedUrl: null, summary: connected }))
+    diagnose: vi.fn(async () => ({ normalizedUrl: null, summary: connected })),
+    discoverCatalog: vi.fn(async ({ profileId }: { profileId: string }) => ({ schemaVersion: 1 as const, profileId, models: [{ modelId: "model", voices: [{ voiceId: "voice", name: "Voice", language: null, gender: null }] }] }))
   });
 }
 
@@ -174,6 +175,7 @@ describe("connections service", () => {
     await expect(service.list()).resolves.toHaveLength(1);
     await service.replace("local", { ...mutation("Updated"), credential: { action: "keep" } });
     await service.test("local");
+    await expect(service.discoverSpeechCatalog("local")).resolves.toMatchObject({ models: [{ modelId: "model" }] });
     await service.exportDiagnostics("local");
     await expect(service.getSetupState()).resolves.toMatchObject({ client: "electron" });
     await service.setActiveProfile("local");
@@ -190,6 +192,28 @@ describe("connections service", () => {
     await expect(catalog.replace({ schemaVersion: 1, modelId: "model", entries: [{ voiceId: "voice", label: "Renamed", enabled: false, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }] })).resolves.toMatchObject({ entries: [expect.objectContaining({ label: "Bundled" })] });
     await service.delete("local");
     await expect(service.list()).resolves.toEqual([]);
+  });
+
+  it("resolves privileged catalog data without changing persisted connection state", async () => {
+    const repository = new MemoryRepository();
+    const vault = new MemoryVault();
+    const discoverCatalog = vi.fn(async ({ profileId, apiKey }: { profileId: string; apiKey?: string | undefined }) => {
+      expect(apiKey).toBe("test-secret-must-not-appear");
+      return { schemaVersion: 1 as const, profileId, models: [{ modelId: "model", voices: [{ voiceId: "voice", name: "Voice", language: null, gender: null }] }] };
+    });
+    const service = createConnectionsService({
+      repository,
+      credentials: createRoutedCredentialStore({ environmentApiKey: null, vault }),
+      context: { client: "electron", nodeVersion: "26.0.0", electronVersion: "43.3.0", activeProfileLocked: false },
+      diagnose: vi.fn(async () => ({ normalizedUrl: null, summary: connected })),
+      discoverCatalog
+    });
+    await service.create(mutation());
+    const before = JSON.stringify(repository.getConnectionProfile("local"));
+    const result = await service.discoverSpeechCatalog("local");
+    expect(result.models[0]?.voices[0]?.voiceId).toBe("voice");
+    expect(JSON.stringify(repository.getConnectionProfile("local"))).toBe(before);
+    expect(JSON.stringify(result)).not.toContain("test-secret-must-not-appear");
   });
 
   it("normalizes profiles, stores only an opaque reference, and never returns the key", async () => {

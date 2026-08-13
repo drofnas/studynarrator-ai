@@ -15,9 +15,13 @@ import {
   SystemDiagnosticsSchema,
   SystemPacingDefaultsSchema,
   RedactedConnectionDiagnosticsSchema,
+  SCRATCHPAD_CHANNELS,
+  ScratchpadPreviewResultSchema,
+  SpeechCatalogSchema,
   VoiceCatalogSchema,
   type ConnectionsClient,
   type PersistenceClient,
+  type ScratchpadClient,
   type StudyNarratorBridge,
   type SystemDiagnostics,
   type VoiceCatalogClient
@@ -57,6 +61,7 @@ export function createPreloadBridge(invoke: (channel: string, input?: unknown) =
     async replace(profileId, mutation) { return ConnectionProfileSchema.parse(await invoke(CONNECTION_CHANNELS.replace, { profileId, mutation })); },
     async delete(profileId) { EmptyResponseSchema.parse(await invoke(CONNECTION_CHANNELS.delete, { profileId })); },
     async test(profileId) { return ConnectionTestSummarySchema.parse(await invoke(CONNECTION_CHANNELS.test, { profileId })); },
+    async discoverSpeechCatalog(profileId) { return SpeechCatalogSchema.parse(await invoke(CONNECTION_CHANNELS.speechCatalogDiscover, { profileId })); },
     async exportDiagnostics(profileId) { return RedactedConnectionDiagnosticsSchema.parse(await invoke(CONNECTION_CHANNELS.exportDiagnostics, { profileId })); },
     async getSetupState() { return ConnectionSetupStateSchema.parse(await invoke(CONNECTION_CHANNELS.setupGet)); },
     async setActiveProfile(profileId) { return ConnectionSetupStateSchema.parse(await invoke(CONNECTION_CHANNELS.setupSetActive, { profileId })); },
@@ -66,6 +71,11 @@ export function createPreloadBridge(invoke: (channel: string, input?: unknown) =
     async get(modelId) { return VoiceCatalogSchema.parse(await invoke(CONNECTION_CHANNELS.voiceCatalogGet, { modelId })); },
     async replace(input) { return VoiceCatalogSchema.parse(await invoke(CONNECTION_CHANNELS.voiceCatalogReplace, input)); }
   };
+  const scratchpad: ScratchpadClient = {
+    async preview(input) {
+      return ScratchpadPreviewResultSchema.parse(await invoke(SCRATCHPAD_CHANNELS.preview, input));
+    }
+  };
   return Object.freeze({
     system: Object.freeze({
       async diagnostics(): Promise<SystemDiagnostics> {
@@ -74,6 +84,7 @@ export function createPreloadBridge(invoke: (channel: string, input?: unknown) =
     }),
     persistence: Object.freeze(persistence),
     connections: Object.freeze(connections),
-    voiceCatalog: Object.freeze(voiceCatalog)
+    voiceCatalog: Object.freeze(voiceCatalog),
+    scratchpad: Object.freeze(scratchpad)
   });
 }

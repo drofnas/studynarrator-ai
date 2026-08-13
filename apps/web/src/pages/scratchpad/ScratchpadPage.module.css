@@ -1,0 +1,52 @@
+.page { display: grid; gap: 22px; }
+.pageHeader { display: flex; justify-content: space-between; gap: 32px; align-items: end; padding-bottom: 20px; border-bottom: 2px solid var(--ink); }
+.pageHeader h2 { margin: 0; font-family: "Avenir Next Condensed", "Arial Narrow", sans-serif; font-size: clamp(2.7rem, 6vw, 5.2rem); letter-spacing: -0.045em; line-height: 0.9; }
+.pageHeader p:last-child { max-width: 600px; margin: 12px 0 0; color: #557080; }
+.kicker, .step { display: block; margin: 0 0 7px; color: var(--signal); font: 800 0.66rem ui-monospace, monospace; letter-spacing: 0.12em; text-transform: uppercase; }
+.connectionState { display: grid; min-width: 230px; padding: 12px 15px; color: white; background: var(--ink); border-top: 5px solid var(--fault); }
+.connectionState[data-state="connected"] { border-color: var(--signal); }
+.connectionState span { color: #9ed8d3; font: 700 0.62rem ui-monospace, monospace; text-transform: uppercase; }
+.connectionState strong { margin: 5px 0; }
+.connectionState code { color: #c5d6dc; }
+.workspace { display: grid; grid-template-columns: 250px minmax(440px, 1fr) 250px; gap: 18px; align-items: start; }
+.controls, .history, .passagePanel, .transformation, .resultDetail, .emptyResult { background: var(--paper); border: 1px solid var(--line); }
+.controls, .history { position: sticky; top: 14px; padding: 17px; border-top: 5px solid var(--copper); }
+.controls h3, .history h3, .passagePanel h3, .emptyResult h3 { margin: 0; }
+.controls label, .passagePanel > label { display: grid; gap: 5px; margin-top: 13px; font-size: 0.72rem; font-weight: 800; }
+.controls input, .controls select { width: 100%; padding: 9px; color: var(--ink); background: white; border: 1px solid #91a9b2; }
+.controls input:focus, .controls select:focus, .passagePanel textarea:focus { outline: 3px solid var(--signal-pale); border-color: var(--signal); }
+.voiceCard { display: grid; gap: 4px; margin-top: 8px; padding: 9px; background: var(--mist); }
+.voiceCard strong { font-size: 0.7rem; }
+.fieldError { margin: 10px 0 0; color: var(--fault); font-size: 0.72rem; font-weight: 800; line-height: 1.45; }
+.composer { display: grid; gap: 14px; min-width: 0; }
+.passagePanel { padding: 18px; border-top: 5px solid var(--signal); }
+.sectionHeading { display: flex; justify-content: space-between; gap: 16px; align-items: center; }
+.sectionHeading b { padding: 7px 9px; color: white; background: var(--ink); font: 700 0.67rem ui-monospace, monospace; }
+.passagePanel textarea { width: 100%; min-height: 210px; padding: 16px; color: #eaf6f5; background: #17354c; border: 3px solid #10293f; resize: vertical; font: 0.86rem/1.7 ui-monospace, monospace; }
+.passagePanel .lexiconToggle { display: flex; gap: 8px; align-items: center; justify-self: start; }
+.lexiconToggle input { width: auto; accent-color: var(--signal); }
+.transformation { display: grid; grid-template-columns: 1fr auto 1fr; gap: 0; overflow: hidden; }
+.transformation article { min-width: 0; padding: 16px; }
+.transformation article:last-child { background: #e3efef; }
+.transformation span { color: var(--signal); font: 800 0.64rem ui-monospace, monospace; letter-spacing: 0.08em; text-transform: uppercase; }
+.transformation p { min-height: 48px; margin: 8px 0 0; overflow-wrap: anywhere; font: 0.8rem/1.55 ui-monospace, monospace; white-space: pre-wrap; }
+.transformMark { display: grid; place-items: center; width: 46px; color: white; background: var(--copper); font-size: 1.3rem; }
+.warnings { margin: 0; padding: 12px 16px 12px 36px; color: #7a431f; background: #fff1e6; border-left: 5px solid var(--copper); font-size: 0.75rem; }
+.synthesisBar { display: flex; justify-content: space-between; gap: 16px; align-items: center; padding: 15px 17px; background: #d9e6e8; border-left: 5px solid var(--signal); }
+.synthesisBar strong { display: block; font-size: 0.84rem; }
+.resultDetail { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 14px 16px; border-left: 5px solid var(--signal); }
+.resultDetail div { display: flex; gap: 10px; }
+.resultDetail span { color: var(--signal); font-weight: 800; }
+.resultDetail p { grid-column: 1 / -1; margin: 0; font-size: 0.8rem; }
+.emptyResult { display: grid; grid-template-columns: auto 1fr; gap: 16px; align-items: center; padding: 28px; border: 2px dashed var(--line); }
+.emptyResult > span { color: var(--copper); font-size: 3rem; }
+.emptyResult p, .history > p { margin: 6px 0 0; color: #557080; font-size: 0.76rem; line-height: 1.5; }
+.historyHeading { display: flex; justify-content: space-between; gap: 8px; align-items: start; }
+.historyHeading button { min-height: 30px; padding: 0 9px; color: var(--ink); background: transparent; font-size: 0.68rem; }
+.history > button { display: grid; gap: 5px; width: 100%; min-height: 0; margin-top: 8px; padding: 10px; color: var(--ink); text-align: left; background: white; border: 1px solid var(--line); border-left: 4px solid var(--line); }
+.history > button:hover { color: white; }
+.history > button span { overflow: hidden; font-size: 0.68rem; text-overflow: ellipsis; white-space: nowrap; }
+.history > button code { color: inherit; font-size: 0.61rem; }
+.history .activeResult { color: white; background: var(--ink); border-left-color: var(--signal); }
+@media (max-width: 1180px) { .workspace { grid-template-columns: 220px minmax(0, 1fr); } .history { position: static; grid-column: 1 / -1; } }
+@media (max-width: 760px) { .pageHeader, .synthesisBar { align-items: stretch; flex-direction: column; } .connectionState { min-width: 0; } .workspace { grid-template-columns: 1fr; } .controls, .history { position: static; grid-column: 1; } .transformation { grid-template-columns: 1fr; } .transformMark { width: 100%; height: 34px; transform: rotate(90deg); } }
