@@ -125,9 +125,10 @@
 .renderPlanDetail > header div { display: grid; gap: 3px; }
 .renderPlanDetail > header span { color: #b9d4db; font-size: 0.7rem; }
 .renderPlanDetail > header code { color: #9fe2d9; font-size: 0.65rem; }
-.renderPlanTable { display: grid; min-width: 780px; background: #d5e0e3; gap: 1px; }
+.renderPlanTable { display: grid; min-width: 780px; max-height: 600px; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; background: #d5e0e3; gap: 1px; }
+.renderPlanTable:focus-visible { outline: 3px solid var(--signal-pale); outline-offset: -3px; }
 .renderPlanRow { display: grid; grid-template-columns: 38px 140px 90px 130px minmax(220px, 1fr) 70px; gap: 9px; align-items: start; padding: 9px 10px; background: white; font-size: 0.72rem; }
-.renderPlanRow:first-child { color: #456577; background: #edf3f4; font: 700 0.61rem ui-monospace, monospace; text-transform: uppercase; }
+.renderPlanRow:first-child { position: sticky; z-index: 1; top: 0; color: #456577; background: #edf3f4; font: 700 0.61rem ui-monospace, monospace; text-transform: uppercase; }
 .renderPlanRow span[data-state="hit"] { color: #075e59; font-weight: 800; }
 .renderPlanRow span[data-state="miss"] { color: var(--copper); font-weight: 800; }
 .validationSummary { display: flex; justify-content: space-between; gap: 20px; padding: 14px 16px; color: white; background: var(--ink); border-left: 5px solid var(--fault); }

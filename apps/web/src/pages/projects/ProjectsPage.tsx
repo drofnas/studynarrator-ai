@@ -832,7 +832,7 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
             <div className={styles.renderPlanDetail} aria-live="polite">
               {!selectedRenderPlan ? <p>Select a saved plan to inspect its immutable entries.</p> : <>
                 <header><div><strong>{selectedRenderPlan.scriptHash === project.scriptHash && selectedRenderPlan.createdAt >= project.updatedAt ? "Matches current project" : "Frozen from earlier project"}</strong><span>{new Date(selectedRenderPlan.createdAt).toLocaleString()}</span></div><code>{selectedRenderPlan.id}</code></header>
-                <div className={styles.renderPlanTable} role="table" aria-label="Frozen render plan ordered entries">
+                <div className={styles.renderPlanTable} role="table" aria-label="Frozen render plan ordered entries" tabIndex={0}>
                   <div className={styles.renderPlanRow} role="row"><b>#</b><b>Type / origin</b><b>Duration</b><b>Voice</b><b>Transformed text</b><b>Cache</b></div>
                   {selectedRenderPlan.entries.map((entry) => <div className={styles.renderPlanRow} role="row" key={entry.ordinal}>
                     <span>{entry.ordinal}</span>

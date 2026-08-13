@@ -542,6 +542,7 @@ describe("Projects workbench", () => {
     }));
     expect(replace.mock.invocationCallOrder[0]).toBeLessThan(create.mock.invocationCallOrder[0]!);
     const planTable = await screen.findByRole("table", { name: "Frozen render plan ordered entries" });
+    expect(planTable).toHaveAttribute("tabindex", "0");
     expect(planTable).toHaveTextContent("automatic · paragraph");
     expect(planTable).toHaveTextContent("750 ms");
     expect(planTable).toHaveTextContent("voice_teacher");
