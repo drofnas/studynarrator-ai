@@ -14,6 +14,9 @@ interface ElectronEvaluationApi {
   shell: {
     openExternal(url: string): Promise<void>;
   };
+  dialog: {
+    showSaveDialog(options: { defaultPath: string }): Promise<{ canceled: boolean; filePath?: string }>;
+  };
 }
 
 test.describe("Electron acceptance", () => {
@@ -30,7 +33,7 @@ test.describe("Electron acceptance", () => {
       };
     });
     expect(bridgeShape).toEqual({
-      bridge: ["connections", "persistence", "projectPreview", "renderPlans", "scratchpad", "speechCache", "system", "voiceCatalog"],
+      bridge: ["connections", "persistence", "projectPreview", "renderPlans", "renders", "scratchpad", "speechCache", "system", "voiceCatalog"],
       hasRequire: false,
       hasProcess: false,
       frozen: true
@@ -116,6 +119,35 @@ test.describe("Electron acceptance", () => {
     await expect(table).toContainText("750 ms");
     await expect(savedPlans.getByRole("button")).toHaveCount(2);
     expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/speech"] ?? 0).toBe(0);
+  });
+
+  test("auto-resumes an interrupted render and saves a validated artifact through native IPC", async ({ electronStudyNarrator, studyNarrator }) => {
+    let page = electronStudyNarrator.page;
+    await continueElectronOffline(page);
+    await page.getByLabel("Project name").fill("Desktop render recovery");
+    await page.getByRole("button", { name: "Create project" }).click();
+    await page.getByLabel("Script source").fill("[speaker_teacher] Resume this render.");
+    await page.getByLabel("Connection profile").selectOption("environment-speaches");
+    await page.getByLabel("Optional model override").fill("speaches-ai/Kokoro-82M-v1.0-ONNX");
+    await expect(page.getByLabel("Voices")).toHaveValue("af_heart");
+    await page.getByRole("button", { name: "Freeze render plan" }).click();
+    studyNarrator.fakeSpeaches.setScenario("timeout");
+    await page.getByRole("button", { name: "Render this frozen plan" }).click();
+    await expect(page.getByText(/Phase: synthesizing/u)).toBeVisible();
+
+    studyNarrator.fakeSpeaches.setScenario("healthy");
+    page = await electronStudyNarrator.relaunch();
+    await expect(page.getByRole("heading", { name: "Projects", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: /Desktop render recovery/u }).click();
+    await expect(page.getByText(/Phase: complete/u)).toBeVisible({ timeout: 20_000 });
+    const mp3Row = page.getByRole("list", { name: "Render artifacts" }).getByRole("listitem").filter({ hasText: "mp3" });
+    await expect(mp3Row).toBeVisible();
+    const destination = resolve(electronStudyNarrator.dataDirectory, "exported-render.mp3");
+    await electronStudyNarrator.application.evaluate(({ dialog }: ElectronEvaluationApi, filePath) => {
+      dialog.showSaveDialog = () => Promise.resolve({ canceled: false, filePath });
+    }, destination);
+    await mp3Row.getByRole("button", { name: "Save As" }).click();
+    await expect.poll(async () => (await stat(destination)).size).toBeGreaterThan(0);
   });
 
   test("clears one-shot credential input and never stores plaintext", async ({ electronStudyNarrator, studyNarrator }) => {

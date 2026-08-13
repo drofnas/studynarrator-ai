@@ -1,3 +1,4 @@
+import { copyFile } from "node:fs/promises";
 import {
   ActiveConnectionProfileInputSchema,
   CONNECTION_CHANNELS,
@@ -28,6 +29,15 @@ import {
   RenderPlanProjectInputSchema,
   RenderPlanSchema,
   RenderPlanSummaryCollectionSchema,
+  RENDER_CHANNELS,
+  RenderArtifactCollectionSchema,
+  RenderArtifactExportResultSchema,
+  RenderArtifactInputSchema,
+  RenderIdInputSchema,
+  RenderJobCollectionSchema,
+  RenderJobSchema,
+  RenderPlanInputSchema,
+  RenderProjectInputSchema,
   SYSTEM_DIAGNOSTICS_CHANNEL,
   SystemDiagnosticsSchema,
   SystemPacingDefaultsSchema,
@@ -51,7 +61,7 @@ import {
   type SpeechCacheClient,
   type VoiceCatalogClient
 } from "@studynarrator/shared-types";
-import type { DiagnosticsContext, SystemService } from "@studynarrator/application";
+import type { DiagnosticsContext, RenderService, SystemService } from "@studynarrator/application";
 
 export const PUBLIC_IPC_CHANNEL_MANIFEST = Object.freeze([
   SYSTEM_DIAGNOSTICS_CHANNEL,
@@ -60,7 +70,8 @@ export const PUBLIC_IPC_CHANNEL_MANIFEST = Object.freeze([
   ...Object.values(SCRATCHPAD_CHANNELS),
   ...Object.values(PROJECT_PREVIEW_CHANNELS),
   ...Object.values(SPEECH_CACHE_CHANNELS),
-  ...Object.values(RENDER_PLAN_CHANNELS)
+  ...Object.values(RENDER_PLAN_CHANNELS),
+  ...Object.values(RENDER_CHANNELS)
 ]);
 
 interface IpcMainLike {
@@ -264,5 +275,57 @@ export function registerRenderPlanHandlers(ipcMain: IpcMainLike, renderPlans: Re
   handle(RENDER_PLAN_CHANNELS.get, async (input) => {
     const { planId } = RenderPlanIdInputSchema.parse(input);
     return RenderPlanSchema.parse(await renderPlans.get(planId));
+  });
+}
+
+export function registerRenderHandlers(
+  ipcMain: IpcMainLike,
+  renders: RenderService,
+  dialog: { showSaveDialog(options: { defaultPath: string }): Promise<{ canceled: boolean; filePath?: string }> }
+) {
+  const handle = (channel: string, listener: (input: unknown) => Promise<unknown>) => {
+    ipcMain.removeHandler(channel);
+    ipcMain.handle(channel, async (_event, input) => {
+      try { return await listener(input); }
+      catch (error) {
+        const record = error && typeof error === "object" ? error as Record<string, unknown> : undefined;
+        /* eslint-disable preserve-caught-error */
+        if (record && Array.isArray(record.issues)) throw new Error("The request does not match the render contract.");
+        throw new Error("StudyNarrator could not complete the render operation.");
+        /* eslint-enable preserve-caught-error */
+      }
+    });
+  };
+  handle(RENDER_CHANNELS.start, async (input) => {
+    const { planId } = RenderPlanInputSchema.parse(input);
+    return RenderJobSchema.parse(await renders.start(planId));
+  });
+  handle(RENDER_CHANNELS.list, async (input) => {
+    const { projectId } = RenderProjectInputSchema.parse(input);
+    return RenderJobCollectionSchema.parse(await renders.list(projectId));
+  });
+  handle(RENDER_CHANNELS.get, async (input) => {
+    const { renderId } = RenderIdInputSchema.parse(input);
+    return RenderJobSchema.parse(await renders.get(renderId));
+  });
+  handle(RENDER_CHANNELS.cancel, async (input) => {
+    const { renderId } = RenderIdInputSchema.parse(input);
+    return RenderJobSchema.parse(await renders.cancel(renderId));
+  });
+  handle(RENDER_CHANNELS.retry, async (input) => {
+    const { renderId } = RenderIdInputSchema.parse(input);
+    return RenderJobSchema.parse(await renders.retry(renderId));
+  });
+  handle(RENDER_CHANNELS.artifacts, async (input) => {
+    const { renderId } = RenderIdInputSchema.parse(input);
+    return RenderArtifactCollectionSchema.parse(await renders.listArtifacts(renderId));
+  });
+  handle(RENDER_CHANNELS.exportArtifact, async (input) => {
+    const { artifactId } = RenderArtifactInputSchema.parse(input);
+    const { artifact, path } = await renders.resolveArtifact(artifactId);
+    const destination = await dialog.showSaveDialog({ defaultPath: artifact.fileName });
+    if (destination.canceled || !destination.filePath) return RenderArtifactExportResultSchema.parse({ disposition: "canceled", fileName: artifact.fileName });
+    await copyFile(path, destination.filePath);
+    return RenderArtifactExportResultSchema.parse({ disposition: "saved", fileName: artifact.fileName });
   });
 }

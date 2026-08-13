@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { Link, MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseScript, resolveParagraphPauses, transformScript } from "@studynarrator/core";
-import type { ConnectionProfile, IgnoredDiagnosticCollection, PersistenceClient, ProjectDetail, ProjectPreviewResult, ProjectReplaceInput, ProjectPreviewClient, RenderPlan, RenderPlanClient, RenderPlanSummary, SpeechCacheClient, SpeechCatalog, VoiceCatalog } from "@studynarrator/shared-types";
+import type { ConnectionProfile, IgnoredDiagnosticCollection, PersistenceClient, ProjectDetail, ProjectPreviewResult, ProjectReplaceInput, ProjectPreviewClient, RenderClient, RenderPlan, RenderPlanClient, RenderPlanSummary, SpeechCacheClient, SpeechCatalog, VoiceCatalog } from "@studynarrator/shared-types";
 import type { ScriptAnalyzer } from "@/workers/parser/parserClient.js";
 import type { ScriptAnalysisInput } from "@/workers/parser/parserWorkerProtocol.js";
 import { GLOBAL_VOICE_CATALOG_MODEL_ID } from "@/features/projects/projectAuthoring.js";
@@ -144,6 +144,7 @@ function renderPage(client: PersistenceClient, analyze: ScriptAnalyzer["analyze"
   previewClient?: ProjectPreviewClient;
   cacheClient?: SpeechCacheClient;
   renderPlanClient?: RenderPlanClient;
+  renderClient?: RenderClient;
 } = {}) {
   const profiles = options.profiles ?? [];
   const discoveredCatalog = options.speechCatalog ?? {
@@ -168,7 +169,7 @@ function renderPage(client: PersistenceClient, analyze: ScriptAnalyzer["analyze"
     clearEntry: vi.fn(async () => ({ contractVersion: 1 as const, entriesRemoved: 0, bytesFreed: 0 }))
   } as unknown as SpeechCacheClient;
   const renderPlanClient = options.renderPlanClient ?? { create: vi.fn(), list: vi.fn(async () => []), get: vi.fn() } as unknown as RenderPlanClient;
-  return { ...render(<ConnectionProvider connections={connections} voiceCatalog={voiceCatalog}><MemoryRouter initialEntries={[`/projects/${project.id}`]}><Link to="/settings">Settings test link</Link><Routes><Route path="/projects/:projectId" element={<ProjectsPage client={client} analyzer={{ analyze }} previewClient={previewClient} cacheClient={cacheClient} renderPlanClient={renderPlanClient} />} /><Route path="/settings" element={<p>Settings destination</p>} /></Routes></MemoryRouter></ConnectionProvider>), connections, voiceCatalog, previewClient, cacheClient, renderPlanClient };
+  return { ...render(<ConnectionProvider connections={connections} voiceCatalog={voiceCatalog}><MemoryRouter initialEntries={[`/projects/${project.id}`]}><Link to="/settings">Settings test link</Link><Routes><Route path="/projects/:projectId" element={<ProjectsPage client={client} analyzer={{ analyze }} previewClient={previewClient} cacheClient={cacheClient} renderPlanClient={renderPlanClient} {...(options.renderClient ? { renderClient: options.renderClient } : {})} />} /><Route path="/settings" element={<p>Settings destination</p>} /></Routes></MemoryRouter></ConnectionProvider>), connections, voiceCatalog, previewClient, cacheClient, renderPlanClient };
 }
 
 function deferred<T>() {
@@ -541,6 +542,7 @@ describe("Projects workbench", () => {
     }));
     expect(replace.mock.invocationCallOrder[0]).toBeLessThan(create.mock.invocationCallOrder[0]!);
     const planTable = await screen.findByRole("table", { name: "Frozen render plan ordered entries" });
+    expect(planTable).toHaveAttribute("tabindex", "0");
     expect(planTable).toHaveTextContent("automatic · paragraph");
     expect(planTable).toHaveTextContent("750 ms");
     expect(planTable).toHaveTextContent("voice_teacher");
@@ -565,6 +567,40 @@ describe("Projects workbench", () => {
     await userEvent.click(within(savedPlans).getAllByRole("button")[1]!);
     await waitFor(() => expect(get).toHaveBeenCalledWith(first.id));
     expect(screen.getByRole("table", { name: "Frozen render plan ordered entries" })).toHaveTextContent("sequel.");
+  });
+
+  it("starts a selected frozen plan and exposes completed artifact actions", async () => {
+    const { client, analyze } = fixture();
+    const plan = frozenPlan("00000000-0000-4000-8000-000000000002", project.scriptHash, "2026-08-12T14:00:00.000Z");
+    const job = {
+      contractVersion: 1 as const, id: "00000000-0000-4000-8000-000000000003", projectId: project.id, planId: plan.id,
+      retryOfRenderId: null, state: "complete" as const,
+      progress: { phase: "complete" as const, sectionTitle: null, sectionOrdinal: 0, sectionCount: 0, entryOrdinal: null, speechOrdinal: 1, speechCount: 1, chunkOrdinal: null, completedChunks: 1, totalChunks: 1, cacheHits: 0, cacheMisses: 1, ttsRequests: 1, speakerId: null, voiceId: null, excerpt: null, elapsedMs: 1_000 },
+      error: null, createdAt: "2026-08-12T14:00:00.000Z", startedAt: "2026-08-12T14:00:00.000Z", finishedAt: "2026-08-12T14:00:01.000Z"
+    };
+    const artifact = {
+      contractVersion: 1 as const, id: "00000000-0000-4000-8000-000000000004", renderId: job.id,
+      type: "mp3" as const, fileName: "offline-fixture.mp3", sizeBytes: 1_024, checksum: "a".repeat(64),
+      durationMs: 1_000, createdAt: job.finishedAt
+    };
+    const start = vi.fn(async () => job);
+    const exportArtifact = vi.fn(async () => ({ disposition: "download" as const, fileName: artifact.fileName }));
+    const renderClient: RenderClient = {
+      start, list: vi.fn(async () => []), get: vi.fn(async () => job), cancel: vi.fn(async () => job), retry: vi.fn(async () => job),
+      listArtifacts: vi.fn(async () => [artifact]), exportArtifact
+    };
+    renderPage(client, analyze, {
+      renderPlanClient: { create: vi.fn(), list: vi.fn(async () => [summaryOf(plan)]), get: vi.fn(async () => plan) },
+      renderClient
+    });
+    const savedPlans = await screen.findByLabelText("Saved render plans");
+    await userEvent.click(within(savedPlans).getByRole("button"));
+    await userEvent.click(await screen.findByRole("button", { name: "Render this frozen plan" }));
+    expect(start).toHaveBeenCalledWith(plan.id);
+    expect(await screen.findByText(/Phase: complete/u)).toBeInTheDocument();
+    expect(await screen.findByRole("list", { name: "Render artifacts" })).toHaveTextContent("offline-fixture.mp3");
+    await userEvent.click(screen.getByRole("button", { name: "Download" }));
+    expect(exportArtifact).toHaveBeenCalledWith(artifact.id);
   });
 
   it("shows failed saves and guards unload and route navigation", async () => {

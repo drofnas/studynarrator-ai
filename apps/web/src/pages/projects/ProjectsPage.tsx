@@ -22,6 +22,9 @@ import {
   type RenderPlan,
   type RenderPlanClient,
   type RenderPlanSummary,
+  type RenderArtifact,
+  type RenderClient,
+  type RenderJob,
   type ProjectSummary,
   type SpeechCacheClient,
   type TransitionPauseSetting,
@@ -98,12 +101,13 @@ function TransitionPauseEditor({ label, setting, pausePresets, onChange }: {
   </fieldset>;
 }
 
-export function ProjectsPage({ client, analyzer, previewClient, cacheClient, renderPlanClient }: {
+export function ProjectsPage({ client, analyzer, previewClient, cacheClient, renderPlanClient, renderClient }: {
   client: PersistenceClient;
   analyzer: ScriptAnalyzer;
   previewClient: ProjectPreviewClient;
   cacheClient: SpeechCacheClient;
   renderPlanClient: RenderPlanClient;
+  renderClient?: RenderClient;
 }) {
   const connections = useConnections();
   const { projectId } = useParams();
@@ -147,6 +151,10 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
   const [selectedRenderPlan, setSelectedRenderPlan] = useState<RenderPlan>();
   const [renderPlanBusy, setRenderPlanBusy] = useState(false);
   const [renderPlanError, setRenderPlanError] = useState("");
+  const [renderJobs, setRenderJobs] = useState<RenderJob[]>([]);
+  const [selectedRenderJob, setSelectedRenderJob] = useState<RenderJob>();
+  const [renderArtifacts, setRenderArtifacts] = useState<RenderArtifact[]>([]);
+  const [renderError, setRenderError] = useState("");
   const previewControllerRef = useRef<AbortController | null>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const revisionRef = useRef(0);
@@ -246,6 +254,9 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
       setConfiguration({ speakers: [], pauses: [], sections: [] });
       setRenderPlanSummaries([]);
       setSelectedRenderPlan(undefined);
+      setRenderJobs([]);
+      setSelectedRenderJob(undefined);
+      setRenderArtifacts([]);
       return;
     }
     let active = true;
@@ -281,6 +292,39 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
     });
     return () => { active = false; };
   }, [projectId, renderPlanClient]);
+
+  useEffect(() => {
+    if (!projectId || !renderClient) return;
+    let active = true;
+    setRenderError("");
+    void renderClient.list(projectId).then((jobs) => {
+      if (!active) return;
+      setRenderJobs(jobs);
+      setSelectedRenderJob(jobs.find(({ state }) => !["complete", "failed", "canceled"].includes(state)) ?? jobs[0]);
+    }).catch((error: unknown) => { if (active) setRenderError(message(error)); });
+    return () => { active = false; };
+  }, [projectId, renderClient]);
+
+  useEffect(() => {
+    if (!renderClient || !selectedRenderJob || ["complete", "failed", "canceled"].includes(selectedRenderJob.state)) return;
+    let active = true;
+    const timer = window.setInterval(() => {
+      void renderClient.get(selectedRenderJob.id).then((job) => {
+        if (!active) return;
+        setSelectedRenderJob(job);
+        setRenderJobs((current) => current.map((item) => item.id === job.id ? job : item));
+      }).catch((error: unknown) => { if (active) setRenderError(message(error)); });
+    }, 500);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [renderClient, selectedRenderJob]);
+
+  useEffect(() => {
+    if (!renderClient || selectedRenderJob?.state !== "complete") { setRenderArtifacts([]); return; }
+    let active = true;
+    void renderClient.listArtifacts(selectedRenderJob.id).then((artifacts) => { if (active) setRenderArtifacts(artifacts); })
+      .catch((error: unknown) => { if (active) setRenderError(message(error)); });
+    return () => { active = false; };
+  }, [renderClient, selectedRenderJob]);
 
   const updateDraft = useCallback((updater: (current: ProjectDraft) => ProjectDraft, autosave = true) => {
     const current = draftRef.current;
@@ -640,6 +684,32 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
     }
   };
 
+  const startRender = async () => {
+    if (!renderClient || !selectedRenderPlan) return;
+    setRenderError("");
+    try {
+      const job = await renderClient.start(selectedRenderPlan.id);
+      setSelectedRenderJob(job);
+      setRenderJobs((current) => [job, ...current.filter(({ id }) => id !== job.id)]);
+      setNotice(`Render ${job.id} entered the queue.`);
+    } catch (error) { setRenderError(message(error)); }
+  };
+
+  const cancelRender = async () => {
+    if (!renderClient || !selectedRenderJob) return;
+    try { setSelectedRenderJob(await renderClient.cancel(selectedRenderJob.id)); }
+    catch (error) { setRenderError(message(error)); }
+  };
+
+  const retryRender = async () => {
+    if (!renderClient || !selectedRenderJob) return;
+    try {
+      const job = await renderClient.retry(selectedRenderJob.id);
+      setSelectedRenderJob(job);
+      setRenderJobs((current) => [job, ...current]);
+    } catch (error) { setRenderError(message(error)); }
+  };
+
   const clearProjectCache = async () => {
     if (!project || !window.confirm(`Clear every cached speech entry associated with ${project.name}? Identical speech shared with Scratchpad or other projects will also be deleted.`)) return;
     try {
@@ -762,7 +832,7 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
             <div className={styles.renderPlanDetail} aria-live="polite">
               {!selectedRenderPlan ? <p>Select a saved plan to inspect its immutable entries.</p> : <>
                 <header><div><strong>{selectedRenderPlan.scriptHash === project.scriptHash && selectedRenderPlan.createdAt >= project.updatedAt ? "Matches current project" : "Frozen from earlier project"}</strong><span>{new Date(selectedRenderPlan.createdAt).toLocaleString()}</span></div><code>{selectedRenderPlan.id}</code></header>
-                <div className={styles.renderPlanTable} role="table" aria-label="Frozen render plan ordered entries">
+                <div className={styles.renderPlanTable} role="table" aria-label="Frozen render plan ordered entries" tabIndex={0}>
                   <div className={styles.renderPlanRow} role="row"><b>#</b><b>Type / origin</b><b>Duration</b><b>Voice</b><b>Transformed text</b><b>Cache</b></div>
                   {selectedRenderPlan.entries.map((entry) => <div className={styles.renderPlanRow} role="row" key={entry.ordinal}>
                     <span>{entry.ordinal}</span>
@@ -773,9 +843,27 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
                     <span data-state={entry.type === "speech" ? entry.chunks[0]?.cacheStatus : undefined}>{entry.type === "speech" ? entry.chunks[0]?.cacheStatus : "—"}</span>
                   </div>)}
                 </div>
+                {renderClient ? <div className={styles.actionRow}><button type="button" onClick={() => void startRender()}>Render this frozen plan</button></div> : null}
               </>}
             </div>
           </div>
+          {renderClient ? <section aria-labelledby="render-execution-heading">
+            <div className={styles.sectionHeading}><div><span>Durable worker</span><h4 id="render-execution-heading">Render execution</h4></div><b>{renderJobs.length}</b></div>
+            {renderError ? <p className={styles.fieldError} role="alert">{renderError}</p> : null}
+            {renderJobs.length > 0 ? <label>Saved renders<select aria-label="Saved renders" value={selectedRenderJob?.id ?? ""} onChange={(event) => setSelectedRenderJob(renderJobs.find(({ id }) => id === event.target.value))}>{renderJobs.map((job) => <option key={job.id} value={job.id}>{new Date(job.createdAt).toLocaleString()} · {job.state}</option>)}</select></label> : <p>No render jobs yet.</p>}
+            {selectedRenderJob ? <div aria-live="polite">
+              <p><strong>Phase: {selectedRenderJob.state.replace("_", " ")}</strong> · {selectedRenderJob.progress.completedChunks}/{selectedRenderJob.progress.totalChunks} chunks · {selectedRenderJob.progress.cacheHits} cache hits · {selectedRenderJob.progress.cacheMisses} misses · {selectedRenderJob.progress.ttsRequests} TTS requests</p>
+              <p>{selectedRenderJob.progress.sectionTitle ?? "No active section"} · speech {selectedRenderJob.progress.speechOrdinal}/{selectedRenderJob.progress.speechCount} · {selectedRenderJob.progress.speakerId ?? "no active speaker"} · {selectedRenderJob.progress.voiceId ?? "no active voice"}</p>
+              {selectedRenderJob.progress.excerpt ? <blockquote>{selectedRenderJob.progress.excerpt}</blockquote> : null}
+              <p>Elapsed {(selectedRenderJob.progress.elapsedMs / 1_000).toFixed(1)} seconds.</p>
+              {selectedRenderJob.error ? <p className={styles.fieldError} role="alert"><strong>{selectedRenderJob.error.code}</strong> — {selectedRenderJob.error.message}{selectedRenderJob.error.entryOrdinal ? ` Entry ${String(selectedRenderJob.error.entryOrdinal)}.` : ""}</p> : null}
+              <div className={styles.actionRow}>
+                {!(["complete", "failed", "canceled"] as string[]).includes(selectedRenderJob.state) ? <button type="button" className={styles.danger} onClick={() => void cancelRender()}>Cancel render</button> : null}
+                {selectedRenderJob.state === "failed" ? <button type="button" onClick={() => void retryRender()}>Retry render</button> : null}
+              </div>
+              {renderArtifacts.length > 0 ? <ul aria-label="Render artifacts">{renderArtifacts.map((artifact) => <li key={artifact.id}><strong>{artifact.fileName}</strong> · {artifact.type} · {artifact.sizeBytes.toLocaleString()} bytes · <code>{artifact.checksum}</code> <button type="button" className={styles.secondary} onClick={() => void renderClient.exportArtifact(artifact.id).catch((error: unknown) => setRenderError(message(error)))}>{window.studyNarrator ? "Save As" : "Download"}</button></li>)}</ul> : null}
+            </div> : null}
+          </section> : null}
         </section>
 
         <section className={styles.validationPanel}>

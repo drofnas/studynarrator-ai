@@ -4,6 +4,7 @@ import {
   PERSISTENCE_CHANNELS,
   PROJECT_PREVIEW_CHANNELS,
   RENDER_PLAN_CHANNELS,
+  RENDER_CHANNELS,
   SCRATCHPAD_CHANNELS,
   SPEECH_CACHE_CHANNELS,
   SYSTEM_DIAGNOSTICS_CHANNEL
@@ -16,6 +17,7 @@ import {
   registerPersistenceHandlers,
   registerProjectPreviewHandlers,
   registerRenderPlanHandlers,
+  registerRenderHandlers,
   registerScratchpadHandlers,
   registerSpeechCacheHandlers
 } from "./ipc.js";
@@ -46,8 +48,8 @@ const diagnostics = {
 const persistenceStatus = {
   contractVersion: 4 as const,
   state: "ready" as const,
-  databaseSchemaVersion: 4 as const,
-  targetDatabaseSchemaVersion: 4 as const,
+  databaseSchemaVersion: 5 as const,
+  targetDatabaseSchemaVersion: 5 as const,
   databasePath: "/tmp/studynarrator.sqlite",
   latestBackupPath: null
 };
@@ -154,6 +156,36 @@ const renderPlans = {
   list: vi.fn(async () => [renderPlanSummary]),
   get: vi.fn(async () => renderPlan)
 };
+const renderJob = {
+  contractVersion: 1 as const,
+  id: "00000000-0000-4000-8000-000000000003",
+  projectId: renderPlan.projectId,
+  planId: renderPlan.id,
+  retryOfRenderId: null,
+  state: "complete" as const,
+  progress: {
+    phase: "complete" as const, sectionTitle: null, sectionOrdinal: 0, sectionCount: 0,
+    entryOrdinal: null, speechOrdinal: 0, speechCount: 0, chunkOrdinal: null,
+    completedChunks: 0, totalChunks: 0, cacheHits: 0, cacheMisses: 0, ttsRequests: 0,
+    speakerId: null, voiceId: null, excerpt: null, elapsedMs: 1
+  },
+  error: null,
+  createdAt: renderPlan.createdAt,
+  startedAt: renderPlan.createdAt,
+  finishedAt: renderPlan.createdAt
+};
+const renderArtifact = {
+  contractVersion: 1 as const, id: "00000000-0000-4000-8000-000000000004", renderId: renderJob.id,
+  type: "mp3" as const, fileName: "audio.mp3", sizeBytes: 3, checksum: "a".repeat(64),
+  durationMs: 1, createdAt: renderPlan.createdAt
+};
+const renders = {
+  start: vi.fn(async () => renderJob), list: vi.fn(async () => [renderJob]), get: vi.fn(async () => renderJob),
+  cancel: vi.fn(async () => renderJob), retry: vi.fn(async () => renderJob), listArtifacts: vi.fn(async () => []),
+  exportArtifact: vi.fn(async () => ({ disposition: "download" as const, fileName: "audio.mp3" })),
+  resolveArtifact: vi.fn(async () => ({ artifact: renderArtifact, path: "/tmp/audio.mp3" })), close: vi.fn()
+};
+const saveDialog = { showSaveDialog: vi.fn(async () => ({ canceled: true })) };
 
 describe("Electron boundary", () => {
   it("exposes only the validated diagnostics and persistence operations", async () => {
@@ -163,7 +195,7 @@ describe("Electron boundary", () => {
       return persistenceStatus;
     });
     const bridge = createPreloadBridge(invoke);
-    expect(Object.keys(bridge)).toEqual(["system", "persistence", "connections", "voiceCatalog", "scratchpad", "projectPreview", "speechCache", "renderPlans"]);
+    expect(Object.keys(bridge)).toEqual(["system", "persistence", "connections", "voiceCatalog", "scratchpad", "projectPreview", "speechCache", "renderPlans", "renders"]);
     expect(Object.keys(bridge.system)).toEqual(["diagnostics"]);
     await expect(bridge.system.diagnostics()).resolves.toEqual(diagnostics);
     expect(invoke).toHaveBeenCalledWith(SYSTEM_DIAGNOSTICS_CHANNEL);
@@ -197,6 +229,7 @@ describe("Electron boundary", () => {
     registerProjectPreviewHandlers(ipcMain, projectPreview);
     registerSpeechCacheHandlers(ipcMain, speechCache);
     registerRenderPlanHandlers(ipcMain, renderPlans);
+    registerRenderHandlers(ipcMain, renders as never, saveDialog);
     expect([...handlers.keys()]).toEqual(PUBLIC_IPC_CHANNEL_MANIFEST);
     expect([...handlers.keys()]).not.toContain("persistence.execute");
     await expect(handlers.get(SYSTEM_DIAGNOSTICS_CHANNEL)?.()).resolves.toEqual(diagnostics);
@@ -307,6 +340,7 @@ describe("Electron boundary", () => {
     registerProjectPreviewHandlers(ipcMain, projectPreview);
     registerSpeechCacheHandlers(ipcMain, speechCache);
     registerRenderPlanHandlers(ipcMain, renderPlans);
+    registerRenderHandlers(ipcMain, renders as never, saveDialog);
     const projectReplace = { name: project.name, description: "", scriptSource: "", connectionProfileId: null, modelId: null, speakerMappings: [], pausePresets: project.pausePresets, transitionPauses: project.transitionPauses, lexiconEntries: [] };
     const mutation = { profile: { id: "profile", name: "IPC profile", baseUrl: "http://127.0.0.1:8000", defaultModelId: "model", defaultVoiceId: "voice" }, credential: { action: "keep" } };
     const inputs: Record<string, unknown> = {
@@ -333,7 +367,14 @@ describe("Electron boundary", () => {
       [SPEECH_CACHE_CHANNELS.clearEntry]: { cacheKey: "a".repeat(64) },
       [RENDER_PLAN_CHANNELS.create]: { projectId: project.id },
       [RENDER_PLAN_CHANNELS.list]: { projectId: project.id },
-      [RENDER_PLAN_CHANNELS.get]: { planId: renderPlan.id }
+      [RENDER_PLAN_CHANNELS.get]: { planId: renderPlan.id },
+      [RENDER_CHANNELS.start]: { planId: renderPlan.id },
+      [RENDER_CHANNELS.list]: { projectId: project.id },
+      [RENDER_CHANNELS.get]: { renderId: renderJob.id },
+      [RENDER_CHANNELS.cancel]: { renderId: renderJob.id },
+      [RENDER_CHANNELS.retry]: { renderId: renderJob.id },
+      [RENDER_CHANNELS.artifacts]: { renderId: renderJob.id },
+      [RENDER_CHANNELS.exportArtifact]: { artifactId: renderArtifact.id }
     };
     const invoked = new Set<string>();
     for (const channel of PUBLIC_IPC_CHANNEL_MANIFEST) {

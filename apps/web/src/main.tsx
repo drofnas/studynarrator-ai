@@ -9,6 +9,7 @@ import { createScriptAnalysisWorkerClient } from "@/workers/parser/parserClient.
 import { resolveScratchpadClient } from "@/services/scratchpad/scratchpadClient.js";
 import { resolveProjectPreviewClient, resolveSpeechCacheClient } from "@/services/preview/previewClient.js";
 import { resolveRenderPlanClient } from "@/services/renderPlans/renderPlanClient.js";
+import { resolveRenderClient } from "@/services/renders/renderClient.js";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("StudyNarrator root element is missing");
@@ -16,7 +17,7 @@ if (!root) throw new Error("StudyNarrator root element is missing");
 createRoot(root).render(
   <StrictMode>
     <HashRouter>
-      <App analyzer={createScriptAnalysisWorkerClient()} client={resolveSystemClient()} persistence={resolvePersistenceClient()} connections={resolveConnectionsClient()} voiceCatalog={resolveVoiceCatalogClient()} scratchpad={resolveScratchpadClient()} projectPreview={resolveProjectPreviewClient()} speechCache={resolveSpeechCacheClient()} renderPlans={resolveRenderPlanClient()} />
+      <App analyzer={createScriptAnalysisWorkerClient()} client={resolveSystemClient()} persistence={resolvePersistenceClient()} connections={resolveConnectionsClient()} voiceCatalog={resolveVoiceCatalogClient()} scratchpad={resolveScratchpadClient()} projectPreview={resolveProjectPreviewClient()} speechCache={resolveSpeechCacheClient()} renderPlans={resolveRenderPlanClient()} renders={resolveRenderClient()} />
     </HashRouter>
   </StrictMode>
 );

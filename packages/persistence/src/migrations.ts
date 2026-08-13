@@ -187,6 +187,49 @@ const MIGRATION_4_SQL = `
     paragraph_transition_duration_ms = NULL;
 `;
 
+const MIGRATION_5_SQL = `
+  CREATE TABLE render_jobs (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    plan_id TEXT NOT NULL,
+    retry_of_render_id TEXT REFERENCES render_jobs(id) ON DELETE SET NULL,
+    state TEXT NOT NULL CHECK (state IN ('queued','validating','synthesizing','assembling','normalizing','encoding','writing_artifacts','complete','failed','canceled')),
+    progress_json TEXT NOT NULL,
+    error_json TEXT,
+    created_at TEXT NOT NULL,
+    started_at TEXT,
+    finished_at TEXT
+  );
+
+  CREATE TABLE render_segments (
+    render_id TEXT NOT NULL REFERENCES render_jobs(id) ON DELETE CASCADE,
+    ordinal INTEGER NOT NULL CHECK (ordinal > 0),
+    segment_type TEXT NOT NULL CHECK (segment_type IN ('section','speech','pause')),
+    state TEXT NOT NULL CHECK (state IN ('pending','complete','failed','skipped')),
+    cache_status TEXT CHECK (cache_status IN ('hit','miss')),
+    audio_duration_ms INTEGER CHECK (audio_duration_ms >= 0),
+    error_json TEXT,
+    PRIMARY KEY (render_id, ordinal)
+  );
+
+  CREATE TABLE render_artifacts (
+    id TEXT PRIMARY KEY,
+    render_id TEXT NOT NULL REFERENCES render_jobs(id) ON DELETE CASCADE,
+    artifact_type TEXT NOT NULL CHECK (artifact_type IN ('mp3','originalScript','readableTranscript','ttsTranscript','manifest','projectSnapshot','checksums')),
+    file_name TEXT NOT NULL,
+    path TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL CHECK (size_bytes > 0),
+    checksum TEXT NOT NULL CHECK (length(checksum) = 64),
+    duration_ms INTEGER CHECK (duration_ms >= 0),
+    created_at TEXT NOT NULL,
+    UNIQUE (render_id, artifact_type)
+  );
+
+  CREATE INDEX render_jobs_project_created_idx ON render_jobs(project_id, created_at DESC);
+  CREATE INDEX render_jobs_state_created_idx ON render_jobs(state, created_at ASC);
+  CREATE INDEX render_artifacts_render_idx ON render_artifacts(render_id, artifact_type);
+`;
+
 export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
   { version: 1, name: "runtime-diagnostics", up: (database) => { database.exec(MIGRATION_1_SQL); } },
   {
@@ -208,6 +251,13 @@ export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
     name: "project-transition-pauses",
     up: (database) => {
       database.exec(MIGRATION_4_SQL);
+    }
+  },
+  {
+    version: 5,
+    name: "render-execution",
+    up: (database) => {
+      database.exec(MIGRATION_5_SQL);
     }
   }
 ]);

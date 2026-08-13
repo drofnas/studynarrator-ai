@@ -76,6 +76,7 @@ export const test = base.extend<{
       ...(services.scratchpad === undefined ? {} : { scratchpad: services.scratchpad }),
       ...(services.projectPreview === undefined ? {} : { projectPreview: services.projectPreview }),
       ...(services.renderPlans === undefined ? {} : { renderPlans: services.renderPlans }),
+      ...(services.renders === undefined ? {} : { renders: services.renders }),
       speechCache: services.speechCache
     });
     attachStaticWebApplication(application, webDistribution);
@@ -91,7 +92,7 @@ export const test = base.extend<{
       });
     } finally {
       await closeServer(server);
-      services.dispose();
+      await services.dispose();
       await fakeSpeaches.close();
       await removeTestDirectory(dataDirectory);
     }

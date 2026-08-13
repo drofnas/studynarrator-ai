@@ -25,6 +25,11 @@ import {
   ProjectSummaryCollectionSchema,
   SystemPacingDefaultsSchema,
   VoiceCatalogSchema,
+  RenderArtifactCollectionSchema,
+  RenderArtifactSchema,
+  RenderJobCollectionSchema,
+  RenderJobSchema,
+  RenderSegmentSchema,
   type ConnectionProfileAuthoring,
   type ConnectionProfilePlaceholder,
   type ConnectionTestSummary,
@@ -40,7 +45,10 @@ import {
   type TransitionPauseConfiguration,
   type TransitionPauseSetting,
   type VoiceCatalog,
-  type VoiceCatalogAuthoring
+  type VoiceCatalogAuthoring,
+  type RenderArtifact,
+  type RenderJob,
+  type RenderSegment
 } from "@studynarrator/shared-types";
 import { PersistenceConflictError, PersistenceNotFoundError } from "./errors.js";
 import {
@@ -175,7 +183,45 @@ export interface StudyNarratorRepository {
   completeConnectionOnboarding(): ConnectionSetupRecord;
   getVoiceCatalogOverrides(modelId: string): VoiceCatalog;
   replaceVoiceCatalogOverrides(input: VoiceCatalogAuthoring): VoiceCatalog;
+  createRenderJob(job: RenderJob, segments: RenderSegment[]): RenderJob;
+  getRenderJob(renderId: string): RenderJob;
+  listRenderJobs(projectId: string): RenderJob[];
+  findActiveRenderJob(planId: string): RenderJob | null;
+  listRecoverableRenderJobs(): RenderJob[];
+  updateRenderJob(job: RenderJob): RenderJob;
+  updateRenderSegment(segment: RenderSegment): RenderSegment;
+  replaceRenderArtifacts(renderId: string, artifacts: Array<RenderArtifact & { path: string }>): RenderArtifact[];
+  listRenderArtifacts(renderId: string): RenderArtifact[];
+  getRenderArtifactPath(artifactId: string): { artifact: RenderArtifact; path: string };
   close(): void;
+}
+
+interface RenderJobRow {
+  id: string; project_id: string; plan_id: string; retry_of_render_id: string | null; state: RenderJob["state"];
+  progress_json: string; error_json: string | null; created_at: string; started_at: string | null; finished_at: string | null;
+}
+
+interface RenderArtifactRow {
+  id: string; render_id: string; artifact_type: RenderArtifact["type"]; file_name: string; path: string;
+  size_bytes: number; checksum: string; duration_ms: number | null; created_at: string;
+}
+
+function renderJobFromRow(row: RenderJobRow): RenderJob {
+  return RenderJobSchema.parse({
+    contractVersion: 1, id: row.id, projectId: row.project_id, planId: row.plan_id,
+    retryOfRenderId: row.retry_of_render_id, state: row.state,
+    progress: JSON.parse(row.progress_json) as unknown,
+    error: row.error_json === null ? null : JSON.parse(row.error_json) as unknown,
+    createdAt: row.created_at, startedAt: row.started_at, finishedAt: row.finished_at
+  });
+}
+
+function renderArtifactFromRow(row: RenderArtifactRow): RenderArtifact {
+  return RenderArtifactSchema.parse({
+    contractVersion: 1, id: row.id, renderId: row.render_id, type: row.artifact_type,
+    fileName: row.file_name, sizeBytes: row.size_bytes, checksum: row.checksum,
+    durationMs: row.duration_ms, createdAt: row.created_at
+  });
 }
 
 function scriptHash(source: string): string {
@@ -795,6 +841,110 @@ function createRepository(options: {
         ));
       });
       return getVoiceCatalogOverrides(input.modelId);
+    },
+    createRenderJob(jobValue, segmentValues) {
+      assertOpen();
+      const job = RenderJobSchema.parse(jobValue);
+      const segments = segmentValues.map((segment) => RenderSegmentSchema.parse(segment));
+      transaction(() => {
+        database.prepare(`
+          INSERT INTO render_jobs (
+            id, project_id, plan_id, retry_of_render_id, state, progress_json, error_json,
+            created_at, started_at, finished_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          job.id, job.projectId, job.planId, job.retryOfRenderId, job.state, JSON.stringify(job.progress),
+          job.error === null ? null : JSON.stringify(job.error), job.createdAt, job.startedAt, job.finishedAt
+        );
+        const insert = database.prepare(`
+          INSERT INTO render_segments (render_id, ordinal, segment_type, state, cache_status, audio_duration_ms, error_json)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `);
+        for (const segment of segments) insert.run(
+          segment.renderId, segment.ordinal, segment.type, segment.state, segment.cacheStatus,
+          segment.audioDurationMs, segment.error === null ? null : JSON.stringify(segment.error)
+        );
+      });
+      return job;
+    },
+    getRenderJob(renderId) {
+      assertOpen();
+      const row = database.prepare("SELECT * FROM render_jobs WHERE id = ?").get(renderId) as RenderJobRow | undefined;
+      if (!row) throw new PersistenceNotFoundError(`Render ${renderId} was not found.`);
+      return renderJobFromRow(row);
+    },
+    listRenderJobs(projectId) {
+      assertOpen();
+      return RenderJobCollectionSchema.parse((database.prepare(
+        "SELECT * FROM render_jobs WHERE project_id = ? ORDER BY created_at DESC, id ASC"
+      ).all(projectId) as RenderJobRow[]).map(renderJobFromRow));
+    },
+    findActiveRenderJob(planId) {
+      assertOpen();
+      const row = database.prepare(`
+        SELECT * FROM render_jobs WHERE plan_id = ? AND state NOT IN ('complete','failed','canceled')
+        ORDER BY created_at ASC LIMIT 1
+      `).get(planId) as RenderJobRow | undefined;
+      return row ? renderJobFromRow(row) : null;
+    },
+    listRecoverableRenderJobs() {
+      assertOpen();
+      return RenderJobCollectionSchema.parse((database.prepare(`
+        SELECT * FROM render_jobs WHERE state NOT IN ('complete','failed','canceled') ORDER BY created_at ASC, id ASC
+      `).all() as RenderJobRow[]).map(renderJobFromRow));
+    },
+    updateRenderJob(jobValue) {
+      assertOpen();
+      const job = RenderJobSchema.parse(jobValue);
+      const result = database.prepare(`
+        UPDATE render_jobs SET state = ?, progress_json = ?, error_json = ?, started_at = ?, finished_at = ? WHERE id = ?
+      `).run(
+        job.state, JSON.stringify(job.progress), job.error === null ? null : JSON.stringify(job.error),
+        job.startedAt, job.finishedAt, job.id
+      );
+      if (Number(result.changes ?? 0) !== 1) throw new PersistenceNotFoundError(`Render ${job.id} was not found.`);
+      return job;
+    },
+    updateRenderSegment(segmentValue) {
+      assertOpen();
+      const segment = RenderSegmentSchema.parse(segmentValue);
+      const result = database.prepare(`
+        UPDATE render_segments SET state = ?, cache_status = ?, audio_duration_ms = ?, error_json = ?
+        WHERE render_id = ? AND ordinal = ?
+      `).run(
+        segment.state, segment.cacheStatus, segment.audioDurationMs,
+        segment.error === null ? null : JSON.stringify(segment.error), segment.renderId, segment.ordinal
+      );
+      if (Number(result.changes ?? 0) !== 1) throw new PersistenceNotFoundError("Render segment was not found.");
+      return segment;
+    },
+    replaceRenderArtifacts(renderId, artifactValues) {
+      assertOpen();
+      const artifacts = artifactValues.map(({ path, ...artifact }) => ({ artifact: RenderArtifactSchema.parse(artifact), path }));
+      transaction(() => {
+        database.prepare("DELETE FROM render_artifacts WHERE render_id = ?").run(renderId);
+        const insert = database.prepare(`
+          INSERT INTO render_artifacts (id, render_id, artifact_type, file_name, path, size_bytes, checksum, duration_ms, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        for (const { artifact, path } of artifacts) insert.run(
+          artifact.id, artifact.renderId, artifact.type, artifact.fileName, path, artifact.sizeBytes,
+          artifact.checksum, artifact.durationMs, artifact.createdAt
+        );
+      });
+      return RenderArtifactCollectionSchema.parse(artifacts.map(({ artifact }) => artifact));
+    },
+    listRenderArtifacts(renderId) {
+      assertOpen();
+      return RenderArtifactCollectionSchema.parse((database.prepare(
+        "SELECT * FROM render_artifacts WHERE render_id = ? ORDER BY artifact_type ASC"
+      ).all(renderId) as RenderArtifactRow[]).map(renderArtifactFromRow));
+    },
+    getRenderArtifactPath(artifactId) {
+      assertOpen();
+      const row = database.prepare("SELECT * FROM render_artifacts WHERE id = ?").get(artifactId) as RenderArtifactRow | undefined;
+      if (!row) throw new PersistenceNotFoundError(`Render artifact ${artifactId} was not found.`);
+      return { artifact: renderArtifactFromRow(row), path: row.path };
     },
     close() {
       if (!closed) {

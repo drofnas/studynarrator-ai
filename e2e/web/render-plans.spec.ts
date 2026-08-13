@@ -33,6 +33,10 @@ test.describe("Frozen render plans", () => {
     await freeze.click();
     await expect(page.getByText(/Frozen render plan [0-9a-f-]+\. No speech was synthesized\./u)).toBeVisible();
     const table = page.getByRole("table", { name: "Frozen render plan ordered entries" });
+    await expect.poll(() => table.evaluate((element) => ({
+      maxHeight: getComputedStyle(element).maxHeight,
+      overflowY: getComputedStyle(element).overflowY,
+    }))).toEqual({ maxHeight: "600px", overflowY: "auto" });
     await expect(table).toContainText("automatic · paragraph");
     await expect(table).toContainText("automatic · speakerChange");
     await expect(table).toContainText("automatic · section");
