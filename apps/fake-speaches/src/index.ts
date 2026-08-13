@@ -205,9 +205,7 @@ export async function startFakeSpeachesServer(options: { port?: number; scenario
       return;
     }
     if (path === "/v1/audio/speech" && request.method === "POST") {
-      const compatible = (model === FAKE_SPEACHES_MODEL_ID && (voice === FAKE_SPEACHES_VOICE_ID || voice === FAKE_SPEACHES_ALTERNATE_VOICE_ID))
-        || (model === FAKE_SPEACHES_SECONDARY_MODEL_ID && voice === FAKE_SPEACHES_SECONDARY_VOICE_ID);
-      if (scenario === "rejected-voice" || !compatible) {
+      if (scenario === "rejected-voice") {
         log(422);
         sendJson(response, 422, { error: "voice rejected" });
         return;
