@@ -44,7 +44,7 @@ function clients(client: "web" | "electron") {
 }
 
 function renderApp(connections: ConnectionsClient, route = "/projects") {
-  return render(<MemoryRouter initialEntries={[route]}><App analyzer={{ analyze: vi.fn() }} client={{ diagnostics: vi.fn() }} persistence={persistence} connections={connections} voiceCatalog={voiceCatalog} /></MemoryRouter>);
+  return render(<MemoryRouter initialEntries={[route]}><App analyzer={{ analyze: vi.fn() }} client={{ diagnostics: vi.fn() }} persistence={persistence} connections={connections} voiceCatalog={voiceCatalog} scratchpad={{ preview: vi.fn() }} /></MemoryRouter>);
 }
 
 describe("connection onboarding", () => {

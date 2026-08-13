@@ -6,6 +6,7 @@ import { resolveSystemClient } from "@/services/system/systemClient.js";
 import { resolvePersistenceClient } from "@/services/persistence/persistenceClient.js";
 import { resolveConnectionsClient, resolveVoiceCatalogClient } from "@/services/connections/connectionsClient.js";
 import { createScriptAnalysisWorkerClient } from "@/workers/parser/parserClient.js";
+import { resolveScratchpadClient } from "@/services/scratchpad/scratchpadClient.js";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("StudyNarrator root element is missing");
@@ -13,7 +14,7 @@ if (!root) throw new Error("StudyNarrator root element is missing");
 createRoot(root).render(
   <StrictMode>
     <HashRouter>
-      <App analyzer={createScriptAnalysisWorkerClient()} client={resolveSystemClient()} persistence={resolvePersistenceClient()} connections={resolveConnectionsClient()} voiceCatalog={resolveVoiceCatalogClient()} />
+      <App analyzer={createScriptAnalysisWorkerClient()} client={resolveSystemClient()} persistence={resolvePersistenceClient()} connections={resolveConnectionsClient()} voiceCatalog={resolveVoiceCatalogClient()} scratchpad={resolveScratchpadClient()} />
     </HashRouter>
   </StrictMode>
 );
