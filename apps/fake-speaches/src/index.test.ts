@@ -61,6 +61,10 @@ describe("fake Speaches diagnostic scenarios", () => {
     expect(output.summary.overall).toBe(overall);
     expect(output.summary.stages.some((candidate) => candidate.code === code)).toBe(true);
     expect(JSON.stringify(output)).not.toContain("g06-secret-must-not-appear");
+    expect(current.getState().requests.length).toBeGreaterThan(0);
+    for (const request of current.getState().requests) {
+      expect(Object.keys(request).sort()).toEqual(["inputHash", "inputLength", "method", "model", "path", "status", "voice"].sort());
+    }
   });
 
   it("times out once with no retry", async () => {
@@ -69,6 +73,7 @@ describe("fake Speaches diagnostic scenarios", () => {
     expect(output.summary.overall).toBe("disconnected");
     expect(output.summary.stages[3]).toMatchObject({ status: "fail", code: "request-timeout" });
     expect(current.getState().counters["/health"]).toBe(1);
+    expect(current.getState().requests).toEqual([expect.objectContaining({ method: "GET", path: "/health", status: 0 })]);
   });
 
   it("accepts root and /v1 inputs without ever requesting /v1/v1", async () => {

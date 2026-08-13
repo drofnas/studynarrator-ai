@@ -151,6 +151,7 @@ export async function startFakeSpeachesServer(options: { port?: number; scenario
     };
 
     if (scenario === "timeout") {
+      log(0);
       request.once("close", () => undefined);
       return;
     }
