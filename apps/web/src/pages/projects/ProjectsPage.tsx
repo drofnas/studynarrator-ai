@@ -17,7 +17,10 @@ import {
   type IgnoredDiagnosticCollection,
   type PersistenceClient,
   type ProjectDetail,
+  type ProjectPreviewClient,
+  type ProjectPreviewResult,
   type ProjectSummary,
+  type SpeechCacheClient,
   type VoiceCatalog
 } from "@studynarrator/shared-types";
 import type { ScriptAnalyzer } from "@/workers/parser/parserClient.js";
@@ -37,6 +40,7 @@ import {
 } from "@/features/projects/projectAuthoring.js";
 import styles from "./ProjectsPage.module.css";
 import { useConnections } from "@/features/connections/ConnectionProvider.js";
+import { PreviewResultCard } from "@/features/preview/PreviewResultCard.js";
 
 type SaveState = "saved" | "unsaved" | "saving" | "invalid" | "failed";
 type AnalysisState = "idle" | "parsing" | "ready" | "failed";
@@ -70,7 +74,12 @@ function sameDraft(left: ProjectDraft, right: ProjectDraft): boolean {
 function message(error: unknown): string { return error instanceof Error ? error.message : "The operation failed."; }
 function diagnosticKey(item: IgnoredDiagnostic): string { return `${item.code}\u0000${item.pattern}`; }
 
-export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; analyzer: ScriptAnalyzer }) {
+export function ProjectsPage({ client, analyzer, previewClient, cacheClient }: {
+  client: PersistenceClient;
+  analyzer: ScriptAnalyzer;
+  previewClient: ProjectPreviewClient;
+  cacheClient: SpeechCacheClient;
+}) {
   const connections = useConnections();
   const { projectId } = useParams();
   const navigate = useNavigate();
@@ -106,6 +115,10 @@ export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; 
   const [copySource, setCopySource] = useState<Record<string, string>>({});
   const [voiceCatalog, setVoiceCatalog] = useState<VoiceCatalog | null>(null);
   const [voiceCatalogState, setVoiceCatalogState] = useState<VoiceCatalogState>("idle");
+  const [previewResult, setPreviewResult] = useState<ProjectPreviewResult>();
+  const [previewBusy, setPreviewBusy] = useState(false);
+  const [previewError, setPreviewError] = useState("");
+  const previewControllerRef = useRef<AbortController | null>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const revisionRef = useRef(0);
   const savedRevisionRef = useRef(0);
@@ -320,6 +333,14 @@ export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; 
   useEffect(() => () => clearAutosave(), [clearAutosave]);
 
   useEffect(() => {
+    previewControllerRef.current?.abort();
+    setPreviewResult(undefined);
+    setPreviewError("");
+  }, [project?.id]);
+
+  useEffect(() => () => previewControllerRef.current?.abort(), []);
+
+  useEffect(() => {
     if (!draft) return;
     const revision = ++analysisRevisionRef.current;
     const persistReconciliation = revisionRef.current > savedRevisionRef.current;
@@ -527,6 +548,44 @@ export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; 
     );
   };
 
+  const runPreview = async (input: Parameters<ProjectPreviewClient["preview"]>[1]) => {
+    if (!project || !await saveNow()) {
+      setPreviewError("Save valid project changes before previewing.");
+      return;
+    }
+    previewControllerRef.current?.abort();
+    const controller = new AbortController();
+    previewControllerRef.current = controller;
+    setPreviewBusy(true);
+    setPreviewError("");
+    try {
+      const result = await previewClient.preview(project.id, input, controller.signal);
+      if (!controller.signal.aborted) setPreviewResult(result);
+    } catch (error) {
+      if (!controller.signal.aborted) setPreviewError(message(error));
+    } finally {
+      if (previewControllerRef.current === controller) { previewControllerRef.current = null; setPreviewBusy(false); }
+    }
+  };
+
+  const clearProjectCache = async () => {
+    if (!project || !window.confirm(`Clear every cached speech entry associated with ${project.name}? Identical speech shared with Scratchpad or other projects will also be deleted.`)) return;
+    try {
+      const removed = await cacheClient.clearProject(project.id);
+      setNotice(`Cleared ${String(removed.entriesRemoved)} project-associated cache ${removed.entriesRemoved === 1 ? "entry" : "entries"} and freed ${removed.bytesFreed.toLocaleString()} bytes.`);
+      setPreviewResult(undefined);
+    } catch (error) { setPreviewError(message(error)); }
+  };
+
+  const clearPreviewEntry = async () => {
+    if (!previewResult || !window.confirm("Clear this cached speech entry? A future equivalent preview will contact Speaches again.")) return;
+    try {
+      const removed = await cacheClient.clearEntry(previewResult.cache.key);
+      setNotice(`Cleared ${String(removed.entriesRemoved)} selected cache ${removed.entriesRemoved === 1 ? "entry" : "entries"}.`);
+      setPreviewResult(undefined);
+    } catch (error) { setPreviewError(message(error)); }
+  };
+
   const allLexicon = [...globalLexicon, ...(draft?.lexiconEntries ?? [])];
   const filteredLexicon = allLexicon.filter((entry) =>
     (lexiconScope === "all" || entry.scope === lexiconScope)
@@ -570,7 +629,7 @@ export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; 
             <section className={styles.projectIdentity}>
               <label>Project name<input value={draft.name} onChange={(event) => updateDraft((current) => ({ ...current, name: event.target.value }))} /></label>
               <label>Description<input value={draft.description} onChange={(event) => updateDraft((current) => ({ ...current, description: event.target.value }))} /></label>
-              <div className={styles.actionRow}><button type="button" onClick={() => void saveNow()} disabled={saveState === "saving"}>Save now</button><button type="button" className={styles.secondary} onClick={() => void duplicateProject()}>Duplicate</button><button type="button" className={styles.danger} onClick={() => void deleteProject()}>Delete</button></div>
+              <div className={styles.actionRow}><button type="button" onClick={() => void saveNow()} disabled={saveState === "saving"}>Save now</button><button type="button" className={styles.secondary} onClick={() => void duplicateProject()}>Duplicate</button><button type="button" className={styles.secondary} onClick={() => void clearProjectCache()}>Clear project cache</button><button type="button" className={styles.danger} onClick={() => void deleteProject()}>Delete</button></div>
             </section>
 
             <section className={styles.scriptPanel} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void importFile(event.dataTransfer.files[0]); }}>
@@ -596,8 +655,11 @@ export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; 
           <div className={styles.sectionHeading}><div><span>Pronunciation</span><h3>Persisted lexicon workbench</h3></div><b>{allLexicon.length} entries</b></div>
           <div className={styles.lexiconFilters}><input aria-label="Search lexicon" placeholder="Search terms and replacements" value={lexiconSearch} onChange={(event) => setLexiconSearch(event.target.value)} /><select aria-label="Lexicon scope filter" value={lexiconScope} onChange={(event) => setLexiconScope(event.target.value as typeof lexiconScope)}><option value="all">All scopes</option><option value="global">Global</option><option value="project">Project</option></select><select aria-label="Lexicon type filter" value={lexiconType} onChange={(event) => setLexiconType(event.target.value as typeof lexiconType)}><option value="all">All types</option><option value="exactTerm">Exact terms</option><option value="exactPhrase">Exact phrases</option><option value="namedSense">Named senses</option></select></div>
           <div className={styles.lexiconGrid}><form onSubmit={(event) => { event.preventDefault(); void saveLexicon(); }}><label>Scope<select value={lexiconDraft.scope} onChange={(event) => setLexiconDraft((current) => ({ ...current, scope: event.target.value as "global" | "project" }))}><option value="project">Project</option><option value="global">Global</option></select></label><label>Type<select value={lexiconDraft.entryType} onChange={(event) => setLexiconDraft((current) => ({ ...current, entryType: event.target.value as LexiconEntryAuthoring["entryType"] }))}><option value="exactTerm">Exact term</option><option value="exactPhrase">Exact phrase</option><option value="namedSense">Named sense</option></select></label><label>Display text<input value={lexiconDraft.displayText} onChange={(event) => setLexiconDraft((current) => ({ ...current, displayText: event.target.value }))} /></label>{lexiconDraft.entryType === "namedSense" ? <label>Sense ID<input value={lexiconDraft.senseId ?? ""} onChange={(event) => setLexiconDraft((current) => ({ ...current, senseId: event.target.value }))} /></label> : null}<label>Spoken text<input value={lexiconDraft.spokenText} onChange={(event) => setLexiconDraft((current) => ({ ...current, spokenText: event.target.value }))} /></label><label>Notes<input value={lexiconDraft.notes ?? ""} onChange={(event) => setLexiconDraft((current) => ({ ...current, notes: event.target.value }))} /></label><div className={styles.checks}><label><input type="checkbox" checked={lexiconDraft.caseSensitive ?? true} onChange={(event) => setLexiconDraft((current) => ({ ...current, caseSensitive: event.target.checked }))} />Case sensitive</label><label><input type="checkbox" checked={lexiconDraft.wholeWord ?? true} onChange={(event) => setLexiconDraft((current) => ({ ...current, wholeWord: event.target.checked }))} />Whole word</label><label><input type="checkbox" checked={lexiconDraft.enabled ?? true} onChange={(event) => setLexiconDraft((current) => ({ ...current, enabled: event.target.checked }))} />Enabled</label></div><div className={styles.actionRow}><button type="submit">{editingLexicon ? "Save entry" : "Add entry"}</button>{editingLexicon ? <button type="button" className={styles.secondary} onClick={() => { setEditingLexicon(undefined); setLexiconDraft(emptyLexiconDraft); }}>Cancel</button> : null}</div></form><div className={styles.lexiconEntries}>{filteredLexicon.length === 0 ? <p>No matching lexicon entries.</p> : filteredLexicon.map((entry, index) => { const matches = analysis?.transformResult.matches.filter(({ entryId }) => entryId === entry.id) ?? []; return <article key={entry.id ?? `${entry.scope}-${String(index)}`}><div><strong>{entry.displayText}{entry.senseId ? ` + ${entry.senseId}` : ""}</strong><span>→ {entry.spokenText}</span></div><code>{entry.scope} · {entry.entryType} · {entry.enabled === false ? "disabled" : "enabled"} · {matches.length} matches</code><div className={styles.sourceLinks}>{matches.map((match) => <button type="button" className={styles.sourceLink} key={`${match.entryId}:${String(match.sourceStartOffset)}`} onClick={() => focusLine(match.range.start.line)}>Line {match.range.start.line}:{match.range.start.column}</button>)}</div><div className={styles.actionRow}><button type="button" className={styles.secondary} onClick={() => { setEditingLexicon({ scope: entry.scope, id: entry.id ?? "" }); setLexiconDraft({ ...entry, caseSensitive: entry.caseSensitive ?? true, wholeWord: entry.wholeWord ?? true, priority: entry.priority ?? 0, enabled: entry.enabled ?? true, notes: entry.notes ?? "" }); }}>Edit</button><button type="button" className={styles.secondary} onClick={() => { const next = { ...entry, enabled: !(entry.enabled ?? true) }; if (entry.scope === "global") void client.globalLexicon.replace(globalLexicon.map((item) => item.id === entry.id ? next : item)).then((saved) => setGlobalLexicon(authoringLexicon(saved))); else updateDraft((current) => ({ ...current, lexiconEntries: current.lexiconEntries.map((item) => item.id === entry.id ? next : item) })); }}>{entry.enabled === false ? "Enable" : "Disable"}</button><button type="button" className={styles.danger} onClick={() => void removeLexicon(entry.scope, entry.id)}>Delete</button></div></article>; })}</div></div>
-          <div className={styles.sample}><label>Pronunciation test<textarea value={sample} onChange={(event) => setSample(event.target.value)} placeholder="Enter a word, phrase, or sentence." /></label><label>Speaker<select value={sampleSpeaker} onChange={(event) => setSampleSpeaker(event.target.value)}><option value="">System narrator</option>{configuration.speakers.map((row) => <option key={row.speakerId} value={row.speakerId}>{row.displayName} — {row.voiceId || "unmapped"}</option>)}</select></label><div><span>Original</span><p>{sample || "—"}</p><span>Readable</span><p>{sampleResult?.readableTranscript || "—"}</p><span>TTS text</span><p>{sampleResult?.ttsTranscript || "—"}</p></div></div>
+          <div className={styles.sample}><label>Pronunciation test<textarea value={sample} onChange={(event) => setSample(event.target.value)} placeholder="Enter a word, phrase, or sentence." /></label><label>Speaker<select value={sampleSpeaker} onChange={(event) => setSampleSpeaker(event.target.value)}><option value="">System narrator</option>{configuration.speakers.map((row) => <option key={row.speakerId} value={row.speakerId}>{row.displayName} — {row.voiceId || "unmapped"}</option>)}</select><button type="button" disabled={previewBusy || !sample.trim() || !sampleResult?.synthesisReady} onClick={() => void runPreview({ mode: "pronunciation", text: sample, ...(sampleSpeaker ? { speakerId: sampleSpeaker } : {}) })}>{previewBusy ? "Previewing…" : "Preview pronunciation"}</button></label><div><span>Original</span><p>{sample || "—"}</p><span>Readable</span><p>{sampleResult?.readableTranscript || "—"}</p><span>TTS text</span><p>{sampleResult?.ttsTranscript || "—"}</p></div></div>
         </section>
+
+        {previewError ? <p className={styles.previewError} role="alert">{previewError} Your project and preview selection are unchanged.</p> : null}
+        {previewResult ? <PreviewResultCard result={previewResult} onClearEntry={clearPreviewEntry} /> : null}
 
         <section className={styles.validationPanel}>
           <div className={styles.sectionHeading}><div><span>Offline validation</span><h3>Narration score</h3></div><b>{dryRun?.rows.length ?? 0} ordered rows</b></div>
@@ -609,7 +671,14 @@ export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; 
               return <li data-severity={issue.severity} key={`${issue.code}:${issue.target?.id ?? String(index)}`}><button type="button" onClick={() => issue.line && focusLine(issue.line)}>{issue.code}</button><span>{issue.message}</span>{diagnostic ? <button type="button" className={styles.secondary} onClick={() => void ignoreDiagnostic(diagnostic)}>Ignore this pattern</button> : null}</li>;
             })}</ul> : null}
             {ignoredDiagnostics.length > 0 ? <section aria-label="Ignored diagnostic patterns"><h4>Ignored diagnostic patterns</h4><p>These exact diagnostic patterns are suppressed across projects.</p><ul className={styles.issues}>{ignoredDiagnostics.map((item) => <li key={diagnosticKey(item)}><code>{item.code}</code><span>{item.pattern}</span><button type="button" className={styles.secondary} onClick={() => void restoreDiagnostic(item)}>Restore this pattern</button></li>)}</ul></section> : null}
-            <div className={styles.score} aria-label="Dry run ordered segment table"><div className={styles.scoreHeader}><span>#</span><span>Type</span><span>Speaker / cue</span><span>Original</span><span>Readable</span><span>TTS text</span></div>{dryRun?.rows.map((row) => <button type="button" className={styles.scoreRow} data-type={row.type} data-valid={row.validationStatus} key={row.rowNumber} onClick={() => focusLine(row.sourceRange.start.line)}><b>{String(row.rowNumber).padStart(2, "0")}</b><span className={styles.scoreType}>{row.type === "pause" ? `${row.origin} pause` : row.type}</span>{row.type === "section" ? <><strong>{row.title}</strong><small>Line {row.sourceRange.start.line}</small></> : row.type === "pause" ? <><strong>{row.pauseId}</strong><small>{row.durationMs === null ? "Missing duration" : `${String(row.durationMs)} ms`}</small></> : <><span className={styles.speakerChip} aria-label={`Speaker ${row.speakerId}. ${row.voiceId ? `Voice ID ${row.voiceId}` : "Voice ID not configured"}`} title={row.voiceId ? `Voice ID: ${row.voiceId}` : "Voice ID not configured"}><span className={styles.speakerLabel} aria-hidden="true">speaker</span><span className={styles.speakerName} aria-hidden="true">{row.speakerId}</span></span><span>{row.originalText}</span><span>{row.readableText}</span><span>{row.ttsText}</span></>}</button>)}</div>
+            <div className={styles.score} aria-label="Dry run ordered segment table">
+              <div className={styles.scoreHeader}><span>#</span><span>Type</span><span>Speaker / cue</span><span>Original</span><span>Readable</span><span>TTS text</span><span>Audio</span></div>
+              {dryRun?.rows.map((row) => <div className={styles.scoreRow} data-type={row.type} data-valid={row.validationStatus} key={row.rowNumber}>
+                <button type="button" className={styles.rowFocus} aria-label={`Focus source line ${String(row.sourceRange.start.line)}`} onClick={() => focusLine(row.sourceRange.start.line)}>{String(row.rowNumber).padStart(2, "0")}</button>
+                <span className={styles.scoreType}>{row.type === "pause" ? `${row.origin} pause` : row.type}</span>
+                {row.type === "section" ? <><strong>{row.title}</strong><small>Line {row.sourceRange.start.line}</small></> : row.type === "pause" ? <><strong>{row.pauseId}</strong><small>{row.durationMs === null ? "Missing duration" : `${String(row.durationMs)} ms`}</small></> : <><span className={styles.speakerChip} aria-label={`Speaker ${row.speakerId}. ${row.voiceId ? `Voice ID ${row.voiceId}` : "Voice ID not configured"}`} title={row.voiceId ? `Voice ID: ${row.voiceId}` : "Voice ID not configured"}><span className={styles.speakerLabel} aria-hidden="true">speaker</span><span className={styles.speakerName} aria-hidden="true">{row.speakerId}</span></span><span>{row.originalText}</span><span>{row.readableText}</span><span>{row.ttsText}</span>{row.validationStatus === "valid" ? <button type="button" className={styles.previewButton} disabled={previewBusy} onClick={() => void runPreview({ mode: "segment", nodeOrdinal: row.nodeOrdinal })}>{previewBusy ? "Working…" : "Preview"}</button> : <span className={styles.previewUnavailable}>Unavailable</span>}</>}
+              </div>)}
+            </div>
           </div>
         </section>
       </> : null}

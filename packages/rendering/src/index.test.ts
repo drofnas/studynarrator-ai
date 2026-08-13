@@ -73,12 +73,12 @@ describe("content-addressed speech cache", () => {
     const synthesize = vi.fn(async () => await new Promise<Uint8Array>((resolve) => { finish = resolve; }));
     const cancelled = new AbortController();
     const first = cache.getOrCreate(input, { projectId: "project-a" }, synthesize, cancelled.signal);
-    const second = cache.getOrCreate(input, { projectId: "project-a" }, synthesize);
+    const second = cache.getOrCreate(input, { projectId: "project-b", scratchpad: true }, synthesize);
     while (!finish) await new Promise<void>((resolve) => setImmediate(resolve));
     cancelled.abort();
     await expect(first).rejects.toMatchObject({ name: "AbortError" });
     finish?.(Uint8Array.from([82, 73, 70, 70]));
-    await expect(second).resolves.toMatchObject({ status: "miss" });
+    await expect(second).resolves.toMatchObject({ status: "miss", metadata: { projectIds: ["project-a", "project-b"], scratchpadUsed: true } });
     expect(synthesize).toHaveBeenCalledTimes(1);
   });
 

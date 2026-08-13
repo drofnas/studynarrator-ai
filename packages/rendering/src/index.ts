@@ -100,6 +100,7 @@ interface SessionCounters {
 interface Flight {
   controller: AbortController;
   promise: Promise<CachedSpeechResult>;
+  usages: SpeechCacheUsage[];
   waiters: number;
   settled: boolean;
 }
@@ -211,6 +212,10 @@ function mergedUsage(metadata: SpeechCacheEntryMetadata, usage: SpeechCacheUsage
     projectIds: [...projectIds].sort((left, right) => left.localeCompare(right, "en-US")),
     scratchpadUsed: metadata.scratchpadUsed || usage.scratchpad === true
   };
+}
+
+function mergedUsages(metadata: SpeechCacheEntryMetadata, usages: readonly SpeechCacheUsage[], lastUsedAt: string): SpeechCacheEntryMetadata {
+  return usages.reduce((current, usage) => mergedUsage(current, usage, lastUsedAt), metadata);
 }
 
 function aborted(signal?: AbortSignal): Error {
@@ -329,7 +334,7 @@ export function createSpeechCache(options: {
   const loadEntry = async (
     key: string,
     normalized: NormalizedSpeechCacheInput,
-    usage: SpeechCacheUsage,
+    usages: readonly SpeechCacheUsage[],
     signal?: AbortSignal
   ): Promise<CachedSpeechResult | null> => {
     const entryPaths = paths(key);
@@ -353,7 +358,7 @@ export function createSpeechCache(options: {
         throw new Error("Cached speech metadata failed integrity validation.");
       }
       if (!(await options.validateAudio(audioBuffer, signal))) throw new Error("Cached speech audio failed decoding validation.");
-      const updated = mergedUsage(metadata, usage, now().toISOString());
+      const updated = mergedUsages(metadata, usages, now().toISOString());
       await writeMetadata(updated);
       counters.hits += 1;
       return { key, status: "hit", bytes: new Uint8Array(audioBuffer), metadata: updated };
@@ -369,7 +374,7 @@ export function createSpeechCache(options: {
     key: string,
     normalized: NormalizedSpeechCacheInput,
     bytes: Uint8Array,
-    usage: SpeechCacheUsage,
+    usages: readonly SpeechCacheUsage[],
     signal?: AbortSignal
   ): Promise<SpeechCacheEntryMetadata> => {
     if (bytes.byteLength < 1 || bytes.byteLength > MAX_CACHED_SPEECH_BYTES) throw new Error("Synthesized speech exceeds the cache size limit.");
@@ -399,8 +404,8 @@ export function createSpeechCache(options: {
       byteLength: bytes.byteLength,
       createdAt,
       lastUsedAt: createdAt,
-      projectIds: usage.projectId ? [usage.projectId] : [],
-      scratchpadUsed: usage.scratchpad === true
+      projectIds: [...new Set(usages.flatMap((usage) => usage.projectId ? [usage.projectId] : []))].sort((left, right) => left.localeCompare(right, "en-US")),
+      scratchpadUsed: usages.some((usage) => usage.scratchpad === true)
     };
     const suffix = createId();
     const temporaryAudio = join(entryPaths.directory, `${key}.${suffix}.tmp.wav`);
@@ -423,15 +428,15 @@ export function createSpeechCache(options: {
   const produce = async (
     key: string,
     normalized: NormalizedSpeechCacheInput,
-    usage: SpeechCacheUsage,
+    usages: readonly SpeechCacheUsage[],
     synthesize: (normalizedText: string, signal: AbortSignal) => Promise<Uint8Array>,
     signal: AbortSignal
   ): Promise<CachedSpeechResult> => {
-    const cached = await loadEntry(key, normalized, usage, signal);
+    const cached = await loadEntry(key, normalized, usages, signal);
     if (cached) return cached;
     counters.misses += 1;
     const bytes = await synthesize(normalized.normalizedText, signal);
-    const metadata = await writeEntry(key, normalized, bytes, usage, signal);
+    const metadata = await writeEntry(key, normalized, bytes, usages, signal);
     return { key, status: "miss", bytes, metadata };
   };
 
@@ -455,15 +460,19 @@ export function createSpeechCache(options: {
       const normalized = normalizeSpeechCacheInput(input);
       const key = createSpeechCacheKey(input);
       const existing = flights.get(key);
-      if (existing) return await waitForFlight(existing, signal);
+      if (existing) {
+        existing.usages.push(usage);
+        return await waitForFlight(existing, signal);
+      }
       const controller = new AbortController();
       const flight: Flight = {
         controller,
         waiters: 0,
+        usages: [usage],
         settled: false,
         promise: Promise.resolve(undefined as never)
       };
-      flight.promise = produce(key, normalized, usage, synthesize, controller.signal).finally(() => {
+      flight.promise = produce(key, normalized, flight.usages, synthesize, controller.signal).finally(() => {
         flight.settled = true;
         flights.delete(key);
       });

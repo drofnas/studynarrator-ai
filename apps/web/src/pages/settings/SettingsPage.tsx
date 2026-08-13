@@ -4,6 +4,8 @@ import {
   VoiceCatalogSchema,
   type ConnectionProfile,
   type PersistenceClient,
+  type SpeechCacheClient,
+  type SpeechCacheStatus,
   type SystemPacingDefaults,
   type VoiceCatalog
 } from "@studynarrator/shared-types";
@@ -23,7 +25,13 @@ function profileDraft(profile: ConnectionProfile | null) {
   } : { ...EMPTY_PROFILE };
 }
 
-export function SettingsPage({ client }: { client: PersistenceClient }) {
+function formatBytes(value: number): string {
+  if (value < 1024) return `${value.toLocaleString()} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KiB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MiB`;
+}
+
+export function SettingsPage({ client, cacheClient }: { client: PersistenceClient; cacheClient: SpeechCacheClient }) {
   const workspace = useConnections();
   const [pacing, setPacing] = useState<SystemPacingDefaults>({ enabled: true, durationMs: 750 });
   const [duration, setDuration] = useState("750 ms");
@@ -37,6 +45,13 @@ export function SettingsPage({ client }: { client: PersistenceClient }) {
   const [catalog, setCatalog] = useState<VoiceCatalog | null>(null);
   const [catalogSearch, setCatalogSearch] = useState("");
   const [catalogJson, setCatalogJson] = useState("");
+  const [cacheStatus, setCacheStatus] = useState<SpeechCacheStatus | null>(null);
+  const [cacheBusy, setCacheBusy] = useState(false);
+
+  const refreshCache = async () => {
+    try { setCacheStatus(await cacheClient.status()); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Speech cache status could not be loaded."); }
+  };
 
   useEffect(() => {
     let active = true;
@@ -48,6 +63,8 @@ export function SettingsPage({ client }: { client: PersistenceClient }) {
     }).catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : "Settings could not be loaded."); });
     return () => { active = false; };
   }, [client]);
+
+  useEffect(() => { void refreshCache(); }, [cacheClient]);
 
   useEffect(() => {
     if (selectedId === null && workspace.profiles.length > 0) setSelectedId(workspace.setup?.activeProfileId ?? workspace.profiles[0]?.id ?? null);
@@ -133,6 +150,17 @@ export function SettingsPage({ client }: { client: PersistenceClient }) {
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Catalog JSON is invalid."); }
   };
 
+  const clearAllCache = async () => {
+    if (!window.confirm("Clear every cached speech preview? Future previews will contact Speaches again. This does not change projects or render history.")) return;
+    setCacheBusy(true);
+    try {
+      const removed = await cacheClient.clearAll();
+      setStatus(`Cleared ${String(removed.entriesRemoved)} cached speech ${removed.entriesRemoved === 1 ? "entry" : "entries"} and freed ${formatBytes(removed.bytesFreed)}.`);
+      await refreshCache();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "The speech cache could not be cleared."); }
+    finally { setCacheBusy(false); }
+  };
+
   const filteredVoices = useMemo(() => catalog?.entries.filter((entry) => !catalogSearch || `${entry.label} ${entry.voiceId} ${entry.language ?? ""}`.toLocaleLowerCase().includes(catalogSearch.toLocaleLowerCase())) ?? [], [catalog, catalogSearch]);
   const managed = selected?.source === "environment";
 
@@ -178,6 +206,15 @@ export function SettingsPage({ client }: { client: PersistenceClient }) {
         <label className={styles.check}><input type="checkbox" checked={pacing.enabled} onChange={(event) => setPacing({ ...pacing, enabled: event.target.checked })} />Pause at paragraph breaks</label>
         <label>Default <code>pause_medium</code> duration<input value={duration} onChange={(event) => { setDuration(event.target.value); setError(""); }} /></label>
         <button type="button" onClick={() => void savePacing()}>Save pacing defaults</button>
+      </section>
+
+      <section className={styles.cache}>
+        <div className={styles.sectionHeading}><div><p>Disposable preview audio</p><h3>Speech cache</h3></div><button type="button" className={styles.secondary} onClick={() => void refreshCache()}>Refresh</button></div>
+        {cacheStatus ? <>
+          <div className={styles.cacheGrid}><article><span>Stored</span><strong>{cacheStatus.entryCount.toLocaleString()} entries</strong><code>{formatBytes(cacheStatus.totalBytes)}</code></article><article><span>This session</span><strong>{cacheStatus.sessionHits.toLocaleString()} hits · {cacheStatus.sessionMisses.toLocaleString()} misses</strong><code>{cacheStatus.sessionWrites.toLocaleString()} writes · {cacheStatus.sessionCorruptMisses.toLocaleString()} corrupt misses</code></article><article><span>Activity</span><strong>{cacheStatus.inFlight.toLocaleString()} in flight</strong><code>{cacheStatus.lastUsedAt ? `Last used ${new Date(cacheStatus.lastUsedAt).toLocaleString()}` : "Not used yet"}</code></article></div>
+          <p>Cached WAV files are disposable and never create render history. Project cleanup can remove globally shared audio that was associated with that project.</p>
+        </> : <p>Loading cache statistics…</p>}
+        <button type="button" className={styles.danger} disabled={cacheBusy || cacheStatus?.entryCount === 0} onClick={() => void clearAllCache()}>{cacheBusy ? "Clearing…" : "Clear all cached speech"}</button>
       </section>
     </div>
   );

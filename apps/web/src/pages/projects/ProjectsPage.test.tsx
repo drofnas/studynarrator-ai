@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { Link, MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseScript, resolveParagraphPauses, transformScript } from "@studynarrator/core";
-import type { ConnectionProfile, IgnoredDiagnosticCollection, PersistenceClient, ProjectDetail, ProjectReplaceInput, SpeechCatalog, VoiceCatalog } from "@studynarrator/shared-types";
+import type { ConnectionProfile, IgnoredDiagnosticCollection, PersistenceClient, ProjectDetail, ProjectPreviewResult, ProjectReplaceInput, ProjectPreviewClient, SpeechCacheClient, SpeechCatalog, VoiceCatalog } from "@studynarrator/shared-types";
 import type { ScriptAnalyzer } from "@/workers/parser/parserClient.js";
 import type { ScriptAnalysisInput } from "@/workers/parser/parserWorkerProtocol.js";
 import { GLOBAL_VOICE_CATALOG_MODEL_ID } from "@/features/projects/projectAuthoring.js";
@@ -39,6 +39,31 @@ const globalCatalog: VoiceCatalog = { schemaVersion: 1, modelId: GLOBAL_VOICE_CA
   { voiceId: "af_heart", label: "Heart — American English — af_heart", enabled: true, language: "American English", locale: "en-US", accent: "American", category: null, style: null, sampleText: null },
   { voiceId: "af_sky", label: "Sky — American English — af_sky", enabled: true, language: "American English", locale: "en-US", accent: "American", category: null, style: null, sampleText: null }
 ] };
+
+function projectPreviewResult(mode: "segment" | "pronunciation" = "segment"): ProjectPreviewResult {
+  const timestamp = "2026-08-12T12:00:00.000Z";
+  return {
+    schemaVersion: 1,
+    id: "00000000-0000-4000-8000-000000000002",
+    createdAt: timestamp,
+    projectId: project.id,
+    mode,
+    nodeOrdinal: mode === "segment" ? 1 : null,
+    sourceRange: mode === "segment" ? { start: { line: 1, column: 1 }, end: { line: 1, column: 23 } } : null,
+    connectionProfileId: "local",
+    connectionProfileName: "Local Speaches",
+    modelId: "model",
+    speakerId: "teacher",
+    voiceId: "voice_teacher",
+    voiceLabel: "Teacher Voice",
+    speed: 1,
+    originalText: "SQL.",
+    readableText: "SQL.",
+    transformedText: "sequel.",
+    cache: { key: "a".repeat(64), status: "miss", byteLength: 3, createdAt: timestamp, lastUsedAt: timestamp },
+    audio: { mimeType: "audio/wav", base64: "AQID", byteLength: 3 }
+  };
+}
 
 function fixture(sourceProject = project) {
   let stored = structuredClone(sourceProject);
@@ -81,7 +106,14 @@ function fixture(sourceProject = project) {
   return { client, analyze, replace, duplicate, replaceIgnoredDiagnostics };
 }
 
-function renderPage(client: PersistenceClient, analyze: ScriptAnalyzer["analyze"], options: { profiles?: ConnectionProfile[]; catalog?: VoiceCatalog; speechCatalog?: SpeechCatalog; discovery?: (profileId: string) => Promise<SpeechCatalog> } = {}) {
+function renderPage(client: PersistenceClient, analyze: ScriptAnalyzer["analyze"], options: {
+  profiles?: ConnectionProfile[];
+  catalog?: VoiceCatalog;
+  speechCatalog?: SpeechCatalog;
+  discovery?: (profileId: string) => Promise<SpeechCatalog>;
+  previewClient?: ProjectPreviewClient;
+  cacheClient?: SpeechCacheClient;
+} = {}) {
   const profiles = options.profiles ?? [];
   const discoveredCatalog = options.speechCatalog ?? {
     schemaVersion: 1 as const,
@@ -98,7 +130,13 @@ function renderPage(client: PersistenceClient, analyze: ScriptAnalyzer["analyze"
     setActiveProfile: vi.fn(), completeOnboarding: vi.fn()
   };
   const voiceCatalog = { get: vi.fn(async (modelId: string) => options.catalog ?? ({ schemaVersion: 1 as const, modelId, entries: [] })), replace: vi.fn() };
-  return { ...render(<ConnectionProvider connections={connections} voiceCatalog={voiceCatalog}><MemoryRouter initialEntries={[`/projects/${project.id}`]}><Link to="/settings">Settings test link</Link><Routes><Route path="/projects/:projectId" element={<ProjectsPage client={client} analyzer={{ analyze }} />} /><Route path="/settings" element={<p>Settings destination</p>} /></Routes></MemoryRouter></ConnectionProvider>), connections, voiceCatalog };
+  const previewClient = options.previewClient ?? { preview: vi.fn() } as unknown as ProjectPreviewClient;
+  const cacheClient = options.cacheClient ?? {
+    status: vi.fn(), clearAll: vi.fn(),
+    clearProject: vi.fn(async () => ({ contractVersion: 1 as const, entriesRemoved: 0, bytesFreed: 0 })),
+    clearEntry: vi.fn(async () => ({ contractVersion: 1 as const, entriesRemoved: 0, bytesFreed: 0 }))
+  } as unknown as SpeechCacheClient;
+  return { ...render(<ConnectionProvider connections={connections} voiceCatalog={voiceCatalog}><MemoryRouter initialEntries={[`/projects/${project.id}`]}><Link to="/settings">Settings test link</Link><Routes><Route path="/projects/:projectId" element={<ProjectsPage client={client} analyzer={{ analyze }} previewClient={previewClient} cacheClient={cacheClient} />} /><Route path="/settings" element={<p>Settings destination</p>} /></Routes></MemoryRouter></ConnectionProvider>), connections, voiceCatalog, previewClient, cacheClient };
 }
 
 function deferred<T>() {
@@ -107,7 +145,7 @@ function deferred<T>() {
   return { promise, resolve: resolvePromise };
 }
 
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("Projects workbench", () => {
   it("selects a managed profile/model and maps searchable friendly voices with raw IDs", async () => {
@@ -383,6 +421,53 @@ describe("Projects workbench", () => {
     expect(prompt).toHaveBeenCalled();
     expect(replace).toHaveBeenCalledWith(project.id, expect.objectContaining({ description: "Pending duplicate source" }));
     expect(replace.mock.invocationCallOrder[0]).toBeLessThan(duplicate.mock.invocationCallOrder[0]!);
+  });
+
+  it("flushes pending edits before segment and pronunciation previews and scopes cache cleanup", async () => {
+    vi.stubGlobal("atob", (value: string) => Buffer.from(value, "base64").toString("binary"));
+    vi.stubGlobal("URL", { createObjectURL: vi.fn(() => "blob:project-preview"), revokeObjectURL: vi.fn() });
+    vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => undefined);
+    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => undefined);
+    const connectedProject = { ...project, connectionProfileId: "local", modelId: "model" };
+    const { client, analyze, replace } = fixture(connectedProject);
+    const profile: ConnectionProfile = {
+      id: "local", name: "Local Speaches", baseUrl: "http://127.0.0.1:8000", suppliedUrlForm: "root", source: "saved", editable: true,
+      credentialEntryAllowed: false, configured: true, apiKeyConfigured: false, defaultModelId: "model", defaultVoiceId: "voice_teacher",
+      timeoutSeconds: 120, retryCount: 0, responseFormat: "wav", lastTestedAt: null, lastSuccessfulTestAt: null, lastTestSummary: null,
+      createdAt: project.createdAt, updatedAt: project.updatedAt
+    };
+    const catalog: VoiceCatalog = { schemaVersion: 1, modelId: "model", entries: [{
+      voiceId: "voice_teacher", label: "Teacher Voice", enabled: true, language: null, locale: null, accent: null, category: null, style: null, sampleText: null
+    }] };
+    const preview = vi.fn(async (_projectId: string, input: { mode: "segment" | "pronunciation" }) => projectPreviewResult(input.mode));
+    const clearProject = vi.fn(async () => ({ contractVersion: 1 as const, entriesRemoved: 2, bytesFreed: 6 }));
+    const clearEntry = vi.fn(async () => ({ contractVersion: 1 as const, entriesRemoved: 1, bytesFreed: 3 }));
+    const cacheClient = { status: vi.fn(), clearAll: vi.fn(), clearProject, clearEntry } as unknown as SpeechCacheClient;
+    renderPage(client, analyze, {
+      profiles: [profile], catalog,
+      speechCatalog: { schemaVersion: 1, profileId: profile.id, models: [{ modelId: "model", voices: [{ voiceId: "voice_teacher", name: "Teacher Voice", language: null, gender: null }] }] },
+      previewClient: { preview } as unknown as ProjectPreviewClient,
+      cacheClient
+    });
+
+    fireEvent.change(await screen.findByDisplayValue("Offline fixture"), { target: { value: "Pending preview edit" } });
+    await userEvent.click((await screen.findAllByRole("button", { name: "Preview" }))[0]!);
+    expect(await screen.findByRole("region", { name: "Project preview result" })).toHaveTextContent("Teacher Voice");
+    expect(screen.getByRole("region", { name: "Project preview result" })).toHaveTextContent("voice_teacher");
+    expect(screen.getByRole("region", { name: "Project preview result" })).toHaveTextContent("Cache miss");
+    expect(replace).toHaveBeenCalledWith(project.id, expect.objectContaining({ description: "Pending preview edit" }));
+    expect(replace.mock.invocationCallOrder[0]).toBeLessThan(preview.mock.invocationCallOrder[0]!);
+
+    await userEvent.type(screen.getByLabelText("Pronunciation test"), "SQL sample.");
+    await userEvent.click(screen.getByRole("button", { name: "Preview pronunciation" }));
+    await waitFor(() => expect(preview).toHaveBeenLastCalledWith(project.id, { mode: "pronunciation", text: "SQL sample." }, expect.any(AbortSignal)));
+
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    await userEvent.click(screen.getByRole("button", { name: "Clear this cached entry" }));
+    expect(clearEntry).toHaveBeenCalledWith("a".repeat(64));
+    await userEvent.click(screen.getByRole("button", { name: "Clear project cache" }));
+    expect(clearProject).toHaveBeenCalledWith(project.id);
+    expect(confirm.mock.calls.flat().join(" ")).toContain("shared with Scratchpad or other projects");
   });
 
   it("shows failed saves and guards unload and route navigation", async () => {

@@ -23,13 +23,18 @@ const unusedConnections = {
 };
 const unusedVoiceCatalog = { get: vi.fn(async (modelId: string) => ({ schemaVersion: 1 as const, modelId, entries: [] })), replace: vi.fn() };
 const unusedScratchpad = { preview: vi.fn() };
+const unusedProjectPreview = { preview: vi.fn() };
+const unusedSpeechCache = {
+  status: vi.fn(async () => ({ contractVersion: 1 as const, entryCount: 0, totalBytes: 0, lastUsedAt: null, sessionHits: 0, sessionMisses: 0, sessionWrites: 0, sessionCorruptMisses: 0, inFlight: 0 })),
+  clearAll: vi.fn(), clearProject: vi.fn(), clearEntry: vi.fn()
+};
 
 afterEach(cleanup);
 
 function renderApp(route: string, client: SystemClient = { diagnostics: vi.fn() }, connections = unusedConnections) {
   return render(
     <MemoryRouter initialEntries={[route]}>
-      <App analyzer={unusedAnalyzer} client={client} persistence={unusedPersistence} connections={connections} voiceCatalog={unusedVoiceCatalog} scratchpad={unusedScratchpad} />
+      <App analyzer={unusedAnalyzer} client={client} persistence={unusedPersistence} connections={connections} voiceCatalog={unusedVoiceCatalog} scratchpad={unusedScratchpad} projectPreview={unusedProjectPreview} speechCache={unusedSpeechCache} />
     </MemoryRouter>
   );
 }

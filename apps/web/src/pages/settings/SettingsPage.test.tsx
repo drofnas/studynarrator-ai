@@ -7,7 +7,13 @@ import type { PersistenceClient } from "@studynarrator/shared-types";
 import { SettingsPage } from "./SettingsPage.js";
 import { ConnectionProvider } from "@/features/connections/ConnectionProvider.js";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+
+const cacheClient = {
+  status: vi.fn(async () => ({ contractVersion: 1 as const, entryCount: 0, totalBytes: 0, lastUsedAt: null, sessionHits: 0, sessionMisses: 0, sessionWrites: 0, sessionCorruptMisses: 0, inFlight: 0 })),
+  clearAll: vi.fn(async () => ({ contractVersion: 1 as const, entriesRemoved: 0, bytesFreed: 0 })),
+  clearProject: vi.fn(), clearEntry: vi.fn()
+};
 
 describe("System Settings", () => {
   it("normalizes and saves new-project pacing without touching projects", async () => {
@@ -24,7 +30,7 @@ describe("System Settings", () => {
       setActiveProfile: vi.fn(), completeOnboarding: vi.fn()
     };
     const voiceCatalog = { get: vi.fn(async (modelId: string) => ({ schemaVersion: 1 as const, modelId, entries: [] })), replace: vi.fn() };
-    render(<ConnectionProvider connections={connections} voiceCatalog={voiceCatalog}><SettingsPage client={client} /></ConnectionProvider>);
+    render(<ConnectionProvider connections={connections} voiceCatalog={voiceCatalog}><SettingsPage client={client} cacheClient={cacheClient} /></ConnectionProvider>);
     const input = await screen.findByLabelText(/Default pause_medium duration/u);
     fireEvent.change(input, { target: { value: "1.5 s" } });
     fireEvent.click(screen.getByRole("button", { name: "Save pacing defaults" }));
@@ -55,7 +61,7 @@ describe("System Settings", () => {
     const client = {
       settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() }
     } as unknown as PersistenceClient;
-    render(<ConnectionProvider connections={connections} voiceCatalog={voiceCatalog}><SettingsPage client={client} /></ConnectionProvider>);
+    render(<ConnectionProvider connections={connections} voiceCatalog={voiceCatalog}><SettingsPage client={client} cacheClient={cacheClient} /></ConnectionProvider>);
     expect(await screen.findByDisplayValue("Environment Speaches")).toBeDisabled();
     expect(screen.getByText(/effective source: server environment/u)).toBeInTheDocument();
     expect(screen.getByLabelText("Active profile")).toBeDisabled();
@@ -64,5 +70,27 @@ describe("System Settings", () => {
     fireEvent.change(screen.getByLabelText("Strict override JSON"), { target: { value: JSON.stringify({ schemaVersion: 1, modelId: environmentProfile.defaultModelId, entries: [] }) } });
     await userEvent.click(screen.getByRole("button", { name: "Replace model overrides" }));
     expect(replaceCatalog).toHaveBeenCalledWith({ schemaVersion: 1, modelId: environmentProfile.defaultModelId, entries: [] });
+  });
+
+  it("shows session cache statistics and confirms clear-all", async () => {
+    const connections = {
+      list: vi.fn(async () => []), create: vi.fn(), replace: vi.fn(), delete: vi.fn(), test: vi.fn(), exportDiagnostics: vi.fn(),
+      discoverSpeechCatalog: vi.fn(), getSetupState: vi.fn(async () => ({ activeProfileId: null, activeProfileLocked: false, onboardingCompletedAt: "2026-08-12T12:00:00.000Z", client: "web" as const })),
+      setActiveProfile: vi.fn(), completeOnboarding: vi.fn()
+    };
+    const voiceCatalog = { get: vi.fn(async (modelId: string) => ({ schemaVersion: 1 as const, modelId, entries: [] })), replace: vi.fn() };
+    const client = { settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() } } as unknown as PersistenceClient;
+    const status = vi.fn()
+      .mockResolvedValueOnce({ contractVersion: 1, entryCount: 2, totalBytes: 2048, lastUsedAt: "2026-08-12T12:00:00.000Z", sessionHits: 3, sessionMisses: 2, sessionWrites: 2, sessionCorruptMisses: 1, inFlight: 0 })
+      .mockResolvedValueOnce({ contractVersion: 1, entryCount: 0, totalBytes: 0, lastUsedAt: null, sessionHits: 3, sessionMisses: 2, sessionWrites: 2, sessionCorruptMisses: 1, inFlight: 0 });
+    const clearAll = vi.fn(async () => ({ contractVersion: 1 as const, entriesRemoved: 2, bytesFreed: 2048 }));
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<ConnectionProvider connections={connections} voiceCatalog={voiceCatalog}><SettingsPage client={client} cacheClient={{ status, clearAll, clearProject: vi.fn(), clearEntry: vi.fn() }} /></ConnectionProvider>);
+    expect(await screen.findByText("2 entries")).toBeInTheDocument();
+    expect(screen.getByText("3 hits · 2 misses")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Clear all cached speech" }));
+    expect(clearAll).toHaveBeenCalledOnce();
+    expect(await screen.findByText(/Cleared 2 cached speech entries/u)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Clear all cached speech" })).toBeDisabled();
   });
 });

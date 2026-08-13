@@ -122,14 +122,14 @@ export function ScratchpadPage({ client, persistence }: { client: ScratchpadClie
           {error ? <ErrorNotice title="Synthesis did not complete">{error} Your passage and selections are ready to retry.</ErrorNotice> : null}
 
           {session.active ? <>
-            <BasicAudioPlayer label={`${session.active.result.connectionProfileName} · ${session.active.result.voiceId}`} src={session.active.audioUrl} />
-            <section className={styles.resultDetail}><div><span>Result</span><strong>{session.active.result.voiceId}</strong></div><code>{session.active.result.modelId} · {String(session.active.result.speed)}× · {String(session.active.result.audio.byteLength)} bytes</code><p>{session.active.result.transformedText}</p></section>
+            <BasicAudioPlayer label={`${session.active.result.connectionProfileName} · ${session.active.result.voiceLabel} · ${session.active.result.voiceId}`} src={session.active.audioUrl} />
+            <section className={styles.resultDetail}><div><span>Result · cache {session.active.result.cache.status}</span><strong>{session.active.result.voiceLabel}</strong></div><code>{session.active.result.voiceId} · {session.active.result.modelId} · {String(session.active.result.speed)}× · {String(session.active.result.audio.byteLength)} bytes</code><p>{session.active.result.transformedText}</p></section>
           </> : <section className={styles.emptyResult}><span aria-hidden="true">◌</span><div><h3>No audio loaded</h3><p>Your first validated result will appear here. Scratchpad results never enter project or render history.</p></div></section>}
         </main>
 
         <aside className={styles.history} aria-label="Scratchpad session history">
           <div className={styles.historyHeading}><div><span className={styles.step}>This session</span><h3>Recent results</h3></div>{session.results.length ? <button type="button" onClick={() => session.clear()}>Clear</button> : null}</div>
-          {session.results.length === 0 ? <p>Up to five successful tests remain here until reload or restart.</p> : session.results.map(({ result }) => <button type="button" className={result.id === session.active?.result.id ? styles.activeResult : ""} key={result.id} onClick={() => session.select(result.id)}><strong>{result.voiceId}</strong><span>{result.transformedText}</span><code>{new Date(result.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</code></button>)}
+          {session.results.length === 0 ? <p>Up to five successful tests remain here until reload or restart.</p> : session.results.map(({ result }) => <button type="button" className={result.id === session.active?.result.id ? styles.activeResult : ""} key={result.id} onClick={() => session.select(result.id)}><strong>{result.voiceLabel}</strong><span>{result.transformedText}</span><code>{result.cache.status} · {result.voiceId} · {new Date(result.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</code></button>)}
         </aside>
       </div>
     </div>

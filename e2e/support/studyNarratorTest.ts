@@ -73,7 +73,9 @@ export const test = base.extend<{
       context: services.context,
       ...(services.connections === undefined ? {} : { connections: services.connections }),
       ...(services.voiceCatalog === undefined ? {} : { voiceCatalog: services.voiceCatalog }),
-      ...(services.scratchpad === undefined ? {} : { scratchpad: services.scratchpad })
+      ...(services.scratchpad === undefined ? {} : { scratchpad: services.scratchpad }),
+      ...(services.projectPreview === undefined ? {} : { projectPreview: services.projectPreview }),
+      speechCache: services.speechCache
     });
     attachStaticWebApplication(application, webDistribution);
     const server = createServer(application);

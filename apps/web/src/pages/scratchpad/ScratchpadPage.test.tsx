@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -77,6 +77,9 @@ describe("Quick Scratchpad", () => {
     await user.click(screen.getByRole("button", { name: "Synthesize passage" }));
     await waitFor(() => expect(preview).toHaveBeenCalledWith(expect.objectContaining({ text: "SQL indexes can improve database reads.", applyGlobalLexicon: true }), expect.any(AbortSignal)));
     expect(await screen.findByLabelText(/Audio player for Local Speaches/u)).toBeInTheDocument();
+    const resultDetail = screen.getByText(/Result · cache miss/u).closest("section");
+    expect(resultDetail).not.toBeNull();
+    expect(within(resultDetail!).getByText("Teacher — voice", { selector: "strong" })).toBeInTheDocument();
 
     const audio = container.querySelector("audio");
     expect(audio).not.toBeNull();

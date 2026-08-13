@@ -84,9 +84,10 @@ test.describe("Quick Scratchpad", () => {
     await expect(historyResults).toHaveCount(3);
 
     studyNarrator.fakeSpeaches.setScenario("timeout");
+    await page.getByLabel("Passage").fill("A distinct timeout passage.");
     await page.getByRole("button", { name: "Synthesize passage" }).click();
     await expect(page.getByRole("alert")).toContainText("service is unavailable", { timeout: 5_000 });
-    await expect(page.getByLabel("Passage")).toHaveValue(original);
+    await expect(page.getByLabel("Passage")).toHaveValue("A distinct timeout passage.");
     await expect(historyResults).toHaveCount(3);
     studyNarrator.fakeSpeaches.setScenario("healthy");
     await page.getByRole("button", { name: "Retry synthesis" }).click();
