@@ -1,6 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { StudyNarratorBridge } from "@studynarrator/shared-types";
+import { FAKE_SPEACHES_SECONDARY_MODEL_ID, FAKE_SPEACHES_SECONDARY_VOICE_ID } from "@studynarrator/fake-speaches";
 import { continueElectronOffline, expect, test } from "../support/electronTest.js";
 
 const secret = "test-secret-must-not-appear";
@@ -46,6 +47,17 @@ test.describe("Electron acceptance", () => {
     await player.getByRole("button", { name: "Play", exact: true }).click();
     await expect(player.getByRole("status")).toHaveText("Playing");
     await expect(player.getByRole("status")).toHaveText("Playback complete", { timeout: 5_000 });
+    expect(studyNarrator.fakeSpeaches.getState().requests.filter(({ path }) => path === "/v1/audio/speech")).toHaveLength(1);
+
+    await page.getByRole("link", { name: "Projects" }).click();
+    await page.getByLabel("Project name").fill("Desktop model voices");
+    await page.getByRole("button", { name: "Create project" }).click();
+    await page.getByLabel("Script source").fill("[speaker_narrator] Model scoped voice.");
+    await page.getByLabel("Connection profile").selectOption("environment-speaches");
+    await page.getByLabel("Optional model override").fill(FAKE_SPEACHES_SECONDARY_MODEL_ID);
+    await expect(page.getByLabel("Voices")).toHaveValue(FAKE_SPEACHES_SECONDARY_VOICE_ID);
+    await page.getByRole("button", { name: "Save now" }).click();
+    await expect(page.getByText("All changes saved.")).toBeVisible();
     expect(studyNarrator.fakeSpeaches.getState().requests.filter(({ path }) => path === "/v1/audio/speech")).toHaveLength(1);
 
     await page.getByRole("link", { name: "Settings" }).click();

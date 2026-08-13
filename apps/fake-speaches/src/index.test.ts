@@ -1,8 +1,10 @@
 import { createServer } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { diagnoseSpeaches } from "@studynarrator/speaches-adapter";
+import { diagnoseSpeaches, discoverSpeachesSpeechCatalog } from "@studynarrator/speaches-adapter";
 import {
   FAKE_SPEACHES_MODEL_ID,
+  FAKE_SPEACHES_SECONDARY_MODEL_ID,
+  FAKE_SPEACHES_SECONDARY_VOICE_ID,
   FAKE_SPEACHES_VOICE_ID,
   startFakeSpeachesServer,
   type FakeSpeachesServer
@@ -26,6 +28,18 @@ async function diagnose(baseUrl: string, timeoutSeconds = 2) {
 }
 
 describe("fake Speaches diagnostic scenarios", () => {
+  it("reports disjoint model-scoped voice lists", async () => {
+    current = await startFakeSpeachesServer();
+    const catalog = await discoverSpeachesSpeechCatalog({
+      profileId: "fake",
+      baseUrl: current.baseUrl,
+      timeoutSeconds: 2,
+      retryCount: 0
+    });
+    expect(catalog.models.find(({ modelId }) => modelId === FAKE_SPEACHES_MODEL_ID)?.voices.map(({ voiceId }) => voiceId)).toEqual(["af_heart", "af_sky"]);
+    expect(catalog.models.find(({ modelId }) => modelId === FAKE_SPEACHES_SECONDARY_MODEL_ID)?.voices.map(({ voiceId }) => voiceId)).toEqual([FAKE_SPEACHES_SECONDARY_VOICE_ID]);
+  });
+
   it("returns deterministic, decodable WAV audio and sanitized logs", async () => {
     current = await startFakeSpeachesServer();
     const output = await diagnose(current.baseUrl);
@@ -34,7 +48,7 @@ describe("fake Speaches diagnostic scenarios", () => {
     expect(output.summary.stages[7]).toMatchObject({ code: "audio-valid-wav" });
 
     const state = current.getState();
-    expect(state.counters).toMatchObject({ "/health": 1, "/v1/models": 1, "/v1/audio/voices": 1, "/v1/audio/speech": 1 });
+    expect(state.counters).toMatchObject({ "/health": 1, "/v1/models": 1, "/v1/audio/models": 1, "/v1/audio/speech": 1 });
     expect(state.requests.at(-1)).toMatchObject({
       method: "POST",
       path: "/v1/audio/speech",

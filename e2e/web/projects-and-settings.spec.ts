@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import type { FakeSpeachesScenario } from "@studynarrator/fake-speaches";
+import { FAKE_SPEACHES_SECONDARY_MODEL_ID, FAKE_SPEACHES_SECONDARY_VOICE_ID, type FakeSpeachesScenario } from "@studynarrator/fake-speaches";
 import {
   continueOffline,
   expect,
@@ -99,6 +99,8 @@ test.describe("Projects connected authoring", () => {
   test("defaults and persists catalog voices in bounded editor panels without requesting TTS", async ({ page, studyNarrator }) => {
     await continueOffline(page, studyNarrator);
     studyNarrator.fakeSpeaches.reset();
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Projects", exact: true })).toBeVisible();
     await page.getByLabel("Project name").fill("Automated narration");
     await page.getByLabel("Description").first().fill("Acceptance project");
     await page.getByRole("button", { name: "Create project" }).click();
@@ -115,8 +117,15 @@ test.describe("Projects connected authoring", () => {
     await expect(voices).toHaveValue("af_heart");
     await expect(page.locator("strong").filter({ hasText: "Heart — American English — af_heart" })).toBeVisible();
     await expect(page.getByText("af_heart", { exact: true })).toBeVisible();
+    await page.getByLabel("Optional model override").fill(FAKE_SPEACHES_SECONDARY_MODEL_ID);
+    await expect(voices).toHaveValue(FAKE_SPEACHES_SECONDARY_VOICE_ID);
+    await expect(voices.getByRole("option", { name: `Lessac — ${FAKE_SPEACHES_SECONDARY_VOICE_ID}` })).toBeAttached();
+    await expect(voices.getByRole("option", { name: /Heart/u })).toHaveCount(0);
+    await page.getByLabel("Optional model override").fill(modelId);
+    await expect(voices).toHaveValue("af_heart");
     await voices.selectOption("af_sky");
     await expect(voices).toHaveValue("af_sky");
+    expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/models"] ?? 0).toBe(1);
     expect(await voices.evaluate((element) => ({ tagName: element.tagName, hasManualOption: [...(element as HTMLSelectElement).options].some(({ value }) => value === "manual_voice_id") }))).toEqual({ tagName: "SELECT", hasManualOption: false });
     await page.getByRole("article").filter({ hasText: "pause_short" }).getByLabel("Duration").fill("400 ms");
     await expect(page.getByLabel("Dry run ordered segment table")).toContainText("Welcome line 48.");
@@ -160,6 +169,16 @@ test.describe("Projects connected authoring", () => {
     await expect(page.getByLabel("Connection profile")).toHaveValue("environment-speaches");
     await expect(page.getByLabel("Optional model override")).toHaveValue(modelId);
     await expect(page.getByLabel("Voices")).toHaveValue("af_sky");
+    expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/models"] ?? 0).toBe(2);
+    studyNarrator.fakeSpeaches.setScenario("timeout");
+    await page.reload();
+    await expect(page.getByRole("button", { name: "Retry supported voices" })).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByLabel("Voices")).toBeDisabled();
+    await expect(page.getByText("af_sky", { exact: true })).toBeVisible();
+    studyNarrator.fakeSpeaches.setScenario("healthy");
+    await page.getByRole("button", { name: "Retry supported voices" }).click();
+    await expect(page.getByLabel("Voices")).toHaveValue("af_sky");
+    expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/models"] ?? 0).toBe(4);
     expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/speech"] ?? 0).toBe(0);
   });
 

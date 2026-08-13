@@ -3,6 +3,9 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 
 export const FAKE_SPEACHES_MODEL_ID = "speaches-ai/Kokoro-82M-v1.0-ONNX";
 export const FAKE_SPEACHES_VOICE_ID = "af_heart";
+export const FAKE_SPEACHES_ALTERNATE_VOICE_ID = "af_sky";
+export const FAKE_SPEACHES_SECONDARY_MODEL_ID = "speaches-ai/Piper-en_US-lessac-medium";
+export const FAKE_SPEACHES_SECONDARY_VOICE_ID = "en_US-lessac-medium";
 export const FAKE_SPEACHES_SCENARIOS = [
   "healthy",
   "timeout",
@@ -170,16 +173,41 @@ export async function startFakeSpeachesServer(options: { port?: number; scenario
     }
     if (path === "/v1/models") {
       log(200);
-      sendJson(response, 200, { data: scenario === "missing-model" ? [] : [{ id: FAKE_SPEACHES_MODEL_ID }] });
+      sendJson(response, 200, { data: scenario === "missing-model" ? [] : [{ id: FAKE_SPEACHES_MODEL_ID }, { id: FAKE_SPEACHES_SECONDARY_MODEL_ID }] });
+      return;
+    }
+    if (path === "/v1/audio/models") {
+      log(200);
+      sendJson(response, 200, { object: "list", models: scenario === "missing-model" ? [] : [
+        {
+          id: FAKE_SPEACHES_MODEL_ID,
+          task: "text-to-speech",
+          voices: [
+            { id: FAKE_SPEACHES_VOICE_ID, name: "Heart", language: "American English", gender: "female" },
+            { id: FAKE_SPEACHES_ALTERNATE_VOICE_ID, name: "Sky", language: "American English", gender: "female" }
+          ]
+        },
+        {
+          id: FAKE_SPEACHES_SECONDARY_MODEL_ID,
+          task: "text-to-speech",
+          voices: [{ id: FAKE_SPEACHES_SECONDARY_VOICE_ID, name: "Lessac", language: "American English", gender: "female" }]
+        }
+      ] });
       return;
     }
     if (path === "/v1/audio/voices") {
       log(200);
-      sendJson(response, 200, { data: [{ id: FAKE_SPEACHES_VOICE_ID }] });
+      sendJson(response, 200, { object: "list", voices: [
+        { id: FAKE_SPEACHES_VOICE_ID },
+        { id: FAKE_SPEACHES_ALTERNATE_VOICE_ID },
+        { id: FAKE_SPEACHES_SECONDARY_VOICE_ID }
+      ] });
       return;
     }
     if (path === "/v1/audio/speech" && request.method === "POST") {
-      if (scenario === "rejected-voice") {
+      const compatible = (model === FAKE_SPEACHES_MODEL_ID && (voice === FAKE_SPEACHES_VOICE_ID || voice === FAKE_SPEACHES_ALTERNATE_VOICE_ID))
+        || (model === FAKE_SPEACHES_SECONDARY_MODEL_ID && voice === FAKE_SPEACHES_SECONDARY_VOICE_ID);
+      if (scenario === "rejected-voice" || !compatible) {
         log(422);
         sendJson(response, 422, { error: "voice rejected" });
         return;
