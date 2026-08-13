@@ -32,6 +32,12 @@ import {
 } from "@studynarrator/shared-types";
 import type { DiagnosticsContext, SystemService } from "@studynarrator/application";
 
+export const PUBLIC_IPC_CHANNEL_MANIFEST = Object.freeze([
+  SYSTEM_DIAGNOSTICS_CHANNEL,
+  ...Object.values(PERSISTENCE_CHANNELS),
+  ...Object.values(CONNECTION_CHANNELS)
+]);
+
 interface IpcMainLike {
   handle(channel: string, listener: (event: unknown, input?: unknown) => Promise<unknown>): void;
   removeHandler(channel: string): void;

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { IgnoredDiagnosticCollection, SystemPacingDefaults } from "@studynarrator/shared-types";
+import { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
 import { createPersistenceService, createUnavailablePersistenceService, PersistenceUnavailableError } from "./persistence.js";
 
 const project = {
@@ -49,6 +50,58 @@ function repository() {
 }
 
 describe("persistence application service", () => {
+  it("enumerates and executes every persistence service method", async () => {
+    const source = repository();
+    const service = createPersistenceService(source);
+    const liveMethods = [
+      ...Object.keys(service).filter((key) => key === "status").map((key) => `persistence.${key}`),
+      ...Object.keys(service.projects).map((key) => `persistence.projects.${key}`),
+      ...Object.keys(service.settings).map((key) => `persistence.settings.${key}`),
+      ...Object.keys(service.preferences).map((key) => `persistence.preferences.${key}`),
+      ...Object.keys(service.globalLexicon).map((key) => `persistence.globalLexicon.${key}`)
+    ];
+    expect(liveMethods.sort()).toEqual(APPLICATION_SERVICE_MANIFEST.filter((path) => path.startsWith("persistence.")).sort());
+    const replacement = {
+      name: project.name,
+      description: project.description,
+      scriptSource: project.scriptSource,
+      connectionProfileId: null,
+      modelId: null,
+      speakerMappings: [],
+      pausePresets: project.pausePresets,
+      paragraphPause: project.paragraphPause,
+      lexiconEntries: []
+    };
+    await service.status();
+    await service.projects.list();
+    await service.projects.create({ name: "Study" });
+    await service.projects.get(project.id);
+    await service.projects.replace(project.id, replacement);
+    await service.projects.duplicate(project.id, { name: "Copy" });
+    await service.projects.delete(project.id);
+    await service.settings.getPacing();
+    await service.settings.updatePacing({ enabled: false, durationMs: 900 });
+    await service.preferences.getIgnoredDiagnostics();
+    await service.preferences.replaceIgnoredDiagnostics([]);
+    await service.globalLexicon.list();
+    await service.globalLexicon.replace([]);
+
+    expect(source.status).toHaveBeenCalledOnce();
+    expect(source.listProjects).toHaveBeenCalledOnce();
+    expect(source.createProject).toHaveBeenCalledOnce();
+    expect(source.getProject).toHaveBeenCalledOnce();
+    expect(source.replaceProject).toHaveBeenCalledOnce();
+    expect(source.duplicateProject).toHaveBeenCalledOnce();
+    expect(source.deleteProject).toHaveBeenCalledOnce();
+    expect(source.getSystemPacing).toHaveBeenCalledOnce();
+    expect(source.updateSystemPacing).toHaveBeenCalledOnce();
+    expect(source.getIgnoredDiagnostics).toHaveBeenCalledOnce();
+    expect(source.replaceIgnoredDiagnostics).toHaveBeenCalledOnce();
+    expect(source.listGlobalLexicon).toHaveBeenCalledOnce();
+    expect(source.replaceGlobalLexicon).toHaveBeenCalledOnce();
+    expect(liveMethods).toHaveLength(13);
+  });
+
   it("validates requests before invoking the repository", async () => {
     const source = repository();
     const service = createPersistenceService(source);

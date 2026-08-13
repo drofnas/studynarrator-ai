@@ -25,6 +25,7 @@
     "gate:reset": "node scripts/gates/reset-gate.mjs",
     "lint": "eslint . --max-warnings 0",
     "test": "vitest run",
+    "test:api": "vitest run --config vitest.api.config.ts",
     "test:e2e:web": "npm run build --workspace @studynarrator/web && playwright test --project=web",
     "test:e2e:electron": "npm run build --workspace @studynarrator/web && npm run build --workspace @studynarrator/desktop && npm run rebuild:native --workspace @studynarrator/desktop && playwright test --project=electron",
     "test:e2e": "npm run build --workspace @studynarrator/web && npm run build --workspace @studynarrator/desktop && npm run rebuild:native --workspace @studynarrator/desktop && playwright test",

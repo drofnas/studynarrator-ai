@@ -116,6 +116,7 @@ export {
   type ConnectionRuntimeContext,
   type CredentialStore
 } from "./connections.js";
+export { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
 export {
   BUNDLED_VOICE_CATALOGS,
   KOKORO_V1_MODEL_ID,

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createSystemService, type DiagnosticsContext } from "./index.js";
+import { APPLICATION_SERVICE_MANIFEST, createSystemService, type DiagnosticsContext } from "./index.js";
 
 const context: DiagnosticsContext = {
   client: "web",
@@ -31,6 +31,9 @@ describe("createSystemService", () => {
       repository: { runMarker: () => storagePass, close },
       ffmpegProbe: { run: async () => ({ status: "pass", executable: "ffmpeg", version: "ffmpeg 8" }) }
     });
+    expect(Object.keys(service).map((key) => `system.${key}`).sort()).toEqual(
+      APPLICATION_SERVICE_MANIFEST.filter((path) => path.startsWith("system.")).sort()
+    );
 
     expect(service.health()).toEqual({ status: "ok", applicationVersion: "0.1.0" });
     expect(service.runtime(context).runtimeName).toBe("node");
@@ -42,6 +45,9 @@ describe("createSystemService", () => {
     });
     service.close();
     expect(close).toHaveBeenCalledOnce();
+    expect(APPLICATION_SERVICE_MANIFEST.filter((path) => path.startsWith("system."))).toEqual([
+      "system.health", "system.runtime", "system.diagnostics", "system.close"
+    ]);
   });
 
   it("maps a thrown storage error to a stable failure", async () => {

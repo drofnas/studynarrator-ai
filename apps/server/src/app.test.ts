@@ -17,6 +17,7 @@ import {
 import { openStudyNarratorRepository, type DatabaseConstructor } from "@studynarrator/persistence";
 import { BoundaryErrorSchema, HealthSchema, ProjectDetailSchema, ProjectSummaryCollectionSchema, RuntimeSchema, SystemDiagnosticsSchema } from "@studynarrator/shared-types";
 import { createExpressApp } from "./app.js";
+import { REST_API_MANIFEST } from "./apiManifest.js";
 
 const context: DiagnosticsContext = {
   client: "web",
@@ -186,5 +187,118 @@ describe("Express connection API", () => {
     }).expect(201);
     const profiles = await request(app).get("/api/connections").expect(200);
     expect(profiles.body).toEqual([expect.objectContaining({ id: "web-profile", baseUrl: "http://127.0.0.1:8000", credentialEntryAllowed: false })]);
+  });
+});
+
+interface ExpressRouteLayer {
+  route?: {
+    path: string;
+    methods: Record<string, boolean>;
+  };
+}
+
+describe("REST API operation manifest", () => {
+  it("matches every registered method and path exactly", async () => {
+    const { service, persistence, connections, voiceCatalog } = await fixture();
+    const application = createExpressApp({ service, persistence, connections, voiceCatalog, context });
+    const layers = (application as unknown as { router: { stack: ExpressRouteLayer[] } }).router.stack;
+    const registered = layers.flatMap((layer) => layer.route
+      ? Object.entries(layer.route.methods)
+        .filter(([, enabled]) => enabled)
+        .map(([method]) => `${method.toUpperCase()} ${layer.route!.path}`)
+      : []);
+    const declared = REST_API_MANIFEST.map(({ method, path }) => `${method} ${path}`);
+    expect(registered.sort()).toEqual([...declared].sort());
+    expect(new Set(declared).size).toBe(27);
+  });
+
+  it("exercises a successful schema-valid response for all 27 operations", async () => {
+    const { app } = await fixture();
+    const covered = new Set<string>();
+    const call = async (method: string, path: string, expected: number, body?: string | object) => {
+      covered.add(`${method} ${path.replace(/\/[0-9a-f-]{36}(?=\/|$)/gu, "/:projectId").replace(/\/manifest-profile(?=\/|$)/gu, "/:profileId")}`);
+      const agent = request(app)[method.toLowerCase() as "get"](path);
+      if (body !== undefined) agent.send(body);
+      return await agent.expect(expected);
+    };
+
+    await call("GET", "/api/health", 200);
+    await call("GET", "/api/runtime", 200);
+    SystemDiagnosticsSchema.parse((await call("GET", "/api/diagnostics", 200)).body as unknown);
+    await call("GET", "/api/persistence/status", 200);
+    ProjectSummaryCollectionSchema.parse((await call("GET", "/api/projects", 200)).body as unknown);
+    const created = ProjectDetailSchema.parse((await call("POST", "/api/projects", 201, { name: "Manifest project" })).body as unknown);
+    ProjectDetailSchema.parse((await call("GET", `/api/projects/${created.id}`, 200)).body as unknown);
+    const replacement = {
+      name: created.name,
+      description: "manifest",
+      scriptSource: "Manifest source",
+      connectionProfileId: null,
+      modelId: null,
+      speakerMappings: [],
+      pausePresets: created.pausePresets,
+      paragraphPause: created.paragraphPause,
+      lexiconEntries: []
+    };
+    ProjectDetailSchema.parse((await call("PUT", `/api/projects/${created.id}`, 200, replacement)).body as unknown);
+    ProjectDetailSchema.parse((await call("POST", `/api/projects/${created.id}/duplicate`, 201, { name: "Manifest copy" })).body as unknown);
+    await call("GET", "/api/settings/pacing", 200);
+    await call("PUT", "/api/settings/pacing", 200, { enabled: false, durationMs: 900 });
+    await call("GET", "/api/preferences/ignored-diagnostics", 200);
+    await call("PUT", "/api/preferences/ignored-diagnostics", 200, []);
+    await call("GET", "/api/lexicon/global", 200);
+    await call("PUT", "/api/lexicon/global", 200, []);
+    await call("GET", "/api/connections", 200);
+    const profileMutation = {
+      profile: { id: "manifest-profile", name: "Manifest", baseUrl: "http://127.0.0.1:1/v1", defaultModelId: "model", defaultVoiceId: "voice" },
+      credential: { action: "keep" }
+    };
+    await call("POST", "/api/connections", 201, profileMutation);
+    await call("PUT", "/api/connections/manifest-profile", 200, { ...profileMutation, profile: { ...profileMutation.profile, name: "Updated manifest" } });
+    await call("POST", "/api/connections/manifest-profile/test", 200);
+    await call("GET", "/api/connections/manifest-profile/diagnostics", 200);
+    await call("GET", "/api/setup", 200);
+    await call("PUT", "/api/setup/active-profile", 200, { profileId: "manifest-profile" });
+    await call("POST", "/api/setup/complete", 200);
+    await call("GET", "/api/voice-catalog?modelId=model", 200);
+    covered.delete("GET /api/voice-catalog?modelId=model");
+    covered.add("GET /api/voice-catalog");
+    await call("PUT", "/api/voice-catalog", 200, { schemaVersion: 1, modelId: "model", entries: [] });
+    await call("DELETE", "/api/connections/manifest-profile", 204);
+    await call("DELETE", `/api/projects/${created.id}`, 204);
+
+    expect([...covered].sort()).toEqual(REST_API_MANIFEST.map(({ method, path }) => `${method} ${path}`).sort());
+  });
+
+  it("rejects malformed path, query, body, policy, conflict, missing, and unavailable cases without credentials", async () => {
+    const { app, service } = await fixture();
+    const secret = "g06-secret-must-not-appear";
+    const invalidCases = [
+      request(app).post("/api/projects").send({ name: "", password: secret }).expect(400),
+      request(app).get("/api/projects/not-a-uuid").expect(400),
+      request(app).put("/api/projects/not-a-uuid").send({}).expect(400),
+      request(app).post("/api/projects/not-a-uuid/duplicate").send({}).expect(400),
+      request(app).delete("/api/projects/not-a-uuid").expect(400),
+      request(app).put("/api/settings/pacing").send({ durationMs: -1 }).expect(400),
+      request(app).put("/api/preferences/ignored-diagnostics").send({}).expect(400),
+      request(app).put("/api/lexicon/global").send({}).expect(400),
+      request(app).post("/api/connections").send({ profile: {}, credential: { action: "replace", apiKey: secret } }).expect(400),
+      request(app).put("/api/connections/not-found").send({}).expect(400),
+      request(app).delete("/api/connections/not-found").expect(404),
+      request(app).post("/api/connections/not-found/test").expect(404),
+      request(app).get("/api/connections/not-found/diagnostics").expect(404),
+      request(app).put("/api/setup/active-profile").send({ profileId: 12 }).expect(400),
+      request(app).get("/api/voice-catalog").expect(400),
+      request(app).put("/api/voice-catalog").send({ schemaVersion: 1, modelId: "model", entries: [{ voiceId: "same", label: secret, apiKey: secret }] }).expect(400)
+    ];
+    const responses = await Promise.all(invalidCases);
+    expect(JSON.stringify(responses.map((response) => response.body as unknown))).not.toContain(secret);
+
+    const unavailable = createUnavailablePersistenceService({
+      contractVersion: 3, state: "unavailable", databaseSchemaVersion: 2, targetDatabaseSchemaVersion: 3,
+      databasePath: "/redacted/data.sqlite", latestBackupPath: null, code: "MIGRATION_FAILED", message: "Unavailable."
+    });
+    const degraded = await listen(createExpressApp({ service, persistence: unavailable, context }));
+    await request(degraded).post("/api/projects").send({ name: "Blocked" }).expect(503);
   });
 });

@@ -6,6 +6,7 @@
   "type": "module",
   "exports": {
     "./app": "./src/app.ts",
+    "./api-manifest": "./src/apiManifest.ts",
     "./bootstrap": "./src/bootstrap.ts"
   },
   "scripts": {

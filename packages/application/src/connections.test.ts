@@ -11,10 +11,12 @@ import {
   classifyEndpoint,
   createConnectionsService,
   createRoutedCredentialStore,
+  createVoiceCatalogService,
   reconcileEnvironmentConnectionProfile,
   type ConnectionRepository,
   type CredentialStore
 } from "./connections.js";
+import { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
 
 const timestamp = "2026-08-12T12:00:00.000Z";
 const connected: ConnectionTestSummary = {
@@ -161,6 +163,35 @@ function desktopService(repository: MemoryRepository, vault: MemoryVault) {
 }
 
 describe("connections service", () => {
+  it("executes every connection, setup, and voice-catalog service method", async () => {
+    const repository = new MemoryRepository();
+    const vault = new MemoryVault();
+    const service = desktopService(repository, vault);
+    expect(Object.keys(service).map((key) => `connections.${key}`).sort()).toEqual(
+      APPLICATION_SERVICE_MANIFEST.filter((path) => path.startsWith("connections.")).sort()
+    );
+    await service.create(mutation());
+    await expect(service.list()).resolves.toHaveLength(1);
+    await service.replace("local", { ...mutation("Updated"), credential: { action: "keep" } });
+    await service.test("local");
+    await service.exportDiagnostics("local");
+    await expect(service.getSetupState()).resolves.toMatchObject({ client: "electron" });
+    await service.setActiveProfile("local");
+    await expect(service.completeOnboarding()).resolves.toMatchObject({ activeProfileId: "local", onboardingCompletedAt: timestamp });
+
+    const catalog = createVoiceCatalogService({
+      repository,
+      bundledCatalogs: new Map([["model", { schemaVersion: 1, modelId: "model", entries: [{ voiceId: "voice", label: "Bundled", enabled: true, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }] }]])
+    });
+    expect(Object.keys(catalog).map((key) => `voiceCatalog.${key}`).sort()).toEqual(
+      APPLICATION_SERVICE_MANIFEST.filter((path) => path.startsWith("voiceCatalog.")).sort()
+    );
+    await expect(catalog.get("model")).resolves.toMatchObject({ entries: [expect.objectContaining({ voiceId: "voice" })] });
+    await expect(catalog.replace({ schemaVersion: 1, modelId: "model", entries: [{ voiceId: "voice", label: "Renamed", enabled: false, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }] })).resolves.toMatchObject({ entries: [expect.objectContaining({ label: "Bundled" })] });
+    await service.delete("local");
+    await expect(service.list()).resolves.toEqual([]);
+  });
+
   it("normalizes profiles, stores only an opaque reference, and never returns the key", async () => {
     const repository = new MemoryRepository();
     const vault = new MemoryVault();
