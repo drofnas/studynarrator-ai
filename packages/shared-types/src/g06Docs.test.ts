@@ -26,6 +26,14 @@ describe("G06 gate documentation", () => {
     expect(agents).toContain("Human gate review is UX-only after automation is green");
   });
 
+  it("requires a signed approval record when G06 is checked", () => {
+    const plan = readFileSync(resolve(root, "docs/gated-implementation-plan-v1.md"), "utf8");
+    if (!plan.includes("- [x] G06 —")) return;
+    const approval = readFileSync(resolve(root, "docs/gates/approvals/G06.md"), "utf8");
+    expect(approval).toContain("Reviewed implementation commit SHA: `02a48d9`");
+    expect(approval).toContain("\nAPPROVED\n");
+  });
+
   it("keeps G06 inside the reset allowlist and repository-local safety boundary", () => {
     const reset = readFileSync(resolve(root, "scripts/gates/reset-gate.mjs"), "utf8");
     expect(reset).toContain('"G06"');

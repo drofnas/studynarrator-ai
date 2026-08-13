@@ -324,7 +324,7 @@ The first unchecked item is the next gate. Only that gate may be implemented or 
 - [x] G03 — Lexicon, named senses, and transcript transformation
 - [x] G04 — SQLite project persistence and migrations
 - [x] G05 — Project authoring, discovery, configuration, and dry run
-- [ ] G06 — Speaches connection profiles and diagnostics
+- [x] G06 — Speaches connection profiles and diagnostics
 - [ ] G07 — Quick Scratchpad and first audible output
 - [ ] G08 — Segment preview and content-addressed cache
 - [ ] G09 — Frozen render plan and exact silence generation
@@ -337,7 +337,7 @@ The first unchecked item is the next gate. Only that gate may be implemented or 
 - [ ] G16 — Cross-platform packages and clean-install release matrix
 - [ ] G17 — Version 1 release acceptance
 
-The checked G00 through G05 entries are supported by their records under `docs/gates/approvals/` and their matching approved tags. Therefore, G06 is the current and only eligible gate.
+The checked G00 through G06 entries are supported by their records under `docs/gates/approvals/` and their matching approved tags. Therefore, G07 is the current and only eligible gate.
 
 ### 6.2 Gate outcomes
 

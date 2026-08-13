@@ -296,6 +296,10 @@ if (gateIndex >= gateOrder.indexOf("G06")) {
       'docs/gates/G06-manual-test.md',
       'docs/gates/evidence/G06/README.md'
     ]) if (!fs.existsSync(path)) process.exit(1);
+    if (plan.includes('- [x] G06 —')) {
+      const approvalPath = 'docs/gates/approvals/G06.md';
+      if (!fs.existsSync(approvalPath) || !fs.readFileSync(approvalPath, 'utf8').includes('\\nAPPROVED\\n')) process.exit(1);
+    }
     const schemas = fs.readFileSync('packages/shared-types/src/connections.ts', 'utf8');
     const persistence = fs.readFileSync('packages/shared-types/src/persistence.ts', 'utf8');
     const adapter = fs.readFileSync('packages/speaches-adapter/src/index.ts', 'utf8');
