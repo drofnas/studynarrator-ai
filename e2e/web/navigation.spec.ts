@@ -40,8 +40,10 @@ test.describe("shell, onboarding, and runtime routes", () => {
     await navigation.getByText("Review tools").click();
     await navigation.getByRole("link", { name: "Script Lab" }).click();
     await expect(page.getByRole("heading", { name: "Script Lab" })).toBeVisible();
+    await navigation.getByText("Review tools").click();
     await navigation.getByRole("link", { name: "Persistence Lab" }).click();
     await expect(page.getByRole("heading", { name: "Persistence Lab" })).toBeVisible();
+    await navigation.getByText("Review tools").click();
     await navigation.getByRole("link", { name: "Runtime diagnostics" }).click();
     await expect(page.getByRole("heading", { name: "Runtime self-test" })).toBeVisible();
     await page.getByRole("button", { name: "Run self-test" }).click();

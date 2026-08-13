@@ -44,10 +44,12 @@ describe("application routing", () => {
   it("navigates between stable page routes", async () => {
     const user = userEvent.setup();
     renderApp("/projects");
+    const reviewTools = screen.getByText("Review tools").closest("details");
     await user.click(screen.getByText("Review tools"));
     await user.click(screen.getByRole("link", { name: "Runtime diagnostics" }));
     expect(screen.getByRole("heading", { name: "Runtime self-test" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Runtime diagnostics" })).toHaveAttribute("aria-current", "page");
+    expect(reviewTools).not.toHaveAttribute("open");
   });
 
   it("exposes the dedicated persistence route without changing Script Lab", async () => {
