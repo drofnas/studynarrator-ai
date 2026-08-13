@@ -14,6 +14,19 @@ export const CONNECTION_DIAGNOSTIC_SCHEMA_VERSION = 1;
 export const CONNECTION_PROFILE_DEFAULT_TIMEOUT_SECONDS = 120;
 export const CONNECTION_PROFILE_DEFAULT_RETRY_COUNT = 2;
 export const ENVIRONMENT_CONNECTION_PROFILE_ID = "environment-speaches";
+export const CONNECTION_CHANNELS = Object.freeze({
+  list: "connections.list",
+  create: "connections.create",
+  replace: "connections.replace",
+  delete: "connections.delete",
+  test: "connections.test",
+  exportDiagnostics: "connections.export-diagnostics",
+  setupGet: "setup.get",
+  setupSetActive: "setup.set-active",
+  setupComplete: "setup.complete",
+  voiceCatalogGet: "voice-catalog.get",
+  voiceCatalogReplace: "voice-catalog.replace"
+} as const);
 
 export const ConnectionProfileSourceSchema = z.enum(["saved", "environment"]);
 export type ConnectionProfileSource = z.infer<typeof ConnectionProfileSourceSchema>;
@@ -92,6 +105,7 @@ export const ConnectionProfileSchema = z.object({
   id: z.string().min(1).max(128),
   name: z.string().min(1).max(200),
   baseUrl: z.url({ protocol: /^https?$/u }).nullable(),
+  suppliedUrlForm: z.enum(["root", "v1", "unconfigured"]),
   source: ConnectionProfileSourceSchema,
   editable: z.boolean(),
   credentialEntryAllowed: z.boolean(),
@@ -124,10 +138,16 @@ export const ConnectionProfileMutationRequestSchema = z.object({
   profileId: z.string().min(1).max(128),
   mutation: ConnectionProfileMutationSchema
 }).strict();
+export const ActiveConnectionProfileInputSchema = z.object({ profileId: z.string().min(1).max(128).nullable() }).strict();
+export const VoiceCatalogModelInputSchema = z.object({ modelId: z.string().trim().min(1).max(500) }).strict();
 
 export const RedactedConnectionDiagnosticsSchema = z.object({
   schemaVersion: z.literal(CONNECTION_DIAGNOSTIC_SCHEMA_VERSION),
   applicationVersion: z.string().min(1),
+  runtimeVersions: z.object({
+    node: z.string().min(1),
+    electron: z.string().min(1).nullable()
+  }).strict(),
   profileId: z.string().min(1),
   profileSource: ConnectionProfileSourceSchema,
   endpointClass: z.enum(["loopback", "private", "public", "unconfigured"]),
@@ -135,6 +155,12 @@ export const RedactedConnectionDiagnosticsSchema = z.object({
   modelId: z.string().nullable(),
   voiceId: z.string().nullable(),
   apiKeyConfigured: z.boolean(),
+  requestCounts: z.object({
+    health: z.number().int().nonnegative(),
+    models: z.number().int().nonnegative(),
+    voices: z.number().int().nonnegative(),
+    speech: z.number().int().nonnegative()
+  }).strict(),
   result: ConnectionTestSummarySchema
 }).strict();
 export type RedactedConnectionDiagnostics = z.infer<typeof RedactedConnectionDiagnosticsSchema>;

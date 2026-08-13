@@ -31,6 +31,7 @@ describe("G06 connection contracts", () => {
       id: "lan-speaches",
       name: "LAN Speaches",
       baseUrl: "http://speaches.lan:8000",
+      suppliedUrlForm: "v1",
       source: "saved",
       editable: true,
       credentialEntryAllowed: true,

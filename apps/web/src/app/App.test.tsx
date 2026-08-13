@@ -13,8 +13,7 @@ const unusedPersistence: PersistenceClient = {
   projects: { list: vi.fn(async () => []), create: vi.fn(), get: vi.fn(), replace: vi.fn(), duplicate: vi.fn(), delete: vi.fn() },
   settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() },
   preferences: { getIgnoredDiagnostics: vi.fn(async () => []), replaceIgnoredDiagnostics: vi.fn() },
-  globalLexicon: { list: vi.fn(async () => []), replace: vi.fn() },
-  connectionProfiles: { list: vi.fn(async () => []), create: vi.fn(), replace: vi.fn(), delete: vi.fn() }
+  globalLexicon: { list: vi.fn(async () => []), replace: vi.fn() }
 };
 
 afterEach(cleanup);

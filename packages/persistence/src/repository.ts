@@ -106,6 +106,7 @@ interface ProfileRow {
   timeout_seconds: number;
   retry_count: number;
   response_format: "wav";
+  supplied_url_form: "root" | "v1" | "unconfigured";
   last_tested_at: string | null;
   last_successful_test_at: string | null;
   last_test_summary_json: string | null;
@@ -155,6 +156,7 @@ export interface StudyNarratorRepository {
   deleteConnectionProfile(profileId: string): void;
   getConnectionCredentialReference(profileId: string): string | null;
   setConnectionCredentialReference(profileId: string, reference: string | null): ConnectionProfilePlaceholder;
+  setConnectionSuppliedUrlForm(profileId: string, suppliedUrlForm: "root" | "v1" | "unconfigured"): ConnectionProfilePlaceholder;
   upsertEnvironmentConnectionProfile(input: ConnectionProfileAuthoring, credentialReference: string | null): ConnectionProfilePlaceholder;
   recordConnectionTest(profileId: string, summary: ConnectionTestSummary): ConnectionProfilePlaceholder;
   getConnectionSetup(): ConnectionSetupRecord;
@@ -205,6 +207,7 @@ function profileFromRow(row: ProfileRow): ConnectionProfilePlaceholder {
     timeoutSeconds: row.timeout_seconds,
     retryCount: row.retry_count,
     responseFormat: row.response_format,
+    suppliedUrlForm: row.supplied_url_form,
     lastTestedAt: row.last_tested_at,
     lastSuccessfulTestAt: row.last_successful_test_at,
     lastTestSummary: row.last_test_summary_json === null ? null : JSON.parse(row.last_test_summary_json) as unknown,
@@ -635,6 +638,13 @@ function createRepository(options: {
       assertOpen();
       const result = database.prepare("UPDATE connection_profiles SET api_key_reference = ?, updated_at = ? WHERE id = ?")
         .run(reference, options.now().toISOString(), profileId);
+      if (Number(result.changes ?? 0) !== 1) throw new PersistenceNotFoundError(`Connection profile ${profileId} was not found.`);
+      return getConnectionProfile(profileId);
+    },
+    setConnectionSuppliedUrlForm(profileId, suppliedUrlForm) {
+      assertOpen();
+      const result = database.prepare("UPDATE connection_profiles SET supplied_url_form = ?, updated_at = ? WHERE id = ?")
+        .run(suppliedUrlForm, options.now().toISOString(), profileId);
       if (Number(result.changes ?? 0) !== 1) throw new PersistenceNotFoundError(`Connection profile ${profileId} was not found.`);
       return getConnectionProfile(profileId);
     },

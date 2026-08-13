@@ -51,8 +51,7 @@ function fixture(sourceProject = project) {
     },
     settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() },
     preferences: { getIgnoredDiagnostics: vi.fn(async () => []), replaceIgnoredDiagnostics: vi.fn() },
-    globalLexicon: { list: vi.fn(async () => []), replace: vi.fn(async () => []) },
-    connectionProfiles: { list: vi.fn(async () => []), create: vi.fn(), replace: vi.fn(), delete: vi.fn() }
+    globalLexicon: { list: vi.fn(async () => []), replace: vi.fn(async () => []) }
   };
   const analyze = vi.fn(async (input: ScriptAnalysisInput) => {
     const { entries, paragraphPause, ...parseInput } = input;

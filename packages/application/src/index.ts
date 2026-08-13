@@ -102,3 +102,17 @@ export {
   createUnavailablePersistenceService,
   type PersistenceRepository
 } from "./persistence.js";
+export {
+  ConnectionConfigurationError,
+  ConnectionPolicyError,
+  ENVIRONMENT_CREDENTIAL_REFERENCE,
+  classifyEndpoint,
+  createConnectionsService,
+  createRoutedCredentialStore,
+  createVoiceCatalogService,
+  reconcileEnvironmentConnectionProfile,
+  type ConnectionDiagnosticRunner,
+  type ConnectionRepository,
+  type ConnectionRuntimeContext,
+  type CredentialStore
+} from "./connections.js";

@@ -1,7 +1,5 @@
 import {
   BoundaryErrorSchema,
-  ConnectionProfileCollectionSchema,
-  ConnectionProfilePlaceholderSchema,
   EmptyResponseSchema,
   GlobalLexiconEntryCollectionSchema,
   IgnoredDiagnosticCollectionSchema,
@@ -80,14 +78,6 @@ export function createRestPersistenceClient(fetchInput: typeof fetch = fetch): P
     globalLexicon: {
       list: async () => await request("/api/lexicon/global", GlobalLexiconEntryCollectionSchema),
       replace: async (input) => await request("/api/lexicon/global", GlobalLexiconEntryCollectionSchema, { method: "PUT", body: body(input) })
-    },
-    connectionProfiles: {
-      list: async () => await request("/api/connection-profiles", ConnectionProfileCollectionSchema),
-      create: async (input) => await request("/api/connection-profiles", ConnectionProfilePlaceholderSchema, { method: "POST", body: body(input) }),
-      replace: async (profileId, input) => await request(`/api/connection-profiles/${encodeURIComponent(profileId)}`, ConnectionProfilePlaceholderSchema, { method: "PUT", body: body(input) }),
-      async delete(profileId) {
-        await request(`/api/connection-profiles/${encodeURIComponent(profileId)}`, EmptyResponseSchema, { method: "DELETE" });
-      }
     }
   };
 }

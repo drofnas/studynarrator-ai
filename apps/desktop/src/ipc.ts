@@ -1,9 +1,13 @@
 import {
-  ConnectionProfileAuthoringSchema,
+  ActiveConnectionProfileInputSchema,
+  CONNECTION_CHANNELS,
   ConnectionProfileCollectionSchema,
   ConnectionProfileIdInputSchema,
-  ConnectionProfilePlaceholderSchema,
-  ConnectionProfileReplaceRequestSchema,
+  ConnectionProfileMutationRequestSchema,
+  ConnectionProfileMutationSchema,
+  ConnectionProfileSchema,
+  ConnectionSetupStateSchema,
+  ConnectionTestSummarySchema,
   EmptyResponseSchema,
   GlobalLexiconEntryCollectionSchema,
   GlobalLexiconReplaceInputSchema,
@@ -19,7 +23,12 @@ import {
   SYSTEM_DIAGNOSTICS_CHANNEL,
   SystemDiagnosticsSchema,
   SystemPacingDefaultsSchema,
-  type PersistenceClient
+  RedactedConnectionDiagnosticsSchema,
+  VoiceCatalogModelInputSchema,
+  VoiceCatalogSchema,
+  type ConnectionsClient,
+  type PersistenceClient,
+  type VoiceCatalogClient
 } from "@studynarrator/shared-types";
 import type { DiagnosticsContext, SystemService } from "@studynarrator/application";
 
@@ -86,15 +95,45 @@ export function registerPersistenceHandlers(ipcMain: IpcMainLike, persistence: P
   handle(PERSISTENCE_CHANNELS.ignoredReplace, async (input) => IgnoredDiagnosticCollectionSchema.parse(await persistence.preferences.replaceIgnoredDiagnostics(IgnoredDiagnosticCollectionSchema.parse(input))));
   handle(PERSISTENCE_CHANNELS.globalLexiconList, async () => GlobalLexiconEntryCollectionSchema.parse(await persistence.globalLexicon.list()));
   handle(PERSISTENCE_CHANNELS.globalLexiconReplace, async (input) => GlobalLexiconEntryCollectionSchema.parse(await persistence.globalLexicon.replace(GlobalLexiconReplaceInputSchema.parse(input))));
-  handle(PERSISTENCE_CHANNELS.connectionProfilesList, async () => ConnectionProfileCollectionSchema.parse(await persistence.connectionProfiles.list()));
-  handle(PERSISTENCE_CHANNELS.connectionProfilesCreate, async (input) => ConnectionProfilePlaceholderSchema.parse(await persistence.connectionProfiles.create(ConnectionProfileAuthoringSchema.parse(input))));
-  handle(PERSISTENCE_CHANNELS.connectionProfilesReplace, async (input) => {
-    const request = ConnectionProfileReplaceRequestSchema.parse(input);
-    return ConnectionProfilePlaceholderSchema.parse(await persistence.connectionProfiles.replace(request.profileId, request.profile));
+}
+
+export function registerConnectionHandlers(
+  ipcMain: IpcMainLike,
+  connections: ConnectionsClient,
+  voiceCatalog: VoiceCatalogClient
+) {
+  const handle = (channel: string, listener: (input: unknown) => Promise<unknown>) => {
+    ipcMain.removeHandler(channel);
+    ipcMain.handle(channel, async (_event, input) => {
+      try {
+        return await listener(input);
+      } catch (error) {
+        const record = error && typeof error === "object" ? error as Record<string, unknown> : undefined;
+        // The original error is intentionally not attached: it may contain a one-shot credential.
+        /* eslint-disable preserve-caught-error */
+        if (record && Array.isArray(record.issues)) throw new Error("The request does not match the connection contract.");
+        if (record?.code === "CONNECTION_POLICY" && typeof record.message === "string") throw new Error(record.message);
+        if (record?.code === "PERSISTENCE_NOT_FOUND") throw new Error("The requested connection profile does not exist.");
+        throw new Error("StudyNarrator could not complete the connection operation.");
+        /* eslint-enable preserve-caught-error */
+      }
+    });
+  };
+  handle(CONNECTION_CHANNELS.list, async () => ConnectionProfileCollectionSchema.parse(await connections.list()));
+  handle(CONNECTION_CHANNELS.create, async (input) => ConnectionProfileSchema.parse(await connections.create(ConnectionProfileMutationSchema.parse(input))));
+  handle(CONNECTION_CHANNELS.replace, async (input) => {
+    const request = ConnectionProfileMutationRequestSchema.parse(input);
+    return ConnectionProfileSchema.parse(await connections.replace(request.profileId, request.mutation));
   });
-  handle(PERSISTENCE_CHANNELS.connectionProfilesDelete, async (input) => {
-    const request = ConnectionProfileIdInputSchema.parse(input);
-    await persistence.connectionProfiles.delete(request.profileId);
+  handle(CONNECTION_CHANNELS.delete, async (input) => {
+    await connections.delete(ConnectionProfileIdInputSchema.parse(input).profileId);
     return EmptyResponseSchema.parse({});
   });
+  handle(CONNECTION_CHANNELS.test, async (input) => ConnectionTestSummarySchema.parse(await connections.test(ConnectionProfileIdInputSchema.parse(input).profileId)));
+  handle(CONNECTION_CHANNELS.exportDiagnostics, async (input) => RedactedConnectionDiagnosticsSchema.parse(await connections.exportDiagnostics(ConnectionProfileIdInputSchema.parse(input).profileId)));
+  handle(CONNECTION_CHANNELS.setupGet, async () => ConnectionSetupStateSchema.parse(await connections.getSetupState()));
+  handle(CONNECTION_CHANNELS.setupSetActive, async (input) => ConnectionSetupStateSchema.parse(await connections.setActiveProfile(ActiveConnectionProfileInputSchema.parse(input).profileId)));
+  handle(CONNECTION_CHANNELS.setupComplete, async () => ConnectionSetupStateSchema.parse(await connections.completeOnboarding()));
+  handle(CONNECTION_CHANNELS.voiceCatalogGet, async (input) => VoiceCatalogSchema.parse(await voiceCatalog.get(VoiceCatalogModelInputSchema.parse(input).modelId)));
+  handle(CONNECTION_CHANNELS.voiceCatalogReplace, async (input) => VoiceCatalogSchema.parse(await voiceCatalog.replace(VoiceCatalogSchema.parse(input))));
 }

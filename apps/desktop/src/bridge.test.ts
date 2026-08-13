@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { PERSISTENCE_CHANNELS, SYSTEM_DIAGNOSTICS_CHANNEL } from "@studynarrator/shared-types";
+import { CONNECTION_CHANNELS, PERSISTENCE_CHANNELS, SYSTEM_DIAGNOSTICS_CHANNEL } from "@studynarrator/shared-types";
 import { createPreloadBridge } from "./bridge.js";
-import { registerDiagnosticsHandler, registerPersistenceHandlers } from "./ipc.js";
+import { registerConnectionHandlers, registerDiagnosticsHandler, registerPersistenceHandlers } from "./ipc.js";
 import { SECURE_WEB_PREFERENCES } from "./security.js";
 
 const diagnostics = {
@@ -40,24 +40,38 @@ const persistence = {
   projects: { list: vi.fn(async () => []), create: vi.fn(), get: vi.fn(), replace: vi.fn(), duplicate: vi.fn(), delete: vi.fn() },
   settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() },
   preferences: { getIgnoredDiagnostics: vi.fn(async () => []), replaceIgnoredDiagnostics: vi.fn() },
-  globalLexicon: { list: vi.fn(async () => []), replace: vi.fn() },
-  connectionProfiles: { list: vi.fn(async () => []), create: vi.fn(), replace: vi.fn(), delete: vi.fn() }
+  globalLexicon: { list: vi.fn(async () => []), replace: vi.fn() }
 };
+
+const connections = {
+  list: vi.fn(async () => []),
+  create: vi.fn(),
+  replace: vi.fn(),
+  delete: vi.fn(),
+  test: vi.fn(),
+  exportDiagnostics: vi.fn(),
+  getSetupState: vi.fn(async () => ({ activeProfileId: null, activeProfileLocked: false, onboardingCompletedAt: null, client: "electron" as const })),
+  setActiveProfile: vi.fn(),
+  completeOnboarding: vi.fn()
+};
+const voiceCatalog = { get: vi.fn(), replace: vi.fn() };
 
 describe("Electron boundary", () => {
   it("exposes only the validated diagnostics and persistence operations", async () => {
     const invoke = vi.fn(async (channel: string) => {
       if (channel === SYSTEM_DIAGNOSTICS_CHANNEL) return diagnostics;
-      if (channel === PERSISTENCE_CHANNELS.projectsList) return [];
+      if (channel === PERSISTENCE_CHANNELS.projectsList || channel === CONNECTION_CHANNELS.list) return [];
       return persistenceStatus;
     });
     const bridge = createPreloadBridge(invoke);
-    expect(Object.keys(bridge)).toEqual(["system", "persistence"]);
+    expect(Object.keys(bridge)).toEqual(["system", "persistence", "connections", "voiceCatalog"]);
     expect(Object.keys(bridge.system)).toEqual(["diagnostics"]);
     await expect(bridge.system.diagnostics()).resolves.toEqual(diagnostics);
     expect(invoke).toHaveBeenCalledWith(SYSTEM_DIAGNOSTICS_CHANNEL);
     await expect(bridge.persistence.projects.list()).resolves.toEqual([]);
     expect(invoke).toHaveBeenCalledWith(PERSISTENCE_CHANNELS.projectsList);
+    await expect(bridge.connections.list()).resolves.toEqual([]);
+    expect(invoke).toHaveBeenCalledWith(CONNECTION_CHANNELS.list);
   });
 
   it("rejects malformed IPC output", async () => {
@@ -79,12 +93,15 @@ describe("Electron boundary", () => {
     };
     registerDiagnosticsHandler(ipcMain, service as never, {} as never);
     registerPersistenceHandlers(ipcMain, persistence as never);
-    expect([...handlers.keys()]).toEqual([SYSTEM_DIAGNOSTICS_CHANNEL, ...Object.values(PERSISTENCE_CHANNELS)]);
+    registerConnectionHandlers(ipcMain, connections, voiceCatalog as never);
+    expect([...handlers.keys()]).toEqual([SYSTEM_DIAGNOSTICS_CHANNEL, ...Object.values(PERSISTENCE_CHANNELS), ...Object.values(CONNECTION_CHANNELS)]);
     expect([...handlers.keys()]).not.toContain("persistence.execute");
     await expect(handlers.get(SYSTEM_DIAGNOSTICS_CHANNEL)?.()).resolves.toEqual(diagnostics);
     await expect(handlers.get(PERSISTENCE_CHANNELS.projectsList)?.()).resolves.toEqual([]);
     await expect(handlers.get(PERSISTENCE_CHANNELS.projectsCreate)?.(undefined, { name: "", secret: "must-not-leak" }))
       .rejects.toThrow("The request does not match the persistence contract.");
+    await expect(handlers.get(CONNECTION_CHANNELS.create)?.(undefined, { profile: {}, credential: { action: "replace", apiKey: "g06-secret-must-not-appear" } }))
+      .rejects.toThrow("The request does not match the connection contract.");
   });
 
   it("keeps the renderer sandboxed without Node integration", () => {

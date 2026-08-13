@@ -45,8 +45,7 @@ function clientFixture() {
     },
     settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing },
     preferences: { getIgnoredDiagnostics: vi.fn(async () => []), replaceIgnoredDiagnostics: replaceIgnored },
-    globalLexicon: { list: vi.fn(async () => []), replace: replaceGlobal },
-    connectionProfiles: { list: vi.fn(async () => []), create: vi.fn(), replace: vi.fn(), delete: vi.fn() }
+    globalLexicon: { list: vi.fn(async () => []), replace: replaceGlobal }
   };
   return { client, replace, remove, replaceGlobal, updatePacing };
 }
@@ -58,7 +57,7 @@ describe("Persistence Lab", () => {
     const { client } = clientFixture();
     render(<PersistenceLabPage client={client} />);
     const ledger = await screen.findByRole("region", { name: "Migration ledger" });
-    expect(within(ledger).getByText("2 / 2")).toBeInTheDocument();
+    expect(within(ledger).getByText("3 / 3")).toBeInTheDocument();
     expect(within(ledger).getByText("/tmp/gates/G04/studynarrator.sqlite")).toBeInTheDocument();
     await userEvent.click(await screen.findByRole("button", { name: /Restart study/u }));
     expect(screen.getByLabelText("Exact script source")).toHaveValue("Résumé\n\nSQL");

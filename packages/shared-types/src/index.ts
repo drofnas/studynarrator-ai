@@ -95,8 +95,8 @@ export interface SystemClient {
 export interface StudyNarratorBridge {
   system: SystemClient;
   persistence: PersistenceClient;
-  connections?: ConnectionsClient;
-  voiceCatalog?: VoiceCatalogClient;
+  connections: ConnectionsClient;
+  voiceCatalog: VoiceCatalogClient;
 }
 
 export * from "./connections.js";

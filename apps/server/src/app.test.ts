@@ -5,7 +5,15 @@ import { join } from "node:path";
 import Database from "better-sqlite3";
 import request from "supertest";
 import { afterEach, describe, expect, it } from "vitest";
-import { createPersistenceService, createSystemService, createUnavailablePersistenceService, type DiagnosticsContext } from "@studynarrator/application";
+import {
+  createConnectionsService,
+  createPersistenceService,
+  createRoutedCredentialStore,
+  createSystemService,
+  createUnavailablePersistenceService,
+  createVoiceCatalogService,
+  type DiagnosticsContext
+} from "@studynarrator/application";
 import { openStudyNarratorRepository, type DatabaseConstructor } from "@studynarrator/persistence";
 import { BoundaryErrorSchema, HealthSchema, ProjectDetailSchema, ProjectSummaryCollectionSchema, RuntimeSchema, SystemDiagnosticsSchema } from "@studynarrator/shared-types";
 import { createExpressApp } from "./app.js";
@@ -55,8 +63,14 @@ async function fixture() {
     ffmpegProbe: { run: async () => ({ status: "pass", executable: "ffmpeg", version: "ffmpeg version test" }) }
   });
   const persistence = createPersistenceService(repository);
+  const connections = createConnectionsService({
+    repository,
+    credentials: createRoutedCredentialStore({ environmentApiKey: null }),
+    context: { client: "web", nodeVersion: "26.7.0", electronVersion: null, activeProfileLocked: false }
+  });
+  const voiceCatalog = createVoiceCatalogService({ repository, bundledCatalogs: new Map() });
   openServices.add(service);
-  return { service, persistence, app: await listen(createExpressApp({ service, persistence, context })) };
+  return { service, persistence, connections, voiceCatalog, app: await listen(createExpressApp({ service, persistence, connections, voiceCatalog, context })) };
 }
 
 describe("Express diagnostics API", () => {
@@ -129,9 +143,9 @@ describe("Express persistence API", () => {
     expect(invalid.error.issues?.some((issue) => issue.path.startsWith("$.") && issue.message.length > 0)).toBe(true);
     expect(JSON.stringify(invalid)).not.toContain("must-not-leak");
 
-    const profile = { id: "safe-profile", name: "Local placeholder", baseUrl: "http://127.0.0.1:8000", defaultModelId: null, defaultVoiceId: null };
-    await request(app).post("/api/connection-profiles").send(profile).expect(201);
-    const conflict = BoundaryErrorSchema.parse((await request(app).post("/api/connection-profiles").send(profile).expect(409)).body as unknown);
+    const profile = { profile: { id: "safe-profile", name: "Local placeholder", baseUrl: "http://127.0.0.1:8000", defaultModelId: null, defaultVoiceId: null }, credential: { action: "keep" } };
+    await request(app).post("/api/connections").send(profile).expect(201);
+    const conflict = BoundaryErrorSchema.parse((await request(app).post("/api/connections").send(profile).expect(409)).body as unknown);
     expect(conflict).toEqual({ error: { code: "CONFLICT", message: "The persistence operation conflicts with existing data." } });
   });
 
@@ -151,5 +165,26 @@ describe("Express persistence API", () => {
     await request(app).get("/api/persistence/status").expect(200);
     const response = BoundaryErrorSchema.parse((await request(app).post("/api/projects").send({ name: "Unavailable" }).expect(503)).body as unknown);
     expect(response).toEqual({ error: { code: "PERSISTENCE_UNAVAILABLE", message: "Persistence is unavailable until the database migration is repaired." } });
+  });
+});
+
+describe("Express connection API", () => {
+  it("uses managed connection routes and rejects Web credential entry without echoing it", async () => {
+    const { app } = await fixture();
+    const secret = "g06-secret-must-not-appear";
+    const rejected = BoundaryErrorSchema.parse((await request(app).post("/api/connections").send({
+      profile: { id: "web-profile", name: "Web", baseUrl: "http://127.0.0.1:8000", defaultModelId: "model", defaultVoiceId: "voice" },
+      credential: { action: "replace", apiKey: secret }
+    }).expect(409)).body as unknown);
+    expect(rejected.error.code).toBe("CONNECTION_POLICY");
+    expect(JSON.stringify(rejected)).not.toContain(secret);
+    await request(app).get("/api/connection-profiles").expect(404);
+
+    await request(app).post("/api/connections").send({
+      profile: { id: "web-profile", name: "Web", baseUrl: "http://127.0.0.1:8000/v1", defaultModelId: "model", defaultVoiceId: "voice" },
+      credential: { action: "keep" }
+    }).expect(201);
+    const profiles = await request(app).get("/api/connections").expect(200);
+    expect(profiles.body).toEqual([expect.objectContaining({ id: "web-profile", baseUrl: "http://127.0.0.1:8000", credentialEntryAllowed: false })]);
   });
 });

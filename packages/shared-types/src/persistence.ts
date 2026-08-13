@@ -13,8 +13,7 @@ import {
   ConnectionProfileAuthoringSchema,
   ConnectionProfileCollectionSchema,
   ConnectionProfileIdInputSchema,
-  type ConnectionProfile,
-  type ConnectionProfileAuthoring
+  type ConnectionProfile
 } from "./connections.js";
 
 export const DATABASE_SCHEMA_VERSION = 3;
@@ -32,11 +31,7 @@ export const PERSISTENCE_CHANNELS = Object.freeze({
   ignoredGet: "preferences.ignored.get",
   ignoredReplace: "preferences.ignored.replace",
   globalLexiconList: "lexicon.global.list",
-  globalLexiconReplace: "lexicon.global.replace",
-  connectionProfilesList: "connection-profiles.list",
-  connectionProfilesCreate: "connection-profiles.create",
-  connectionProfilesReplace: "connection-profiles.replace",
-  connectionProfilesDelete: "connection-profiles.delete"
+  globalLexiconReplace: "lexicon.global.replace"
 } as const);
 
 export const ProjectIdSchema = z.uuid();
@@ -263,20 +258,12 @@ export interface GlobalLexiconClient {
   replace(input: GlobalLexiconReplaceInput): Promise<z.infer<typeof GlobalLexiconEntryCollectionSchema>>;
 }
 
-export interface ConnectionProfilesClient {
-  list(): Promise<ConnectionProfilePlaceholder[]>;
-  create(input: ConnectionProfileAuthoring): Promise<ConnectionProfilePlaceholder>;
-  replace(profileId: string, input: ConnectionProfileAuthoring): Promise<ConnectionProfilePlaceholder>;
-  delete(profileId: string): Promise<void>;
-}
-
 export interface PersistenceClient {
   status(): Promise<PersistenceStatus>;
   projects: ProjectsClient;
   settings: PersistenceSettingsClient;
   preferences: PreferencesClient;
   globalLexicon: GlobalLexiconClient;
-  connectionProfiles: ConnectionProfilesClient;
 }
 
 export const DEFAULT_PROJECT_PARAGRAPH_PAUSE = Object.freeze({

@@ -1,8 +1,4 @@
 import {
-  ConnectionProfileAuthoringSchema,
-  ConnectionProfileCollectionSchema,
-  ConnectionProfilePlaceholderSchema,
-  DurableIdSchema,
   GlobalLexiconEntryCollectionSchema,
   GlobalLexiconReplaceInputSchema,
   IgnoredDiagnosticCollectionSchema,
@@ -14,8 +10,6 @@ import {
   ProjectReplaceInputSchema,
   ProjectSummaryCollectionSchema,
   SystemPacingDefaultsSchema,
-  type ConnectionProfileAuthoring,
-  type ConnectionProfilePlaceholder,
   type GlobalLexiconReplaceInput,
   type IgnoredDiagnosticCollection,
   type PersistenceClient,
@@ -43,10 +37,6 @@ export interface PersistenceRepository {
   replaceIgnoredDiagnostics(input: IgnoredDiagnosticCollection): IgnoredDiagnosticCollection;
   listGlobalLexicon(): LexiconEntry[];
   replaceGlobalLexicon(input: GlobalLexiconReplaceInput): LexiconEntry[];
-  listConnectionProfiles(): ConnectionProfilePlaceholder[];
-  createConnectionProfile(input: ConnectionProfileAuthoring): ConnectionProfilePlaceholder;
-  replaceConnectionProfile(profileId: string, input: ConnectionProfileAuthoring): ConnectionProfilePlaceholder;
-  deleteConnectionProfile(profileId: string): void;
 }
 
 export class PersistenceUnavailableError extends Error {
@@ -102,20 +92,6 @@ export function createPersistenceService(repository: PersistenceRepository): Per
       replace(input) {
         return execute(() => GlobalLexiconEntryCollectionSchema.parse(repository.replaceGlobalLexicon(GlobalLexiconReplaceInputSchema.parse(input))));
       }
-    },
-    connectionProfiles: {
-      list() {
-        return execute(() => ConnectionProfileCollectionSchema.parse(repository.listConnectionProfiles()));
-      },
-      create(input) {
-        return execute(() => ConnectionProfilePlaceholderSchema.parse(repository.createConnectionProfile(ConnectionProfileAuthoringSchema.parse(input))));
-      },
-      replace(profileId, input) {
-        return execute(() => ConnectionProfilePlaceholderSchema.parse(repository.replaceConnectionProfile(DurableIdSchema.parse(profileId), ConnectionProfileAuthoringSchema.parse(input))));
-      },
-      delete(profileId) {
-        return execute(() => { repository.deleteConnectionProfile(DurableIdSchema.parse(profileId)); });
-      }
     }
   };
 }
@@ -130,7 +106,6 @@ export function createUnavailablePersistenceService(statusInput: PersistenceStat
     projects: { list: unavailable, create: unavailable, get: unavailable, replace: unavailable, duplicate: unavailable, delete: unavailable },
     settings: { getPacing: unavailable, updatePacing: unavailable },
     preferences: { getIgnoredDiagnostics: unavailable, replaceIgnoredDiagnostics: unavailable },
-    globalLexicon: { list: unavailable, replace: unavailable },
-    connectionProfiles: { list: unavailable, create: unavailable, replace: unavailable, delete: unavailable }
+    globalLexicon: { list: unavailable, replace: unavailable }
   };
 }
