@@ -1,4 +1,5 @@
 import express, { type ErrorRequestHandler, type Express } from "express";
+import { resolve } from "node:path";
 import {
   ActiveConnectionProfileInputSchema,
   BoundaryErrorSchema,
@@ -29,6 +30,13 @@ import {
   type VoiceCatalogClient
 } from "@studynarrator/shared-types";
 import type { DiagnosticsContext, SystemService } from "@studynarrator/application";
+
+export function attachStaticWebApplication(app: Express, distributionDirectory: string): void {
+  app.use(express.static(distributionDirectory, { index: "index.html" }));
+  app.get("/{*path}", (_request, response) => {
+    response.sendFile(resolve(distributionDirectory, "index.html"));
+  });
+}
 
 export function createExpressApp(options: {
   service: SystemService;

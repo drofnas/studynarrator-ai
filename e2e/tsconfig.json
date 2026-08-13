@@ -1,0 +1,13 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "../dist/types-e2e",
+    "rootDir": "..",
+    "types": ["node", "@playwright/test"]
+  },
+  "include": ["**/*.ts"],
+  "references": [
+    { "path": "../apps/fake-speaches" },
+    { "path": "../apps/server" }
+  ]
+}

@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "tsconfig.tools.json" },
+    { "path": "e2e" },
     { "path": "apps/fake-speaches" },
     { "path": "packages/shared-types" },
     { "path": "packages/core" },

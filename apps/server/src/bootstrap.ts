@@ -90,5 +90,12 @@ export async function createServerServices(environment = process.env) {
     architecture: process.arch,
     dataDirectory
   };
-  return { service, persistence, connections, voiceCatalog, context };
+  return {
+    service,
+    persistence,
+    connections,
+    voiceCatalog,
+    context,
+    dispose: () => repository.close()
+  };
 }
