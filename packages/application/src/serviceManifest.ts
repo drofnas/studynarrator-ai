@@ -28,5 +28,10 @@ export const APPLICATION_SERVICE_MANIFEST = Object.freeze([
   "connections.completeOnboarding",
   "voiceCatalog.get",
   "voiceCatalog.replace",
-  "scratchpad.preview"
+  "scratchpad.preview",
+  "projectPreview.preview",
+  "speechCache.status",
+  "speechCache.clearAll",
+  "speechCache.clearProject",
+  "speechCache.clearEntry"
 ]);

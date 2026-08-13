@@ -9,6 +9,8 @@ export const REST_API_MANIFEST = [
   { method: "PUT", path: "/api/projects/:projectId" },
   { method: "POST", path: "/api/projects/:projectId/duplicate" },
   { method: "DELETE", path: "/api/projects/:projectId" },
+  { method: "POST", path: "/api/projects/:projectId/preview" },
+  { method: "DELETE", path: "/api/projects/:projectId/speech-cache" },
   { method: "GET", path: "/api/settings/pacing" },
   { method: "PUT", path: "/api/settings/pacing" },
   { method: "GET", path: "/api/preferences/ignored-diagnostics" },
@@ -27,7 +29,10 @@ export const REST_API_MANIFEST = [
   { method: "POST", path: "/api/setup/complete" },
   { method: "GET", path: "/api/voice-catalog" },
   { method: "PUT", path: "/api/voice-catalog" },
-  { method: "POST", path: "/api/scratchpad/preview" }
+  { method: "POST", path: "/api/scratchpad/preview" },
+  { method: "GET", path: "/api/speech-cache" },
+  { method: "DELETE", path: "/api/speech-cache" },
+  { method: "DELETE", path: "/api/speech-cache/:cacheKey" }
 ] as const;
 
 export type RestApiOperation = (typeof REST_API_MANIFEST)[number];

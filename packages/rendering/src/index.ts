@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import { chmod, lstat, mkdir, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { chmod, lstat, mkdir, open, readdir, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 export const SPEECH_CACHE_SCHEMA_VERSION = 1;
@@ -8,6 +9,12 @@ export const SPEECH_CHUNKING_VERSION = 1;
 export const MAX_CACHED_SPEECH_BYTES = 5 * 1024 * 1024;
 const CACHE_KEY_PATTERN = /^[a-f0-9]{64}$/u;
 const SHARD_PATTERN = /^[a-f0-9]{2}$/u;
+const MAX_CACHE_METADATA_BYTES = 64 * 1024;
+const METADATA_KEYS = new Set([
+  "schemaVersion", "normalizationVersion", "chunkingVersion", "adapterId", "adapterVersion",
+  "serverIdentityHash", "profileId", "modelId", "voiceId", "speed", "textHash", "responseFormat",
+  "key", "audioChecksum", "byteLength", "createdAt", "lastUsedAt", "projectIds", "scratchpadUsed"
+]);
 
 export interface SpeechCacheKeyInput {
   adapterId: string;
@@ -160,7 +167,8 @@ function isStringArray(value: unknown): value is string[] {
 function parseMetadata(value: unknown): SpeechCacheEntryMetadata | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const item = value as Record<string, unknown>;
-  if (item.schemaVersion !== SPEECH_CACHE_SCHEMA_VERSION
+  if (Object.keys(item).length !== METADATA_KEYS.size || Object.keys(item).some((key) => !METADATA_KEYS.has(key))
+    || item.schemaVersion !== SPEECH_CACHE_SCHEMA_VERSION
     || item.normalizationVersion !== SPEECH_NORMALIZATION_VERSION
     || item.chunkingVersion !== SPEECH_CHUNKING_VERSION
     || typeof item.key !== "string" || !CACHE_KEY_PATTERN.test(item.key)
@@ -229,10 +237,28 @@ async function regularFile(path: string): Promise<boolean> {
   }
 }
 
+async function readBoundedFile(path: string, maximumBytes: number): Promise<Buffer> {
+  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const details = await handle.stat();
+    if (!details.isFile() || details.size < 1 || details.size > maximumBytes) throw new Error("Speech cache file size is invalid.");
+    const bytes = Buffer.allocUnsafe(details.size);
+    let offset = 0;
+    while (offset < bytes.byteLength) {
+      const { bytesRead } = await handle.read(bytes, offset, bytes.byteLength - offset, offset);
+      if (bytesRead === 0) throw new Error("Speech cache file was truncated during its bounded read.");
+      offset += bytesRead;
+    }
+    return bytes;
+  } finally {
+    await handle.close();
+  }
+}
+
 async function safeUnlink(path: string): Promise<void> {
   try {
     const entry = await lstat(path);
-    if (!entry.isFile() || entry.isSymbolicLink()) throw new Error("Refusing to remove an unsafe speech cache path.");
+    if (!entry.isFile() && !entry.isSymbolicLink()) throw new Error("Refusing to remove an unsafe speech cache path.");
     await unlink(path);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -288,8 +314,8 @@ export function createSpeechCache(options: {
     let found = false;
     try {
       const audio = await lstat(entryPaths.audio);
-      if (!audio.isFile() || audio.isSymbolicLink()) throw new Error("Refusing to remove an unsafe speech cache audio path.");
-      bytesFreed = audio.size;
+      if (!audio.isFile() && !audio.isSymbolicLink()) throw new Error("Refusing to remove an unsafe speech cache audio path.");
+      bytesFreed = audio.isSymbolicLink() ? 0 : audio.size;
       found = true;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -317,13 +343,11 @@ export function createSpeechCache(options: {
     }
     try {
       if (signal?.aborted) throw aborted(signal);
-      const audioStat = await stat(entryPaths.audio);
-      if (audioStat.size < 1 || audioStat.size > MAX_CACHED_SPEECH_BYTES) throw new Error("Cached audio size is invalid.");
       const [metadataJson, audioBuffer] = await Promise.all([
-        readFile(entryPaths.metadata, "utf8"),
-        readFile(entryPaths.audio)
+        readBoundedFile(entryPaths.metadata, MAX_CACHE_METADATA_BYTES),
+        readBoundedFile(entryPaths.audio, MAX_CACHED_SPEECH_BYTES)
       ]);
-      const metadata = parseMetadata(JSON.parse(metadataJson) as unknown);
+      const metadata = parseMetadata(JSON.parse(metadataJson.toString("utf8")) as unknown);
       if (!metadata || metadata.key !== key || !metadataMatchesInput(metadata, normalized)
         || metadata.byteLength !== audioBuffer.byteLength || metadata.audioChecksum !== sha256(audioBuffer)) {
         throw new Error("Cached speech metadata failed integrity validation.");
@@ -455,7 +479,7 @@ export function createSpeechCache(options: {
         const entryPaths = paths(key);
         if (!(await regularFile(entryPaths.audio)) || !(await regularFile(entryPaths.metadata))) continue;
         try {
-          const metadata = parseMetadata(JSON.parse(await readFile(entryPaths.metadata, "utf8")) as unknown);
+          const metadata = parseMetadata(JSON.parse((await readBoundedFile(entryPaths.metadata, MAX_CACHE_METADATA_BYTES)).toString("utf8")) as unknown);
           if (!metadata || metadata.key !== key) continue;
           totalBytes += metadata.byteLength;
           entryCount += 1;
@@ -491,7 +515,7 @@ export function createSpeechCache(options: {
         const entryPaths = paths(key);
         if (!(await regularFile(entryPaths.metadata))) continue;
         try {
-          const metadata = parseMetadata(JSON.parse(await readFile(entryPaths.metadata, "utf8")) as unknown);
+          const metadata = parseMetadata(JSON.parse((await readBoundedFile(entryPaths.metadata, MAX_CACHE_METADATA_BYTES)).toString("utf8")) as unknown);
           if (!metadata?.projectIds.includes(projectId)) continue;
           const removed = await removeEntry(key);
           entriesRemoved += removed.entriesRemoved;

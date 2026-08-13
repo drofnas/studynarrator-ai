@@ -10,19 +10,24 @@ const revokeObjectUrl = vi.fn();
 
 function result(index: number): ScratchpadPreviewResult {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
     createdAt: "2026-08-12T12:00:00.000Z",
     connectionProfileId: "profile",
     connectionProfileName: "Local",
     modelId: "model",
     voiceId: `voice-${String(index)}`,
+    voiceLabel: `Voice ${String(index)}`,
     speed: 1,
     originalText: "Speech.",
     readableText: "Speech.",
     transformedText: "Speech.",
     lexiconApplied: false,
     warnings: [],
+    cache: {
+      key: String(index).padStart(64, "a"), status: "hit", byteLength: 3,
+      createdAt: "2026-08-12T12:00:00.000Z", lastUsedAt: "2026-08-12T12:00:00.000Z"
+    },
     audio: { mimeType: "audio/wav", base64: "AQID", byteLength: 3 }
   };
 }

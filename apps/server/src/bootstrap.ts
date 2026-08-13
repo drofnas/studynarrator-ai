@@ -2,10 +2,14 @@ import { resolve } from "node:path";
 import Database from "better-sqlite3";
 import {
   createConnectionsService,
+  createApplicationSpeechCache,
+  createCachedSpeechSynthesis,
   BUNDLED_VOICE_CATALOGS,
   createPersistenceService,
+  createProjectPreviewService,
   createRoutedCredentialStore,
   createScratchpadService,
+  createSpeechCacheService,
   createSystemService,
   createUnavailablePersistenceService,
   createVoiceCatalogService,
@@ -29,12 +33,15 @@ export function resolveServerDataDirectory(environment = process.env): string {
 export async function createServerServices(environment = process.env) {
   const dataDirectory = resolveServerDataDirectory(environment);
   const databasePath = resolve(dataDirectory, "studynarrator.sqlite");
+  const cache = createApplicationSpeechCache(dataDirectory);
+  const speechCache = createSpeechCacheService(cache);
   let storageFailure: StorageCheck | undefined;
   let persistence: PersistenceClient;
   let repository: DiagnosticRepository;
   let connections;
   let voiceCatalog;
   let scratchpad;
+  let projectPreview;
   try {
     const openedRepository = await openStudyNarratorRepository({ Database, databasePath });
     repository = openedRepository;
@@ -53,7 +60,9 @@ export async function createServerServices(environment = process.env) {
       context
     });
     voiceCatalog = createVoiceCatalogService({ repository: openedRepository, bundledCatalogs: BUNDLED_VOICE_CATALOGS });
-    scratchpad = createScratchpadService({ repository: openedRepository, credentials });
+    const speech = createCachedSpeechSynthesis({ repository: openedRepository, credentials, cache });
+    scratchpad = createScratchpadService({ repository: openedRepository, credentials, cache });
+    projectPreview = createProjectPreviewService({ repository: openedRepository, speech });
   } catch (error) {
     if (!(error instanceof MigrationFailureError)) throw error;
     storageFailure = {
@@ -100,6 +109,8 @@ export async function createServerServices(environment = process.env) {
     connections,
     voiceCatalog,
     scratchpad,
+    projectPreview,
+    speechCache,
     context,
     dispose: () => repository.close()
   };

@@ -36,9 +36,11 @@ const voiceCatalog = { get: vi.fn(async () => ({ schemaVersion: 1 as const, mode
 
 function previewResult(text: string): ScratchpadPreviewResult {
   return {
-    schemaVersion: 1, id: crypto.randomUUID(), createdAt: timestamp, connectionProfileId: "local", connectionProfileName: "Local Speaches",
-    modelId: "model", voiceId: "voice", speed: 1, originalText: text, readableText: text, transformedText: text.replace("SQL", "sequel"),
-    lexiconApplied: true, warnings: [], audio: { mimeType: "audio/wav", base64: "AQID", byteLength: 3 }
+    schemaVersion: 2, id: crypto.randomUUID(), createdAt: timestamp, connectionProfileId: "local", connectionProfileName: "Local Speaches",
+    modelId: "model", voiceId: "voice", voiceLabel: "Teacher — voice", speed: 1, originalText: text, readableText: text, transformedText: text.replace("SQL", "sequel"),
+    lexiconApplied: true, warnings: [],
+    cache: { key: "a".repeat(64), status: "miss", byteLength: 3, createdAt: timestamp, lastUsedAt: timestamp },
+    audio: { mimeType: "audio/wav", base64: "AQID", byteLength: 3 }
   };
 }
 

@@ -6,14 +6,12 @@ import {
   type ScratchpadClient,
   type ScratchpadPreviewResult
 } from "@studynarrator/shared-types";
-import {
-  SpeachesSynthesisError,
-  synthesizeSpeech,
-  type SpeachesSynthesisInput,
-  type SpeachesSynthesisResult
-} from "@studynarrator/speaches-adapter";
+import { SpeachesSynthesisError } from "@studynarrator/speaches-adapter";
 import type { ConnectionRepository, CredentialStore } from "./connections.js";
 import type { PersistenceRepository } from "./persistence.js";
+import { createCachedSpeechSynthesis, type CachedSpeechSynthesisRunner } from "./cachedSpeech.js";
+import type { SpeechCache } from "@studynarrator/rendering";
+import { BUNDLED_VOICE_CATALOGS } from "./kokoroCatalog.js";
 
 export type ScratchpadServiceErrorCode =
   | "SCRATCHPAD_ABORTED"
@@ -31,9 +29,7 @@ export class ScratchpadServiceError extends Error {
 
 export interface ScratchpadRepository extends ConnectionRepository, Pick<PersistenceRepository, "listGlobalLexicon"> {}
 
-export interface ScratchpadSynthesisRunner {
-  (input: SpeachesSynthesisInput): Promise<SpeachesSynthesisResult>;
-}
+export type ScratchpadSynthesisRunner = CachedSpeechSynthesisRunner;
 
 function safeSynthesisError(error: unknown): ScratchpadServiceError {
   if (error instanceof ScratchpadServiceError) return error;
@@ -59,11 +55,12 @@ function safeSynthesisError(error: unknown): ScratchpadServiceError {
 export function createScratchpadService(dependencies: {
   repository: ScratchpadRepository;
   credentials: CredentialStore;
+  cache: SpeechCache;
   synthesize?: ScratchpadSynthesisRunner;
   createId?: () => string;
   now?: () => Date;
 }): ScratchpadClient {
-  const runSynthesis = dependencies.synthesize ?? ((input) => synthesizeSpeech(input));
+  const speech = createCachedSpeechSynthesis(dependencies);
   const createId = dependencies.createId ?? randomUUID;
   const now = dependencies.now ?? (() => new Date());
   return {
@@ -79,33 +76,41 @@ export function createScratchpadService(dependencies: {
           entries: dependencies.repository.listGlobalLexicon(),
           applyGlobalLexicon: input.applyGlobalLexicon
         });
-        const reference = dependencies.repository.getConnectionCredentialReference(profile.id);
-        const apiKey = reference ? await dependencies.credentials.read(reference) : null;
-        const synthesized = await runSynthesis({
-          baseUrl: profile.baseUrl,
+        const synthesized = await speech.synthesize({
+          connectionProfileId: profile.id,
           modelId: input.modelId,
           voiceId: input.voiceId,
           speed: input.speed,
           text: projection.transformedText,
-          ...(apiKey === null ? {} : { apiKey }),
-          timeoutSeconds: profile.timeoutSeconds,
-          retryCount: profile.retryCount,
+          usage: { scratchpad: true },
           ...(signal === undefined ? {} : { signal })
         });
+        const voiceLabel = dependencies.repository.getVoiceCatalogOverrides(input.modelId).entries
+          .find((entry) => entry.voiceId === input.voiceId)?.label
+          ?? BUNDLED_VOICE_CATALOGS.get(input.modelId)?.entries.find((entry) => entry.voiceId === input.voiceId)?.label
+          ?? input.voiceId;
         const result: ScratchpadPreviewResult = {
-          schemaVersion: 1,
+          schemaVersion: 2,
           id: createId(),
           createdAt: now().toISOString(),
           connectionProfileId: profile.id,
           connectionProfileName: profile.name,
           modelId: input.modelId,
           voiceId: input.voiceId,
+          voiceLabel,
           speed: input.speed,
           originalText: projection.originalText,
           readableText: projection.readableText,
           transformedText: projection.transformedText,
           lexiconApplied: input.applyGlobalLexicon,
           warnings: projection.warnings,
+          cache: {
+            key: synthesized.key,
+            status: synthesized.status,
+            byteLength: synthesized.metadata.byteLength,
+            createdAt: synthesized.metadata.createdAt,
+            lastUsedAt: synthesized.metadata.lastUsedAt
+          },
           audio: {
             mimeType: "audio/wav",
             base64: Buffer.from(synthesized.bytes).toString("base64"),

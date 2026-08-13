@@ -2,19 +2,24 @@ import { describe, expect, it, vi } from "vitest";
 import { createRestScratchpadClient, resolveScratchpadClient } from "./scratchpadClient.js";
 
 const result = {
-  schemaVersion: 1 as const,
+  schemaVersion: 2 as const,
   id: "00000000-0000-4000-8000-000000000099",
   createdAt: "2026-08-12T12:00:00.000Z",
   connectionProfileId: "profile",
   connectionProfileName: "Local",
   modelId: "model",
   voiceId: "voice",
+  voiceLabel: "Voice",
   speed: 1,
   originalText: "Speech.",
   readableText: "Speech.",
   transformedText: "Speech.",
   lexiconApplied: false,
   warnings: [],
+  cache: {
+    key: "a".repeat(64), status: "hit" as const, byteLength: 3,
+    createdAt: "2026-08-12T12:00:00.000Z", lastUsedAt: "2026-08-12T12:00:00.000Z"
+  },
   audio: { mimeType: "audio/wav" as const, base64: "AQID", byteLength: 3 }
 };
 

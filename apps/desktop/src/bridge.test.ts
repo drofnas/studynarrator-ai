@@ -1,7 +1,22 @@
 import { describe, expect, it, vi } from "vitest";
-import { CONNECTION_CHANNELS, PERSISTENCE_CHANNELS, SCRATCHPAD_CHANNELS, SYSTEM_DIAGNOSTICS_CHANNEL } from "@studynarrator/shared-types";
+import {
+  CONNECTION_CHANNELS,
+  PERSISTENCE_CHANNELS,
+  PROJECT_PREVIEW_CHANNELS,
+  SCRATCHPAD_CHANNELS,
+  SPEECH_CACHE_CHANNELS,
+  SYSTEM_DIAGNOSTICS_CHANNEL
+} from "@studynarrator/shared-types";
 import { createPreloadBridge } from "./bridge.js";
-import { PUBLIC_IPC_CHANNEL_MANIFEST, registerConnectionHandlers, registerDiagnosticsHandler, registerPersistenceHandlers, registerScratchpadHandlers } from "./ipc.js";
+import {
+  PUBLIC_IPC_CHANNEL_MANIFEST,
+  registerConnectionHandlers,
+  registerDiagnosticsHandler,
+  registerPersistenceHandlers,
+  registerProjectPreviewHandlers,
+  registerScratchpadHandlers,
+  registerSpeechCacheHandlers
+} from "./ipc.js";
 import { isApprovedExternalUrl, SECURE_WEB_PREFERENCES } from "./security.js";
 
 const diagnostics = {
@@ -57,22 +72,61 @@ const connections = {
 };
 const voiceCatalog = { get: vi.fn(), replace: vi.fn() };
 const scratchpadResult = {
-  schemaVersion: 1 as const,
+  schemaVersion: 2 as const,
   id: "00000000-0000-4000-8000-000000000099",
   createdAt: "2026-08-12T12:00:00.000Z",
   connectionProfileId: "profile",
   connectionProfileName: "IPC profile",
   modelId: "model",
   voiceId: "voice",
+  voiceLabel: "Voice",
   speed: 1,
   originalText: "Speech.",
   readableText: "Speech.",
   transformedText: "Speech.",
   lexiconApplied: false,
   warnings: [],
+  cache: {
+    key: "a".repeat(64), status: "hit" as const, byteLength: 3,
+    createdAt: "2026-08-12T12:00:00.000Z", lastUsedAt: "2026-08-12T12:00:00.000Z"
+  },
   audio: { mimeType: "audio/wav" as const, base64: "AQID", byteLength: 3 }
 };
 const scratchpad = { preview: vi.fn(async () => scratchpadResult) };
+const projectPreviewResult = {
+  schemaVersion: 1 as const,
+  id: "00000000-0000-4000-8000-000000000098",
+  createdAt: "2026-08-12T12:00:00.000Z",
+  projectId: "00000000-0000-4000-8000-000000000001",
+  mode: "segment" as const,
+  nodeOrdinal: 1,
+  sourceRange: { start: { line: 1, column: 1 }, end: { line: 1, column: 8 } },
+  connectionProfileId: "profile",
+  connectionProfileName: "IPC profile",
+  modelId: "model",
+  speakerId: "narrator" as const,
+  voiceId: "voice",
+  voiceLabel: "Voice",
+  speed: 1,
+  originalText: "Speech.",
+  readableText: "Speech.",
+  transformedText: "Speech.",
+  cache: scratchpadResult.cache,
+  audio: scratchpadResult.audio
+};
+const projectPreview = { preview: vi.fn(async () => projectPreviewResult) };
+const cacheStatus = {
+  contractVersion: 1 as const, entryCount: 1, totalBytes: 3,
+  lastUsedAt: "2026-08-12T12:00:00.000Z", sessionHits: 1, sessionMisses: 0,
+  sessionWrites: 0, sessionCorruptMisses: 0, inFlight: 0
+};
+const cleanupResult = { contractVersion: 1 as const, entriesRemoved: 1, bytesFreed: 3 };
+const speechCache = {
+  status: vi.fn(async () => cacheStatus),
+  clearAll: vi.fn(async () => cleanupResult),
+  clearProject: vi.fn(async () => cleanupResult),
+  clearEntry: vi.fn(async () => cleanupResult)
+};
 
 describe("Electron boundary", () => {
   it("exposes only the validated diagnostics and persistence operations", async () => {
@@ -82,7 +136,7 @@ describe("Electron boundary", () => {
       return persistenceStatus;
     });
     const bridge = createPreloadBridge(invoke);
-    expect(Object.keys(bridge)).toEqual(["system", "persistence", "connections", "voiceCatalog", "scratchpad"]);
+    expect(Object.keys(bridge)).toEqual(["system", "persistence", "connections", "voiceCatalog", "scratchpad", "projectPreview", "speechCache"]);
     expect(Object.keys(bridge.system)).toEqual(["diagnostics"]);
     await expect(bridge.system.diagnostics()).resolves.toEqual(diagnostics);
     expect(invoke).toHaveBeenCalledWith(SYSTEM_DIAGNOSTICS_CHANNEL);
@@ -113,6 +167,8 @@ describe("Electron boundary", () => {
     registerPersistenceHandlers(ipcMain, persistence as never);
     registerConnectionHandlers(ipcMain, connections, voiceCatalog as never);
     registerScratchpadHandlers(ipcMain, scratchpad);
+    registerProjectPreviewHandlers(ipcMain, projectPreview);
+    registerSpeechCacheHandlers(ipcMain, speechCache);
     expect([...handlers.keys()]).toEqual(PUBLIC_IPC_CHANNEL_MANIFEST);
     expect([...handlers.keys()]).not.toContain("persistence.execute");
     await expect(handlers.get(SYSTEM_DIAGNOSTICS_CHANNEL)?.()).resolves.toEqual(diagnostics);
@@ -220,6 +276,8 @@ describe("Electron boundary", () => {
     registerPersistenceHandlers(ipcMain, persistence as never);
     registerConnectionHandlers(ipcMain, connections as never, voiceCatalog as never);
     registerScratchpadHandlers(ipcMain, scratchpad);
+    registerProjectPreviewHandlers(ipcMain, projectPreview);
+    registerSpeechCacheHandlers(ipcMain, speechCache);
     const projectReplace = { name: project.name, description: "", scriptSource: "", connectionProfileId: null, modelId: null, speakerMappings: [], pausePresets: project.pausePresets, paragraphPause: project.paragraphPause, lexiconEntries: [] };
     const mutation = { profile: { id: "profile", name: "IPC profile", baseUrl: "http://127.0.0.1:8000", defaultModelId: "model", defaultVoiceId: "voice" }, credential: { action: "keep" } };
     const inputs: Record<string, unknown> = {
@@ -240,7 +298,10 @@ describe("Electron boundary", () => {
       [CONNECTION_CHANNELS.setupSetActive]: { profileId: "profile" },
       [CONNECTION_CHANNELS.voiceCatalogGet]: { modelId: "model" },
       [CONNECTION_CHANNELS.voiceCatalogReplace]: catalog,
-      [SCRATCHPAD_CHANNELS.preview]: { connectionProfileId: "profile", modelId: "model", voiceId: "voice", speed: 1, text: "Speech.", applyGlobalLexicon: false }
+      [SCRATCHPAD_CHANNELS.preview]: { connectionProfileId: "profile", modelId: "model", voiceId: "voice", speed: 1, text: "Speech.", applyGlobalLexicon: false },
+      [PROJECT_PREVIEW_CHANNELS.preview]: { projectId: project.id, preview: { mode: "segment", nodeOrdinal: 1 } },
+      [SPEECH_CACHE_CHANNELS.clearProject]: { projectId: project.id },
+      [SPEECH_CACHE_CHANNELS.clearEntry]: { cacheKey: "a".repeat(64) }
     };
     const invoked = new Set<string>();
     for (const channel of PUBLIC_IPC_CHANNEL_MANIFEST) {

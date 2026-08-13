@@ -18,19 +18,24 @@ describe("scratchpad contracts", () => {
 
   it("validates portable base64 audio and its decoded byte count", () => {
     const result = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       id: "00000000-0000-4000-8000-000000000001",
       createdAt: "2026-08-12T12:00:00.000Z",
       connectionProfileId: "local",
       connectionProfileName: "Local Speaches",
       modelId: "model",
       voiceId: "voice",
+      voiceLabel: "Friendly Voice",
       speed: 1,
       originalText: "SQL",
       readableText: "SQL",
       transformedText: "sequel",
       lexiconApplied: true,
       warnings: [],
+      cache: {
+        key: "a".repeat(64), status: "miss", byteLength: 3,
+        createdAt: "2026-08-12T12:00:00.000Z", lastUsedAt: "2026-08-12T12:00:00.000Z"
+      },
       audio: { mimeType: "audio/wav", base64: "AQID", byteLength: 3 }
     };
     expect(ScratchpadPreviewResultSchema.parse(result)).toEqual(result);

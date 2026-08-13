@@ -105,7 +105,7 @@ describe("content-addressed speech cache", () => {
     await expect(cache.status()).resolves.toMatchObject({ entryCount: 0, totalBytes: 0 });
   });
 
-  it("refuses symlinked cache entries", async () => {
+  it("treats a symlinked cache entry as a safe miss and replaces only the link", async () => {
     const { cache, rootDirectory } = await fixture();
     const key = createSpeechCacheKey(input);
     const shard = join(rootDirectory, key.slice(0, 2));
@@ -115,6 +115,9 @@ describe("content-addressed speech cache", () => {
     const entry = join(shard, `${key}.wav`);
     await (await import("node:fs/promises")).unlink(entry);
     await symlink(target, entry);
-    await expect(cache.clearEntry(key)).rejects.toThrow("unsafe");
+    const synthesize = vi.fn(async () => Uint8Array.from([82, 2]));
+    await expect(cache.getOrCreate(input, {}, synthesize)).resolves.toMatchObject({ status: "miss" });
+    expect(synthesize).toHaveBeenCalledOnce();
+    expect(await readFile(target)).toEqual(Buffer.from([82]));
   });
 });

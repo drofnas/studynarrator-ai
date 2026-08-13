@@ -10,6 +10,8 @@ import {
   PERSISTENCE_CHANNELS,
   PersistenceStatusSchema,
   ProjectDetailSchema,
+  PROJECT_PREVIEW_CHANNELS,
+  ProjectPreviewResultSchema,
   ProjectSummaryCollectionSchema,
   SYSTEM_DIAGNOSTICS_CHANNEL,
   SystemDiagnosticsSchema,
@@ -17,11 +19,16 @@ import {
   RedactedConnectionDiagnosticsSchema,
   SCRATCHPAD_CHANNELS,
   ScratchpadPreviewResultSchema,
+  SPEECH_CACHE_CHANNELS,
+  SpeechCacheCleanupResultSchema,
+  SpeechCacheStatusSchema,
   SpeechCatalogSchema,
   VoiceCatalogSchema,
   type ConnectionsClient,
   type PersistenceClient,
+  type ProjectPreviewClient,
   type ScratchpadClient,
+  type SpeechCacheClient,
   type StudyNarratorBridge,
   type SystemDiagnostics,
   type VoiceCatalogClient
@@ -76,6 +83,21 @@ export function createPreloadBridge(invoke: (channel: string, input?: unknown) =
       return ScratchpadPreviewResultSchema.parse(await invoke(SCRATCHPAD_CHANNELS.preview, input));
     }
   };
+  const projectPreview: ProjectPreviewClient = {
+    async preview(projectId, input) {
+      return ProjectPreviewResultSchema.parse(await invoke(PROJECT_PREVIEW_CHANNELS.preview, { projectId, preview: input }));
+    }
+  };
+  const speechCache: SpeechCacheClient = {
+    async status() { return SpeechCacheStatusSchema.parse(await invoke(SPEECH_CACHE_CHANNELS.status)); },
+    async clearAll() { return SpeechCacheCleanupResultSchema.parse(await invoke(SPEECH_CACHE_CHANNELS.clearAll)); },
+    async clearProject(projectId) {
+      return SpeechCacheCleanupResultSchema.parse(await invoke(SPEECH_CACHE_CHANNELS.clearProject, { projectId }));
+    },
+    async clearEntry(cacheKey) {
+      return SpeechCacheCleanupResultSchema.parse(await invoke(SPEECH_CACHE_CHANNELS.clearEntry, { cacheKey }));
+    }
+  };
   return Object.freeze({
     system: Object.freeze({
       async diagnostics(): Promise<SystemDiagnostics> {
@@ -85,6 +107,8 @@ export function createPreloadBridge(invoke: (channel: string, input?: unknown) =
     persistence: Object.freeze(persistence),
     connections: Object.freeze(connections),
     voiceCatalog: Object.freeze(voiceCatalog),
-    scratchpad: Object.freeze(scratchpad)
+    scratchpad: Object.freeze(scratchpad),
+    projectPreview: Object.freeze(projectPreview),
+    speechCache: Object.freeze(speechCache)
   });
 }

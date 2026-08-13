@@ -18,6 +18,9 @@ import {
   ProjectDetailSchema,
   ProjectDuplicateRequestSchema,
   ProjectIdInputSchema,
+  PROJECT_PREVIEW_CHANNELS,
+  ProjectPreviewRequestSchema,
+  ProjectPreviewResultSchema,
   ProjectReplaceRequestSchema,
   ProjectSummaryCollectionSchema,
   SYSTEM_DIAGNOSTICS_CHANNEL,
@@ -28,11 +31,18 @@ import {
   ScratchpadPreviewInputSchema,
   ScratchpadPreviewResultSchema,
   SpeechCatalogSchema,
+  SPEECH_CACHE_CHANNELS,
+  SpeechCacheCleanupResultSchema,
+  SpeechCacheKeyInputSchema,
+  SpeechCacheProjectInputSchema,
+  SpeechCacheStatusSchema,
   VoiceCatalogModelInputSchema,
   VoiceCatalogSchema,
   type ConnectionsClient,
   type PersistenceClient,
+  type ProjectPreviewClient,
   type ScratchpadClient,
+  type SpeechCacheClient,
   type VoiceCatalogClient
 } from "@studynarrator/shared-types";
 import type { DiagnosticsContext, SystemService } from "@studynarrator/application";
@@ -41,7 +51,9 @@ export const PUBLIC_IPC_CHANNEL_MANIFEST = Object.freeze([
   SYSTEM_DIAGNOSTICS_CHANNEL,
   ...Object.values(PERSISTENCE_CHANNELS),
   ...Object.values(CONNECTION_CHANNELS),
-  ...Object.values(SCRATCHPAD_CHANNELS)
+  ...Object.values(SCRATCHPAD_CHANNELS),
+  ...Object.values(PROJECT_PREVIEW_CHANNELS),
+  ...Object.values(SPEECH_CACHE_CHANNELS)
 ]);
 
 interface IpcMainLike {
@@ -167,5 +179,51 @@ export function registerScratchpadHandlers(ipcMain: IpcMainLike, scratchpad: Scr
       throw new Error("StudyNarrator could not complete speech synthesis.");
       /* eslint-enable preserve-caught-error */
     }
+  });
+}
+
+export function registerProjectPreviewHandlers(ipcMain: IpcMainLike, projectPreview: ProjectPreviewClient) {
+  ipcMain.removeHandler(PROJECT_PREVIEW_CHANNELS.preview);
+  ipcMain.handle(PROJECT_PREVIEW_CHANNELS.preview, async (_event, input) => {
+    try {
+      const request = ProjectPreviewRequestSchema.parse(input);
+      return ProjectPreviewResultSchema.parse(await projectPreview.preview(request.projectId, request.preview));
+    } catch (error) {
+      const record = error && typeof error === "object" ? error as Record<string, unknown> : undefined;
+      /* eslint-disable preserve-caught-error */
+      if (record && Array.isArray(record.issues)) throw new Error("The request does not match the project preview contract.");
+      if (typeof record?.code === "string" && record.code.startsWith("PROJECT_PREVIEW_") && typeof record.message === "string") {
+        throw new Error(record.message);
+      }
+      throw new Error("StudyNarrator could not complete the project preview.");
+      /* eslint-enable preserve-caught-error */
+    }
+  });
+}
+
+export function registerSpeechCacheHandlers(ipcMain: IpcMainLike, speechCache: SpeechCacheClient) {
+  const handle = (channel: string, listener: (input: unknown) => Promise<unknown>) => {
+    ipcMain.removeHandler(channel);
+    ipcMain.handle(channel, async (_event, input) => {
+      try {
+        return await listener(input);
+      } catch (error) {
+        const record = error && typeof error === "object" ? error as Record<string, unknown> : undefined;
+        /* eslint-disable preserve-caught-error */
+        if (record && Array.isArray(record.issues)) throw new Error("The request does not match the speech cache contract.");
+        throw new Error("StudyNarrator could not complete the speech cache operation.");
+        /* eslint-enable preserve-caught-error */
+      }
+    });
+  };
+  handle(SPEECH_CACHE_CHANNELS.status, async () => SpeechCacheStatusSchema.parse(await speechCache.status()));
+  handle(SPEECH_CACHE_CHANNELS.clearAll, async () => SpeechCacheCleanupResultSchema.parse(await speechCache.clearAll()));
+  handle(SPEECH_CACHE_CHANNELS.clearProject, async (input) => {
+    const { projectId } = SpeechCacheProjectInputSchema.parse(input);
+    return SpeechCacheCleanupResultSchema.parse(await speechCache.clearProject(projectId));
+  });
+  handle(SPEECH_CACHE_CHANNELS.clearEntry, async (input) => {
+    const { cacheKey } = SpeechCacheKeyInputSchema.parse(input);
+    return SpeechCacheCleanupResultSchema.parse(await speechCache.clearEntry(cacheKey));
   });
 }
