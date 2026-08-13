@@ -312,7 +312,7 @@ describe("Express persistence API", () => {
       contractVersion: 4,
       state: "unavailable",
       databaseSchemaVersion: 1,
-      targetDatabaseSchemaVersion: 5,
+      targetDatabaseSchemaVersion: 6,
       databasePath: "/tmp/studynarrator.sqlite",
       latestBackupPath: "/tmp/backups/recovery.sqlite",
       code: "MIGRATION_FAILED",
@@ -495,7 +495,7 @@ describe("REST API operation manifest", () => {
     expect(JSON.stringify(responses.map((response) => response.body as unknown))).not.toContain(secret);
 
     const unavailable = createUnavailablePersistenceService({
-      contractVersion: 4, state: "unavailable", databaseSchemaVersion: 2, targetDatabaseSchemaVersion: 5,
+      contractVersion: 4, state: "unavailable", databaseSchemaVersion: 2, targetDatabaseSchemaVersion: 6,
       databasePath: "/redacted/data.sqlite", latestBackupPath: null, code: "MIGRATION_FAILED", message: "Unavailable."
     });
     const degraded = await listen(createExpressApp({ service, persistence: unavailable, context }));

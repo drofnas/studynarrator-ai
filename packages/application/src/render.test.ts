@@ -22,6 +22,7 @@ class MemoryRepository implements RenderRepository {
   jobs = new Map<string, RenderJob>();
   artifacts = new Map<string, RenderArtifact & { path: string }>();
   segments = new Map<string, RenderSegment>();
+  segmentPaths = new Map<string, string | null>();
   constructor(readonly profile: ConnectionProfilePlaceholder) {}
   getConnectionProfile() { return this.profile; }
   createRenderJob(job: RenderJob, segments: RenderSegment[]) { this.jobs.set(job.id, job); segments.forEach((item) => this.segments.set(`${item.renderId}:${String(item.ordinal)}`, item)); return job; }
@@ -30,7 +31,9 @@ class MemoryRepository implements RenderRepository {
   findActiveRenderJob(planId: string) { return [...this.jobs.values()].find((job) => job.planId === planId && !["complete", "failed", "canceled"].includes(job.state)) ?? null; }
   listRecoverableRenderJobs() { return [...this.jobs.values()].filter((job) => !["complete", "failed", "canceled"].includes(job.state)); }
   updateRenderJob(job: RenderJob) { this.jobs.set(job.id, job); return job; }
-  updateRenderSegment(item: RenderSegment) { this.segments.set(`${item.renderId}:${String(item.ordinal)}`, item); return item; }
+  updateRenderSegment(item: RenderSegment, path: string | null = null) { const key = `${item.renderId}:${String(item.ordinal)}`; this.segments.set(key, item); this.segmentPaths.set(key, path); return item; }
+  listRenderSegments(renderId: string) { return [...this.segments.values()].filter((item) => item.renderId === renderId).sort((left, right) => left.ordinal - right.ordinal); }
+  getRenderSegmentPath(renderId: string, ordinal: number) { const key = `${renderId}:${String(ordinal)}`; const item = this.segments.get(key); if (!item) throw new Error("missing"); return { segment: item, path: this.segmentPaths.get(key) ?? null }; }
   replaceRenderArtifacts(renderId: string, values: Array<RenderArtifact & { path: string }>) { values.forEach((item) => this.artifacts.set(item.id, item)); return values.filter((item) => item.renderId === renderId).map(({ path: _path, ...item }) => item); }
   listRenderArtifacts(renderId: string) { return [...this.artifacts.values()].filter((item) => item.renderId === renderId).map(({ path: _path, ...item }) => item); }
   getRenderArtifactPath(id: string) { const item = this.artifacts.get(id); if (!item) throw new Error("missing"); const { path, ...artifact } = item; return { artifact, path }; }
@@ -95,7 +98,7 @@ async function fixture() {
     } },
     createId: () => `00000000-0000-4000-8000-${String(nextId++).padStart(12, "0")}`
   });
-  return { service, repository, plan, projectId };
+  return { service, repository, plan, projectId, dataDirectory };
 }
 
 async function terminal(service: Awaited<ReturnType<typeof createRenderService>>, renderId: string): Promise<RenderJob> {
@@ -109,7 +112,7 @@ async function terminal(service: Awaited<ReturnType<typeof createRenderService>>
 
 describe("render coordinator", () => {
   it("synthesizes, normalizes, encodes, validates, and atomically publishes the v1 bundle", async () => {
-    const { service, plan } = await fixture();
+    const { service, plan, repository, dataDirectory } = await fixture();
     const started = await service.start(plan.id);
     await expect(service.start(plan.id)).resolves.toHaveProperty("id", started.id);
     const completed = await terminal(service, started.id);
@@ -122,6 +125,15 @@ describe("render coordinator", () => {
     const probe = await probeAudioFile({ inputPath: resolved.path });
     expect(probe.decodable).toBe(true);
     expect(probe.formatName).toContain("mp3");
+    const [reviewSegment] = repository.listRenderSegments(started.id);
+    expect(reviewSegment).toMatchObject({ state: "complete", audioFileName: "000001.wav", audioSizeBytes: expect.any(Number), audioChecksum: expect.stringMatching(/^[a-f0-9]{64}$/u) });
+    const retained = repository.getRenderSegmentPath(started.id, 1);
+    expect(retained.path).toBe(join(dataDirectory, "renders", started.id, "segments", "000001.wav"));
+    expect((await readFile(retained.path!)).byteLength).toBe(reviewSegment!.audioSizeBytes);
+    const waveform = JSON.parse(await readFile(join(dataDirectory, "renders", started.id, "waveform.json"), "utf8")) as { sourceChecksum: string; peaks: number[] };
+    expect(waveform.sourceChecksum).toBe(mp3.checksum);
+    expect(waveform.peaks.length).toBeGreaterThan(0);
+    expect(waveform.peaks.length).toBeLessThanOrEqual(1_024);
     const checksums = artifacts.find(({ type }) => type === "checksums")!;
     expect(await readFile((await service.resolveArtifact(checksums.id)).path, "utf8")).toContain(mp3.checksum);
     await service.close();

@@ -82,9 +82,87 @@ export const RenderSegmentSchema = z.object({
   state: z.enum(["pending", "complete", "failed", "skipped"]),
   cacheStatus: z.enum(["hit", "miss"]).nullable(),
   audioDurationMs: z.number().int().nonnegative().nullable(),
+  audioFileName: z.string().min(1).max(255).nullable(),
+  audioSizeBytes: z.number().int().positive().nullable(),
+  audioChecksum: z.string().regex(/^[a-f0-9]{64}$/u).nullable(),
   error: RenderErrorSchema.nullable()
-}).strict();
+}).strict().superRefine((segment, context) => {
+  const audioFields = [segment.audioFileName, segment.audioSizeBytes, segment.audioChecksum];
+  const populated = audioFields.filter((value) => value !== null).length;
+  if (populated !== 0 && populated !== audioFields.length) {
+    context.addIssue({ code: "custom", message: "Render segment audio metadata must be complete.", path: ["audioFileName"] });
+  }
+  if (populated > 0 && segment.type !== "speech") {
+    context.addIssue({ code: "custom", message: "Only speech segments retain review audio.", path: ["type"] });
+  }
+});
 export type RenderSegment = z.infer<typeof RenderSegmentSchema>;
+
+const RenderHistorySegmentBaseSchema = z.object({
+  renderId: RenderIdSchema,
+  ordinal: z.number().int().positive(),
+  state: z.enum(["pending", "complete", "failed", "skipped"]),
+  sectionTitle: z.string().min(1).nullable(),
+  sourceRange: z.object({
+    start: z.object({ line: z.number().int().positive(), column: z.number().int().positive() }).strict(),
+    end: z.object({ line: z.number().int().positive(), column: z.number().int().positive() }).strict()
+  }).strict().nullable(),
+  audioDurationMs: z.number().int().nonnegative().nullable(),
+  cacheStatus: z.enum(["hit", "miss"]).nullable(),
+  audio: z.discriminatedUnion("status", [
+    z.object({
+      status: z.literal("available"),
+      mimeType: z.literal("audio/wav"),
+      sizeBytes: z.number().int().positive(),
+      checksum: z.string().regex(/^[a-f0-9]{64}$/u)
+    }).strict(),
+    z.object({ status: z.literal("unavailable") }).strict()
+  ]),
+  error: RenderErrorSchema.nullable()
+});
+
+export const RenderHistorySegmentSchema = z.discriminatedUnion("type", [
+  RenderHistorySegmentBaseSchema.extend({
+    type: z.literal("section"),
+    title: z.string().min(1),
+    audio: z.object({ status: z.literal("unavailable") }).strict()
+  }).strict(),
+  RenderHistorySegmentBaseSchema.extend({
+    type: z.literal("speech"),
+    speakerId: z.string().min(1),
+    speakerLabel: z.string().min(1),
+    voiceId: z.string().min(1),
+    readableText: z.string().min(1),
+    ttsText: z.string().min(1)
+  }).strict(),
+  RenderHistorySegmentBaseSchema.extend({
+    type: z.literal("pause"),
+    pauseId: z.string().min(1).nullable(),
+    pauseKind: z.enum(["explicit", "automatic"]),
+    reason: z.enum(["explicit", "paragraph", "speakerChange", "section"]),
+    durationMs: z.number().int().nonnegative(),
+    audio: z.object({ status: z.literal("unavailable") }).strict()
+  }).strict()
+]);
+export type RenderHistorySegment = z.infer<typeof RenderHistorySegmentSchema>;
+export const RenderHistorySegmentCollectionSchema = z.array(RenderHistorySegmentSchema);
+
+export const RenderWaveformSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("available"),
+    renderId: RenderIdSchema,
+    sourceChecksum: z.string().regex(/^[a-f0-9]{64}$/u),
+    durationMs: z.number().int().nonnegative(),
+    sampleRate: z.number().int().positive(),
+    peaks: z.array(z.number().int().min(0).max(255)).max(1_024)
+  }).strict(),
+  z.object({
+    status: z.literal("unavailable"),
+    renderId: RenderIdSchema,
+    reason: z.enum(["renderIncomplete", "audioMissing", "extractionFailed"])
+  }).strict()
+]);
+export type RenderWaveform = z.infer<typeof RenderWaveformSchema>;
 
 export const RenderArtifactTypeSchema = z.enum([
   "mp3", "originalScript", "readableTranscript", "ttsTranscript",
