@@ -16,7 +16,7 @@ const storagePass = {
   status: "pass",
   driver: "better-sqlite3",
   sqliteVersion: "3.50.0",
-  migrationVersion: 3,
+  migrationVersion: 4,
   databasePath: "/tmp/studynarrator/studynarrator.sqlite",
   latestBackupPath: null,
   markerKey: "runtime.storage-self-test",

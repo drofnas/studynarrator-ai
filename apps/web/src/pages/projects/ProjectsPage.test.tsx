@@ -13,7 +13,7 @@ import { ProjectsPage } from "./ProjectsPage.js";
 import { ConnectionProvider } from "@/features/connections/ConnectionProvider.js";
 
 const project: ProjectDetail = {
-  contractVersion: 3,
+  contractVersion: 4,
   id: "00000000-0000-4000-8000-000000000001",
   name: "Authoring study",
   description: "Offline fixture",
@@ -26,7 +26,7 @@ const project: ProjectDetail = {
     { pauseId: "pause_short", durationMs: 350, description: "Brief" },
     { pauseId: "pause_medium", durationMs: 750, description: "Paragraph" }
   ],
-  paragraphPause: { enabled: true, pauseId: "pause_medium", durationMs: 750 },
+  transitionPauses: { paragraph: { mode: "preset", pauseId: "pause_medium" }, speakerChange: { mode: "none" }, section: { mode: "none" } },
   lexiconEntries: [{
     id: "project-sql", scope: "project", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel",
     caseSensitive: true, wholeWord: true, priority: 0, enabled: true, notes: "", createdAt: "2026-08-12T12:00:00.000Z", updatedAt: "2026-08-12T12:00:00.000Z"

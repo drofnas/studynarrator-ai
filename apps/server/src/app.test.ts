@@ -220,7 +220,7 @@ describe("Express persistence API", () => {
   it("creates, replaces, reads, lists, and deletes complete project aggregates", async () => {
     const { app } = await fixture();
     const created = ProjectDetailSchema.parse((await request(app).post("/api/projects").send({ name: "REST study" }).expect(201)).body as unknown);
-    expect(created).toMatchObject({ name: "REST study", paragraphPause: { pauseId: "pause_medium", durationMs: 750 } });
+    expect(created).toMatchObject({ name: "REST study", transitionPauses: { paragraph: { mode: "preset", pauseId: "pause_medium" } } });
 
     const source = "Résumé\r\n\r\nSQL 🧠";
     const replaced = ProjectDetailSchema.parse((await request(app).put(`/api/projects/${created.id}`).send({
@@ -230,7 +230,7 @@ describe("Express persistence API", () => {
       connectionProfileId: null,
       speakerMappings: [],
       pausePresets: created.pausePresets,
-      paragraphPause: created.paragraphPause,
+      transitionPauses: created.transitionPauses,
       lexiconEntries: [{ scope: "project", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel" }]
     }).expect(200)).body as unknown);
     expect(replaced.scriptSource).toBe(source);
@@ -262,10 +262,10 @@ describe("Express persistence API", () => {
   it("keeps diagnostics status available while degraded writes return 503", async () => {
     const { service } = await fixture();
     const persistence = createUnavailablePersistenceService({
-      contractVersion: 3,
+      contractVersion: 4,
       state: "unavailable",
       databaseSchemaVersion: 1,
-      targetDatabaseSchemaVersion: 3,
+      targetDatabaseSchemaVersion: 4,
       databasePath: "/tmp/studynarrator.sqlite",
       latestBackupPath: "/tmp/backups/recovery.sqlite",
       code: "MIGRATION_FAILED",
@@ -349,7 +349,7 @@ describe("REST API operation manifest", () => {
       modelId: null,
       speakerMappings: [],
       pausePresets: created.pausePresets,
-      paragraphPause: created.paragraphPause,
+      transitionPauses: created.transitionPauses,
       lexiconEntries: []
     };
     ProjectDetailSchema.parse((await call("PUT", `/api/projects/${created.id}`, 200, replacement)).body as unknown);
@@ -424,7 +424,7 @@ describe("REST API operation manifest", () => {
     expect(JSON.stringify(responses.map((response) => response.body as unknown))).not.toContain(secret);
 
     const unavailable = createUnavailablePersistenceService({
-      contractVersion: 3, state: "unavailable", databaseSchemaVersion: 2, targetDatabaseSchemaVersion: 3,
+      contractVersion: 4, state: "unavailable", databaseSchemaVersion: 2, targetDatabaseSchemaVersion: 4,
       databasePath: "/redacted/data.sqlite", latestBackupPath: null, code: "MIGRATION_FAILED", message: "Unavailable."
     });
     const degraded = await listen(createExpressApp({ service, persistence: unavailable, context }));

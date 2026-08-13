@@ -4,7 +4,6 @@ import {
   IgnoredDiagnosticSchema,
   LexiconEntryAuthoringSchema,
   LexiconEntrySchema,
-  ParagraphPauseConfigurationSchema,
   PauseIdSchema,
   SpeakerIdSchema
 } from "@studynarrator/core";
@@ -16,8 +15,8 @@ import {
   type ConnectionProfile
 } from "./connections.js";
 
-export const DATABASE_SCHEMA_VERSION = 3;
-export const PERSISTENCE_CONTRACT_VERSION = 3;
+export const DATABASE_SCHEMA_VERSION = 4;
+export const PERSISTENCE_CONTRACT_VERSION = 4;
 export const PERSISTENCE_CHANNELS = Object.freeze({
   status: "persistence.status",
   projectsList: "projects.list",
@@ -55,6 +54,20 @@ export const PausePresetSchema = z.object({
   description: z.string().max(500)
 }).strict();
 export type PausePreset = z.infer<typeof PausePresetSchema>;
+
+export const TransitionPauseSettingSchema = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("none") }).strict(),
+  z.object({ mode: z.literal("preset"), pauseId: PauseIdSchema }).strict(),
+  z.object({ mode: z.literal("duration"), durationMs: z.number().int().min(0).max(30_000) }).strict()
+]);
+export type TransitionPauseSetting = z.infer<typeof TransitionPauseSettingSchema>;
+
+export const TransitionPauseConfigurationSchema = z.object({
+  paragraph: TransitionPauseSettingSchema,
+  speakerChange: TransitionPauseSettingSchema,
+  section: TransitionPauseSettingSchema
+}).strict();
+export type TransitionPauseConfiguration = z.infer<typeof TransitionPauseConfigurationSchema>;
 
 export const SystemPacingDefaultsSchema = z.object({
   enabled: z.boolean(),
@@ -140,25 +153,29 @@ const ProjectAggregateShape = {
   modelId: z.string().trim().min(1).max(500).nullable().default(null),
   speakerMappings: SpeakerMappingCollectionSchema,
   pausePresets: PausePresetCollectionSchema,
-  paragraphPause: ParagraphPauseConfigurationSchema
+  transitionPauses: TransitionPauseConfigurationSchema
 } as const;
 
-function validateParagraphPreset(
-  project: { pausePresets: PausePreset[]; paragraphPause: z.infer<typeof ParagraphPauseConfigurationSchema> },
+function validateTransitionPresets(
+  project: { pausePresets: PausePreset[]; transitionPauses: TransitionPauseConfiguration },
   context: z.RefinementCtx
 ) {
-  const preset = project.pausePresets.find((candidate) => candidate.pauseId === project.paragraphPause.pauseId);
-  if (!preset) {
-    context.addIssue({ code: "custom", message: "Paragraph pacing must reference a project pause preset.", path: ["paragraphPause", "pauseId"] });
-  } else if (preset.durationMs !== project.paragraphPause.durationMs) {
-    context.addIssue({ code: "custom", message: "Paragraph pacing duration must match its referenced pause preset.", path: ["paragraphPause", "durationMs"] });
+  for (const [boundary, setting] of Object.entries(project.transitionPauses)) {
+    if (setting.mode !== "preset") continue;
+    if (!project.pausePresets.some((candidate) => candidate.pauseId === setting.pauseId)) {
+      context.addIssue({
+        code: "custom",
+        message: `${boundary} transition pacing must reference a project pause preset.`,
+        path: ["transitionPauses", boundary, "pauseId"]
+      });
+    }
   }
 }
 
 export const ProjectReplaceInputSchema = z.object({
   ...ProjectAggregateShape,
   lexiconEntries: ProjectLexiconAuthoringCollectionSchema
-}).strict().superRefine(validateParagraphPreset);
+}).strict().superRefine(validateTransitionPresets);
 export type ProjectReplaceInput = z.input<typeof ProjectReplaceInputSchema>;
 
 export const ProjectSummarySchema = z.object({
@@ -179,7 +196,7 @@ export const ProjectDetailSchema = z.object({
   lexiconEntries: z.array(ProjectLexiconEntrySchema),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema
-}).strict().superRefine(validateParagraphPreset);
+}).strict().superRefine(validateTransitionPresets);
 export type ProjectDetail = z.infer<typeof ProjectDetailSchema>;
 
 export const ProjectSummaryCollectionSchema = z.array(ProjectSummarySchema);

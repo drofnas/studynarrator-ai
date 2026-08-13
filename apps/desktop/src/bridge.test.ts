@@ -42,10 +42,10 @@ const diagnostics = {
 } as const;
 
 const persistenceStatus = {
-  contractVersion: 3 as const,
+  contractVersion: 4 as const,
   state: "ready" as const,
-  databaseSchemaVersion: 3 as const,
-  targetDatabaseSchemaVersion: 3 as const,
+  databaseSchemaVersion: 4 as const,
+  targetDatabaseSchemaVersion: 4 as const,
   databasePath: "/tmp/studynarrator.sqlite",
   latestBackupPath: null
 };
@@ -182,7 +182,7 @@ describe("Electron boundary", () => {
   it("invokes every public IPC contract with schema-valid input and output", async () => {
     const timestamp = "2026-08-12T12:00:00.000Z";
     const project = {
-      contractVersion: 3 as const,
+      contractVersion: 4 as const,
       id: "00000000-0000-4000-8000-000000000001",
       name: "IPC project",
       description: "",
@@ -192,7 +192,7 @@ describe("Electron boundary", () => {
       modelId: null,
       speakerMappings: [],
       pausePresets: [{ pauseId: "pause_medium", durationMs: 750, description: "Paragraph" }],
-      paragraphPause: { enabled: true, pauseId: "pause_medium" as const, durationMs: 750 },
+      transitionPauses: { paragraph: { mode: "preset" as const, pauseId: "pause_medium" as const }, speakerChange: { mode: "none" as const }, section: { mode: "none" as const } },
       lexiconEntries: [],
       createdAt: timestamp,
       updatedAt: timestamp
@@ -278,7 +278,7 @@ describe("Electron boundary", () => {
     registerScratchpadHandlers(ipcMain, scratchpad);
     registerProjectPreviewHandlers(ipcMain, projectPreview);
     registerSpeechCacheHandlers(ipcMain, speechCache);
-    const projectReplace = { name: project.name, description: "", scriptSource: "", connectionProfileId: null, modelId: null, speakerMappings: [], pausePresets: project.pausePresets, paragraphPause: project.paragraphPause, lexiconEntries: [] };
+    const projectReplace = { name: project.name, description: "", scriptSource: "", connectionProfileId: null, modelId: null, speakerMappings: [], pausePresets: project.pausePresets, transitionPauses: project.transitionPauses, lexiconEntries: [] };
     const mutation = { profile: { id: "profile", name: "IPC profile", baseUrl: "http://127.0.0.1:8000", defaultModelId: "model", defaultVoiceId: "voice" }, credential: { action: "keep" } };
     const inputs: Record<string, unknown> = {
       [PERSISTENCE_CHANNELS.projectsCreate]: { name: "IPC project" },

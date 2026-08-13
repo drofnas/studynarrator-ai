@@ -4,7 +4,7 @@ import { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
 import { createPersistenceService, createUnavailablePersistenceService, PersistenceUnavailableError } from "./persistence.js";
 
 const project = {
-  contractVersion: 3 as const,
+  contractVersion: 4 as const,
   id: "00000000-0000-4000-8000-000000000001",
   name: "Persisted study",
   description: "",
@@ -14,7 +14,7 @@ const project = {
   modelId: null,
   speakerMappings: [],
   pausePresets: [{ pauseId: "pause_medium", durationMs: 750, description: "Paragraph" }],
-  paragraphPause: { enabled: true, pauseId: "pause_medium" as const, durationMs: 750 },
+  transitionPauses: { paragraph: { mode: "preset" as const, pauseId: "pause_medium" as const }, speakerChange: { mode: "none" as const }, section: { mode: "none" as const } },
   lexiconEntries: [],
   createdAt: "2026-08-12T12:00:00.000Z",
   updatedAt: "2026-08-12T12:00:00.000Z"
@@ -23,10 +23,10 @@ const project = {
 function repository() {
   return {
     status: vi.fn(() => ({
-      contractVersion: 3 as const,
+      contractVersion: 4 as const,
       state: "ready" as const,
-      databaseSchemaVersion: 3 as const,
-      targetDatabaseSchemaVersion: 3 as const,
+      databaseSchemaVersion: 4 as const,
+      targetDatabaseSchemaVersion: 4 as const,
       databasePath: "/tmp/studynarrator.sqlite",
       latestBackupPath: null
     })),
@@ -69,7 +69,7 @@ describe("persistence application service", () => {
       modelId: null,
       speakerMappings: [],
       pausePresets: project.pausePresets,
-      paragraphPause: project.paragraphPause,
+      transitionPauses: project.transitionPauses,
       lexiconEntries: []
     };
     await service.status();
@@ -122,10 +122,10 @@ describe("persistence application service", () => {
 
   it("keeps status available while rejecting degraded persistence operations", async () => {
     const service = createUnavailablePersistenceService({
-      contractVersion: 3,
+      contractVersion: 4,
       state: "unavailable",
       databaseSchemaVersion: 1,
-      targetDatabaseSchemaVersion: 3,
+      targetDatabaseSchemaVersion: 4,
       databasePath: "/tmp/studynarrator.sqlite",
       latestBackupPath: "/tmp/backups/recovery.sqlite",
       code: "MIGRATION_FAILED",

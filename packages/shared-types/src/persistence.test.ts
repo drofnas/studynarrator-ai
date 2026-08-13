@@ -18,7 +18,11 @@ const validProject = {
   modelId: null,
   speakerMappings: [],
   pausePresets: [{ pauseId: "pause_medium", durationMs: 750, description: "Paragraph" }],
-  paragraphPause: { enabled: true, pauseId: "pause_medium", durationMs: 750 },
+  transitionPauses: {
+    paragraph: { mode: "preset", pauseId: "pause_medium" },
+    speakerChange: { mode: "none" },
+    section: { mode: "none" }
+  },
   lexiconEntries: []
 };
 
@@ -28,8 +32,8 @@ describe("persistence contracts", () => {
     expect(() => ProjectReplaceInputSchema.parse({ ...validProject, unknown: true })).toThrow();
     expect(() => ProjectReplaceInputSchema.parse({
       ...validProject,
-      paragraphPause: { enabled: true, pauseId: "pause_medium", durationMs: 900 }
-    })).toThrow(/must match/iu);
+      transitionPauses: { ...validProject.transitionPauses, paragraph: { mode: "preset", pauseId: "pause_missing" } }
+    })).toThrow(/must reference/iu);
   });
 
   it("enforces project and global lexicon ownership", () => {
@@ -61,7 +65,7 @@ describe("persistence contracts", () => {
     const pausePresets = PausePresetCollectionSchema.parse([
       { pauseId: "pause_medium", durationMs: 750, description: "Paragraph" }
     ]);
-    const paragraphPause = { enabled: true, pauseId: "pause_medium", durationMs: 750 };
+    const transitionPauses = validProject.transitionPauses;
     const lexiconEntries = ProjectLexiconAuthoringCollectionSchema.parse([
       { id: "project-resume", scope: "project", entryType: "namedSense", displayText: "resume", senseId: "cv", spokenText: "rez-oo-may" }
     ]);
@@ -74,7 +78,7 @@ describe("persistence contracts", () => {
       modelId: null,
       speakerMappings,
       pausePresets,
-      paragraphPause,
+      transitionPauses,
       lexiconEntries
     })).toBeDefined();
     expect(GlobalLexiconReplaceInputSchema.parse([
@@ -97,7 +101,7 @@ describe("persistence contracts", () => {
     expect(ProjectReplaceInputSchema.parse({
       ...validProject,
       pausePresets: updatedPauses,
-      paragraphPause: { enabled: true, pauseId: "pause_medium", durationMs: 900 }
-    }).paragraphPause).toEqual({ enabled: true, pauseId: "pause_medium", durationMs: 900 });
+      transitionPauses: { ...validProject.transitionPauses, section: { mode: "duration", durationMs: 900 } }
+    }).transitionPauses.section).toEqual({ mode: "duration", durationMs: 900 });
   });
 });

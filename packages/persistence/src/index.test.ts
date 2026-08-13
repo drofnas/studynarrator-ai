@@ -42,21 +42,22 @@ describe("database migrations", () => {
     expect(STUDYNARRATOR_MIGRATIONS.map(({ version, name }) => ({ version, name }))).toEqual([
       { version: 1, name: "runtime-diagnostics" },
       { version: 2, name: "project-authoring" },
-      { version: 3, name: "speaches-connections" }
+      { version: 3, name: "speaches-connections" },
+      { version: 4, name: "project-transition-pauses" }
     ]);
   });
 
-  it("creates schema version 3 and reruns without duplicate migrations or backups", async () => {
+  it("creates schema version 4 and reruns without duplicate migrations or backups", async () => {
     const databasePath = await temporaryDatabase("studynarrator-migration-fresh-");
     const first = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-12T12:00:00.000Z") });
-    expect(first.appliedVersions).toEqual([1, 2, 3]);
+    expect(first.appliedVersions).toEqual([1, 2, 3, 4]);
     expect(first.backupPath).toBeNull();
     first.database.close();
 
     const second = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-13T12:00:00.000Z") });
     expect(second.appliedVersions).toEqual([]);
     expect(second.backupPath).toBeNull();
-    expect(second.database.prepare("SELECT count(*) AS count FROM schema_migrations").get()).toEqual({ count: 3 });
+    expect(second.database.prepare("SELECT count(*) AS count FROM schema_migrations").get()).toEqual({ count: 4 });
     second.database.close();
   });
 
@@ -67,8 +68,8 @@ describe("database migrations", () => {
     old.close();
 
     const upgraded = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-12T12:00:00.000Z") });
-    expect(upgraded.appliedVersions).toEqual([2, 3]);
-    expect(upgraded.backupPath).toContain("-v1-to-v3-");
+    expect(upgraded.appliedVersions).toEqual([2, 3, 4]);
+    expect(upgraded.backupPath).toContain("-v1-to-v4-");
     expect((await stat(upgraded.backupPath!)).mode & 0o777).toBe(0o600);
     expect(upgraded.database.prepare("SELECT value FROM diagnostic_kv WHERE key = 'fixture'").get()).toEqual({ value: "preserved" });
     const backup = new Database(upgraded.backupPath!, { readonly: true });
@@ -95,10 +96,10 @@ describe("database migrations", () => {
     previous.database.close();
 
     const upgraded = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-13T12:00:00.000Z") });
-    expect(upgraded.appliedVersions).toEqual([3]);
-    expect(upgraded.backupPath).toContain("-v2-to-v3-");
-    expect(upgraded.database.prepare("SELECT name, model_id FROM projects WHERE id = ?").get(projectId))
-      .toEqual({ name: "V2 project", model_id: null });
+    expect(upgraded.appliedVersions).toEqual([3, 4]);
+    expect(upgraded.backupPath).toContain("-v2-to-v4-");
+    expect(upgraded.database.prepare("SELECT name, model_id, paragraph_transition_mode, paragraph_transition_pause_id FROM projects WHERE id = ?").get(projectId))
+      .toEqual({ name: "V2 project", model_id: null, paragraph_transition_mode: "preset", paragraph_transition_pause_id: "pause_medium" });
     upgraded.database.close();
   });
 
@@ -165,7 +166,7 @@ describe("StudyNarratorRepository", () => {
       idFactory: ids(projectId, lexiconId)
     });
     const created = first.createProject({ name: "Persistence restart proof", description: "Restart proof" });
-    expect(created.paragraphPause).toEqual({ enabled: true, pauseId: "pause_medium", durationMs: 750 });
+    expect(created.transitionPauses).toEqual({ paragraph: { mode: "preset", pauseId: "pause_medium" }, speakerChange: { mode: "none" }, section: { mode: "none" } });
     expect(created.pausePresets).toEqual([{ pauseId: "pause_medium", durationMs: 750, description: "Paragraph or subtopic separation." }]);
     const source = "Résumé line\r\n\r\nSQL line 🧠";
     first.replaceProject(created.id, {
@@ -181,7 +182,7 @@ describe("StudyNarratorRepository", () => {
         { pauseId: "pause_medium", durationMs: 750, description: "Paragraph" },
         { pauseId: "pause_short", durationMs: 350, description: "Brief" }
       ],
-      paragraphPause: { enabled: true, pauseId: "pause_medium", durationMs: 750 },
+      transitionPauses: { paragraph: { mode: "preset", pauseId: "pause_medium" }, speakerChange: { mode: "duration", durationMs: 350 }, section: { mode: "preset", pauseId: "pause_short" } },
       lexiconEntries: [{ id: lexiconId, scope: "project", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel" }]
     });
     first.close();
@@ -192,6 +193,11 @@ describe("StudyNarratorRepository", () => {
     expect(reopened.scriptHash).toMatch(/^[a-f0-9]{64}$/u);
     expect(reopened.speakerMappings.map((item) => item.speakerId)).toEqual(["narrator"]);
     expect(reopened.pausePresets.map((item) => item.pauseId)).toEqual(["pause_medium", "pause_short"]);
+    expect(reopened.transitionPauses).toEqual({
+      paragraph: { mode: "preset", pauseId: "pause_medium" },
+      speakerChange: { mode: "duration", durationMs: 350 },
+      section: { mode: "preset", pauseId: "pause_short" }
+    });
     expect(reopened.lexiconEntries[0]).toMatchObject({ id: lexiconId, createdAt: "2026-08-12T12:00:00.000Z" });
     second.close();
 
@@ -210,8 +216,8 @@ describe("StudyNarratorRepository", () => {
     const first = repository.createProject({ name: "First" });
     repository.updateSystemPacing({ enabled: false, durationMs: 1200 });
     const second = repository.createProject({ name: "Second" });
-    expect(repository.getProject(first.id).paragraphPause).toEqual({ enabled: true, pauseId: "pause_medium", durationMs: 750 });
-    expect(second.paragraphPause).toEqual({ enabled: false, pauseId: "pause_medium", durationMs: 1200 });
+    expect(repository.getProject(first.id).transitionPauses.paragraph).toEqual({ mode: "preset", pauseId: "pause_medium" });
+    expect(second.transitionPauses.paragraph).toEqual({ mode: "none" });
     repository.close();
   });
 
@@ -230,7 +236,7 @@ describe("StudyNarratorRepository", () => {
       connectionProfileId: null,
       speakerMappings: [{ speakerId: "teacher", displayName: "Teacher", voiceId: "voice_teacher", speed: 1, gainDb: 0, roleDescription: "Guide", sampleText: "SQL" }],
       pausePresets: source.pausePresets,
-      paragraphPause: source.paragraphPause,
+      transitionPauses: source.transitionPauses,
       lexiconEntries: [{ id: lexiconId, scope: "project", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel" }]
     });
 
@@ -244,7 +250,7 @@ describe("StudyNarratorRepository", () => {
       connectionProfileId: configured.connectionProfileId,
       speakerMappings: configured.speakerMappings,
       pausePresets: configured.pausePresets,
-      paragraphPause: configured.paragraphPause
+      transitionPauses: configured.transitionPauses
     });
     expect(duplicate.lexiconEntries).toHaveLength(1);
     expect(duplicate.lexiconEntries[0]).toMatchObject({ id: duplicateLexiconId, displayText: "SQL", spokenText: "sequel" });
@@ -265,7 +271,7 @@ describe("StudyNarratorRepository", () => {
     repository.replaceGlobalLexicon([{ id: lexiconId, scope: "global", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel" }]);
     repository.replaceProject(project.id, {
       name: project.name, description: "", scriptSource: "SQL", connectionProfileId: profile.id,
-      speakerMappings: [], pausePresets: project.pausePresets, paragraphPause: project.paragraphPause, lexiconEntries: []
+      speakerMappings: [], pausePresets: project.pausePresets, transitionPauses: project.transitionPauses, lexiconEntries: []
     });
     repository.deleteConnectionProfile(profile.id);
     expect(repository.getProject(project.id).connectionProfileId).toBeNull();
@@ -275,7 +281,7 @@ describe("StudyNarratorRepository", () => {
     repository.close();
   });
 
-  it("preserves ordered personal preferences and rejects mismatched paragraph presets atomically", async () => {
+  it("preserves ordered personal preferences and rejects missing transition presets atomically", async () => {
     const repository = await openStudyNarratorRepository({
       Database: DatabaseAdapter,
       databasePath: await temporaryDatabase("studynarrator-atomic-"),
@@ -290,7 +296,7 @@ describe("StudyNarratorRepository", () => {
     expect(() => repository.replaceProject(project.id, {
       name: "Changed", description: "", scriptSource: "lost", connectionProfileId: null,
       speakerMappings: [], pausePresets: project.pausePresets,
-      paragraphPause: { ...project.paragraphPause, durationMs: 999 }, lexiconEntries: []
+      transitionPauses: { ...project.transitionPauses, paragraph: { mode: "preset", pauseId: "pause_missing" } }, lexiconEntries: []
     })).toThrow();
     expect(repository.getProject(project.id)).toMatchObject({ name: "Atomic", scriptSource: "" });
     repository.close();

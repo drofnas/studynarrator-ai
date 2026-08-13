@@ -16,7 +16,7 @@ test.describe("project preview cache", () => {
       name: string;
       description: string;
       pausePresets: unknown[];
-      paragraphPause: unknown;
+      transitionPauses: unknown;
     };
     const replacedResponse = await request.put(`${studyNarrator.baseUrl}/api/projects/${created.id}`, { data: {
       name: created.name,
@@ -26,7 +26,7 @@ test.describe("project preview cache", () => {
       modelId,
       speakerMappings: [{ speakerId: "teacher", displayName: "Teacher", voiceId: "af_heart", speed: 1, gainDb: 0, roleDescription: "", sampleText: "" }],
       pausePresets: created.pausePresets,
-      paragraphPause: created.paragraphPause,
+      transitionPauses: created.transitionPauses,
       lexiconEntries: []
     } });
     expect(replacedResponse.ok()).toBe(true);
