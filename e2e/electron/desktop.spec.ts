@@ -30,7 +30,7 @@ test.describe("Electron acceptance", () => {
       };
     });
     expect(bridgeShape).toEqual({
-      bridge: ["connections", "persistence", "projectPreview", "scratchpad", "speechCache", "system", "voiceCatalog"],
+      bridge: ["connections", "persistence", "projectPreview", "renderPlans", "scratchpad", "speechCache", "system", "voiceCatalog"],
       hasRequire: false,
       hasProcess: false,
       frozen: true
@@ -82,6 +82,40 @@ test.describe("Electron acceptance", () => {
     await expect(page.getByRole("heading", { name: "Projects", exact: true })).toBeVisible();
     await page.getByRole("button", { name: /Desktop durable project/u }).click();
     await expect(page.getByLabel("Script source")).toHaveValue("[speaker_teacher] Persist through relaunch.");
+  });
+
+  test("freezes and reopens immutable plans through typed IPC without TTS", async ({ electronStudyNarrator, studyNarrator }) => {
+    let page = electronStudyNarrator.page;
+    await continueElectronOffline(page);
+    studyNarrator.fakeSpeaches.reset();
+    await page.getByLabel("Project name").fill("Desktop frozen plan");
+    await page.getByRole("button", { name: "Create project" }).click();
+    await page.getByLabel("Script source").fill("[speaker_teacher] First.\n\n[speaker_teacher] Second.");
+    await page.getByLabel("Connection profile").selectOption("environment-speaches");
+    await page.getByLabel("Optional model override").fill("speaches-ai/Kokoro-82M-v1.0-ONNX");
+    await expect(page.getByLabel("Voices")).toHaveValue("af_heart");
+    await page.getByLabel("Paragraph transition mode").selectOption("duration");
+    await page.getByLabel("Paragraph transition duration (ms)").fill("350");
+    await page.getByRole("button", { name: "Freeze render plan" }).click();
+    await expect(page.getByRole("table", { name: "Frozen render plan ordered entries" })).toContainText("350 ms");
+    expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/speech"] ?? 0).toBe(0);
+
+    page = await electronStudyNarrator.relaunch();
+    await expect(page.getByRole("heading", { name: "Projects", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: /Desktop frozen plan/u }).click();
+    const savedPlans = page.getByLabel("Saved render plans");
+    await expect(savedPlans.getByRole("button")).toHaveCount(1);
+    await savedPlans.getByRole("button").click();
+    const table = page.getByRole("table", { name: "Frozen render plan ordered entries" });
+    await expect(table).toContainText("350 ms");
+
+    await page.getByLabel("Paragraph transition duration (ms)").fill("750");
+    await page.getByRole("button", { name: "Save now" }).click();
+    await expect(page.getByText("Frozen from earlier project").first()).toBeVisible();
+    await page.getByRole("button", { name: "Freeze render plan" }).click();
+    await expect(table).toContainText("750 ms");
+    await expect(savedPlans.getByRole("button")).toHaveCount(2);
+    expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/speech"] ?? 0).toBe(0);
   });
 
   test("clears one-shot credential input and never stores plaintext", async ({ electronStudyNarrator, studyNarrator }) => {

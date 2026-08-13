@@ -7,6 +7,7 @@ import {
   createCachedSpeechSynthesis,
   createPersistenceService,
   createProjectPreviewService,
+  createRenderPlanService,
   createRoutedCredentialStore,
   createScratchpadService,
   createSpeechCacheService,
@@ -21,6 +22,7 @@ import {
 import { MigrationFailureError, openStudyNarratorRepository } from "@studynarrator/persistence";
 import { DATABASE_SCHEMA_VERSION, PERSISTENCE_CONTRACT_VERSION, type PersistenceClient } from "@studynarrator/shared-types";
 import { createFfmpegProbe } from "@studynarrator/runtime";
+import { createRenderPlanStore } from "@studynarrator/rendering";
 import { CredentialEncryptionUnavailableError, ElectronCredentialVault, type SafeStorageLike } from "./credentialVault.js";
 
 export function resolveDesktopDataDirectory(defaultDataDirectory: string, environment: NodeJS.ProcessEnv): string {
@@ -44,6 +46,7 @@ export async function createDesktopServices(options: {
   let voiceCatalog;
   let scratchpad;
   let projectPreview;
+  let renderPlans;
   let credentialVault: ElectronCredentialVault | undefined;
   const cache = createApplicationSpeechCache(dataDirectory);
   const speechCache = createSpeechCacheService(cache);
@@ -79,6 +82,11 @@ export async function createDesktopServices(options: {
     const speech = createCachedSpeechSynthesis({ repository: openedRepository, credentials, cache });
     scratchpad = createScratchpadService({ repository: openedRepository, credentials, cache });
     projectPreview = createProjectPreviewService({ repository: openedRepository, speech });
+    renderPlans = createRenderPlanService({
+      repository: openedRepository,
+      cache,
+      store: createRenderPlanStore(resolve(dataDirectory, "render-plans"))
+    });
   } catch (error) {
     if (!(error instanceof MigrationFailureError)) throw error;
     storageFailure = {
@@ -119,5 +127,5 @@ export async function createDesktopServices(options: {
     architecture: process.arch,
     dataDirectory
   };
-  return { service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache, credentialVault, context };
+  return { service, persistence, connections, voiceCatalog, scratchpad, projectPreview, renderPlans, speechCache, credentialVault, context };
 }

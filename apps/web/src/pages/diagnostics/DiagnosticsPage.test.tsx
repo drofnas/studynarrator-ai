@@ -29,7 +29,7 @@ const passingDiagnostics: SystemDiagnostics = {
       status: "pass",
       driver: "better-sqlite3",
       sqliteVersion: "3.50.0",
-      migrationVersion: 3,
+      migrationVersion: 4,
       databasePath: "/tmp/studynarrator/web/studynarrator.sqlite",
       latestBackupPath: null,
       markerKey: "runtime.storage-self-test",
@@ -64,7 +64,7 @@ describe("system diagnostics screen", () => {
     expect(await screen.findByText("REST")).toBeInTheDocument();
     expect(screen.getByText("Web")).toBeInTheDocument();
     expect(screen.getAllByText("PASS")).toHaveLength(3);
-    expect(screen.getByText(/Schema 3 · verified/u)).toBeInTheDocument();
+    expect(screen.getByText(/Schema 4 · verified/u)).toBeInTheDocument();
     expect(screen.getByText(/diagnostics schema 3/u)).toBeInTheDocument();
   });
 

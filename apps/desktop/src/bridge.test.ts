@@ -3,6 +3,7 @@ import {
   CONNECTION_CHANNELS,
   PERSISTENCE_CHANNELS,
   PROJECT_PREVIEW_CHANNELS,
+  RENDER_PLAN_CHANNELS,
   SCRATCHPAD_CHANNELS,
   SPEECH_CACHE_CHANNELS,
   SYSTEM_DIAGNOSTICS_CHANNEL
@@ -14,6 +15,7 @@ import {
   registerDiagnosticsHandler,
   registerPersistenceHandlers,
   registerProjectPreviewHandlers,
+  registerRenderPlanHandlers,
   registerScratchpadHandlers,
   registerSpeechCacheHandlers
 } from "./ipc.js";
@@ -42,10 +44,10 @@ const diagnostics = {
 } as const;
 
 const persistenceStatus = {
-  contractVersion: 3 as const,
+  contractVersion: 4 as const,
   state: "ready" as const,
-  databaseSchemaVersion: 3 as const,
-  targetDatabaseSchemaVersion: 3 as const,
+  databaseSchemaVersion: 4 as const,
+  targetDatabaseSchemaVersion: 4 as const,
   databasePath: "/tmp/studynarrator.sqlite",
   latestBackupPath: null
 };
@@ -127,6 +129,31 @@ const speechCache = {
   clearProject: vi.fn(async () => cleanupResult),
   clearEntry: vi.fn(async () => cleanupResult)
 };
+const renderPlan = {
+  schemaVersion: 1 as const,
+  id: "00000000-0000-4000-8000-000000000002",
+  projectId: "00000000-0000-4000-8000-000000000001",
+  createdAt: "2026-08-12T12:00:00.000Z",
+  snapshotHash: "b".repeat(64),
+  planHash: "c".repeat(64),
+  scriptHash: "a".repeat(64),
+  entries: [],
+  summary: { sectionCount: 0, speechCount: 0, pauseCount: 0, cacheHits: 0, cacheMisses: 0, silenceDurationMs: 0 }
+};
+const renderPlanSummary = {
+  id: renderPlan.id,
+  projectId: renderPlan.projectId,
+  createdAt: renderPlan.createdAt,
+  snapshotHash: renderPlan.snapshotHash,
+  planHash: renderPlan.planHash,
+  scriptHash: renderPlan.scriptHash,
+  summary: renderPlan.summary
+};
+const renderPlans = {
+  create: vi.fn(async () => renderPlan),
+  list: vi.fn(async () => [renderPlanSummary]),
+  get: vi.fn(async () => renderPlan)
+};
 
 describe("Electron boundary", () => {
   it("exposes only the validated diagnostics and persistence operations", async () => {
@@ -136,7 +163,7 @@ describe("Electron boundary", () => {
       return persistenceStatus;
     });
     const bridge = createPreloadBridge(invoke);
-    expect(Object.keys(bridge)).toEqual(["system", "persistence", "connections", "voiceCatalog", "scratchpad", "projectPreview", "speechCache"]);
+    expect(Object.keys(bridge)).toEqual(["system", "persistence", "connections", "voiceCatalog", "scratchpad", "projectPreview", "speechCache", "renderPlans"]);
     expect(Object.keys(bridge.system)).toEqual(["diagnostics"]);
     await expect(bridge.system.diagnostics()).resolves.toEqual(diagnostics);
     expect(invoke).toHaveBeenCalledWith(SYSTEM_DIAGNOSTICS_CHANNEL);
@@ -169,6 +196,7 @@ describe("Electron boundary", () => {
     registerScratchpadHandlers(ipcMain, scratchpad);
     registerProjectPreviewHandlers(ipcMain, projectPreview);
     registerSpeechCacheHandlers(ipcMain, speechCache);
+    registerRenderPlanHandlers(ipcMain, renderPlans);
     expect([...handlers.keys()]).toEqual(PUBLIC_IPC_CHANNEL_MANIFEST);
     expect([...handlers.keys()]).not.toContain("persistence.execute");
     await expect(handlers.get(SYSTEM_DIAGNOSTICS_CHANNEL)?.()).resolves.toEqual(diagnostics);
@@ -182,7 +210,7 @@ describe("Electron boundary", () => {
   it("invokes every public IPC contract with schema-valid input and output", async () => {
     const timestamp = "2026-08-12T12:00:00.000Z";
     const project = {
-      contractVersion: 3 as const,
+      contractVersion: 4 as const,
       id: "00000000-0000-4000-8000-000000000001",
       name: "IPC project",
       description: "",
@@ -192,7 +220,7 @@ describe("Electron boundary", () => {
       modelId: null,
       speakerMappings: [],
       pausePresets: [{ pauseId: "pause_medium", durationMs: 750, description: "Paragraph" }],
-      paragraphPause: { enabled: true, pauseId: "pause_medium" as const, durationMs: 750 },
+      transitionPauses: { paragraph: { mode: "preset" as const, pauseId: "pause_medium" as const }, speakerChange: { mode: "none" as const }, section: { mode: "none" as const } },
       lexiconEntries: [],
       createdAt: timestamp,
       updatedAt: timestamp
@@ -278,7 +306,8 @@ describe("Electron boundary", () => {
     registerScratchpadHandlers(ipcMain, scratchpad);
     registerProjectPreviewHandlers(ipcMain, projectPreview);
     registerSpeechCacheHandlers(ipcMain, speechCache);
-    const projectReplace = { name: project.name, description: "", scriptSource: "", connectionProfileId: null, modelId: null, speakerMappings: [], pausePresets: project.pausePresets, paragraphPause: project.paragraphPause, lexiconEntries: [] };
+    registerRenderPlanHandlers(ipcMain, renderPlans);
+    const projectReplace = { name: project.name, description: "", scriptSource: "", connectionProfileId: null, modelId: null, speakerMappings: [], pausePresets: project.pausePresets, transitionPauses: project.transitionPauses, lexiconEntries: [] };
     const mutation = { profile: { id: "profile", name: "IPC profile", baseUrl: "http://127.0.0.1:8000", defaultModelId: "model", defaultVoiceId: "voice" }, credential: { action: "keep" } };
     const inputs: Record<string, unknown> = {
       [PERSISTENCE_CHANNELS.projectsCreate]: { name: "IPC project" },
@@ -301,7 +330,10 @@ describe("Electron boundary", () => {
       [SCRATCHPAD_CHANNELS.preview]: { connectionProfileId: "profile", modelId: "model", voiceId: "voice", speed: 1, text: "Speech.", applyGlobalLexicon: false },
       [PROJECT_PREVIEW_CHANNELS.preview]: { projectId: project.id, preview: { mode: "segment", nodeOrdinal: 1 } },
       [SPEECH_CACHE_CHANNELS.clearProject]: { projectId: project.id },
-      [SPEECH_CACHE_CHANNELS.clearEntry]: { cacheKey: "a".repeat(64) }
+      [SPEECH_CACHE_CHANNELS.clearEntry]: { cacheKey: "a".repeat(64) },
+      [RENDER_PLAN_CHANNELS.create]: { projectId: project.id },
+      [RENDER_PLAN_CHANNELS.list]: { projectId: project.id },
+      [RENDER_PLAN_CHANNELS.get]: { planId: renderPlan.id }
     };
     const invoked = new Set<string>();
     for (const channel of PUBLIC_IPC_CHANNEL_MANIFEST) {

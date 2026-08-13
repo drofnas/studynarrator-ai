@@ -13,6 +13,9 @@ import {
   PROJECT_PREVIEW_CHANNELS,
   ProjectPreviewResultSchema,
   ProjectSummaryCollectionSchema,
+  RENDER_PLAN_CHANNELS,
+  RenderPlanSchema,
+  RenderPlanSummaryCollectionSchema,
   SYSTEM_DIAGNOSTICS_CHANNEL,
   SystemDiagnosticsSchema,
   SystemPacingDefaultsSchema,
@@ -27,6 +30,7 @@ import {
   type ConnectionsClient,
   type PersistenceClient,
   type ProjectPreviewClient,
+  type RenderPlanClient,
   type ScratchpadClient,
   type SpeechCacheClient,
   type StudyNarratorBridge,
@@ -98,6 +102,17 @@ export function createPreloadBridge(invoke: (channel: string, input?: unknown) =
       return SpeechCacheCleanupResultSchema.parse(await invoke(SPEECH_CACHE_CHANNELS.clearEntry, { cacheKey }));
     }
   };
+  const renderPlans: RenderPlanClient = {
+    async create(projectId) {
+      return RenderPlanSchema.parse(await invoke(RENDER_PLAN_CHANNELS.create, { projectId }));
+    },
+    async list(projectId) {
+      return RenderPlanSummaryCollectionSchema.parse(await invoke(RENDER_PLAN_CHANNELS.list, { projectId }));
+    },
+    async get(planId) {
+      return RenderPlanSchema.parse(await invoke(RENDER_PLAN_CHANNELS.get, { planId }));
+    }
+  };
   return Object.freeze({
     system: Object.freeze({
       async diagnostics(): Promise<SystemDiagnostics> {
@@ -109,6 +124,7 @@ export function createPreloadBridge(invoke: (channel: string, input?: unknown) =
     voiceCatalog: Object.freeze(voiceCatalog),
     scratchpad: Object.freeze(scratchpad),
     projectPreview: Object.freeze(projectPreview),
-    speechCache: Object.freeze(speechCache)
+    speechCache: Object.freeze(speechCache),
+    renderPlans: Object.freeze(renderPlans)
   });
 }

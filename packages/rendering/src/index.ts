@@ -1,7 +1,17 @@
 import { createHash, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { chmod, lstat, mkdir, open, readdir, rename, unlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { chmod, lstat, mkdir, open, readdir, rename, rm, unlink, writeFile } from "node:fs/promises";
+import { join, resolve, sep } from "node:path";
+import {
+  ProjectSnapshotSchema,
+  RenderPlanIdSchema,
+  RenderPlanSchema,
+  RenderPlanSummaryCollectionSchema,
+  type ProjectSnapshot,
+  type RenderPlan,
+  type RenderPlanSummary,
+  type SilenceAsset
+} from "@studynarrator/shared-types";
 
 export const SPEECH_CACHE_SCHEMA_VERSION = 1;
 export const SPEECH_NORMALIZATION_VERSION = 1;
@@ -82,6 +92,7 @@ export interface SpeechCache {
     synthesize: (normalizedText: string, signal: AbortSignal) => Promise<Uint8Array>,
     signal?: AbortSignal
   ): Promise<CachedSpeechResult>;
+  inspect(input: SpeechCacheKeyInput, signal?: AbortSignal): Promise<{ key: string; status: "hit" | "miss" }>;
   status(): Promise<SpeechCacheStatus>;
   clearAll(): Promise<SpeechCacheCleanupResult>;
   clearProject(projectId: string): Promise<SpeechCacheCleanupResult>;
@@ -335,14 +346,15 @@ export function createSpeechCache(options: {
     key: string,
     normalized: NormalizedSpeechCacheInput,
     usages: readonly SpeechCacheUsage[],
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    touch = true
   ): Promise<CachedSpeechResult | null> => {
     const entryPaths = paths(key);
     const audioExists = await regularFile(entryPaths.audio);
     const metadataExists = await regularFile(entryPaths.metadata);
     if (!audioExists && !metadataExists) return null;
     if (!audioExists || !metadataExists) {
-      counters.corruptMisses += 1;
+      if (touch) counters.corruptMisses += 1;
       await removeEntry(key);
       return null;
     }
@@ -358,13 +370,15 @@ export function createSpeechCache(options: {
         throw new Error("Cached speech metadata failed integrity validation.");
       }
       if (!(await options.validateAudio(audioBuffer, signal))) throw new Error("Cached speech audio failed decoding validation.");
-      const updated = mergedUsages(metadata, usages, now().toISOString());
-      await writeMetadata(updated);
-      counters.hits += 1;
+      const updated = touch ? mergedUsages(metadata, usages, now().toISOString()) : metadata;
+      if (touch) {
+        await writeMetadata(updated);
+        counters.hits += 1;
+      }
       return { key, status: "hit", bytes: new Uint8Array(audioBuffer), metadata: updated };
     } catch {
       if (signal?.aborted) throw aborted(signal);
-      counters.corruptMisses += 1;
+      if (touch) counters.corruptMisses += 1;
       await removeEntry(key);
       return null;
     }
@@ -479,6 +493,12 @@ export function createSpeechCache(options: {
       flights.set(key, flight);
       return await waitForFlight(flight, signal);
     },
+    async inspect(input, signal) {
+      const normalized = normalizeSpeechCacheInput(input);
+      const key = createSpeechCacheKey(input);
+      const cached = await loadEntry(key, normalized, [], signal, false);
+      return { key, status: cached ? "hit" : "miss" };
+    },
     async status() {
       const keys = await listKeys();
       let totalBytes = 0;
@@ -556,4 +576,191 @@ export function createSpeechCache(options: {
   }
 
   return cache;
+}
+
+export const RENDER_PLAN_SAMPLE_RATE = 24_000;
+export const RENDER_PLAN_CHANNELS = 1;
+export const RENDER_PLAN_BITS_PER_SAMPLE = 16;
+const MAX_RENDER_PLAN_JSON_BYTES = 12 * 1024 * 1024;
+
+export function hashJson(value: unknown): string {
+  return sha256(JSON.stringify(value));
+}
+
+export function withProjectSnapshotHash(input: Omit<ProjectSnapshot, "snapshotHash">): ProjectSnapshot {
+  const normalized = ProjectSnapshotSchema.parse({ ...input, snapshotHash: "0".repeat(64) });
+  const { snapshotHash: _snapshotHash, ...payload } = normalized;
+  void _snapshotHash;
+  return ProjectSnapshotSchema.parse({ ...payload, snapshotHash: hashJson(payload) });
+}
+
+export function withRenderPlanHash(input: Omit<RenderPlan, "planHash">): RenderPlan {
+  const normalized = RenderPlanSchema.parse({ ...input, planHash: "0".repeat(64) });
+  const { planHash: _planHash, ...payload } = normalized;
+  void _planHash;
+  return RenderPlanSchema.parse({ ...payload, planHash: hashJson(payload) });
+}
+
+export function createPcmSilence(durationMs: number): { bytes: Uint8Array | null; asset: SilenceAsset | null } {
+  if (!Number.isInteger(durationMs) || durationMs < 0 || durationMs > 30_000) throw new Error("Silence duration must be an integer from 0 through 30000 milliseconds.");
+  if (durationMs === 0) return { bytes: null, asset: null };
+  const frameCount = RENDER_PLAN_SAMPLE_RATE * durationMs / 1_000;
+  const dataLength = frameCount * RENDER_PLAN_CHANNELS * (RENDER_PLAN_BITS_PER_SAMPLE / 8);
+  const bytes = new Uint8Array(44 + dataLength);
+  const view = new DataView(bytes.buffer);
+  const ascii = (offset: number, value: string) => {
+    for (let index = 0; index < value.length; index += 1) bytes[offset + index] = value.charCodeAt(index);
+  };
+  ascii(0, "RIFF");
+  view.setUint32(4, 36 + dataLength, true);
+  ascii(8, "WAVE");
+  ascii(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, RENDER_PLAN_CHANNELS, true);
+  view.setUint32(24, RENDER_PLAN_SAMPLE_RATE, true);
+  view.setUint32(28, RENDER_PLAN_SAMPLE_RATE * RENDER_PLAN_CHANNELS * (RENDER_PLAN_BITS_PER_SAMPLE / 8), true);
+  view.setUint16(32, RENDER_PLAN_CHANNELS * (RENDER_PLAN_BITS_PER_SAMPLE / 8), true);
+  view.setUint16(34, RENDER_PLAN_BITS_PER_SAMPLE, true);
+  ascii(36, "data");
+  view.setUint32(40, dataLength, true);
+  const checksum = sha256(bytes);
+  return {
+    bytes,
+    asset: {
+      relativePath: `silence/${checksum}.wav`,
+      checksum,
+      byteLength: bytes.byteLength,
+      sampleRate: RENDER_PLAN_SAMPLE_RATE,
+      channels: RENDER_PLAN_CHANNELS,
+      bitsPerSample: RENDER_PLAN_BITS_PER_SAMPLE,
+      frameCount
+    }
+  };
+}
+
+export interface RenderPlanStore {
+  save(snapshot: ProjectSnapshot, plan: RenderPlan, silenceAssets: ReadonlyMap<string, Uint8Array>): Promise<RenderPlan>;
+  list(projectId: string): Promise<RenderPlanSummary[]>;
+  get(planId: string): Promise<RenderPlan>;
+}
+
+function verifiedSnapshotHash(snapshot: ProjectSnapshot): boolean {
+  const { snapshotHash, ...payload } = snapshot;
+  return snapshotHash === hashJson(payload);
+}
+
+function verifiedPlanHash(plan: RenderPlan): boolean {
+  const { planHash, ...payload } = plan;
+  return planHash === hashJson(payload);
+}
+
+async function boundedRead(path: string, maximumBytes: number): Promise<Uint8Array> {
+  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const details = await handle.stat();
+    if (!details.isFile() || details.size < 1 || details.size > maximumBytes) throw new Error("Render plan artifact size is invalid.");
+    const bytes = new Uint8Array(details.size);
+    let offset = 0;
+    while (offset < bytes.byteLength) {
+      const { bytesRead } = await handle.read(bytes, offset, bytes.byteLength - offset, offset);
+      if (bytesRead === 0) throw new Error("Render plan artifact was truncated.");
+      offset += bytesRead;
+    }
+    return bytes;
+  } finally {
+    await handle.close();
+  }
+}
+
+async function boundedJson(path: string): Promise<unknown> {
+  return JSON.parse(new TextDecoder().decode(await boundedRead(path, MAX_RENDER_PLAN_JSON_BYTES))) as unknown;
+}
+
+export function createRenderPlanStore(rootDirectoryInput: string): RenderPlanStore {
+  const rootDirectory = resolve(rootDirectoryInput);
+  if (!rootDirectoryInput.trim() || rootDirectory === resolve("/")) throw new Error("Render plan root must be a scoped directory.");
+
+  const ensureRoot = async () => {
+    await mkdir(rootDirectory, { recursive: true, mode: 0o700 });
+    const root = await lstat(rootDirectory);
+    if (!root.isDirectory() || root.isSymbolicLink()) throw new Error("Render plan root must be a real directory.");
+    await chmod(rootDirectory, 0o700);
+  };
+
+  const readBundle = async (planIdInput: string): Promise<{ snapshot: ProjectSnapshot; plan: RenderPlan }> => {
+    const planId = RenderPlanIdSchema.parse(planIdInput);
+    const directory = join(rootDirectory, planId);
+    const details = await lstat(directory);
+    if (!details.isDirectory() || details.isSymbolicLink()) throw new Error("Render plan directory is unsafe.");
+    const snapshot = ProjectSnapshotSchema.parse(await boundedJson(join(directory, "project-snapshot.json")));
+    const plan = RenderPlanSchema.parse(await boundedJson(join(directory, "render-plan.json")));
+    if (plan.id !== planId || snapshot.project.id !== plan.projectId || snapshot.project.scriptHash !== plan.scriptHash || snapshot.snapshotHash !== plan.snapshotHash
+      || !verifiedSnapshotHash(snapshot) || !verifiedPlanHash(plan)) throw new Error("Render plan hashes are inconsistent.");
+    const silenceDirectory = join(directory, "silence");
+    const silenceEntries = plan.entries.filter((entry) => entry.type === "pause" && entry.silence !== null);
+    if (silenceEntries.length > 0) {
+      const silenceDetails = await lstat(silenceDirectory);
+      if (!silenceDetails.isDirectory() || silenceDetails.isSymbolicLink()) throw new Error("Render plan silence directory is unsafe.");
+    }
+    for (const entry of silenceEntries) {
+      const asset = entry.type === "pause" ? entry.silence : null;
+      if (!asset) continue;
+      const bytes = await boundedRead(join(directory, asset.relativePath), asset.byteLength);
+      if (bytes.byteLength !== asset.byteLength || sha256(bytes) !== asset.checksum) throw new Error("Render plan silence checksum is invalid.");
+    }
+    return { snapshot, plan };
+  };
+
+  return {
+    async save(snapshotInput, planInput, silenceAssets) {
+      const snapshot = ProjectSnapshotSchema.parse(snapshotInput);
+      const plan = RenderPlanSchema.parse(planInput);
+      if (!verifiedSnapshotHash(snapshot) || !verifiedPlanHash(plan) || snapshot.snapshotHash !== plan.snapshotHash
+        || snapshot.project.id !== plan.projectId || snapshot.project.scriptHash !== plan.scriptHash) {
+        throw new Error("Render plan cannot be saved with inconsistent hashes.");
+      }
+      await ensureRoot();
+      const finalDirectory = join(rootDirectory, plan.id);
+      const temporaryDirectory = join(rootDirectory, `${plan.id}.${randomUUID()}.tmp`);
+      if (!temporaryDirectory.startsWith(`${rootDirectory}${sep}`)) throw new Error("Render plan temporary path escaped its root.");
+      try {
+        await mkdir(temporaryDirectory, { mode: 0o700 });
+        await mkdir(join(temporaryDirectory, "silence"), { mode: 0o700 });
+        await writeFile(join(temporaryDirectory, "project-snapshot.json"), `${JSON.stringify(snapshot, null, 2)}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
+        await writeFile(join(temporaryDirectory, "render-plan.json"), `${JSON.stringify(plan, null, 2)}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
+        const expected = new Map(plan.entries.flatMap((entry) => entry.type === "pause" && entry.silence ? [[entry.silence.checksum, entry.silence] as const] : []));
+        for (const [checksum, asset] of expected) {
+          const bytes = silenceAssets.get(checksum);
+          if (!bytes || bytes.byteLength !== asset.byteLength || sha256(bytes) !== checksum) throw new Error("Render plan silence bytes do not match the manifest.");
+          await writeFile(join(temporaryDirectory, asset.relativePath), bytes, { mode: 0o600, flag: "wx" });
+        }
+        await rename(temporaryDirectory, finalDirectory);
+        return plan;
+      } catch (error) {
+        await rm(temporaryDirectory, { recursive: true, force: true }).catch(() => undefined);
+        throw error;
+      }
+    },
+    async list(projectId) {
+      await ensureRoot();
+      const summaries: RenderPlanSummary[] = [];
+      for (const entry of await readdir(rootDirectory, { withFileTypes: true })) {
+        if (!entry.isDirectory() || entry.isSymbolicLink() || !RenderPlanIdSchema.safeParse(entry.name).success) continue;
+        const { plan } = await readBundle(entry.name);
+        if (plan.projectId === projectId) {
+          summaries.push({
+            id: plan.id, projectId: plan.projectId, createdAt: plan.createdAt, snapshotHash: plan.snapshotHash,
+            planHash: plan.planHash, scriptHash: plan.scriptHash, summary: plan.summary
+          });
+        }
+      }
+      summaries.sort((left, right) => right.createdAt.localeCompare(left.createdAt) || left.id.localeCompare(right.id));
+      return RenderPlanSummaryCollectionSchema.parse(summaries);
+    },
+    async get(planId) {
+      await ensureRoot();
+      return (await readBundle(planId)).plan;
+    }
+  };
 }

@@ -7,6 +7,7 @@ import {
   BUNDLED_VOICE_CATALOGS,
   createPersistenceService,
   createProjectPreviewService,
+  createRenderPlanService,
   createRoutedCredentialStore,
   createScratchpadService,
   createSpeechCacheService,
@@ -21,6 +22,7 @@ import {
 import { MigrationFailureError, openStudyNarratorRepository } from "@studynarrator/persistence";
 import { DATABASE_SCHEMA_VERSION, PERSISTENCE_CONTRACT_VERSION, type PersistenceClient } from "@studynarrator/shared-types";
 import { createFfmpegProbe } from "@studynarrator/runtime";
+import { createRenderPlanStore } from "@studynarrator/rendering";
 
 const repositoryRoot = resolve(import.meta.dirname, "../../..");
 
@@ -42,6 +44,7 @@ export async function createServerServices(environment = process.env) {
   let voiceCatalog;
   let scratchpad;
   let projectPreview;
+  let renderPlans;
   try {
     const openedRepository = await openStudyNarratorRepository({ Database, databasePath });
     repository = openedRepository;
@@ -63,6 +66,11 @@ export async function createServerServices(environment = process.env) {
     const speech = createCachedSpeechSynthesis({ repository: openedRepository, credentials, cache });
     scratchpad = createScratchpadService({ repository: openedRepository, credentials, cache });
     projectPreview = createProjectPreviewService({ repository: openedRepository, speech });
+    renderPlans = createRenderPlanService({
+      repository: openedRepository,
+      cache,
+      store: createRenderPlanStore(resolve(dataDirectory, "render-plans"))
+    });
   } catch (error) {
     if (!(error instanceof MigrationFailureError)) throw error;
     storageFailure = {
@@ -110,6 +118,7 @@ export async function createServerServices(environment = process.env) {
     voiceCatalog,
     scratchpad,
     projectPreview,
+    renderPlans,
     speechCache,
     context,
     dispose: () => repository.close()

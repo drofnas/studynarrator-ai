@@ -33,5 +33,8 @@ export const APPLICATION_SERVICE_MANIFEST = Object.freeze([
   "speechCache.status",
   "speechCache.clearAll",
   "speechCache.clearProject",
-  "speechCache.clearEntry"
+  "speechCache.clearEntry",
+  "renderPlans.create",
+  "renderPlans.list",
+  "renderPlans.get"
 ]);

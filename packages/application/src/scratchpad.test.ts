@@ -63,6 +63,7 @@ function speechCache(): SpeechCache {
         }
       };
     },
+    async inspect() { return { key: "a".repeat(64), status: "miss" as const }; },
     async status() { return { entryCount: 0, totalBytes: 0, lastUsedAt: null, sessionHits: 0, sessionMisses: 0, sessionWrites: 0, sessionCorruptMisses: 0, inFlight: 0 }; },
     async clearAll() { return { entriesRemoved: 0, bytesFreed: 0 }; },
     async clearProject() { return { entriesRemoved: 0, bytesFreed: 0 }; },

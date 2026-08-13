@@ -170,6 +170,23 @@ const MIGRATION_3_SQL = `
   );
 `;
 
+const MIGRATION_4_SQL = `
+  ALTER TABLE projects ADD COLUMN paragraph_transition_mode TEXT NOT NULL DEFAULT 'preset' CHECK (paragraph_transition_mode IN ('none', 'preset', 'duration'));
+  ALTER TABLE projects ADD COLUMN paragraph_transition_pause_id TEXT;
+  ALTER TABLE projects ADD COLUMN paragraph_transition_duration_ms INTEGER CHECK (paragraph_transition_duration_ms BETWEEN 0 AND 30000);
+  ALTER TABLE projects ADD COLUMN speaker_change_transition_mode TEXT NOT NULL DEFAULT 'none' CHECK (speaker_change_transition_mode IN ('none', 'preset', 'duration'));
+  ALTER TABLE projects ADD COLUMN speaker_change_transition_pause_id TEXT;
+  ALTER TABLE projects ADD COLUMN speaker_change_transition_duration_ms INTEGER CHECK (speaker_change_transition_duration_ms BETWEEN 0 AND 30000);
+  ALTER TABLE projects ADD COLUMN section_transition_mode TEXT NOT NULL DEFAULT 'none' CHECK (section_transition_mode IN ('none', 'preset', 'duration'));
+  ALTER TABLE projects ADD COLUMN section_transition_pause_id TEXT;
+  ALTER TABLE projects ADD COLUMN section_transition_duration_ms INTEGER CHECK (section_transition_duration_ms BETWEEN 0 AND 30000);
+
+  UPDATE projects SET
+    paragraph_transition_mode = CASE WHEN paragraph_pause_enabled = 1 THEN 'preset' ELSE 'none' END,
+    paragraph_transition_pause_id = CASE WHEN paragraph_pause_enabled = 1 THEN paragraph_pause_id ELSE NULL END,
+    paragraph_transition_duration_ms = NULL;
+`;
+
 export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
   { version: 1, name: "runtime-diagnostics", up: (database) => { database.exec(MIGRATION_1_SQL); } },
   {
@@ -184,6 +201,13 @@ export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
     name: "speaches-connections",
     up: (database) => {
       database.exec(MIGRATION_3_SQL);
+    }
+  },
+  {
+    version: 4,
+    name: "project-transition-pauses",
+    up: (database) => {
+      database.exec(MIGRATION_4_SQL);
     }
   }
 ]);

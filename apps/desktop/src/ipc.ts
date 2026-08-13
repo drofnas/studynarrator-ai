@@ -23,6 +23,11 @@ import {
   ProjectPreviewResultSchema,
   ProjectReplaceRequestSchema,
   ProjectSummaryCollectionSchema,
+  RENDER_PLAN_CHANNELS,
+  RenderPlanIdInputSchema,
+  RenderPlanProjectInputSchema,
+  RenderPlanSchema,
+  RenderPlanSummaryCollectionSchema,
   SYSTEM_DIAGNOSTICS_CHANNEL,
   SystemDiagnosticsSchema,
   SystemPacingDefaultsSchema,
@@ -41,6 +46,7 @@ import {
   type ConnectionsClient,
   type PersistenceClient,
   type ProjectPreviewClient,
+  type RenderPlanClient,
   type ScratchpadClient,
   type SpeechCacheClient,
   type VoiceCatalogClient
@@ -53,7 +59,8 @@ export const PUBLIC_IPC_CHANNEL_MANIFEST = Object.freeze([
   ...Object.values(CONNECTION_CHANNELS),
   ...Object.values(SCRATCHPAD_CHANNELS),
   ...Object.values(PROJECT_PREVIEW_CHANNELS),
-  ...Object.values(SPEECH_CACHE_CHANNELS)
+  ...Object.values(SPEECH_CACHE_CHANNELS),
+  ...Object.values(RENDER_PLAN_CHANNELS)
 ]);
 
 interface IpcMainLike {
@@ -225,5 +232,37 @@ export function registerSpeechCacheHandlers(ipcMain: IpcMainLike, speechCache: S
   handle(SPEECH_CACHE_CHANNELS.clearEntry, async (input) => {
     const { cacheKey } = SpeechCacheKeyInputSchema.parse(input);
     return SpeechCacheCleanupResultSchema.parse(await speechCache.clearEntry(cacheKey));
+  });
+}
+
+export function registerRenderPlanHandlers(ipcMain: IpcMainLike, renderPlans: RenderPlanClient) {
+  const handle = (channel: string, listener: (input: unknown) => Promise<unknown>) => {
+    ipcMain.removeHandler(channel);
+    ipcMain.handle(channel, async (_event, input) => {
+      try {
+        return await listener(input);
+      } catch (error) {
+        const record = error && typeof error === "object" ? error as Record<string, unknown> : undefined;
+        /* eslint-disable preserve-caught-error */
+        if (record && Array.isArray(record.issues)) throw new Error("The request does not match the render plan contract.");
+        if (typeof record?.code === "string" && record.code.startsWith("RENDER_PLAN_") && typeof record.message === "string") {
+          throw new Error(record.message);
+        }
+        throw new Error("StudyNarrator could not complete the render plan operation.");
+        /* eslint-enable preserve-caught-error */
+      }
+    });
+  };
+  handle(RENDER_PLAN_CHANNELS.create, async (input) => {
+    const { projectId } = RenderPlanProjectInputSchema.parse(input);
+    return RenderPlanSchema.parse(await renderPlans.create(projectId));
+  });
+  handle(RENDER_PLAN_CHANNELS.list, async (input) => {
+    const { projectId } = RenderPlanProjectInputSchema.parse(input);
+    return RenderPlanSummaryCollectionSchema.parse(await renderPlans.list(projectId));
+  });
+  handle(RENDER_PLAN_CHANNELS.get, async (input) => {
+    const { planId } = RenderPlanIdInputSchema.parse(input);
+    return RenderPlanSchema.parse(await renderPlans.get(planId));
   });
 }

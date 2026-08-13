@@ -134,6 +134,12 @@ export {
   type ProjectPreviewServiceErrorCode
 } from "./projectPreview.js";
 export {
+  RenderPlanServiceError,
+  createRenderPlanService,
+  type RenderPlanRepository,
+  type RenderPlanServiceErrorCode
+} from "./renderPlan.js";
+export {
   ScratchpadServiceError,
   createScratchpadService,
   type ScratchpadRepository,

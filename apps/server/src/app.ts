@@ -21,6 +21,9 @@ import {
   ProjectPreviewResultSchema,
   ProjectReplaceInputSchema,
   ProjectSummaryCollectionSchema,
+  RenderPlanIdSchema,
+  RenderPlanSchema,
+  RenderPlanSummaryCollectionSchema,
   RedactedConnectionDiagnosticsSchema,
   ScratchpadPreviewInputSchema,
   ScratchpadPreviewResultSchema,
@@ -35,6 +38,7 @@ import {
   type ConnectionsClient,
   type PersistenceClient,
   type ProjectPreviewClient,
+  type RenderPlanClient,
   type ScratchpadClient,
   type SpeechCacheClient,
   type SystemDiagnostics,
@@ -57,6 +61,7 @@ export function createExpressApp(options: {
   voiceCatalog?: VoiceCatalogClient;
   scratchpad?: ScratchpadClient;
   projectPreview?: ProjectPreviewClient;
+  renderPlans?: RenderPlanClient;
   speechCache?: SpeechCacheClient;
 }): Express {
   const app = express();
@@ -248,6 +253,24 @@ export function createExpressApp(options: {
     });
   }
 
+  if (options.renderPlans) {
+    app.post("/api/projects/:projectId/render-plans", async (request, response, next) => {
+      try {
+        response.status(201).json(RenderPlanSchema.parse(await options.renderPlans!.create(ProjectIdSchema.parse(request.params.projectId))));
+      } catch (error) { next(error); }
+    });
+    app.get("/api/projects/:projectId/render-plans", async (request, response, next) => {
+      try {
+        response.json(RenderPlanSummaryCollectionSchema.parse(await options.renderPlans!.list(ProjectIdSchema.parse(request.params.projectId))));
+      } catch (error) { next(error); }
+    });
+    app.get("/api/render-plans/:planId", async (request, response, next) => {
+      try {
+        response.json(RenderPlanSchema.parse(await options.renderPlans!.get(RenderPlanIdSchema.parse(request.params.planId))));
+      } catch (error) { next(error); }
+    });
+  }
+
   if (options.speechCache) {
     app.get("/api/speech-cache", async (_request, response, next) => {
       try { response.json(SpeechCacheStatusSchema.parse(await options.speechCache!.status())); } catch (error) { next(error); }
@@ -342,6 +365,16 @@ export function createExpressApp(options: {
       };
       status = previewStatus[errorRecord.code] ?? 500;
       message = typeof errorRecord.message === "string" ? errorRecord.message : "StudyNarrator could not complete the project preview.";
+    } else if (typeof errorRecord?.code === "string" && errorRecord.code.startsWith("RENDER_PLAN_")) {
+      code = errorRecord.code;
+      const renderPlanStatus: Record<string, number> = {
+        RENDER_PLAN_CONFIGURATION: 409,
+        RENDER_PLAN_INVALID_PROJECT: 422,
+        RENDER_PLAN_NOT_FOUND: 404,
+        RENDER_PLAN_STORAGE: 500
+      };
+      status = renderPlanStatus[errorRecord.code] ?? 500;
+      message = typeof errorRecord.message === "string" ? errorRecord.message : "StudyNarrator could not complete the render plan operation.";
     }
     response.status(status).json(BoundaryErrorSchema.parse({
       error: {

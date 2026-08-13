@@ -1,5 +1,5 @@
 import type { LexiconEntry, LexiconEntryAuthoring } from "@studynarrator/core";
-import type { ProjectDetail, ProjectReplaceInput, SpeechCatalogVoice, VoiceCatalogEntry } from "@studynarrator/shared-types";
+import type { ProjectDetail, ProjectReplaceInput, SpeechCatalogVoice, TransitionPauseConfiguration, VoiceCatalogEntry } from "@studynarrator/shared-types";
 
 export const MAX_SCRIPT_CHARACTERS = 5_000_000;
 export const GLOBAL_VOICE_CATALOG_MODEL_ID = "speaches-ai/Kokoro-82M-v1.0-ONNX";
@@ -67,9 +67,27 @@ export function draftFromProject(project: ProjectDetail): ProjectDraft {
     modelId: project.modelId,
     speakerMappings: project.speakerMappings,
     pausePresets: project.pausePresets,
-    paragraphPause: project.paragraphPause,
+    transitionPauses: project.transitionPauses,
     lexiconEntries: authoringLexicon(project.lexiconEntries)
   };
+}
+
+export function paragraphPauseForAnalysis(
+  transitions: TransitionPauseConfiguration,
+  pausePresets: ProjectReplaceInput["pausePresets"]
+) {
+  const paragraph = transitions.paragraph;
+  if (paragraph.mode === "duration") {
+    return { enabled: true, pauseId: "pause_medium" as const, durationMs: paragraph.durationMs };
+  }
+  if (paragraph.mode === "preset") {
+    return {
+      enabled: true,
+      pauseId: paragraph.pauseId,
+      durationMs: pausePresets.find(({ pauseId }) => pauseId === paragraph.pauseId)?.durationMs ?? 0
+    };
+  }
+  return { enabled: false, pauseId: "pause_medium" as const, durationMs: 0 };
 }
 
 export async function readUtf8TextFile(file: File): Promise<string> {

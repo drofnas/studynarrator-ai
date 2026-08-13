@@ -6,6 +6,7 @@ import {
   registerDiagnosticsHandler,
   registerPersistenceHandlers,
   registerProjectPreviewHandlers,
+  registerRenderPlanHandlers,
   registerScratchpadHandlers,
   registerSpeechCacheHandlers
 } from "./ipc.js";
@@ -53,6 +54,7 @@ void app.whenReady().then(async () => {
   if (runtime.connections && runtime.voiceCatalog) registerConnectionHandlers(ipcMain, runtime.connections, runtime.voiceCatalog);
   if (runtime.scratchpad) registerScratchpadHandlers(ipcMain, runtime.scratchpad);
   if (runtime.projectPreview) registerProjectPreviewHandlers(ipcMain, runtime.projectPreview);
+  if (runtime.renderPlans) registerRenderPlanHandlers(ipcMain, runtime.renderPlans);
   registerSpeechCacheHandlers(ipcMain, runtime.speechCache);
   await createWindow();
 });
