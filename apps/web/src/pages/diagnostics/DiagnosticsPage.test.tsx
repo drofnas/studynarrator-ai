@@ -64,7 +64,7 @@ describe("system diagnostics screen", () => {
     expect(await screen.findByText("REST")).toBeInTheDocument();
     expect(screen.getByText("Web")).toBeInTheDocument();
     expect(screen.getAllByText("PASS")).toHaveLength(3);
-    expect(screen.getByText(/Schema 3 · verified/u)).toBeInTheDocument();
+    expect(screen.getByText(/Schema 4 · verified/u)).toBeInTheDocument();
     expect(screen.getByText(/diagnostics schema 3/u)).toBeInTheDocument();
   });
 

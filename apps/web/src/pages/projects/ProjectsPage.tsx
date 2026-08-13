@@ -747,7 +747,7 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
         <section className={styles.renderPlansPanel} aria-labelledby="render-plans-heading">
           <div className={styles.sectionHeading}>
             <div><span>Immutable handoff</span><h3 id="render-plans-heading">Frozen render plans</h3></div>
-            <button type="button" disabled={renderPlanBusy || analysisState !== "ready" || dryRun?.status === "blocked"} onClick={() => void freezeRenderPlan()}>{renderPlanBusy ? "Freezing…" : "Freeze render plan"}</button>
+            <button type="button" disabled={renderPlanBusy || !dryRun || dryRun.status === "blocked"} onClick={() => void freezeRenderPlan()}>{renderPlanBusy ? "Freezing…" : "Freeze render plan"}</button>
           </div>
           <p>Capture the saved project, pronunciation rules, connection/model identity, ordered entries, cache predictions, and exact silence without contacting Speaches.</p>
           {renderPlanError ? <p className={styles.fieldError} role="alert">{renderPlanError}</p> : null}
