@@ -6,10 +6,10 @@ const modelId = "speaches-ai/Kokoro-82M-v1.0-ONNX";
 const originalScript = "[speaker_teacher] Cache this exact sentence.";
 const changedScript = "[speaker_teacher] Cache this changed sentence.";
 
-test.describe("G08 project preview cache", () => {
+test.describe("project preview cache", () => {
   test("accounts for keys, cross-workflow reuse, corruption replacement, and every cleanup scope", async ({ page, request, studyNarrator }) => {
     await continueOffline(page, studyNarrator);
-    const createdResponse = await request.post(`${studyNarrator.baseUrl}/api/projects`, { data: { name: "G08 cache fixture" } });
+    const createdResponse = await request.post(`${studyNarrator.baseUrl}/api/projects`, { data: { name: "Preview cache fixture" } });
     expect(createdResponse.status()).toBe(201);
     const created = await createdResponse.json() as {
       id: string;
