@@ -1,5 +1,5 @@
 import { join, resolve } from "node:path";
-import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, protocol, safeStorage, shell } from "electron";
 import { createDesktopServices } from "./bootstrap.js";
 import {
   registerConnectionHandlers,
@@ -12,6 +12,12 @@ import {
   registerSpeechCacheHandlers
 } from "./ipc.js";
 import { isApprovedExternalUrl, SECURE_WEB_PREFERENCES } from "./security.js";
+import { createRenderMediaProtocolHandler } from "./renderMediaProtocol.js";
+
+protocol.registerSchemesAsPrivileged([{
+  scheme: "studynarrator-media",
+  privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true }
+}]);
 
 let runtime: Awaited<ReturnType<typeof createDesktopServices>> | undefined;
 
@@ -57,6 +63,7 @@ void app.whenReady().then(async () => {
   if (runtime.projectPreview) registerProjectPreviewHandlers(ipcMain, runtime.projectPreview);
   if (runtime.renderPlans) registerRenderPlanHandlers(ipcMain, runtime.renderPlans);
   if (runtime.renders) registerRenderHandlers(ipcMain, runtime.renders, dialog);
+  if (runtime.renders) protocol.handle("studynarrator-media", createRenderMediaProtocolHandler(runtime.renders));
   registerSpeechCacheHandlers(ipcMain, runtime.speechCache);
   await createWindow();
 });

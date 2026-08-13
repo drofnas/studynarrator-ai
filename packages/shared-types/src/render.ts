@@ -10,7 +10,10 @@ export const RENDER_CHANNELS = Object.freeze({
   cancel: "renders.cancel",
   retry: "renders.retry",
   artifacts: "renders.artifacts",
-  exportArtifact: "renders.exportArtifact"
+  exportArtifact: "renders.exportArtifact",
+  segments: "renders.segments",
+  waveform: "renders.waveform",
+  exportSegment: "renders.exportSegment"
 } as const);
 
 export const RenderIdSchema = z.uuid();
@@ -185,6 +188,10 @@ export const RenderArtifactCollectionSchema = z.array(RenderArtifactSchema);
 export const RenderPlanInputSchema = z.object({ planId: RenderPlanIdSchema }).strict();
 export const RenderProjectInputSchema = z.object({ projectId: ProjectIdSchema }).strict();
 export const RenderIdInputSchema = z.object({ renderId: RenderIdSchema }).strict();
+export const RenderSegmentInputSchema = z.object({
+  renderId: RenderIdSchema,
+  ordinal: z.number().int().positive()
+}).strict();
 export const RenderArtifactInputSchema = z.object({ artifactId: RenderArtifactIdSchema }).strict();
 export const RenderArtifactExportResultSchema = z.object({
   disposition: z.enum(["download", "saved", "canceled"]),
@@ -200,4 +207,9 @@ export interface RenderClient {
   retry(renderId: string): Promise<RenderJob>;
   listArtifacts(renderId: string): Promise<RenderArtifact[]>;
   exportArtifact(artifactId: string): Promise<RenderArtifactExportResult>;
+  listSegments(renderId: string): Promise<RenderHistorySegment[]>;
+  getWaveform(renderId: string): Promise<RenderWaveform>;
+  renderAudioSource(renderId: string): string;
+  segmentAudioSource(renderId: string, ordinal: number): string;
+  exportSegment(renderId: string, ordinal: number): Promise<RenderArtifactExportResult>;
 }

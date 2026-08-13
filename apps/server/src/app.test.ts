@@ -188,6 +188,11 @@ async function fixture() {
     cancel: async () => renderJob(), retry: async () => renderJob(), listArtifacts: async () => [artifact],
     exportArtifact: async () => ({ disposition: "download" as const, fileName: artifact.fileName }),
     resolveArtifact: async () => ({ artifact, path: join(import.meta.dirname, "../../../package.json") }),
+    resolveRenderAudio: async () => ({ path: join(import.meta.dirname, "../../../package.json"), fileName: "fixture.mp3", mimeType: "audio/mpeg" as const, sizeBytes: 1 }),
+    resolveSegmentAudio: async () => ({ path: join(import.meta.dirname, "../../../package.json"), fileName: "000001.wav", mimeType: "audio/wav" as const, sizeBytes: 1 }),
+    listSegments: async () => [],
+    getWaveform: async () => ({ status: "unavailable" as const, renderId, reason: "audioMissing" as const }),
+    exportSegment: async () => ({ disposition: "download" as const, fileName: "000001.wav" }),
     close: async () => undefined
   };
   openServices.add(service);
@@ -346,6 +351,24 @@ describe("Express connection API", () => {
   });
 });
 
+describe("Express render review media", () => {
+  it("supports full, HEAD, and single-range playback without exposing a path", async () => {
+    const { app } = await fixture();
+    const renderId = "00000000-0000-4000-8000-000000000003";
+    const full = await request(app).get(`/api/renders/${renderId}/audio`).expect(200);
+    expect(full.headers["accept-ranges"]).toBe("bytes");
+    expect(full.headers["content-type"]).toMatch(/^audio\/mpeg/u);
+    expect(JSON.stringify(full.headers)).not.toContain(import.meta.dirname);
+    await request(app).head(`/api/renders/${renderId}/audio`).expect(200).expect("content-length", "1");
+    await request(app).get(`/api/renders/${renderId}/segments/1/audio`).set("range", "bytes=0-0")
+      .expect(206).expect("content-range", "bytes 0-0/1").expect("content-length", "1");
+    await request(app).get(`/api/renders/${renderId}/audio`).set("range", "bytes=2-3")
+      .expect(416).expect("content-range", "bytes */1");
+    await request(app).post(`/api/renders/${renderId}/segments/1/export`).expect(200)
+      .expect("content-disposition", "attachment; filename=\"000001.wav\"");
+  });
+});
+
 interface ExpressRouteLayer {
   route?: {
     path: string;
@@ -365,10 +388,10 @@ describe("REST API operation manifest", () => {
       : []);
     const declared = REST_API_MANIFEST.map(({ method, path }) => `${method} ${path}`);
     expect(registered.sort()).toEqual([...declared].sort());
-    expect(new Set(declared).size).toBe(44);
+    expect(new Set(declared).size).toBe(49);
   });
 
-  it("exercises a successful schema-valid response for all 44 operations", async () => {
+  it("exercises a successful schema-valid response for all 49 operations", async () => {
     const { app } = await fixture();
     const covered = new Set<string>();
     const call = async (method: string, path: string, expected: number, body?: string | object) => {
@@ -377,6 +400,7 @@ describe("REST API operation manifest", () => {
         .replace(/^\/api\/render-plans\/[0-9a-f-]{36}$/u, "/api/render-plans/:planId")
         .replace(/^\/api\/render-artifacts\/[0-9a-f-]{36}$/u, "/api/render-artifacts/:artifactId")
         .replace(/^\/api\/renders\/[0-9a-f-]{36}(?=\/|$)/u, "/api/renders/:renderId")
+        .replace(/\/segments\/\d+(?=\/|$)/u, "/segments/:ordinal")
         .replace(/\/[0-9a-f-]{36}(?=\/|$)/gu, "/:projectId")
         .replace(/\/manifest-profile(?=\/|$)/gu, "/:profileId")
         .replace(/\/[a-f0-9]{64}(?=\/|$)/gu, "/:cacheKey")}`);
@@ -444,6 +468,11 @@ describe("REST API operation manifest", () => {
     await call("POST", `/api/renders/${render.id}/cancel`, 200);
     await call("POST", `/api/renders/${render.id}/retry`, 202);
     const artifacts = (await call("GET", `/api/renders/${render.id}/artifacts`, 200)).body as Array<{ id: string }>;
+    await call("GET", `/api/renders/${render.id}/audio`, 200);
+    await call("GET", `/api/renders/${render.id}/waveform`, 200);
+    await call("GET", `/api/renders/${render.id}/segments`, 200);
+    await call("GET", `/api/renders/${render.id}/segments/1/audio`, 200);
+    await call("POST", `/api/renders/${render.id}/segments/1/export`, 200);
     await call("GET", `/api/render-artifacts/${artifacts[0]!.id}`, 200);
     SpeechCacheStatusSchema.parse((await call("GET", "/api/speech-cache", 200)).body as unknown);
     SpeechCacheCleanupResultSchema.parse((await call("DELETE", `/api/projects/${created.id}/speech-cache`, 200)).body as unknown);
@@ -487,6 +516,11 @@ describe("REST API operation manifest", () => {
       request(app).post("/api/renders/not-a-uuid/cancel").expect(400),
       request(app).post("/api/renders/not-a-uuid/retry").expect(400),
       request(app).get("/api/renders/not-a-uuid/artifacts").expect(400),
+      request(app).get("/api/renders/not-a-uuid/audio").expect(400),
+      request(app).get("/api/renders/not-a-uuid/waveform").expect(400),
+      request(app).get("/api/renders/not-a-uuid/segments").expect(400),
+      request(app).get("/api/renders/00000000-0000-4000-8000-000000000003/segments/zero/audio").expect(400),
+      request(app).post("/api/renders/00000000-0000-4000-8000-000000000003/segments/0/export").expect(400),
       request(app).get("/api/render-artifacts/not-a-uuid").expect(400),
       request(app).delete("/api/projects/not-a-uuid/speech-cache").expect(400),
       request(app).delete("/api/speech-cache/not-a-key").expect(400)

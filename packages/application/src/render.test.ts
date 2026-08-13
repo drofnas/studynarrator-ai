@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -126,7 +126,10 @@ describe("render coordinator", () => {
     expect(probe.decodable).toBe(true);
     expect(probe.formatName).toContain("mp3");
     const [reviewSegment] = repository.listRenderSegments(started.id);
-    expect(reviewSegment).toMatchObject({ state: "complete", audioFileName: "000001.wav", audioSizeBytes: expect.any(Number), audioChecksum: expect.stringMatching(/^[a-f0-9]{64}$/u) });
+    expect(reviewSegment?.state).toBe("complete");
+    expect(reviewSegment?.audioFileName).toBe("000001.wav");
+    expect(reviewSegment?.audioSizeBytes).toBeTypeOf("number");
+    expect(reviewSegment?.audioChecksum).toMatch(/^[a-f0-9]{64}$/u);
     const retained = repository.getRenderSegmentPath(started.id, 1);
     expect(retained.path).toBe(join(dataDirectory, "renders", started.id, "segments", "000001.wav"));
     expect((await readFile(retained.path!)).byteLength).toBe(reviewSegment!.audioSizeBytes);
@@ -134,6 +137,17 @@ describe("render coordinator", () => {
     expect(waveform.sourceChecksum).toBe(mp3.checksum);
     expect(waveform.peaks.length).toBeGreaterThan(0);
     expect(waveform.peaks.length).toBeLessThanOrEqual(1_024);
+    await expect(service.getWaveform(started.id)).resolves.toMatchObject({ status: "available", sourceChecksum: mp3.checksum });
+    const [historySegment] = await service.listSegments(started.id);
+    expect(historySegment?.type).toBe("speech");
+    if (historySegment?.type !== "speech") throw new Error("Expected speech history.");
+    expect(historySegment).toMatchObject({ ordinal: 1, speakerLabel: "Narrator", voiceId: "voice", readableText: "Render me." });
+    expect(historySegment.audio).toMatchObject({ status: "available", mimeType: "audio/wav" });
+    await expect(service.resolveSegmentAudio(started.id, 1)).resolves.toMatchObject({ fileName: "000001.wav", mimeType: "audio/wav" });
+    await unlink(retained.path!);
+    const [missingSegment] = await service.listSegments(started.id);
+    expect(missingSegment?.audio.status).toBe("unavailable");
+    await expect(service.resolveSegmentAudio(started.id, 1)).rejects.toThrow("unavailable");
     const checksums = artifacts.find(({ type }) => type === "checksums")!;
     expect(await readFile((await service.resolveArtifact(checksums.id)).path, "utf8")).toContain(mp3.checksum);
     await service.close();

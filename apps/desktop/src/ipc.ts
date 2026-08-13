@@ -33,11 +33,14 @@ import {
   RenderArtifactCollectionSchema,
   RenderArtifactExportResultSchema,
   RenderArtifactInputSchema,
+  RenderHistorySegmentCollectionSchema,
   RenderIdInputSchema,
   RenderJobCollectionSchema,
   RenderJobSchema,
   RenderPlanInputSchema,
   RenderProjectInputSchema,
+  RenderSegmentInputSchema,
+  RenderWaveformSchema,
   SYSTEM_DIAGNOSTICS_CHANNEL,
   SystemDiagnosticsSchema,
   SystemPacingDefaultsSchema,
@@ -327,5 +330,21 @@ export function registerRenderHandlers(
     if (destination.canceled || !destination.filePath) return RenderArtifactExportResultSchema.parse({ disposition: "canceled", fileName: artifact.fileName });
     await copyFile(path, destination.filePath);
     return RenderArtifactExportResultSchema.parse({ disposition: "saved", fileName: artifact.fileName });
+  });
+  handle(RENDER_CHANNELS.segments, async (input) => {
+    const { renderId } = RenderIdInputSchema.parse(input);
+    return RenderHistorySegmentCollectionSchema.parse(await renders.listSegments(renderId));
+  });
+  handle(RENDER_CHANNELS.waveform, async (input) => {
+    const { renderId } = RenderIdInputSchema.parse(input);
+    return RenderWaveformSchema.parse(await renders.getWaveform(renderId));
+  });
+  handle(RENDER_CHANNELS.exportSegment, async (input) => {
+    const { renderId, ordinal } = RenderSegmentInputSchema.parse(input);
+    const media = await renders.resolveSegmentAudio(renderId, ordinal);
+    const destination = await dialog.showSaveDialog({ defaultPath: media.fileName });
+    if (destination.canceled || !destination.filePath) return RenderArtifactExportResultSchema.parse({ disposition: "canceled", fileName: media.fileName });
+    await copyFile(media.path, destination.filePath);
+    return RenderArtifactExportResultSchema.parse({ disposition: "saved", fileName: media.fileName });
   });
 }
