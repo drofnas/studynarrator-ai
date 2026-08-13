@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { transformScratchpadPassage, type LexiconEntry } from "@studynarrator/core";
 import type { PersistenceClient, ScratchpadClient, VoiceCatalog } from "@studynarrator/shared-types";
 import { useConnections } from "@/features/connections/ConnectionProvider.js";
-import { BasicAudioPlayer } from "@/features/scratchpad/BasicAudioPlayer.js";
+import { SharedAudioPlayer } from "@/shared/audio/SharedAudioPlayer.js";
 import { useScratchpadSession } from "@/features/scratchpad/ScratchpadSessionProvider.js";
 import { ErrorNotice } from "@/shared/ui/ErrorNotice.js";
 import styles from "./ScratchpadPage.module.css";
@@ -122,7 +122,7 @@ export function ScratchpadPage({ client, persistence }: { client: ScratchpadClie
           {error ? <ErrorNotice title="Synthesis did not complete">{error} Your passage and selections are ready to retry.</ErrorNotice> : null}
 
           {session.active ? <>
-            <BasicAudioPlayer label={`${session.active.result.connectionProfileName} · ${session.active.result.voiceLabel} · ${session.active.result.voiceId}`} src={session.active.audioUrl} />
+            <SharedAudioPlayer label={`${session.active.result.connectionProfileName} · ${session.active.result.voiceLabel} · ${session.active.result.voiceId}`} src={session.active.audioUrl} />
             <section className={styles.resultDetail}><div><span>Result · cache {session.active.result.cache.status}</span><strong>{session.active.result.voiceLabel}</strong></div><code>{session.active.result.voiceId} · {session.active.result.modelId} · {String(session.active.result.speed)}× · {String(session.active.result.audio.byteLength)} bytes</code><p>{session.active.result.transformedText}</p></section>
           </> : <section className={styles.emptyResult}><span aria-hidden="true">◌</span><div><h3>No audio loaded</h3><p>Your first validated result will appear here. Scratchpad results never enter project or render history.</p></div></section>}
         </main>
