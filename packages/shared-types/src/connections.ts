@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+function hasCredentialControlLineBreak(value: string): boolean {
+  return [...value].some((character) => {
+    const code = character.codePointAt(0);
+    return code === 0 || code === 10 || code === 13;
+  });
+}
+
 const TimestampSchema = z.iso.datetime({ offset: true });
 const NullableTimestampSchema = TimestampSchema.nullable();
 
@@ -70,7 +77,7 @@ export const CredentialMutationSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("clear") }).strict(),
   z.object({
     action: z.literal("replace"),
-    apiKey: z.string().min(1).max(8_192).refine((value) => !/[\u0000\r\n]/u.test(value), "API keys cannot contain control line breaks.")
+    apiKey: z.string().min(1).max(8_192).refine((value) => !hasCredentialControlLineBreak(value), "API keys cannot contain control line breaks.")
   }).strict()
 ]);
 export type CredentialMutation = z.infer<typeof CredentialMutationSchema>;

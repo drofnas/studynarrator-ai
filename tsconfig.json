@@ -2,10 +2,12 @@
   "files": [],
   "references": [
     { "path": "tsconfig.tools.json" },
+    { "path": "apps/fake-speaches" },
     { "path": "packages/shared-types" },
     { "path": "packages/core" },
     { "path": "packages/application" },
     { "path": "packages/persistence" },
+    { "path": "packages/speaches-adapter" },
     { "path": "packages/runtime" },
     { "path": "apps/server" },
     { "path": "apps/web" },

@@ -1,0 +1,15 @@
+{
+  "name": "@studynarrator/fake-speaches",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "start": "tsx src/cli.ts"
+  },
+  "devDependencies": {
+    "@studynarrator/speaches-adapter": "0.1.0"
+  }
+}
