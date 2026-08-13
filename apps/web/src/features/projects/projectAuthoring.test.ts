@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import type { VoiceCatalogEntry } from "@studynarrator/shared-types";
-import { MAX_SCRIPT_CHARACTERS, readUtf8TextFile, replaceLiteral, resolveProjectSpeakerVoiceId, stripSingleSurroundingCodeFence } from "./projectAuthoring.js";
+import { MAX_SCRIPT_CHARACTERS, readUtf8TextFile, replaceLiteral, resolveProjectSpeakerVoiceId, stripSingleSurroundingCodeFence, supportedProjectVoices } from "./projectAuthoring.js";
 
 const voices: VoiceCatalogEntry[] = [
   { voiceId: "voice-disabled", label: "Disabled", enabled: false, language: null, locale: null, accent: null, category: null, style: null, sampleText: null },
@@ -41,5 +41,16 @@ describe("authoring input helpers", () => {
     expect(resolveProjectSpeakerVoiceId("voice-disabled", null, voices)).toBe("voice-first");
     expect(resolveProjectSpeakerVoiceId(null, null, [])).toBeNull();
     expect(resolveProjectSpeakerVoiceId("legacy-voice", null, voices.map((voice) => ({ ...voice, enabled: false })))).toBeNull();
+  });
+
+  it("intersects catalog ordering with server support and appends newly discovered voices", () => {
+    expect(supportedProjectVoices(voices, [
+      { voiceId: "voice-default", name: "Default server name", language: null, gender: null },
+      { voiceId: "voice-disabled", name: null, language: null, gender: null },
+      { voiceId: "voice-new", name: "New voice", language: "English", gender: "neutral" }
+    ])).toEqual([
+      expect.objectContaining({ voiceId: "voice-default", label: "Default" }),
+      expect.objectContaining({ voiceId: "voice-new", label: "New voice — voice-new", language: "English", category: "neutral" })
+    ]);
   });
 });
