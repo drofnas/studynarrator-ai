@@ -587,7 +587,11 @@ describe("Projects workbench", () => {
     const exportArtifact = vi.fn(async () => ({ disposition: "download" as const, fileName: artifact.fileName }));
     const renderClient: RenderClient = {
       start, list: vi.fn(async () => []), get: vi.fn(async () => job), cancel: vi.fn(async () => job), retry: vi.fn(async () => job),
-      listArtifacts: vi.fn(async () => [artifact]), exportArtifact
+      listArtifacts: vi.fn(async () => [artifact]), exportArtifact,
+      listSegments: vi.fn(async () => []),
+      getWaveform: vi.fn(async () => ({ status: "unavailable" as const, renderId: job.id, reason: "audioMissing" as const })),
+      renderAudioSource: vi.fn(() => "/render.mp3"), segmentAudioSource: vi.fn(() => "/segment.wav"),
+      exportSegment: vi.fn(async () => ({ disposition: "download" as const, fileName: "000001.wav" }))
     };
     renderPage(client, analyze, {
       renderPlanClient: { create: vi.fn(), list: vi.fn(async () => [summaryOf(plan)]), get: vi.fn(async () => plan) },

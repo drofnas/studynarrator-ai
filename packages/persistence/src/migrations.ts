@@ -230,6 +230,13 @@ const MIGRATION_5_SQL = `
   CREATE INDEX render_artifacts_render_idx ON render_artifacts(render_id, artifact_type);
 `;
 
+const MIGRATION_6_SQL = `
+  ALTER TABLE render_segments ADD COLUMN audio_file_name TEXT;
+  ALTER TABLE render_segments ADD COLUMN audio_path TEXT;
+  ALTER TABLE render_segments ADD COLUMN audio_size_bytes INTEGER CHECK (audio_size_bytes IS NULL OR audio_size_bytes > 0);
+  ALTER TABLE render_segments ADD COLUMN audio_checksum TEXT CHECK (audio_checksum IS NULL OR length(audio_checksum) = 64);
+`;
+
 export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
   { version: 1, name: "runtime-diagnostics", up: (database) => { database.exec(MIGRATION_1_SQL); } },
   {
@@ -258,6 +265,13 @@ export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
     name: "render-execution",
     up: (database) => {
       database.exec(MIGRATION_5_SQL);
+    }
+  },
+  {
+    version: 6,
+    name: "render-review-media",
+    up: (database) => {
+      database.exec(MIGRATION_6_SQL);
     }
   }
 ]);

@@ -44,21 +44,22 @@ describe("database migrations", () => {
       { version: 2, name: "project-authoring" },
       { version: 3, name: "speaches-connections" },
       { version: 4, name: "project-transition-pauses" },
-      { version: 5, name: "render-execution" }
+      { version: 5, name: "render-execution" },
+      { version: 6, name: "render-review-media" }
     ]);
   });
 
-  it("creates schema version 5 and reruns without duplicate migrations or backups", async () => {
+  it("creates schema version 6 and reruns without duplicate migrations or backups", async () => {
     const databasePath = await temporaryDatabase("studynarrator-migration-fresh-");
     const first = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-12T12:00:00.000Z") });
-    expect(first.appliedVersions).toEqual([1, 2, 3, 4, 5]);
+    expect(first.appliedVersions).toEqual([1, 2, 3, 4, 5, 6]);
     expect(first.backupPath).toBeNull();
     first.database.close();
 
     const second = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-13T12:00:00.000Z") });
     expect(second.appliedVersions).toEqual([]);
     expect(second.backupPath).toBeNull();
-    expect(second.database.prepare("SELECT count(*) AS count FROM schema_migrations").get()).toEqual({ count: 5 });
+    expect(second.database.prepare("SELECT count(*) AS count FROM schema_migrations").get()).toEqual({ count: 6 });
     second.database.close();
   });
 
@@ -69,8 +70,8 @@ describe("database migrations", () => {
     old.close();
 
     const upgraded = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-12T12:00:00.000Z") });
-    expect(upgraded.appliedVersions).toEqual([2, 3, 4, 5]);
-    expect(upgraded.backupPath).toContain("-v1-to-v5-");
+    expect(upgraded.appliedVersions).toEqual([2, 3, 4, 5, 6]);
+    expect(upgraded.backupPath).toContain("-v1-to-v6-");
     expect((await stat(upgraded.backupPath!)).mode & 0o777).toBe(0o600);
     expect(upgraded.database.prepare("SELECT value FROM diagnostic_kv WHERE key = 'fixture'").get()).toEqual({ value: "preserved" });
     const backup = new Database(upgraded.backupPath!, { readonly: true });
@@ -97,8 +98,8 @@ describe("database migrations", () => {
     previous.database.close();
 
     const upgraded = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-13T12:00:00.000Z") });
-    expect(upgraded.appliedVersions).toEqual([3, 4, 5]);
-    expect(upgraded.backupPath).toContain("-v2-to-v5-");
+    expect(upgraded.appliedVersions).toEqual([3, 4, 5, 6]);
+    expect(upgraded.backupPath).toContain("-v2-to-v6-");
     expect(upgraded.database.prepare("SELECT name, model_id, paragraph_transition_mode, paragraph_transition_pause_id FROM projects WHERE id = ?").get(projectId))
       .toEqual({ name: "V2 project", model_id: null, paragraph_transition_mode: "preset", paragraph_transition_pause_id: "pause_medium" });
     upgraded.database.close();
@@ -358,10 +359,10 @@ describe("StudyNarratorRepository", () => {
     const job = repository.createRenderJob({
       contractVersion: 1, id: renderId, projectId: project.id, planId, retryOfRenderId: null,
       state: "queued", progress, error: null, createdAt: timestamp, startedAt: null, finishedAt: null
-    }, [{ renderId, ordinal: 1, type: "speech", state: "pending", cacheStatus: null, audioDurationMs: null, error: null }]);
+    }, [{ renderId, ordinal: 1, type: "speech", state: "pending", cacheStatus: null, audioDurationMs: null, audioFileName: null, audioSizeBytes: null, audioChecksum: null, error: null }]);
     expect(repository.findActiveRenderJob(planId)).toEqual(job);
     expect(repository.listRecoverableRenderJobs()).toEqual([job]);
-    repository.updateRenderSegment({ renderId, ordinal: 1, type: "speech", state: "complete", cacheStatus: "miss", audioDurationMs: 1_000, error: null });
+    repository.updateRenderSegment({ renderId, ordinal: 1, type: "speech", state: "complete", cacheStatus: "miss", audioDurationMs: 1_000, audioFileName: "000001.wav", audioSizeBytes: 24_044, audioChecksum: "a".repeat(64), error: null }, "/tmp/render/segments/000001.wav");
     const complete = repository.updateRenderJob({ ...job, state: "complete", progress: { ...progress, phase: "complete", completedChunks: 1, cacheMisses: 1, ttsRequests: 1 }, startedAt: timestamp, finishedAt: timestamp });
     const artifacts = repository.replaceRenderArtifacts(renderId, [{
       contractVersion: 1, id: artifactId, renderId, type: "mp3", fileName: "rendered.mp3", path: "/scoped/rendered.mp3",
@@ -371,11 +372,14 @@ describe("StudyNarratorRepository", () => {
     expect(repository.listRenderJobs(project.id)).toEqual([complete]);
     expect(repository.listRenderArtifacts(renderId)).toEqual(artifacts);
     expect(repository.getRenderArtifactPath(artifactId)).toMatchObject({ path: "/scoped/rendered.mp3", artifact: artifacts[0] });
+    expect(repository.listRenderSegments(renderId)).toEqual([expect.objectContaining({ ordinal: 1, audioFileName: "000001.wav", audioSizeBytes: 24_044 })]);
+    expect(repository.getRenderSegmentPath(renderId, 1)).toMatchObject({ path: "/tmp/render/segments/000001.wav" });
     repository.close();
 
     const reopened = await openStudyNarratorRepository({ Database: DatabaseAdapter, databasePath });
     expect(reopened.getRenderJob(renderId)).toEqual(complete);
     expect(reopened.listRenderArtifacts(renderId)).toEqual(artifacts);
+    expect(reopened.getRenderSegmentPath(renderId, 1)).toMatchObject({ path: "/tmp/render/segments/000001.wav" });
     reopened.close();
   });
 });

@@ -22,7 +22,6 @@ import {
   type RenderPlan,
   type RenderPlanClient,
   type RenderPlanSummary,
-  type RenderArtifact,
   type RenderClient,
   type RenderJob,
   type ProjectSummary,
@@ -49,6 +48,7 @@ import {
 import styles from "./ProjectsPage.module.css";
 import { useConnections } from "@/features/connections/ConnectionProvider.js";
 import { PreviewResultCard } from "@/features/preview/PreviewResultCard.js";
+import { RenderHistory } from "@/features/renders/RenderHistory.js";
 
 type SaveState = "saved" | "unsaved" | "saving" | "invalid" | "failed";
 type AnalysisState = "idle" | "parsing" | "ready" | "failed";
@@ -153,7 +153,6 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
   const [renderPlanError, setRenderPlanError] = useState("");
   const [renderJobs, setRenderJobs] = useState<RenderJob[]>([]);
   const [selectedRenderJob, setSelectedRenderJob] = useState<RenderJob>();
-  const [renderArtifacts, setRenderArtifacts] = useState<RenderArtifact[]>([]);
   const [renderError, setRenderError] = useState("");
   const previewControllerRef = useRef<AbortController | null>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
@@ -256,7 +255,6 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
       setSelectedRenderPlan(undefined);
       setRenderJobs([]);
       setSelectedRenderJob(undefined);
-      setRenderArtifacts([]);
       return;
     }
     let active = true;
@@ -316,14 +314,6 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
       }).catch((error: unknown) => { if (active) setRenderError(message(error)); });
     }, 500);
     return () => { active = false; window.clearInterval(timer); };
-  }, [renderClient, selectedRenderJob]);
-
-  useEffect(() => {
-    if (!renderClient || selectedRenderJob?.state !== "complete") { setRenderArtifacts([]); return; }
-    let active = true;
-    void renderClient.listArtifacts(selectedRenderJob.id).then((artifacts) => { if (active) setRenderArtifacts(artifacts); })
-      .catch((error: unknown) => { if (active) setRenderError(message(error)); });
-    return () => { active = false; };
   }, [renderClient, selectedRenderJob]);
 
   const updateDraft = useCallback((updater: (current: ProjectDraft) => ProjectDraft, autosave = true) => {
@@ -697,7 +687,11 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
 
   const cancelRender = async () => {
     if (!renderClient || !selectedRenderJob) return;
-    try { setSelectedRenderJob(await renderClient.cancel(selectedRenderJob.id)); }
+    try {
+      const job = await renderClient.cancel(selectedRenderJob.id);
+      setSelectedRenderJob(job);
+      setRenderJobs((current) => current.map((item) => item.id === job.id ? job : item));
+    }
     catch (error) { setRenderError(message(error)); }
   };
 
@@ -707,6 +701,17 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
       const job = await renderClient.retry(selectedRenderJob.id);
       setSelectedRenderJob(job);
       setRenderJobs((current) => [job, ...current]);
+    } catch (error) { setRenderError(message(error)); }
+  };
+
+  const rerenderFrozenPlan = async (source: RenderJob) => {
+    if (!renderClient) return;
+    setRenderError("");
+    try {
+      const job = await renderClient.start(source.planId);
+      setSelectedRenderJob(job);
+      setRenderJobs((current) => [job, ...current.filter(({ id }) => id !== job.id)]);
+      setNotice(`Started a full rerender from frozen plan ${source.planId}.`);
     } catch (error) { setRenderError(message(error)); }
   };
 
@@ -850,19 +855,19 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
           {renderClient ? <section aria-labelledby="render-execution-heading">
             <div className={styles.sectionHeading}><div><span>Durable worker</span><h4 id="render-execution-heading">Render execution</h4></div><b>{renderJobs.length}</b></div>
             {renderError ? <p className={styles.fieldError} role="alert">{renderError}</p> : null}
-            {renderJobs.length > 0 ? <label>Saved renders<select aria-label="Saved renders" value={selectedRenderJob?.id ?? ""} onChange={(event) => setSelectedRenderJob(renderJobs.find(({ id }) => id === event.target.value))}>{renderJobs.map((job) => <option key={job.id} value={job.id}>{new Date(job.createdAt).toLocaleString()} · {job.state}</option>)}</select></label> : <p>No render jobs yet.</p>}
-            {selectedRenderJob ? <div aria-live="polite">
-              <p><strong>Phase: {selectedRenderJob.state.replace("_", " ")}</strong> · {selectedRenderJob.progress.completedChunks}/{selectedRenderJob.progress.totalChunks} chunks · {selectedRenderJob.progress.cacheHits} cache hits · {selectedRenderJob.progress.cacheMisses} misses · {selectedRenderJob.progress.ttsRequests} TTS requests</p>
-              <p>{selectedRenderJob.progress.sectionTitle ?? "No active section"} · speech {selectedRenderJob.progress.speechOrdinal}/{selectedRenderJob.progress.speechCount} · {selectedRenderJob.progress.speakerId ?? "no active speaker"} · {selectedRenderJob.progress.voiceId ?? "no active voice"}</p>
-              {selectedRenderJob.progress.excerpt ? <blockquote>{selectedRenderJob.progress.excerpt}</blockquote> : null}
-              <p>Elapsed {(selectedRenderJob.progress.elapsedMs / 1_000).toFixed(1)} seconds.</p>
-              {selectedRenderJob.error ? <p className={styles.fieldError} role="alert"><strong>{selectedRenderJob.error.code}</strong> — {selectedRenderJob.error.message}{selectedRenderJob.error.entryOrdinal ? ` Entry ${String(selectedRenderJob.error.entryOrdinal)}.` : ""}</p> : null}
-              <div className={styles.actionRow}>
-                {!(["complete", "failed", "canceled"] as string[]).includes(selectedRenderJob.state) ? <button type="button" className={styles.danger} onClick={() => void cancelRender()}>Cancel render</button> : null}
-                {selectedRenderJob.state === "failed" ? <button type="button" onClick={() => void retryRender()}>Retry render</button> : null}
-              </div>
-              {renderArtifacts.length > 0 ? <ul aria-label="Render artifacts">{renderArtifacts.map((artifact) => <li key={artifact.id}><strong>{artifact.fileName}</strong> · {artifact.type} · {artifact.sizeBytes.toLocaleString()} bytes · <code>{artifact.checksum}</code> <button type="button" className={styles.secondary} onClick={() => void renderClient.exportArtifact(artifact.id).catch((error: unknown) => setRenderError(message(error)))}>{window.studyNarrator ? "Save As" : "Download"}</button></li>)}</ul> : null}
-            </div> : null}
+            <RenderHistory
+              jobs={renderJobs}
+              expandedJob={selectedRenderJob}
+              client={renderClient}
+              onExpand={setSelectedRenderJob}
+              onCancel={cancelRender}
+              onRetry={retryRender}
+              onRerender={rerenderFrozenPlan}
+              onSourceLine={focusLine}
+              onNotice={setNotice}
+              onError={setRenderError}
+              voiceCatalog={voiceCatalog}
+            />
           </section> : null}
         </section>
 

@@ -148,6 +148,18 @@ test.describe("Electron acceptance", () => {
     }, destination);
     await mp3Row.getByRole("button", { name: "Save As" }).click();
     await expect.poll(async () => (await stat(destination)).size).toBeGreaterThan(0);
+
+    const segmentRow = page.getByLabel("Ordered segment rows").getByRole("article").filter({ has: page.getByRole("button", { name: /Play segment/u }) }).first();
+    await segmentRow.getByRole("button", { name: /Play segment/u }).click();
+    const segmentPlayer = page.getByLabel(/Audio player for Teacher · segment/u);
+    await expect(segmentPlayer).toBeVisible();
+    await expect.poll(async () => await segmentPlayer.locator("audio").getAttribute("src")).toMatch(/^studynarrator-media:\/\/segment\//u);
+    const segmentDestination = resolve(electronStudyNarrator.dataDirectory, "exported-segment.wav");
+    await electronStudyNarrator.application.evaluate(({ dialog }: ElectronEvaluationApi, filePath) => {
+      dialog.showSaveDialog = () => Promise.resolve({ canceled: false, filePath });
+    }, segmentDestination);
+    await segmentRow.getByRole("button", { name: "Save segment" }).click();
+    await expect.poll(async () => (await stat(segmentDestination)).size).toBeGreaterThan(0);
   });
 
   test("clears one-shot credential input and never stores plaintext", async ({ electronStudyNarrator, studyNarrator }) => {

@@ -140,10 +140,12 @@ export {
   type RenderPlanServiceErrorCode
 } from "./renderPlan.js";
 export {
+  RenderMediaUnavailableError,
   createRenderService,
   type RenderRepository,
   type RenderService
 } from "./render.js";
+export { parseRenderMediaRange, type RenderMediaRange, type ResolvedRenderMedia } from "./renderMedia.js";
 export {
   ScratchpadServiceError,
   createScratchpadService,

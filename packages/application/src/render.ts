@@ -1,41 +1,54 @@
 import { createHash, randomUUID } from "node:crypto";
+import { createReadStream } from "node:fs";
 import { lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import {
   RENDER_CONTRACT_VERSION,
   RenderArtifactIdSchema,
+  RenderHistorySegmentCollectionSchema,
   RenderIdSchema,
   RenderJobSchema,
   RenderPlanIdSchema,
+  RenderWaveformSchema,
   type RenderArtifact,
   type RenderClient,
   type RenderError,
+  type RenderHistorySegment,
   type RenderJob,
   type RenderPlanEntry,
   type RenderProgress,
-  type RenderSegment
+  type RenderSegment,
+  type RenderWaveform
 } from "@studynarrator/shared-types";
 import {
   concatenateWavs,
   encodeMp3,
+  extractWaveformPeaks,
   normalizeSpeechWav,
   probeAudioFile,
   type RenderPlanStore
 } from "@studynarrator/rendering";
 import type { StudyNarratorRepository } from "@studynarrator/persistence";
 import type { CachedSpeechSynthesis } from "./cachedSpeech.js";
+import type { ResolvedRenderMedia } from "./renderMedia.js";
 
 const NONTERMINAL = new Set<RenderJob["state"]>([
   "queued", "validating", "synthesizing", "assembling", "normalizing", "encoding", "writing_artifacts"
 ]);
 
+export class RenderMediaUnavailableError extends Error {
+  readonly code = "RENDER_MEDIA_UNAVAILABLE";
+}
+
 export type RenderRepository = Pick<StudyNarratorRepository,
   "getConnectionProfile" | "createRenderJob" | "getRenderJob" | "listRenderJobs" | "findActiveRenderJob" |
   "listRecoverableRenderJobs" | "updateRenderJob" | "updateRenderSegment" | "replaceRenderArtifacts" |
-  "listRenderArtifacts" | "getRenderArtifactPath">;
+  "listRenderArtifacts" | "getRenderArtifactPath" | "listRenderSegments" | "getRenderSegmentPath">;
 
-export interface RenderService extends RenderClient {
+export interface RenderService extends Omit<RenderClient, "renderAudioSource" | "segmentAudioSource"> {
   resolveArtifact(artifactId: string): Promise<{ artifact: RenderArtifact; path: string }>;
+  resolveRenderAudio(renderId: string): Promise<ResolvedRenderMedia>;
+  resolveSegmentAudio(renderId: string, ordinal: number): Promise<ResolvedRenderMedia>;
   close(): Promise<void>;
 }
 
@@ -54,7 +67,10 @@ function initialProgress(plan: Awaited<ReturnType<RenderPlanStore["get"]>>): Ren
 }
 
 function segment(renderId: string, entry: RenderPlanEntry): RenderSegment {
-  return { renderId, ordinal: entry.ordinal, type: entry.type, state: "pending", cacheStatus: null, audioDurationMs: null, error: null };
+  return {
+    renderId, ordinal: entry.ordinal, type: entry.type, state: "pending", cacheStatus: null,
+    audioDurationMs: null, audioFileName: null, audioSizeBytes: null, audioChecksum: null, error: null
+  };
 }
 
 function slug(value: string): string {
@@ -153,6 +169,8 @@ export async function createRenderService(options: {
     const stage = join(stagingRoot, renderId);
     try {
       await mkdir(stage, { mode: 0o700 });
+      await mkdir(join(stage, "segments"), { mode: 0o700 });
+      await mkdir(join(stage, "work"), { mode: 0o700 });
       job = update(job, "validating");
       const { plan, snapshot, silenceAssets } = await options.plans.load(job.planId);
       const profile = options.repository.getConnectionProfile(snapshot.connection.profileId);
@@ -178,7 +196,7 @@ export async function createRenderService(options: {
           } else {
             const bytes = silenceAssets.get(entry.silence.checksum);
             if (!bytes || sha256(bytes) !== entry.silence.checksum) throw new Error("Frozen silence asset failed verification.");
-            const output = `segment-${String(entry.ordinal).padStart(6, "0")}.wav`;
+            const output = `work/pause-${String(entry.ordinal).padStart(6, "0")}.wav`;
             await writeFile(join(stage, output), bytes, { mode: 0o600, flag: "wx" });
             orderedAudio.push(output);
             actualDurations.set(entry.ordinal, entry.durationMs);
@@ -198,8 +216,9 @@ export async function createRenderService(options: {
           usage: { projectId: plan.projectId }, signal: controller.signal
         });
         if (result.key !== entry.chunks[0]?.cacheKey) throw new Error("Synthesized cache identity did not match the frozen plan.");
-        const raw = join(stage, `raw-${String(entry.ordinal).padStart(6, "0")}.wav`);
-        const output = `segment-${String(entry.ordinal).padStart(6, "0")}.wav`;
+        const audioFileName = `${String(entry.ordinal).padStart(6, "0")}.wav`;
+        const raw = join(stage, "work", `raw-${String(entry.ordinal).padStart(6, "0")}.wav`);
+        const output = `segments/${audioFileName}`;
         await writeFile(raw, result.bytes, { mode: 0o600, flag: "wx" });
         await normalizeSpeechWav({ inputPath: raw, outputPath: join(stage, output), gainDb: entry.gainDb, ...(options.ffmpegPath ? { ffmpegPath: options.ffmpegPath } : {}), signal: controller.signal });
         await rm(raw);
@@ -208,7 +227,11 @@ export async function createRenderService(options: {
         orderedAudio.push(output);
         actualCacheStatuses.set(entry.ordinal, result.status);
         actualDurations.set(entry.ordinal, audio.durationMs);
-        options.repository.updateRenderSegment({ ...segment(renderId, entry), state: "complete", cacheStatus: result.status, audioDurationMs: audio.durationMs });
+        const segmentMetadata = await fileMetadataAt(join(stage, output));
+        options.repository.updateRenderSegment({
+          ...segment(renderId, entry), state: "complete", cacheStatus: result.status, audioDurationMs: audio.durationMs,
+          audioFileName, audioSizeBytes: segmentMetadata.sizeBytes, audioChecksum: segmentMetadata.checksum
+        }, join(root, renderId, "segments", audioFileName));
         job = update(job, "synthesizing", {
           completedChunks: job.progress.completedChunks + 1,
           cacheHits: job.progress.cacheHits + (result.status === "hit" ? 1 : 0),
@@ -231,7 +254,7 @@ export async function createRenderService(options: {
       if (!mp3Probe.decodable || !mp3Probe.formatName?.includes("mp3")) throw new Error("Final MP3 validation failed.");
 
       job = update(job, "writing_artifacts");
-      await Promise.all([rm(combined), rm(join(stage, "concat.txt")), ...orderedAudio.map((name) => rm(join(stage, name)))]);
+      await Promise.all([rm(combined), rm(join(stage, "concat.txt")), rm(join(stage, "work"), { recursive: true })]);
       const files = new Map<string, { type: RenderArtifact["type"]; durationMs: number | null }>([
         [mp3Name, { type: "mp3", durationMs: mp3Probe.durationMs }],
         ["original-script.txt", { type: "originalScript", durationMs: null }],
@@ -244,9 +267,27 @@ export async function createRenderService(options: {
       await writeFile(join(stage, "tts-transcript.txt"), transcript(plan, "tts"), { encoding: "utf8", mode: 0o600, flag: "wx" });
       await writeFile(join(stage, "project-snapshot.json"), `${JSON.stringify(snapshot, null, 2)}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
 
+      const mp3Metadata = await fileMetadataAt(mp3Path);
+      try {
+        const waveform = await extractWaveformPeaks({
+          inputPath: mp3Path,
+          ...(options.ffmpegPath ? { ffmpegPath: options.ffmpegPath } : {}),
+          ...(ffprobePath ? { ffprobePath } : {})
+        });
+        await writeFile(join(stage, "waveform.json"), `${JSON.stringify({
+          schemaVersion: 1,
+          sourceChecksum: mp3Metadata.checksum,
+          durationMs: waveform.durationMs,
+          sampleRate: waveform.sampleRate,
+          peaks: waveform.peaks
+        })}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
+      } catch {
+        // Waveform data is derived review metadata. Its fallback must never invalidate a completed render.
+      }
+
       const fileMetadata = async (fileName: string) => {
-        const bytes = await readFile(join(stage, fileName));
-        return { fileName, checksum: sha256(bytes), sizeBytes: bytes.byteLength };
+        const metadata = await fileMetadataAt(join(stage, fileName));
+        return { fileName, ...metadata };
       };
       const initialMetadata = await Promise.all([...files.keys()].map(fileMetadata));
       let timelineMs = 0;
@@ -308,8 +349,146 @@ export async function createRenderService(options: {
   }
 
   async function fileMetadataAt(path: string): Promise<{ checksum: string; sizeBytes: number }> {
-    const bytes = await readFile(path);
-    return { checksum: sha256(bytes), sizeBytes: bytes.byteLength };
+    const details = await lstat(path);
+    if (!details.isFile() || details.isSymbolicLink()) throw new Error("Render media must be a regular file.");
+    const hash = createHash("sha256");
+    for await (const chunk of createReadStream(path)) hash.update(chunk as Buffer);
+    return { checksum: hash.digest("hex"), sizeBytes: details.size };
+  }
+
+  async function resolveRegularMedia(pathValue: string, expectedDirectory: string, expectedFileName: string, expectedSize: number): Promise<string> {
+    try {
+      const path = resolve(pathValue);
+      const details = await lstat(path);
+      if (dirname(path) !== expectedDirectory || basename(path) !== expectedFileName || !details.isFile() || details.isSymbolicLink() || details.size !== expectedSize) {
+        throw new RenderMediaUnavailableError("The render media is unavailable.");
+      }
+      return path;
+    } catch (error) {
+      if (error instanceof RenderMediaUnavailableError) throw error;
+      throw new RenderMediaUnavailableError("The render media is unavailable.");
+    }
+  }
+
+  async function buildHistorySegments(renderId: string): Promise<RenderHistorySegment[]> {
+    const job = options.repository.getRenderJob(RenderIdSchema.parse(renderId));
+    const { plan, snapshot } = await options.plans.load(job.planId);
+    const runtime = new Map(options.repository.listRenderSegments(job.id).map((item) => [item.ordinal, item]));
+    const speakerLabels = new Map(snapshot.project.speakerMappings.map((item) => [item.speakerId, item.displayName]));
+    const values = await Promise.all(plan.entries.map(async (entry): Promise<RenderHistorySegment> => {
+      const stored = runtime.get(entry.ordinal);
+      if (!stored) throw new Error("The render segment history is incomplete.");
+      const base = {
+        renderId: job.id,
+        ordinal: entry.ordinal,
+        state: stored.state,
+        sectionTitle: entry.sectionTitle,
+        sourceRange: entry.sourceRange,
+        audioDurationMs: stored.audioDurationMs,
+        cacheStatus: stored.cacheStatus,
+        error: stored.error
+      };
+      if (entry.type === "section") return { ...base, type: "section", title: entry.title, audio: { status: "unavailable" } };
+      if (entry.type === "pause") return {
+        ...base, type: "pause", pauseId: entry.pauseId, pauseKind: entry.pauseKind,
+        reason: entry.reason, durationMs: entry.durationMs, audio: { status: "unavailable" }
+      };
+      let audio: RenderHistorySegment["audio"] = { status: "unavailable" };
+      if (stored.audioFileName && stored.audioSizeBytes && stored.audioChecksum) {
+        const resolvedSegment = options.repository.getRenderSegmentPath(job.id, entry.ordinal);
+        if (resolvedSegment.path) {
+          try {
+            await resolveRegularMedia(
+              resolvedSegment.path,
+              join(root, job.id, "segments"),
+              stored.audioFileName,
+              stored.audioSizeBytes
+            );
+            audio = { status: "available", mimeType: "audio/wav", sizeBytes: stored.audioSizeBytes, checksum: stored.audioChecksum };
+          } catch {
+            audio = { status: "unavailable" };
+          }
+        }
+      }
+      return {
+        ...base, type: "speech", speakerId: entry.speakerId,
+        speakerLabel: speakerLabels.get(entry.speakerId) ?? entry.speakerId,
+        modelId: snapshot.connection.modelId, voiceId: entry.voiceId,
+        readableText: entry.readableText, ttsText: entry.ttsText, audio
+      };
+    }));
+    return RenderHistorySegmentCollectionSchema.parse(values);
+  }
+
+  async function waveformFor(renderId: string): Promise<RenderWaveform> {
+    const normalized = RenderIdSchema.parse(renderId);
+    const job = options.repository.getRenderJob(normalized);
+    if (job.state !== "complete") return RenderWaveformSchema.parse({ status: "unavailable", renderId: normalized, reason: "renderIncomplete" });
+    let media: ResolvedRenderMedia;
+    try {
+      media = await resolveRenderAudio(normalized);
+    } catch {
+      return RenderWaveformSchema.parse({ status: "unavailable", renderId: normalized, reason: "audioMissing" });
+    }
+    const cachePath = join(dirname(media.path), "waveform.json");
+    const readCache = async (): Promise<RenderWaveform | null> => {
+      try {
+        const details = await lstat(cachePath);
+        if (!details.isFile() || details.isSymbolicLink() || details.size > 64 * 1_024) return null;
+        const value = JSON.parse(await readFile(cachePath, "utf8")) as Record<string, unknown>;
+        return RenderWaveformSchema.parse({
+          status: "available", renderId: normalized, sourceChecksum: value.sourceChecksum,
+          durationMs: value.durationMs, sampleRate: value.sampleRate, peaks: value.peaks
+        });
+      } catch {
+        return null;
+      }
+    };
+    const cached = await readCache();
+    if (cached?.status === "available" && cached.sourceChecksum === options.repository.listRenderArtifacts(normalized).find(({ type }) => type === "mp3")?.checksum) return cached;
+    try {
+      const artifact = options.repository.listRenderArtifacts(normalized).find(({ type }) => type === "mp3");
+      if (!artifact) throw new Error("The render MP3 is unavailable.");
+      const waveform = await extractWaveformPeaks({
+        inputPath: media.path,
+        ...(options.ffmpegPath ? { ffmpegPath: options.ffmpegPath } : {}),
+        ...(ffprobePath ? { ffprobePath } : {})
+      });
+      const available = RenderWaveformSchema.parse({
+        status: "available", renderId: normalized, sourceChecksum: artifact.checksum,
+        durationMs: waveform.durationMs, sampleRate: waveform.sampleRate, peaks: waveform.peaks
+      });
+      if (available.status !== "available") throw new Error("The waveform result is unavailable.");
+      const temporary = join(dirname(media.path), `waveform.${createId()}.tmp`);
+      await writeFile(temporary, `${JSON.stringify({
+        schemaVersion: 1, sourceChecksum: available.sourceChecksum, durationMs: available.durationMs,
+        sampleRate: available.sampleRate, peaks: available.peaks
+      })}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
+      await rename(temporary, cachePath);
+      return available;
+    } catch {
+      return RenderWaveformSchema.parse({ status: "unavailable", renderId: normalized, reason: "extractionFailed" });
+    }
+  }
+
+  async function resolveRenderAudio(renderId: string): Promise<ResolvedRenderMedia> {
+    const normalized = RenderIdSchema.parse(renderId);
+    const artifact = options.repository.listRenderArtifacts(normalized).find(({ type }) => type === "mp3");
+    if (!artifact) throw new RenderMediaUnavailableError("The completed render audio is unavailable.");
+    const resolvedArtifact = options.repository.getRenderArtifactPath(artifact.id);
+    const path = await resolveRegularMedia(resolvedArtifact.path, join(root, normalized), artifact.fileName, artifact.sizeBytes);
+    return { path, fileName: artifact.fileName, mimeType: "audio/mpeg", sizeBytes: artifact.sizeBytes };
+  }
+
+  async function resolveSegmentAudio(renderId: string, ordinal: number): Promise<ResolvedRenderMedia> {
+    const normalized = RenderIdSchema.parse(renderId);
+    if (!Number.isInteger(ordinal) || ordinal < 1) throw new Error("The render segment ordinal is invalid.");
+    const { segment: stored, path: storedPath } = options.repository.getRenderSegmentPath(normalized, ordinal);
+    if (stored.type !== "speech" || !storedPath || !stored.audioFileName || !stored.audioSizeBytes || !stored.audioChecksum) {
+      throw new RenderMediaUnavailableError("The render segment audio is unavailable.");
+    }
+    const path = await resolveRegularMedia(storedPath, join(root, normalized, "segments"), stored.audioFileName, stored.audioSizeBytes);
+    return { path, fileName: stored.audioFileName, mimeType: "audio/wav", sizeBytes: stored.audioSizeBytes };
   }
 
   async function drain(): Promise<void> {
@@ -391,6 +570,14 @@ export async function createRenderService(options: {
       if (metadata.checksum !== resolved.artifact.checksum || metadata.sizeBytes !== resolved.artifact.sizeBytes) throw new Error("The render artifact failed integrity validation.");
       return { artifact: resolved.artifact, path };
     },
+    async listSegments(renderId) { return await buildHistorySegments(renderId); },
+    async getWaveform(renderId) { return await waveformFor(renderId); },
+    async exportSegment(renderId, ordinal) {
+      const media = await resolveSegmentAudio(renderId, ordinal);
+      return { disposition: "download" as const, fileName: media.fileName };
+    },
+    resolveRenderAudio,
+    resolveSegmentAudio,
     async close() {
       closing = true;
       for (const controller of controllers.values()) controller.abort(new DOMException("StudyNarrator is shutting down.", "AbortError"));

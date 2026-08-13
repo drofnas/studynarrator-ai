@@ -1,4 +1,4 @@
-import express, { type ErrorRequestHandler, type Express } from "express";
+import express, { type ErrorRequestHandler, type Express, type NextFunction, type Request, type Response } from "express";
 import { createReadStream } from "node:fs";
 import { resolve } from "node:path";
 import {
@@ -30,6 +30,9 @@ import {
   RenderIdSchema,
   RenderJobCollectionSchema,
   RenderJobSchema,
+  RenderHistorySegmentCollectionSchema,
+  RenderSegmentInputSchema,
+  RenderWaveformSchema,
   RedactedConnectionDiagnosticsSchema,
   ScratchpadPreviewInputSchema,
   ScratchpadPreviewResultSchema,
@@ -50,7 +53,34 @@ import {
   type SystemDiagnostics,
   type VoiceCatalogClient
 } from "@studynarrator/shared-types";
-import type { DiagnosticsContext, RenderService, SystemService } from "@studynarrator/application";
+import { parseRenderMediaRange, type DiagnosticsContext, type RenderService, type ResolvedRenderMedia, type SystemService } from "@studynarrator/application";
+
+function streamRenderMedia(
+  request: Request,
+  response: Response,
+  next: NextFunction,
+  media: ResolvedRenderMedia,
+  disposition: "inline" | "attachment" = "inline"
+): void {
+  const range = parseRenderMediaRange(request.headers.range, media.sizeBytes);
+  response.setHeader("accept-ranges", "bytes");
+  response.setHeader("cache-control", "private, no-store");
+  response.setHeader("content-type", media.mimeType);
+  response.setHeader("content-disposition", `${disposition}; filename="${media.fileName.replace(/["\\\r\n]/gu, "_")}"`);
+  if (range.status === "unsatisfiable") {
+    response.status(416).setHeader("content-range", `bytes */${String(media.sizeBytes)}`).end();
+    return;
+  }
+  const length = range.end - range.start + 1;
+  response.status(range.status === "partial" ? 206 : 200);
+  response.setHeader("content-length", String(length));
+  if (range.status === "partial") response.setHeader("content-range", `bytes ${String(range.start)}-${String(range.end)}/${String(media.sizeBytes)}`);
+  if (request.method === "HEAD") {
+    response.end();
+    return;
+  }
+  createReadStream(media.path, { start: range.start, end: range.end }).once("error", next).pipe(response);
+}
 
 export function attachStaticWebApplication(app: Express, distributionDirectory: string): void {
   app.use(express.static(distributionDirectory, { index: "index.html" }));
@@ -297,6 +327,32 @@ export function createExpressApp(options: {
     app.get("/api/renders/:renderId/artifacts", async (request, response, next) => {
       try { response.json(RenderArtifactCollectionSchema.parse(await options.renders!.listArtifacts(RenderIdSchema.parse(request.params.renderId)))); } catch (error) { next(error); }
     });
+    app.get("/api/renders/:renderId/audio", async (request, response, next) => {
+      try {
+        const media = await options.renders!.resolveRenderAudio(RenderIdSchema.parse(request.params.renderId));
+        streamRenderMedia(request, response, next, media);
+      } catch (error) { next(error); }
+    });
+    app.get("/api/renders/:renderId/waveform", async (request, response, next) => {
+      try { response.json(RenderWaveformSchema.parse(await options.renders!.getWaveform(RenderIdSchema.parse(request.params.renderId)))); } catch (error) { next(error); }
+    });
+    app.get("/api/renders/:renderId/segments", async (request, response, next) => {
+      try { response.json(RenderHistorySegmentCollectionSchema.parse(await options.renders!.listSegments(RenderIdSchema.parse(request.params.renderId)))); } catch (error) { next(error); }
+    });
+    app.get("/api/renders/:renderId/segments/:ordinal/audio", async (request, response, next) => {
+      try {
+        const input = RenderSegmentInputSchema.parse({ renderId: request.params.renderId, ordinal: Number(request.params.ordinal) });
+        const media = await options.renders!.resolveSegmentAudio(input.renderId, input.ordinal);
+        streamRenderMedia(request, response, next, media);
+      } catch (error) { next(error); }
+    });
+    app.post("/api/renders/:renderId/segments/:ordinal/export", async (request, response, next) => {
+      try {
+        const input = RenderSegmentInputSchema.parse({ renderId: request.params.renderId, ordinal: Number(request.params.ordinal) });
+        const media = await options.renders!.resolveSegmentAudio(input.renderId, input.ordinal);
+        streamRenderMedia(request, response, next, media, "attachment");
+      } catch (error) { next(error); }
+    });
     app.get("/api/render-artifacts/:artifactId", async (request, response, next) => {
       try {
         const { artifact, path } = await options.renders!.resolveArtifact(RenderArtifactIdSchema.parse(request.params.artifactId));
@@ -412,6 +468,10 @@ export function createExpressApp(options: {
       };
       status = renderPlanStatus[errorRecord.code] ?? 500;
       message = typeof errorRecord.message === "string" ? errorRecord.message : "StudyNarrator could not complete the render plan operation.";
+    } else if (errorRecord?.code === "RENDER_MEDIA_UNAVAILABLE") {
+      status = 404;
+      code = "RENDER_MEDIA_UNAVAILABLE";
+      message = "The requested render audio is unavailable.";
     }
     response.status(status).json(BoundaryErrorSchema.parse({
       error: {

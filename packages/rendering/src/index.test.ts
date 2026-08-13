@@ -9,6 +9,7 @@ import {
   createRenderPlanStore,
   createSpeechCache,
   createSpeechCacheKey,
+  extractWaveformPeaks,
   normalizeSpeechText,
   withProjectSnapshotHash,
   withRenderPlanHash,
@@ -250,5 +251,18 @@ describe("render plan silence and storage", () => {
     const moved = withRenderPlanHash({ ...payload, id: "00000000-0000-4000-8000-000000000004" });
     await writeFile(join(root, planId, "render-plan.json"), `${JSON.stringify(moved)}\n`);
     await expect(store.get(planId)).rejects.toThrow(/hash/iu);
+  });
+});
+
+describe("bounded waveform extraction", () => {
+  it("streams audio into a bounded set of normalized peaks", async () => {
+    const root = await mkdtemp(join(tmpdir(), "studynarrator-waveform-"));
+    const inputPath = join(root, "silence.wav");
+    await writeFile(inputPath, createPcmSilence(1_000).bytes!);
+    const waveform = await extractWaveformPeaks({ inputPath, maxPeaks: 64 });
+    expect(waveform).toMatchObject({ durationMs: 1_000, sampleRate: 8_000 });
+    expect(waveform.peaks.length).toBeGreaterThan(0);
+    expect(waveform.peaks.length).toBeLessThanOrEqual(64);
+    expect(new Set(waveform.peaks)).toEqual(new Set([0]));
   });
 });

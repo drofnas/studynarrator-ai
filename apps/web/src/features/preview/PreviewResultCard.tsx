@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ProjectPreviewResult } from "@studynarrator/shared-types";
-import { BasicAudioPlayer } from "@/features/scratchpad/BasicAudioPlayer.js";
+import { SharedAudioPlayer } from "@/shared/audio/SharedAudioPlayer.js";
 import styles from "./PreviewResultCard.module.css";
 
 function createAudioUrl(result: ProjectPreviewResult): string {
@@ -24,7 +24,7 @@ export function PreviewResultCard({ result, onClearEntry }: {
     <header><div><span>Audible preview</span><h3>{result.mode === "segment" ? `Segment ${String(result.nodeOrdinal)}` : "Pronunciation sample"}</h3></div><strong data-state={result.cache.status}>Cache {result.cache.status}</strong></header>
     <div className={styles.identity}><strong>{result.voiceLabel}</strong><code>{result.voiceId}</code><span>{result.modelId} · {String(result.speed)}× · {result.audio.byteLength.toLocaleString()} bytes</span></div>
     <div className={styles.projections}><article><span>Original</span><p>{result.originalText}</p></article><article><span>Readable</span><p>{result.readableText}</p></article><article><span>TTS text</span><p>{result.transformedText}</p></article></div>
-    {audioUrl ? <BasicAudioPlayer label={`${result.voiceLabel} · ${result.voiceId}`} src={audioUrl} /> : null}
+    {audioUrl ? <SharedAudioPlayer label={`${result.voiceLabel} · ${result.voiceId}`} src={audioUrl} /> : null}
     <footer><code>{result.cache.key}</code><button type="button" onClick={() => void onClearEntry()}>Clear this cached entry</button></footer>
   </section>;
 }

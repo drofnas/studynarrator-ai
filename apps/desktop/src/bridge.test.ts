@@ -48,8 +48,8 @@ const diagnostics = {
 const persistenceStatus = {
   contractVersion: 4 as const,
   state: "ready" as const,
-  databaseSchemaVersion: 5 as const,
-  targetDatabaseSchemaVersion: 5 as const,
+  databaseSchemaVersion: 6 as const,
+  targetDatabaseSchemaVersion: 6 as const,
   databasePath: "/tmp/studynarrator.sqlite",
   latestBackupPath: null
 };
@@ -183,7 +183,13 @@ const renders = {
   start: vi.fn(async () => renderJob), list: vi.fn(async () => [renderJob]), get: vi.fn(async () => renderJob),
   cancel: vi.fn(async () => renderJob), retry: vi.fn(async () => renderJob), listArtifacts: vi.fn(async () => []),
   exportArtifact: vi.fn(async () => ({ disposition: "download" as const, fileName: "audio.mp3" })),
-  resolveArtifact: vi.fn(async () => ({ artifact: renderArtifact, path: "/tmp/audio.mp3" })), close: vi.fn()
+  resolveArtifact: vi.fn(async () => ({ artifact: renderArtifact, path: "/tmp/audio.mp3" })),
+  resolveRenderAudio: vi.fn(async () => ({ path: "/tmp/audio.mp3", fileName: "audio.mp3", mimeType: "audio/mpeg" as const, sizeBytes: 3 })),
+  resolveSegmentAudio: vi.fn(async () => ({ path: "/tmp/000001.wav", fileName: "000001.wav", mimeType: "audio/wav" as const, sizeBytes: 3 })),
+  listSegments: vi.fn(async () => []),
+  getWaveform: vi.fn(async () => ({ status: "unavailable" as const, renderId: renderJob.id, reason: "audioMissing" as const })),
+  exportSegment: vi.fn(async () => ({ disposition: "download" as const, fileName: "000001.wav" })),
+  close: vi.fn()
 };
 const saveDialog = { showSaveDialog: vi.fn(async () => ({ canceled: true })) };
 
@@ -203,6 +209,9 @@ describe("Electron boundary", () => {
     expect(invoke).toHaveBeenCalledWith(PERSISTENCE_CHANNELS.projectsList);
     await expect(bridge.connections.list()).resolves.toEqual([]);
     expect(invoke).toHaveBeenCalledWith(CONNECTION_CHANNELS.list);
+    expect(bridge.renders.renderAudioSource(renderJob.id)).toBe(`studynarrator-media://render/${renderJob.id}`);
+    expect(bridge.renders.segmentAudioSource(renderJob.id, 3)).toBe(`studynarrator-media://segment/${renderJob.id}/3`);
+    expect(() => bridge.renders.renderAudioSource("../outside")).toThrow();
   });
 
   it("rejects malformed IPC output", async () => {
@@ -374,7 +383,10 @@ describe("Electron boundary", () => {
       [RENDER_CHANNELS.cancel]: { renderId: renderJob.id },
       [RENDER_CHANNELS.retry]: { renderId: renderJob.id },
       [RENDER_CHANNELS.artifacts]: { renderId: renderJob.id },
-      [RENDER_CHANNELS.exportArtifact]: { artifactId: renderArtifact.id }
+      [RENDER_CHANNELS.exportArtifact]: { artifactId: renderArtifact.id },
+      [RENDER_CHANNELS.segments]: { renderId: renderJob.id },
+      [RENDER_CHANNELS.waveform]: { renderId: renderJob.id },
+      [RENDER_CHANNELS.exportSegment]: { renderId: renderJob.id, ordinal: 1 }
     };
     const invoked = new Set<string>();
     for (const channel of PUBLIC_IPC_CHANNEL_MANIFEST) {

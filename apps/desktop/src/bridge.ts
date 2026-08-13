@@ -19,8 +19,11 @@ import {
   RENDER_CHANNELS,
   RenderArtifactCollectionSchema,
   RenderArtifactExportResultSchema,
+  RenderHistorySegmentCollectionSchema,
+  RenderIdSchema,
   RenderJobCollectionSchema,
   RenderJobSchema,
+  RenderWaveformSchema,
   SYSTEM_DIAGNOSTICS_CHANNEL,
   SystemDiagnosticsSchema,
   SystemPacingDefaultsSchema,
@@ -126,7 +129,15 @@ export function createPreloadBridge(invoke: (channel: string, input?: unknown) =
     async cancel(renderId) { return RenderJobSchema.parse(await invoke(RENDER_CHANNELS.cancel, { renderId })); },
     async retry(renderId) { return RenderJobSchema.parse(await invoke(RENDER_CHANNELS.retry, { renderId })); },
     async listArtifacts(renderId) { return RenderArtifactCollectionSchema.parse(await invoke(RENDER_CHANNELS.artifacts, { renderId })); },
-    async exportArtifact(artifactId) { return RenderArtifactExportResultSchema.parse(await invoke(RENDER_CHANNELS.exportArtifact, { artifactId })); }
+    async exportArtifact(artifactId) { return RenderArtifactExportResultSchema.parse(await invoke(RENDER_CHANNELS.exportArtifact, { artifactId })); },
+    async listSegments(renderId) { return RenderHistorySegmentCollectionSchema.parse(await invoke(RENDER_CHANNELS.segments, { renderId })); },
+    async getWaveform(renderId) { return RenderWaveformSchema.parse(await invoke(RENDER_CHANNELS.waveform, { renderId })); },
+    renderAudioSource(renderId) { return `studynarrator-media://render/${RenderIdSchema.parse(renderId)}`; },
+    segmentAudioSource(renderId, ordinal) {
+      if (!Number.isInteger(ordinal) || ordinal < 1) throw new Error("The render segment ordinal is invalid.");
+      return `studynarrator-media://segment/${RenderIdSchema.parse(renderId)}/${String(ordinal)}`;
+    },
+    async exportSegment(renderId, ordinal) { return RenderArtifactExportResultSchema.parse(await invoke(RENDER_CHANNELS.exportSegment, { renderId, ordinal })); }
   };
   return Object.freeze({
     system: Object.freeze({

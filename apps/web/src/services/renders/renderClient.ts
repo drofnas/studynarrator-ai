@@ -1,8 +1,11 @@
 import {
   BoundaryErrorSchema,
   RenderArtifactCollectionSchema,
+  RenderHistorySegmentCollectionSchema,
+  RenderIdSchema,
   RenderJobCollectionSchema,
   RenderJobSchema,
+  RenderWaveformSchema,
   type RenderClient,
   type StudyNarratorBridge
 } from "@studynarrator/shared-types";
@@ -44,6 +47,37 @@ export function createRestRenderClient(fetchInput: typeof fetch = fetch): Render
       anchor.download = "";
       anchor.click();
       return await Promise.resolve({ disposition: "download" as const, fileName: "render artifact" });
+    },
+    async listSegments(renderId) {
+      return await read(await fetchInput(`/api/renders/${encodeURIComponent(RenderIdSchema.parse(renderId))}/segments`), (body) => RenderHistorySegmentCollectionSchema.parse(body));
+    },
+    async getWaveform(renderId) {
+      return await read(await fetchInput(`/api/renders/${encodeURIComponent(RenderIdSchema.parse(renderId))}/waveform`), (body) => RenderWaveformSchema.parse(body));
+    },
+    renderAudioSource(renderId) {
+      return `/api/renders/${encodeURIComponent(RenderIdSchema.parse(renderId))}/audio`;
+    },
+    segmentAudioSource(renderId, ordinal) {
+      if (!Number.isInteger(ordinal) || ordinal < 1) throw new Error("The render segment ordinal is invalid.");
+      return `/api/renders/${encodeURIComponent(RenderIdSchema.parse(renderId))}/segments/${String(ordinal)}/audio`;
+    },
+    async exportSegment(renderId, ordinal) {
+      if (!Number.isInteger(ordinal) || ordinal < 1) throw new Error("The render segment ordinal is invalid.");
+      const response = await fetchInput(`/api/renders/${encodeURIComponent(RenderIdSchema.parse(renderId))}/segments/${String(ordinal)}/export`, { method: "POST" });
+      if (!response.ok) {
+        let body: unknown;
+        try { body = await response.json() as unknown; } catch { body = null; }
+        const failure = BoundaryErrorSchema.safeParse(body);
+        throw new Error(failure.success ? failure.data.error.message : "StudyNarrator could not export the render segment.");
+      }
+      const blobUrl = URL.createObjectURL(await response.blob());
+      const fileName = /filename="([^"]+)"/u.exec(response.headers.get("content-disposition") ?? "")?.[1] ?? `segment-${String(ordinal).padStart(6, "0")}.wav`;
+      const anchor = document.createElement("a");
+      anchor.href = blobUrl;
+      anchor.download = fileName;
+      anchor.click();
+      URL.revokeObjectURL(blobUrl);
+      return { disposition: "download" as const, fileName };
     }
   };
 }

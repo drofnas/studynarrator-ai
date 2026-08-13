@@ -1,3 +1,5 @@
+import { unlink } from "node:fs/promises";
+import { join } from "node:path";
 import { continueOffline, expect, openRoute, test } from "../support/studyNarratorTest.js";
 
 test.describe("render execution", () => {
@@ -8,13 +10,16 @@ test.describe("render execution", () => {
     await request.put(`${studyNarrator.baseUrl}/api/projects/${created.id}`, { data: {
       name: created.name,
       description: "End-to-end render fixture.",
-      scriptSource: "[section: Opening]\n[speaker_teacher] Render this sentence.\n[pause_medium]\n[speaker_teacher] Finish this render.",
+      scriptSource: "[section: Opening]\n[speaker_teacher] SQL renders this sentence.\n[pause_medium]\n[speaker_teacher] Finish this render.",
       connectionProfileId: "environment-speaches",
       modelId: "speaches-ai/Kokoro-82M-v1.0-ONNX",
       speakerMappings: [{ speakerId: "teacher", displayName: "Teacher", voiceId: "af_heart", speed: 1, gainDb: 0, roleDescription: "", sampleText: "" }],
       pausePresets: created.pausePresets,
       transitionPauses: created.transitionPauses,
-      lexiconEntries: []
+      lexiconEntries: [{
+        scope: "project", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel",
+        caseSensitive: true, wholeWord: true, priority: 0, enabled: true, notes: ""
+      }]
     } });
     studyNarrator.fakeSpeaches.reset();
 
@@ -24,8 +29,39 @@ test.describe("render execution", () => {
     await expect(page.getByRole("button", { name: "Render this frozen plan" })).toBeVisible();
     await page.getByRole("button", { name: "Render this frozen plan" }).click();
     await expect(page.getByText(/Phase: complete/u)).toBeVisible({ timeout: 20_000 });
+    const history = page.getByLabel("Saved renders");
+    const disclosure = history.getByRole("button", { expanded: true }).first();
+    await expect(disclosure).toBeVisible();
     await expect(page.getByRole("list", { name: "Render artifacts" }).getByRole("listitem")).toHaveCount(7);
     expect(studyNarrator.fakeSpeaches.getState().requests.filter(({ path, status }) => path === "/v1/audio/speech" && status === 200)).toHaveLength(2);
+
+    await page.getByRole("button", { name: "Play completed render" }).click();
+    const completedPlayer = page.getByLabel(/Audio player for Completed render/u);
+    await expect(completedPlayer.getByRole("button", { name: "Play", exact: true })).toBeEnabled();
+    const seek = completedPlayer.getByLabel("Seek playback");
+    await seek.focus();
+    await seek.press("End");
+    expect(Number(await seek.inputValue())).toBeGreaterThan(0);
+    const waveform = completedPlayer.getByRole("group", { name: "Playback waveform" });
+    await waveform.click({ position: { x: 12, y: 20 } });
+    expect(Number(await seek.inputValue())).toBeLessThan(Number(await seek.getAttribute("max")));
+
+    const segmentRows = page.getByLabel("Ordered segment rows");
+    const firstSpeech = segmentRows.getByRole("article").filter({ has: page.getByRole("button", { name: /Play segment/u }) }).first();
+    await firstSpeech.getByRole("button", { name: /Play segment/u }).click();
+    await expect(page.getByLabel(/Audio player for Teacher · segment/u)).toBeVisible();
+    expect(studyNarrator.fakeSpeaches.getState().requests.filter(({ path, status }) => path === "/v1/audio/speech" && status === 200)).toHaveLength(2);
+
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: studyNarrator.baseUrl });
+    await firstSpeech.getByRole("button", { name: "Copy readable" }).click();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("SQL renders");
+    await firstSpeech.getByRole("button", { name: "Copy TTS" }).click();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("sequel renders");
+    const downloadPromise = page.waitForEvent("download");
+    await firstSpeech.getByRole("button", { name: "Download segment" }).click();
+    expect((await downloadPromise).suggestedFilename()).toMatch(/^\d{6}\.wav$/u);
+    await firstSpeech.getByRole("button", { name: /Source line/u }).click();
+    await expect(page.getByLabel("Script source")).toBeFocused();
 
     const renders = await request.get(`${studyNarrator.baseUrl}/api/projects/${created.id}/renders`);
     const [render] = await renders.json() as Array<{ id: string; state: string }>;
@@ -40,6 +76,19 @@ test.describe("render execution", () => {
     await page.reload();
     await expect(page.getByText(/Phase: complete/u)).toBeVisible();
     await expect(page.getByRole("list", { name: "Render artifacts" }).getByRole("listitem")).toHaveCount(7);
+
+    const segmentResponse = await request.get(`${studyNarrator.baseUrl}/api/renders/${render!.id}/segments`);
+    const reviewSegments = await segmentResponse.json() as Array<{ ordinal: number; type: string }>;
+    const retainedSpeech = reviewSegments.find(({ type }) => type === "speech")!;
+    await unlink(join(studyNarrator.dataDirectory, "renders", render!.id, "segments", `${String(retainedSpeech.ordinal).padStart(6, "0")}.wav`));
+    const reloadedDisclosure = page.getByLabel("Saved renders").getByRole("button", { name: new RegExp(render!.id, "u") });
+    await reloadedDisclosure.click();
+    await reloadedDisclosure.click();
+    await expect(page.getByText(/no retained synthesis media/u)).toBeVisible();
+    await page.getByRole("button", { name: "Rerender this frozen plan" }).click();
+    await expect(page.getByLabel("Saved renders").locator(":scope > article")).toHaveCount(2);
+    await expect(page.getByLabel("Saved renders").locator(":scope > article").first().getByText(/Phase: complete/u)).toBeVisible({ timeout: 20_000 });
+    expect(studyNarrator.fakeSpeaches.getState().requests.filter(({ path, status }) => path === "/v1/audio/speech" && status === 200)).toHaveLength(2);
   });
 
   test("reports synthesis failure, retries from cache-safe state, and cancels an active request", async ({ page, request, studyNarrator }) => {

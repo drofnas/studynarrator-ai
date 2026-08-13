@@ -189,7 +189,9 @@ export interface StudyNarratorRepository {
   findActiveRenderJob(planId: string): RenderJob | null;
   listRecoverableRenderJobs(): RenderJob[];
   updateRenderJob(job: RenderJob): RenderJob;
-  updateRenderSegment(segment: RenderSegment): RenderSegment;
+  updateRenderSegment(segment: RenderSegment, audioPath?: string | null): RenderSegment;
+  listRenderSegments(renderId: string): RenderSegment[];
+  getRenderSegmentPath(renderId: string, ordinal: number): { segment: RenderSegment; path: string | null };
   replaceRenderArtifacts(renderId: string, artifacts: Array<RenderArtifact & { path: string }>): RenderArtifact[];
   listRenderArtifacts(renderId: string): RenderArtifact[];
   getRenderArtifactPath(artifactId: string): { artifact: RenderArtifact; path: string };
@@ -204,6 +206,12 @@ interface RenderJobRow {
 interface RenderArtifactRow {
   id: string; render_id: string; artifact_type: RenderArtifact["type"]; file_name: string; path: string;
   size_bytes: number; checksum: string; duration_ms: number | null; created_at: string;
+}
+
+interface RenderSegmentRow {
+  render_id: string; ordinal: number; segment_type: RenderSegment["type"]; state: RenderSegment["state"];
+  cache_status: RenderSegment["cacheStatus"]; audio_duration_ms: number | null; error_json: string | null;
+  audio_file_name: string | null; audio_path: string | null; audio_size_bytes: number | null; audio_checksum: string | null;
 }
 
 function renderJobFromRow(row: RenderJobRow): RenderJob {
@@ -221,6 +229,21 @@ function renderArtifactFromRow(row: RenderArtifactRow): RenderArtifact {
     contractVersion: 1, id: row.id, renderId: row.render_id, type: row.artifact_type,
     fileName: row.file_name, sizeBytes: row.size_bytes, checksum: row.checksum,
     durationMs: row.duration_ms, createdAt: row.created_at
+  });
+}
+
+function renderSegmentFromRow(row: RenderSegmentRow): RenderSegment {
+  return RenderSegmentSchema.parse({
+    renderId: row.render_id,
+    ordinal: row.ordinal,
+    type: row.segment_type,
+    state: row.state,
+    cacheStatus: row.cache_status,
+    audioDurationMs: row.audio_duration_ms,
+    audioFileName: row.audio_file_name,
+    audioSizeBytes: row.audio_size_bytes,
+    audioChecksum: row.audio_checksum,
+    error: row.error_json === null ? null : JSON.parse(row.error_json) as unknown
   });
 }
 
@@ -857,12 +880,15 @@ function createRepository(options: {
           job.error === null ? null : JSON.stringify(job.error), job.createdAt, job.startedAt, job.finishedAt
         );
         const insert = database.prepare(`
-          INSERT INTO render_segments (render_id, ordinal, segment_type, state, cache_status, audio_duration_ms, error_json)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO render_segments (
+            render_id, ordinal, segment_type, state, cache_status, audio_duration_ms, error_json,
+            audio_file_name, audio_path, audio_size_bytes, audio_checksum
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
         for (const segment of segments) insert.run(
           segment.renderId, segment.ordinal, segment.type, segment.state, segment.cacheStatus,
-          segment.audioDurationMs, segment.error === null ? null : JSON.stringify(segment.error)
+          segment.audioDurationMs, segment.error === null ? null : JSON.stringify(segment.error),
+          segment.audioFileName, null, segment.audioSizeBytes, segment.audioChecksum
         );
       });
       return job;
@@ -905,18 +931,34 @@ function createRepository(options: {
       if (Number(result.changes ?? 0) !== 1) throw new PersistenceNotFoundError(`Render ${job.id} was not found.`);
       return job;
     },
-    updateRenderSegment(segmentValue) {
+    updateRenderSegment(segmentValue, audioPath = null) {
       assertOpen();
       const segment = RenderSegmentSchema.parse(segmentValue);
       const result = database.prepare(`
-        UPDATE render_segments SET state = ?, cache_status = ?, audio_duration_ms = ?, error_json = ?
+        UPDATE render_segments SET state = ?, cache_status = ?, audio_duration_ms = ?, error_json = ?,
+          audio_file_name = ?, audio_path = ?, audio_size_bytes = ?, audio_checksum = ?
         WHERE render_id = ? AND ordinal = ?
       `).run(
         segment.state, segment.cacheStatus, segment.audioDurationMs,
-        segment.error === null ? null : JSON.stringify(segment.error), segment.renderId, segment.ordinal
+        segment.error === null ? null : JSON.stringify(segment.error), segment.audioFileName, audioPath,
+        segment.audioSizeBytes, segment.audioChecksum, segment.renderId, segment.ordinal
       );
       if (Number(result.changes ?? 0) !== 1) throw new PersistenceNotFoundError("Render segment was not found.");
       return segment;
+    },
+    listRenderSegments(renderId) {
+      assertOpen();
+      return (database.prepare(
+        "SELECT * FROM render_segments WHERE render_id = ? ORDER BY ordinal ASC"
+      ).all(renderId) as RenderSegmentRow[]).map(renderSegmentFromRow);
+    },
+    getRenderSegmentPath(renderId, ordinal) {
+      assertOpen();
+      const row = database.prepare(
+        "SELECT * FROM render_segments WHERE render_id = ? AND ordinal = ?"
+      ).get(renderId, ordinal) as RenderSegmentRow | undefined;
+      if (!row) throw new PersistenceNotFoundError(`Render segment ${String(ordinal)} was not found.`);
+      return { segment: renderSegmentFromRow(row), path: row.audio_path };
     },
     replaceRenderArtifacts(renderId, artifactValues) {
       assertOpen();
