@@ -11,6 +11,10 @@ describe("G06 gate documentation", () => {
     expect(manual).toContain("GATE G06: AUTOMATED CHECKS PASSED");
     expect(manual).toContain("## Human Web UX review");
     expect(manual).toContain("## Human Electron UX review");
+    expect(manual).toContain("npm run dev:web");
+    expect(manual).toContain("npm run dev:desktop");
+    expect(manual).toContain("STUDYNARRATOR_DATA_DIR=.tmp/gates/G06/ux-web");
+    expect(manual).toContain("STUDYNARRATOR_DATA_DIR=.tmp/gates/G06/ux-electron");
     expect(manual).toContain("A functional defect requires an automated regression test before approval");
   });
 
