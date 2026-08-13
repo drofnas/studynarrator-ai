@@ -141,7 +141,7 @@ describe("render coordinator", () => {
     const [historySegment] = await service.listSegments(started.id);
     expect(historySegment?.type).toBe("speech");
     if (historySegment?.type !== "speech") throw new Error("Expected speech history.");
-    expect(historySegment).toMatchObject({ ordinal: 1, speakerLabel: "Narrator", voiceId: "voice", readableText: "Render me." });
+    expect(historySegment).toMatchObject({ ordinal: 1, speakerLabel: "Narrator", modelId: "model", voiceId: "voice", readableText: "Render me." });
     expect(historySegment.audio).toMatchObject({ status: "available", mimeType: "audio/wav" });
     await expect(service.resolveSegmentAudio(started.id, 1)).resolves.toMatchObject({ fileName: "000001.wav", mimeType: "audio/wav" });
     await unlink(retained.path!);

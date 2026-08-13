@@ -413,7 +413,8 @@ export async function createRenderService(options: {
       return {
         ...base, type: "speech", speakerId: entry.speakerId,
         speakerLabel: speakerLabels.get(entry.speakerId) ?? entry.speakerId,
-        voiceId: entry.voiceId, readableText: entry.readableText, ttsText: entry.ttsText, audio
+        modelId: snapshot.connection.modelId, voiceId: entry.voiceId,
+        readableText: entry.readableText, ttsText: entry.ttsText, audio
       };
     }));
     return RenderHistorySegmentCollectionSchema.parse(values);

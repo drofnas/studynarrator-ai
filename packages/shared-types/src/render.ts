@@ -134,6 +134,7 @@ export const RenderHistorySegmentSchema = z.discriminatedUnion("type", [
     type: z.literal("speech"),
     speakerId: z.string().min(1),
     speakerLabel: z.string().min(1),
+    modelId: z.string().min(1),
     voiceId: z.string().min(1),
     readableText: z.string().min(1),
     ttsText: z.string().min(1)
