@@ -1,4 +1,4 @@
-import { vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { CachedSpeechResult } from "@studynarrator/rendering";
 import { createProjectPreviewService, type ProjectPreviewRepository } from "./projectPreview.js";
 import { createSpeechCacheService } from "./cachedSpeech.js";
