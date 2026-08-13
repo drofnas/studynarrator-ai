@@ -108,3 +108,4 @@ export * from "./connections.js";
 export * from "./persistence.js";
 export * from "./preview.js";
 export * from "./scratchpad.js";
+export * from "./renderPlan.js";

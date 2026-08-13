@@ -1,7 +1,21 @@
-import { mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, readdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createSpeechCache, createSpeechCacheKey, normalizeSpeechText, type SpeechCacheKeyInput } from "./index.js";
+import { promisify } from "node:util";
+import { PROJECT_SNAPSHOT_SCHEMA_VERSION, RENDER_PLAN_SCHEMA_VERSION } from "@studynarrator/shared-types";
+import {
+  createPcmSilence,
+  createRenderPlanStore,
+  createSpeechCache,
+  createSpeechCacheKey,
+  normalizeSpeechText,
+  withProjectSnapshotHash,
+  withRenderPlanHash,
+  type SpeechCacheKeyInput
+} from "./index.js";
+
+const runFile = promisify(execFile);
 
 const input: SpeechCacheKeyInput = {
   adapterId: "speaches-openai",
@@ -67,6 +81,14 @@ describe("content-addressed speech cache", () => {
     await expect(cache.status()).resolves.toMatchObject({ entryCount: 1, totalBytes: 4, sessionHits: 1, sessionMisses: 1, sessionWrites: 1 });
   });
 
+  it("predicts hits without changing usage metadata or hit counters", async () => {
+    const { cache } = await fixture();
+    await expect(cache.inspect(input)).resolves.toMatchObject({ status: "miss", key: createSpeechCacheKey(input) });
+    await cache.getOrCreate(input, { projectId: "project-a" }, async () => Uint8Array.from([82, 73, 70, 70]));
+    await expect(cache.inspect(input)).resolves.toMatchObject({ status: "hit" });
+    await expect(cache.status()).resolves.toMatchObject({ sessionHits: 0, sessionMisses: 1, sessionWrites: 1 });
+  });
+
   it("deduplicates concurrent synthesis and isolates a cancelled waiter", async () => {
     const { cache } = await fixture();
     let finish: ((bytes: Uint8Array) => void) | undefined;
@@ -119,5 +141,91 @@ describe("content-addressed speech cache", () => {
     await expect(cache.getOrCreate(input, {}, synthesize)).resolves.toMatchObject({ status: "miss" });
     expect(synthesize).toHaveBeenCalledOnce();
     expect(await readFile(target)).toEqual(Buffer.from([82]));
+  });
+});
+
+describe("render plan silence and storage", () => {
+  const projectId = "00000000-0000-4000-8000-000000000001";
+  const planId = "00000000-0000-4000-8000-000000000002";
+  const timestamp = "2026-08-13T12:00:00.000Z";
+
+  function bundle(durationMs = 750) {
+    const silence = createPcmSilence(durationMs);
+    const snapshot = withProjectSnapshotHash({
+      schemaVersion: PROJECT_SNAPSHOT_SCHEMA_VERSION,
+      capturedAt: timestamp,
+      project: {
+        contractVersion: 4,
+        id: projectId,
+        name: "Frozen plan",
+        description: "",
+        scriptSource: "[pause_medium]",
+        scriptHash: "a".repeat(64),
+        connectionProfileId: "profile",
+        modelId: "model",
+        speakerMappings: [],
+        pausePresets: [{ pauseId: "pause_medium", durationMs, description: "Paragraph" }],
+        transitionPauses: { paragraph: { mode: "preset", pauseId: "pause_medium" }, speakerChange: { mode: "none" }, section: { mode: "none" } },
+        lexiconEntries: [],
+        createdAt: timestamp,
+        updatedAt: timestamp
+      },
+      globalLexiconEntries: [],
+      ignoredDiagnostics: [],
+      connection: { profileId: "profile", profileName: "Fixture", profileSource: "saved", modelId: "model", serverIdentityHash: "b".repeat(64) },
+      versions: { scriptGrammar: 1, cirSchema: 1, lexiconTransform: 1, pacing: 1, speechCacheSchema: 1, speechNormalization: 1, speechChunking: 1, speechAdapter: 1 }
+    });
+    const plan = withRenderPlanHash({
+      schemaVersion: RENDER_PLAN_SCHEMA_VERSION,
+      id: planId,
+      projectId,
+      createdAt: timestamp,
+      snapshotHash: snapshot.snapshotHash,
+      scriptHash: "a".repeat(64),
+      entries: [{
+        type: "pause", ordinal: 1, sectionTitle: null, sourceRange: null, pauseKind: "automatic",
+        reason: "paragraph", pauseId: "pause_medium", durationMs, silence: silence.asset
+      }],
+      summary: { sectionCount: 0, speechCount: 0, pauseCount: 1, cacheHits: 0, cacheMisses: 0, silenceDurationMs: durationMs }
+    });
+    return { silence, snapshot, plan };
+  }
+
+  it.each([350, 750, 1_500])("creates exact %d ms PCM silence", (durationMs) => {
+    const { bytes, asset } = createPcmSilence(durationMs);
+    expect(asset).toMatchObject({ sampleRate: 24_000, channels: 1, bitsPerSample: 16, frameCount: durationMs * 24 });
+    expect(bytes?.byteLength).toBe(44 + durationMs * 24 * 2);
+    expect(new TextDecoder().decode(bytes?.slice(0, 4))).toBe("RIFF");
+  });
+
+  it("represents zero duration without an invalid WAV", () => {
+    expect(createPcmSilence(0)).toEqual({ bytes: null, asset: null });
+  });
+
+  it("writes, lists, and reopens an immutable validated bundle", async () => {
+    const root = await mkdtemp(join(tmpdir(), "studynarrator-render-plan-"));
+    const store = createRenderPlanStore(root);
+    const { silence, snapshot, plan } = bundle();
+    await store.save(snapshot, plan, new Map([[silence.asset!.checksum, silence.bytes!]]));
+    await expect(store.save(snapshot, plan, new Map([[silence.asset!.checksum, silence.bytes!]]))).rejects.toThrow();
+    expect((await readdir(root)).filter((name) => name.endsWith(".tmp"))).toEqual([]);
+    await expect(store.list(projectId)).resolves.toEqual([expect.objectContaining({ id: planId, planHash: plan.planHash })]);
+    await expect(store.get(planId)).resolves.toEqual(plan);
+    const silencePath = join(root, planId, silence.asset!.relativePath);
+    const probe = await runFile("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", silencePath]);
+    expect(Number(probe.stdout.trim())).toBeCloseTo(0.75, 3);
+  });
+
+  it("rejects corrupt files, traversal-shaped IDs, and symlinked plan directories", async () => {
+    const root = await mkdtemp(join(tmpdir(), "studynarrator-render-plan-safety-"));
+    const store = createRenderPlanStore(root);
+    const { silence, snapshot, plan } = bundle();
+    await store.save(snapshot, plan, new Map([[silence.asset!.checksum, silence.bytes!]]));
+    await writeFile(join(root, planId, silence.asset!.relativePath), Uint8Array.from([1, 2, 3]));
+    await expect(store.get(planId)).rejects.toThrow(/size|checksum/iu);
+    await expect(store.get("../outside")).rejects.toThrow();
+    const symlinkId = "00000000-0000-4000-8000-000000000003";
+    await symlink(join(root, planId), join(root, symlinkId));
+    await expect(store.get(symlinkId)).rejects.toThrow(/unsafe/iu);
   });
 });
