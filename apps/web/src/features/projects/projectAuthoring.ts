@@ -1,9 +1,20 @@
 import type { LexiconEntry, LexiconEntryAuthoring } from "@studynarrator/core";
-import type { ProjectDetail, ProjectReplaceInput } from "@studynarrator/shared-types";
+import type { ProjectDetail, ProjectReplaceInput, VoiceCatalogEntry } from "@studynarrator/shared-types";
 
 export const MAX_SCRIPT_CHARACTERS = 5_000_000;
 
 export type ProjectDraft = ProjectReplaceInput;
+
+export function resolveProjectSpeakerVoiceId(
+  currentVoiceId: string | null,
+  profileDefaultVoiceId: string | null,
+  catalogEntries: readonly VoiceCatalogEntry[]
+): string | null {
+  const enabledVoiceIds = new Set(catalogEntries.filter(({ enabled }) => enabled).map(({ voiceId }) => voiceId));
+  if (currentVoiceId && enabledVoiceIds.has(currentVoiceId)) return currentVoiceId;
+  if (profileDefaultVoiceId && enabledVoiceIds.has(profileDefaultVoiceId)) return profileDefaultVoiceId;
+  return catalogEntries.find(({ enabled }) => enabled)?.voiceId ?? null;
+}
 
 export function authoringLexicon(entries: readonly LexiconEntry[]): LexiconEntryAuthoring[] {
   return entries.map((entry) => ({

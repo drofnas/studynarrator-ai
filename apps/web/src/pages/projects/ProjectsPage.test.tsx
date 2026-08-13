@@ -108,16 +108,23 @@ describe("Projects workbench", () => {
       timeoutSeconds: 120, retryCount: 2, responseFormat: "wav", lastTestedAt: summary.testedAt, lastSuccessfulTestAt: summary.testedAt,
       lastTestSummary: summary as ConnectionProfile["lastTestSummary"], createdAt: summary.testedAt, updatedAt: summary.testedAt
     };
-    const catalog: VoiceCatalog = { schemaVersion: 1, modelId: profile.defaultModelId!, entries: [{ voiceId: "af_heart", label: "Heart — American English — af_heart", enabled: true, language: "American English", locale: "en-US", accent: "American", category: null, style: null, sampleText: null }] };
+    const catalog: VoiceCatalog = { schemaVersion: 1, modelId: profile.defaultModelId!, entries: [
+      { voiceId: "af_heart", label: "Heart — American English — af_heart", enabled: true, language: "American English", locale: "en-US", accent: "American", category: null, style: null, sampleText: null },
+      { voiceId: "af_sky", label: "Sky — American English — af_sky", enabled: true, language: "American English", locale: "en-US", accent: "American", category: null, style: null, sampleText: null }
+    ] };
     renderPage(client, analyze, { profiles: [profile], catalog });
     await userEvent.selectOptions(await screen.findByLabelText("Connection profile"), profile.id);
     await waitFor(() => expect(analyze).toHaveBeenCalled());
     expect((await screen.findAllByText("Heart — American English — af_heart")).length).toBeGreaterThan(0);
-    expect(screen.getByText("voice_teacher")).toBeInTheDocument();
-    expect(screen.getByText("unavailable")).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Voice catalog or manual ID"), { target: { value: "af_heart" } });
+    expect(await screen.findByLabelText("Voices")).toHaveValue("af_heart");
     expect(await screen.findByText("available")).toBeInTheDocument();
-    await waitFor(() => expect(replace).toHaveBeenCalledWith(project.id, expect.objectContaining({ connectionProfileId: profile.id, modelId: null })));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith(project.id, expect.objectContaining({
+      connectionProfileId: profile.id,
+      modelId: null,
+      speakerMappings: [expect.objectContaining({ speakerId: "teacher", voiceId: "af_heart" })]
+    })));
+    await userEvent.selectOptions(screen.getByLabelText("Voices"), "af_sky");
+    expect(screen.getByLabelText("Voices")).toHaveValue("af_sky");
   });
 
   it("analyzes offline, renders the narration score, and autosaves edits", async () => {
@@ -202,7 +209,9 @@ describe("Projects workbench", () => {
     renderPage(client, analyze);
 
     await waitFor(() => expect(analyze).toHaveBeenCalled());
-    expect(await screen.findByLabelText("Voice catalog or manual ID")).toHaveValue("");
+    expect(await screen.findByLabelText("Voices")).toBeDisabled();
+    expect(screen.getByLabelText("Voices")).toHaveValue("");
+    expect(screen.getByText("Choose a connection profile or model.")).toBeInTheDocument();
     expect(timerSpy.mock.calls.filter(([, delay]) => delay === 800)).toHaveLength(0);
     expect(replace).not.toHaveBeenCalled();
     expect(screen.getByText("Saved")).toBeInTheDocument();

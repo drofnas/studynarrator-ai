@@ -29,6 +29,7 @@ import {
   materializeLexicon,
   readUtf8TextFile,
   replaceLiteral,
+  resolveProjectSpeakerVoiceId,
   stripSingleSurroundingCodeFence,
   type ProjectDraft
 } from "@/features/projects/projectAuthoring.js";
@@ -37,6 +38,7 @@ import { useConnections } from "@/features/connections/ConnectionProvider.js";
 
 type SaveState = "saved" | "unsaved" | "saving" | "invalid" | "failed";
 type AnalysisState = "idle" | "parsing" | "ready" | "failed";
+type VoiceCatalogState = "idle" | "loading" | "ready" | "failed";
 
 const emptyLexiconDraft: LexiconEntryAuthoring = {
   scope: "project",
@@ -107,6 +109,7 @@ export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; 
   const [sampleSpeaker, setSampleSpeaker] = useState("");
   const [copySource, setCopySource] = useState<Record<string, string>>({});
   const [voiceCatalog, setVoiceCatalog] = useState<VoiceCatalog | null>(null);
+  const [voiceCatalogState, setVoiceCatalogState] = useState<VoiceCatalogState>("idle");
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const revisionRef = useRef(0);
   const savedRevisionRef = useRef(0);
@@ -121,13 +124,20 @@ export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; 
   const effectiveModelId = draft?.modelId ?? selectedConnection?.defaultModelId ?? null;
 
   useEffect(() => {
-    if (!effectiveModelId) { setVoiceCatalog(null); return; }
+    if (!effectiveModelId) { setVoiceCatalog(null); setVoiceCatalogState("idle"); return; }
     let active = true;
-    void connections.getCatalog(effectiveModelId).then((catalog) => { if (active) setVoiceCatalog(catalog); }).catch(() => { if (active) setVoiceCatalog(null); });
+    setVoiceCatalog(null);
+    setVoiceCatalogState("loading");
+    void connections.getCatalog(effectiveModelId).then((catalog) => {
+      if (active) { setVoiceCatalog(catalog); setVoiceCatalogState("ready"); }
+    }).catch(() => {
+      if (active) { setVoiceCatalog(null); setVoiceCatalogState("failed"); }
+    });
     return () => { active = false; };
   }, [connections, effectiveModelId]);
 
   const voiceById = useMemo(() => new Map(voiceCatalog?.entries.map((entry) => [entry.voiceId, entry]) ?? []), [voiceCatalog]);
+  const enabledVoices = useMemo(() => voiceCatalog?.entries.filter(({ enabled }) => enabled) ?? [], [voiceCatalog]);
 
   const reloadProjects = useCallback(async () => setProjects(await client.projects.list()), [client]);
 
@@ -220,6 +230,23 @@ export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; 
       speakerMappings: current.speakerMappings.map((item) => item.speakerId === speakerId ? { ...item, ...patch } : item)
     }));
   }, [updateDraft]);
+
+  useEffect(() => {
+    if (voiceCatalogState !== "ready" || enabledVoices.length === 0 || configuration.speakers.length === 0) return;
+    const replacements = new Map(configuration.speakers.map((speaker) => [
+      speaker.speakerId,
+      resolveProjectSpeakerVoiceId(speaker.voiceId, selectedConnection?.defaultVoiceId ?? null, enabledVoices)
+    ]));
+    if (!configuration.speakers.some((speaker) => replacements.get(speaker.speakerId) !== speaker.voiceId)) return;
+    setConfiguration((current) => ({
+      ...current,
+      speakers: current.speakers.map((speaker) => ({ ...speaker, voiceId: replacements.get(speaker.speakerId) ?? speaker.voiceId }))
+    }));
+    updateDraft((current) => ({
+      ...current,
+      speakerMappings: current.speakerMappings.map((speaker) => ({ ...speaker, voiceId: replacements.get(speaker.speakerId) ?? speaker.voiceId }))
+    }));
+  }, [configuration.speakers, enabledVoices, selectedConnection?.defaultVoiceId, updateDraft, voiceCatalogState]);
 
   const performSave = useCallback(async (): Promise<boolean> => {
     const current = draftRef.current;
@@ -531,7 +558,7 @@ export function ProjectsPage({ client, analyzer }: { client: PersistenceClient; 
           </main>
 
           <aside className={styles.configRail} aria-label="Discovered configuration">
-            <section><div className={styles.sectionHeading}><div><span>Discovered</span><h3>Speakers</h3></div><b>{configuration.speakers.filter(({ discovered }) => discovered).length}</b></div><datalist id="project-voices">{voiceCatalog?.entries.filter(({ enabled }) => enabled).map((entry) => <option key={entry.voiceId} value={entry.voiceId}>{entry.label}</option>)}</datalist>{configuration.speakers.map((row) => <article className={!row.discovered ? styles.unused : ""} key={row.speakerId}><header><code>{row.speakerId}</code><span>{row.occurrenceCount} uses{!row.discovered ? " · unused" : ""}</span></header><div className={styles.sourceLinks}>{analysis?.parseResult.discoveries.speakers.find(({ id }) => id === row.speakerId)?.occurrences.map(({ range }, index) => <button type="button" className={styles.sourceLink} key={`${row.speakerId}:${String(index)}`} onClick={() => focusLine(range.start.line)}>Line {range.start.line}</button>)}</div><label>Display name<input value={row.displayName} onChange={(event) => updateSpeaker(row.speakerId, { displayName: event.target.value })} /></label><label>Voice catalog or manual ID<input list="project-voices" value={row.voiceId ?? ""} onChange={(event) => updateSpeaker(row.speakerId, { voiceId: event.target.value || null })} /></label><div className={styles.voiceMeta}><strong>{voiceById.get(row.voiceId ?? "")?.label ?? "Manual voice ID"}</strong><code>{row.voiceId || "no raw ID"}</code><span data-state={voiceAvailability(selectedConnection, row.voiceId)}>{voiceAvailability(selectedConnection, row.voiceId)}</span></div><div className={styles.inlineFields}><label>Speed<input type="number" step="0.05" min="0.01" max="4" value={row.speed} onChange={(event) => updateSpeaker(row.speakerId, { speed: Number(event.target.value) })} /></label><label>Gain dB<input type="number" min="-60" max="24" value={row.gainDb} onChange={(event) => updateSpeaker(row.speakerId, { gainDb: Number(event.target.value) })} /></label></div><div className={styles.copyRow}><select aria-label={`Copy settings for ${row.speakerId}`} value={copySource[row.speakerId] ?? ""} onChange={(event) => setCopySource((current) => ({ ...current, [row.speakerId]: event.target.value }))}><option value="">Copy another speaker…</option>{configuration.speakers.filter((item) => item.speakerId !== row.speakerId).map((item) => <option key={item.speakerId} value={item.speakerId}>{item.speakerId}</option>)}</select><button type="button" className={styles.secondary} onClick={() => { const source = draft.speakerMappings.find((item) => item.speakerId === copySource[row.speakerId]); if (source) { setConfiguration((current) => ({ ...current, speakers: current.speakers.map((item) => item.speakerId === row.speakerId ? { ...item, voiceId: source.voiceId, speed: source.speed, gainDb: source.gainDb, roleDescription: source.roleDescription, sampleText: source.sampleText } : item) })); updateDraft((current) => ({ ...current, speakerMappings: current.speakerMappings.map((item) => item.speakerId === row.speakerId ? { ...source, speakerId: row.speakerId, displayName: item.displayName } : item) })); } }}>Copy</button></div></article>)}</section>
+            <section><div className={styles.sectionHeading}><div><span>Discovered</span><h3>Speakers</h3></div><b>{configuration.speakers.filter(({ discovered }) => discovered).length}</b></div>{configuration.speakers.map((row) => <article className={!row.discovered ? styles.unused : ""} key={row.speakerId}><header><code>{row.speakerId}</code><span>{row.occurrenceCount} uses{!row.discovered ? " · unused" : ""}</span></header><div className={styles.sourceLinks}>{analysis?.parseResult.discoveries.speakers.find(({ id }) => id === row.speakerId)?.occurrences.map(({ range }, index) => <button type="button" className={styles.sourceLink} key={`${row.speakerId}:${String(index)}`} onClick={() => focusLine(range.start.line)}>Line {range.start.line}</button>)}</div><label>Display name<input value={row.displayName} onChange={(event) => updateSpeaker(row.speakerId, { displayName: event.target.value })} /></label><label>Voices<select disabled={enabledVoices.length === 0} value={enabledVoices.some(({ voiceId }) => voiceId === row.voiceId) ? row.voiceId ?? "" : ""} onChange={(event) => updateSpeaker(row.speakerId, { voiceId: event.target.value })}>{enabledVoices.length === 0 ? <option value="">{voiceCatalogState === "loading" ? "Loading voices…" : "No enabled voices"}</option> : enabledVoices.map((entry) => <option key={entry.voiceId} value={entry.voiceId}>{entry.label}</option>)}</select></label>{enabledVoices.length === 0 ? <p className={styles.voiceFieldMessage}>{voiceCatalogState === "failed" ? "The voice catalog could not be loaded." : effectiveModelId ? "This model has no enabled voices." : "Choose a connection profile or model."} <button type="button" onClick={() => void navigate("/settings")}>Open Settings</button></p> : null}<div className={styles.voiceMeta}><strong>{voiceById.get(row.voiceId ?? "")?.label ?? "Voice unavailable"}</strong><code>{row.voiceId || "no raw ID"}</code><span data-state={voiceAvailability(selectedConnection, row.voiceId)}>{voiceAvailability(selectedConnection, row.voiceId)}</span></div><div className={styles.inlineFields}><label>Speed<input type="number" step="0.05" min="0.01" max="4" value={row.speed} onChange={(event) => updateSpeaker(row.speakerId, { speed: Number(event.target.value) })} /></label><label>Gain dB<input type="number" min="-60" max="24" value={row.gainDb} onChange={(event) => updateSpeaker(row.speakerId, { gainDb: Number(event.target.value) })} /></label></div><div className={styles.copyRow}><select aria-label={`Copy settings for ${row.speakerId}`} value={copySource[row.speakerId] ?? ""} onChange={(event) => setCopySource((current) => ({ ...current, [row.speakerId]: event.target.value }))}><option value="">Copy another speaker…</option>{configuration.speakers.filter((item) => item.speakerId !== row.speakerId).map((item) => <option key={item.speakerId} value={item.speakerId}>{item.speakerId}</option>)}</select><button type="button" className={styles.secondary} onClick={() => { const source = draft.speakerMappings.find((item) => item.speakerId === copySource[row.speakerId]); if (source) { setConfiguration((current) => ({ ...current, speakers: current.speakers.map((item) => item.speakerId === row.speakerId ? { ...item, voiceId: source.voiceId, speed: source.speed, gainDb: source.gainDb, roleDescription: source.roleDescription, sampleText: source.sampleText } : item) })); updateDraft((current) => ({ ...current, speakerMappings: current.speakerMappings.map((item) => item.speakerId === row.speakerId ? { ...source, speakerId: row.speakerId, displayName: item.displayName } : item) })); } }}>Copy</button></div></article>)}</section>
             <section><div className={styles.sectionHeading}><div><span>Timing</span><h3>Pauses</h3></div><b>{configuration.pauses.filter(({ discovered }) => discovered).length}</b></div><label className={styles.check}><input type="checkbox" checked={draft.paragraphPause.enabled} onChange={(event) => updateDraft((current) => ({ ...current, paragraphPause: { ...current.paragraphPause, enabled: event.target.checked } }))} />Pause at paragraph breaks</label>{configuration.pauses.map((row) => <article className={!row.discovered ? styles.unused : ""} key={row.pauseId}><header><code>{row.pauseId}</code><span>{row.occurrenceCount} uses{!row.discovered ? " · unused" : ""}</span></header><div className={styles.sourceLinks}>{analysis?.parseResult.discoveries.pauses.find(({ id }) => id === row.pauseId)?.occurrences.map(({ range }, index) => <button type="button" className={styles.sourceLink} key={`${row.pauseId}:${String(index)}`} onClick={() => focusLine(range.start.line)}>Line {range.start.line}</button>)}</div><label>Duration<input aria-invalid={invalidPauseRef.current[row.pauseId] !== undefined} value={pauseInputs[row.pauseId] ?? ""} onChange={(event) => updatePause(row, event.target.value)} /></label>{invalidPauseRef.current[row.pauseId] ? <p className={styles.fieldError}>{invalidPauseRef.current[row.pauseId]}</p> : null}<label>Description<input value={row.description} onChange={(event) => updateDraft((current) => ({ ...current, pausePresets: current.pausePresets.map((item) => item.pauseId === row.pauseId ? { ...item, description: event.target.value } : item) }))} /></label></article>)}</section>
             <section><div className={styles.sectionHeading}><div><span>Outline</span><h3>Sections</h3></div><b>{configuration.sections.length}</b></div>{configuration.sections.length === 0 ? <p>No sections discovered.</p> : configuration.sections.map((section) => <button type="button" className={styles.sectionLink} key={`${section.sourceLine}:${section.title}`} onClick={() => focusLine(section.sourceLine)}><strong>{section.title}</strong><span>Line {section.sourceLine} · {section.speechSegmentCount} speech segments</span></button>)}</section>
           </aside>
