@@ -48,7 +48,7 @@ describe("connection REST clients", () => {
   });
 
   it("never accepts malformed secret-bearing output", async () => {
-    const fetchInput = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify([{ ...profile, apiKey: "g06-secret-must-not-appear" }]), { status: 200 }));
+    const fetchInput = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify([{ ...profile, apiKey: "test-secret-must-not-appear" }]), { status: 200 }));
     await expect(createRestConnectionsClient(fetchInput).list()).rejects.toThrow();
   });
 

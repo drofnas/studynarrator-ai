@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { MAX_SCRIPT_CHARACTERS, readUtf8TextFile, replaceLiteral, stripSingleSurroundingCodeFence } from "./projectAuthoring.js";
 
-describe("G05 authoring input helpers", () => {
+describe("authoring input helpers", () => {
   it("reads LF, CRLF, and Unicode text without rewriting it", async () => {
     for (const source of ["one\ntwo", "one\r\ntwo", "Résumé 🧠"]) {
       await expect(readUtf8TextFile(new File([source], "guide.txt", { type: "text/plain" }))).resolves.toBe(source);

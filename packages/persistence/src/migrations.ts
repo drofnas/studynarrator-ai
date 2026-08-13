@@ -171,17 +171,17 @@ const MIGRATION_3_SQL = `
 `;
 
 export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
-  { version: 1, name: "g01-diagnostics", up: (database) => { database.exec(MIGRATION_1_SQL); } },
+  { version: 1, name: "runtime-diagnostics", up: (database) => { database.exec(MIGRATION_1_SQL); } },
   {
     version: 2,
-    name: "g04-project-persistence",
+    name: "project-authoring",
     up: (database) => {
       database.exec(MIGRATION_2_SQL);
     }
   },
   {
     version: 3,
-    name: "g06-speaches-connections",
+    name: "speaches-connections",
     up: (database) => {
       database.exec(MIGRATION_3_SQL);
     }

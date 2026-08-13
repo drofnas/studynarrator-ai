@@ -14,9 +14,9 @@ const stages = ["url", "dns", "tcp", "http", "authentication", "model", "voice",
   durationMs: 1
 }));
 
-describe("G06 connection contracts", () => {
+describe("connection contracts", () => {
   it("accepts a one-shot credential mutation but excludes raw keys from profile output", () => {
-    const secret = "g06-secret-must-not-appear";
+    const secret = "test-secret-must-not-appear";
     expect(ConnectionProfileMutationSchema.parse({
       profile: {
         name: "LAN Speaches",

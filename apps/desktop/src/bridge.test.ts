@@ -100,7 +100,7 @@ describe("Electron boundary", () => {
     await expect(handlers.get(PERSISTENCE_CHANNELS.projectsList)?.()).resolves.toEqual([]);
     await expect(handlers.get(PERSISTENCE_CHANNELS.projectsCreate)?.(undefined, { name: "", secret: "must-not-leak" }))
       .rejects.toThrow("The request does not match the persistence contract.");
-    await expect(handlers.get(CONNECTION_CHANNELS.create)?.(undefined, { profile: {}, credential: { action: "replace", apiKey: "g06-secret-must-not-appear" } }))
+    await expect(handlers.get(CONNECTION_CHANNELS.create)?.(undefined, { profile: {}, credential: { action: "replace", apiKey: "test-secret-must-not-appear" } }))
       .rejects.toThrow("The request does not match the connection contract.");
   });
 
@@ -231,7 +231,7 @@ describe("Electron boundary", () => {
     }
     expect(invoked).toEqual(new Set(PUBLIC_IPC_CHANNEL_MANIFEST));
 
-    const secret = "g06-secret-must-not-appear";
+    const secret = "test-secret-must-not-appear";
     for (const channel of Object.keys(inputs)) {
       await expect(handlers.get(channel)?.(undefined, { malformed: true, apiKey: secret })).rejects.toThrow();
     }

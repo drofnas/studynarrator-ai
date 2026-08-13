@@ -1,7 +1,7 @@
 import { SystemDiagnosticsSchema } from "@studynarrator/shared-types";
 import { createServerServices } from "./bootstrap.js";
 
-const smokeProjectName = "G04 deterministic runtime smoke";
+const smokeProjectName = "Deterministic runtime smoke";
 const first = await createServerServices();
 try {
   const existing = (await first.persistence.projects.list()).find((project) => project.name === smokeProjectName);

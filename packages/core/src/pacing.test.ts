@@ -20,7 +20,7 @@ function deepFreeze(value: unknown): void {
   for (const child of Object.values(value)) deepFreeze(child);
 }
 
-describe("G03 paragraph pacing preview", () => {
+describe("paragraph pacing preview", () => {
   it("resolves one medium pause between bare paragraphs by default", () => {
     const parsedScript = parseScript({ source: "First paragraph.\n\nSecond paragraph." });
     const result = resolveParagraphPauses({ parsedScript, configuration: defaultConfiguration });

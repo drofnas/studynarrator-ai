@@ -4,7 +4,7 @@ import { createDesktopServices } from "./bootstrap.js";
 
 void app.whenReady().then(async () => {
   const defaultDataDirectory = app.getPath("userData");
-  const smokeProjectName = "G04 deterministic runtime smoke";
+  const smokeProjectName = "Deterministic runtime smoke";
   const first = await createDesktopServices({ defaultDataDirectory, safeStorage });
   try {
     const existing = (await first.persistence.projects.list()).find((project) => project.name === smokeProjectName);

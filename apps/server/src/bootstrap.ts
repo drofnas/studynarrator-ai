@@ -22,7 +22,7 @@ const repositoryRoot = resolve(import.meta.dirname, "../../..");
 export function resolveServerDataDirectory(environment = process.env): string {
   return environment.STUDYNARRATOR_DATA_DIR
     ? resolve(environment.INIT_CWD ?? repositoryRoot, environment.STUDYNARRATOR_DATA_DIR)
-    : resolve(repositoryRoot, ".tmp/gates/G01/web");
+    : resolve(repositoryRoot, ".tmp/dev/web");
 }
 
 export async function createServerServices(environment = process.env) {

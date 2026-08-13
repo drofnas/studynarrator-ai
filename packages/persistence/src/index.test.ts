@@ -20,6 +20,13 @@ const lexiconId = "00000000-0000-4000-8000-000000000003";
 const profileId = "00000000-0000-4000-8000-000000000004";
 const duplicateProjectId = "00000000-0000-4000-8000-000000000005";
 const duplicateLexiconId = "00000000-0000-4000-8000-000000000006";
+const legacySchemaSql = `
+  PRAGMA user_version = 1;
+  CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
+  CREATE TABLE diagnostic_kv (key TEXT PRIMARY KEY, value TEXT NOT NULL, created_at TEXT NOT NULL);
+  INSERT INTO schema_migrations (version, applied_at) VALUES (1, '2026-08-11T12:00:00.000Z');
+  INSERT INTO diagnostic_kv (key, value, created_at) VALUES ('fixture', 'preserved', '2026-08-11T12:00:00.000Z');
+`;
 
 async function temporaryDatabase(name: string) {
   return join(await mkdtemp(join(tmpdir(), name)), "studynarrator.sqlite");
@@ -30,9 +37,17 @@ function ids(...values: string[]) {
   return () => values[index++] ?? "00000000-0000-4000-8000-ffffffffffff";
 }
 
-describe("G06 migrations", () => {
+describe("database migrations", () => {
+  it("uses feature-based names without changing migration versions", () => {
+    expect(STUDYNARRATOR_MIGRATIONS.map(({ version, name }) => ({ version, name }))).toEqual([
+      { version: 1, name: "runtime-diagnostics" },
+      { version: 2, name: "project-authoring" },
+      { version: 3, name: "speaches-connections" }
+    ]);
+  });
+
   it("creates schema version 3 and reruns without duplicate migrations or backups", async () => {
-    const databasePath = await temporaryDatabase("studynarrator-g04-fresh-");
+    const databasePath = await temporaryDatabase("studynarrator-migration-fresh-");
     const first = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-12T12:00:00.000Z") });
     expect(first.appliedVersions).toEqual([1, 2, 3]);
     expect(first.backupPath).toBeNull();
@@ -46,9 +61,9 @@ describe("G06 migrations", () => {
   });
 
   it("backs up an existing v1 database before upgrading", async () => {
-    const databasePath = await temporaryDatabase("studynarrator-g04-upgrade-");
+    const databasePath = await temporaryDatabase("studynarrator-migration-upgrade-");
     const old = new Database(databasePath);
-    old.exec(readFileSync(new URL("../../../fixtures/gates/G04/schema-v1.sql", import.meta.url), "utf8"));
+    old.exec(legacySchemaSql);
     old.close();
 
     const upgraded = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-12T12:00:00.000Z") });
@@ -64,7 +79,7 @@ describe("G06 migrations", () => {
   });
 
   it("backs up and upgrades a complete v2 database without losing projects", async () => {
-    const databasePath = await temporaryDatabase("studynarrator-g06-v2-");
+    const databasePath = await temporaryDatabase("studynarrator-migration-v2-");
     const previous = await migrateDatabase({
       Database: DatabaseAdapter,
       databasePath,
@@ -88,7 +103,7 @@ describe("G06 migrations", () => {
   });
 
   it("rolls back a failed migration and retains a recoverable v1 backup", async () => {
-    const databasePath = await temporaryDatabase("studynarrator-g04-failure-");
+    const databasePath = await temporaryDatabase("studynarrator-migration-failure-");
     const old = await migrateDatabase({ Database: DatabaseAdapter, databasePath, migrations: STUDYNARRATOR_MIGRATIONS.slice(0, 1) });
     old.database.prepare("INSERT INTO diagnostic_kv (key, value, created_at) VALUES ('fixture', 'safe', '2026-08-11T00:00:00.000Z')").run();
     old.database.close();
@@ -142,14 +157,14 @@ describe("StudyNarratorRepository", () => {
   });
 
   it("persists a complete project aggregate exactly across two reopen cycles", async () => {
-    const databasePath = await temporaryDatabase("studynarrator-g04-project-");
+    const databasePath = await temporaryDatabase("studynarrator-project-reopen-");
     const first = await openStudyNarratorRepository({
       Database: DatabaseAdapter,
       databasePath,
       now: () => new Date("2026-08-12T12:00:00.000Z"),
       idFactory: ids(projectId, lexiconId)
     });
-    const created = first.createProject({ name: "Gate 04 Persistence", description: "Restart proof" });
+    const created = first.createProject({ name: "Persistence restart proof", description: "Restart proof" });
     expect(created.paragraphPause).toEqual({ enabled: true, pauseId: "pause_medium", durationMs: 750 });
     expect(created.pausePresets).toEqual([{ pauseId: "pause_medium", durationMs: 750, description: "Paragraph or subtopic separation." }]);
     const source = "Résumé line\r\n\r\nSQL line 🧠";
@@ -189,7 +204,7 @@ describe("StudyNarratorRepository", () => {
   it("copies changed system defaults only into later projects", async () => {
     const repository = await openStudyNarratorRepository({
       Database: DatabaseAdapter,
-      databasePath: await temporaryDatabase("studynarrator-g04-defaults-"),
+      databasePath: await temporaryDatabase("studynarrator-defaults-"),
       idFactory: ids(projectId, secondProjectId)
     });
     const first = repository.createProject({ name: "First" });
@@ -203,7 +218,7 @@ describe("StudyNarratorRepository", () => {
   it("duplicates a complete project atomically with fresh owned IDs", async () => {
     const repository = await openStudyNarratorRepository({
       Database: DatabaseAdapter,
-      databasePath: await temporaryDatabase("studynarrator-g05-duplicate-"),
+      databasePath: await temporaryDatabase("studynarrator-duplicate-"),
       now: () => new Date("2026-08-12T12:00:00.000Z"),
       idFactory: ids(projectId, lexiconId, duplicateProjectId, duplicateLexiconId)
     });
@@ -242,7 +257,7 @@ describe("StudyNarratorRepository", () => {
   it("keeps installation data when deleting a project and nulls deleted profile references", async () => {
     const repository = await openStudyNarratorRepository({
       Database: DatabaseAdapter,
-      databasePath: await temporaryDatabase("studynarrator-g04-boundaries-"),
+      databasePath: await temporaryDatabase("studynarrator-boundaries-"),
       idFactory: ids(profileId, projectId, lexiconId)
     });
     const profile = repository.createConnectionProfile({ id: profileId, name: "Placeholder", baseUrl: "http://127.0.0.1:8000", defaultModelId: null, defaultVoiceId: null });
@@ -263,7 +278,7 @@ describe("StudyNarratorRepository", () => {
   it("preserves ordered personal preferences and rejects mismatched paragraph presets atomically", async () => {
     const repository = await openStudyNarratorRepository({
       Database: DatabaseAdapter,
-      databasePath: await temporaryDatabase("studynarrator-g04-atomic-"),
+      databasePath: await temporaryDatabase("studynarrator-atomic-"),
       idFactory: ids(projectId)
     });
     repository.replaceIgnoredDiagnostics([
@@ -284,7 +299,7 @@ describe("StudyNarratorRepository", () => {
   it("persists safe connection state and voice overrides without exposing credential values", async () => {
     const repository = await openStudyNarratorRepository({
       Database: DatabaseAdapter,
-      databasePath: await temporaryDatabase("studynarrator-g06-connections-"),
+      databasePath: await temporaryDatabase("studynarrator-connections-"),
       now: () => new Date("2026-08-12T12:00:00.000Z"),
       idFactory: ids(profileId)
     });

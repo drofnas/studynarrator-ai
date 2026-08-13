@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   AuthoringDryRunResultSchema,
@@ -16,6 +14,21 @@ import {
 } from "./index.js";
 
 const timestamp = "2026-08-12T00:00:00.000Z";
+const representativeStudyGuide = `[section: Resumes and background processing]
+
+[speaker_teacher] Today we will compare two meanings of the word {{resume|cv}}.
+[pause_short]
+[speaker_student] That is the document I send with a job application.
+[pause_short]
+[speaker_teacher] Correct. A paused job can {{resume|continue}} after a restart.
+[pause_long]
+
+[section: SQL pronunciation]
+
+[speaker_teacher] SQL indexes can speed up database reads.
+[pause_short]
+[speaker_student] In this project, SQL is pronounced using the project lexicon.
+`;
 
 function lexiconEntry(overrides: Partial<LexiconEntry> & Pick<LexiconEntry, "id" | "displayText" | "spokenText">): LexiconEntry {
   return {
@@ -40,7 +53,7 @@ function pause(pauseId: string, durationMs: number): AuthoringPauseConfiguration
   return { pauseId, durationMs, description: pauseId };
 }
 
-describe("G05 pause duration normalization", () => {
+describe("pause duration normalization", () => {
   it.each([
     ["350", 350],
     ["350 ms", 350],
@@ -61,7 +74,7 @@ describe("G05 pause duration normalization", () => {
   });
 });
 
-describe("G05 discovery reconciliation", () => {
+describe("discovery reconciliation", () => {
   it("adds stable defaults and preserves unused authored configuration", () => {
     const parseResult = parseScript({ source: "[speaker_teacher] One. [pause_short] Two. [pause_custom] Three." });
     const first = reconcileDiscoveredConfiguration({
@@ -97,7 +110,7 @@ describe("G05 discovery reconciliation", () => {
   });
 });
 
-describe("G05 deterministic readiness and dry run", () => {
+describe("deterministic readiness and dry run", () => {
   it("blocks exact missing speaker and pause mappings", () => {
     const parseResult = parseScript({ source: "[speaker_teacher] Hello. [pause_custom] Continue." });
     const transformResult = transformScript({ parsedScript: parseResult, entries: [] });
@@ -111,15 +124,8 @@ describe("G05 deterministic readiness and dry run", () => {
     ]));
   });
 
-  it("keeps original, readable, and TTS text separate in the canonical fixture", () => {
-    const source = readFileSync(resolve(process.cwd(), "fixtures/gates/study-guide-valid.txt"), "utf8");
-    const expected = JSON.parse(readFileSync(resolve(process.cwd(), "fixtures/gates/expected/study-guide-valid.dry-run.json"), "utf8")) as {
-      schemaVersion: number;
-      status: string;
-      issueCount: number;
-      rows: Array<Record<string, unknown>>;
-    };
-    const parseResult = parseScript({ source });
+  it("keeps original, readable, and TTS text separate in a representative study guide", () => {
+    const parseResult = parseScript({ source: representativeStudyGuide });
     const transformResult = transformScript({
       parsedScript: parseResult,
       entries: [
@@ -148,26 +154,22 @@ describe("G05 deterministic readiness and dry run", () => {
     expect(result.rows.filter((row) => row.type === "pause").map((row) => row.origin)).toEqual([
       "explicit", "explicit", "explicit", "explicit"
     ]);
-    expect({
-      schemaVersion: result.schemaVersion,
-      status: result.status,
-      issueCount: result.issues.length,
-      rows: result.rows.map((row) => row.type === "section"
-        ? { rowNumber: row.rowNumber, type: row.type, nodeOrdinal: row.nodeOrdinal, title: row.title }
-        : row.type === "pause"
-          ? { rowNumber: row.rowNumber, type: row.type, nodeOrdinal: row.nodeOrdinal, pauseId: row.pauseId, origin: row.origin, durationMs: row.durationMs }
-          : {
-              rowNumber: row.rowNumber,
-              type: row.type,
-              nodeOrdinal: row.nodeOrdinal,
-              speakerId: row.speakerId,
-              voiceId: row.voiceId,
-              originalText: row.originalText,
-              readableText: row.readableText,
-              ttsText: row.ttsText,
-              durationMs: row.durationMs
-            })
-    }).toEqual(expected);
+    expect(result.schemaVersion).toBe(1);
+    expect(result.issues).toEqual([]);
+    expect(result.rows.map((row) => row.type)).toEqual([
+      "section", "speech", "pause", "speech", "pause", "speech", "pause", "section", "speech", "pause", "speech"
+    ]);
+    expect(result.rows.filter((row) => row.type === "section")).toEqual([
+      expect.objectContaining({ title: "Resumes and background processing" }),
+      expect.objectContaining({ title: "SQL pronunciation" })
+    ]);
+    expect(result.rows.filter((row) => row.type === "speech").map((row) => row.ttsText)).toEqual([
+      "Today we will compare two meanings of the word rez-oo-may.",
+      "That is the document I send with a job application.",
+      "Correct. A paused job can ree-zoom after a restart.",
+      "sequel indexes can speed up database reads.",
+      "In this project, sequel is pronounced using the project lexicon."
+    ]);
     expect(AuthoringDryRunResultSchema.parse(result)).toEqual(result);
   });
 

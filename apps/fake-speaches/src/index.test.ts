@@ -20,7 +20,7 @@ async function diagnose(baseUrl: string, timeoutSeconds = 2) {
     baseUrl,
     modelId: FAKE_SPEACHES_MODEL_ID,
     voiceId: FAKE_SPEACHES_VOICE_ID,
-    apiKey: "g06-secret-must-not-appear",
+    apiKey: "test-secret-must-not-appear",
     timeoutSeconds
   });
 }
@@ -44,7 +44,7 @@ describe("fake Speaches diagnostic scenarios", () => {
       inputLength: 31
     });
     expect(state.requests.at(-1)?.inputHash).toMatch(/^[a-f0-9]{64}$/u);
-    expect(JSON.stringify(state)).not.toContain("g06-secret-must-not-appear");
+    expect(JSON.stringify(state)).not.toContain("test-secret-must-not-appear");
     expect(JSON.stringify(state)).not.toContain("StudyNarrator connection check");
   });
 
@@ -60,7 +60,7 @@ describe("fake Speaches diagnostic scenarios", () => {
     const output = await diagnose(current.baseUrl);
     expect(output.summary.overall).toBe(overall);
     expect(output.summary.stages.some((candidate) => candidate.code === code)).toBe(true);
-    expect(JSON.stringify(output)).not.toContain("g06-secret-must-not-appear");
+    expect(JSON.stringify(output)).not.toContain("test-secret-must-not-appear");
     expect(current.getState().requests.length).toBeGreaterThan(0);
     for (const request of current.getState().requests) {
       expect(Object.keys(request).sort()).toEqual(["inputHash", "inputLength", "method", "model", "path", "status", "voice"].sort());
