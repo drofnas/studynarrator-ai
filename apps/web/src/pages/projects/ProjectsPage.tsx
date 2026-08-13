@@ -19,8 +19,12 @@ import {
   type ProjectDetail,
   type ProjectPreviewClient,
   type ProjectPreviewResult,
+  type RenderPlan,
+  type RenderPlanClient,
+  type RenderPlanSummary,
   type ProjectSummary,
   type SpeechCacheClient,
+  type TransitionPauseSetting,
   type VoiceCatalog
 } from "@studynarrator/shared-types";
 import type { ScriptAnalyzer } from "@/workers/parser/parserClient.js";
@@ -75,11 +79,31 @@ function sameDraft(left: ProjectDraft, right: ProjectDraft): boolean {
 function message(error: unknown): string { return error instanceof Error ? error.message : "The operation failed."; }
 function diagnosticKey(item: IgnoredDiagnostic): string { return `${item.code}\u0000${item.pattern}`; }
 
-export function ProjectsPage({ client, analyzer, previewClient, cacheClient }: {
+function TransitionPauseEditor({ label, setting, pausePresets, onChange }: {
+  label: string;
+  setting: TransitionPauseSetting;
+  pausePresets: ProjectDraft["pausePresets"];
+  onChange: (setting: TransitionPauseSetting) => void;
+}) {
+  return <fieldset className={styles.transitionPause}>
+    <legend>{label}</legend>
+    <label>Mode<select aria-label={`${label} mode`} value={setting.mode} onChange={(event) => {
+      const mode = event.target.value;
+      onChange(mode === "none" ? { mode: "none" }
+        : mode === "preset" ? { mode: "preset", pauseId: pausePresets[0]?.pauseId ?? "pause_medium" }
+          : { mode: "duration", durationMs: 0 });
+    }}><option value="none">None</option><option value="preset">Named preset</option><option value="duration">Direct duration</option></select></label>
+    {setting.mode === "preset" ? <label>Preset<select aria-label={`${label} preset`} value={setting.pauseId} onChange={(event) => onChange({ mode: "preset", pauseId: event.target.value })}>{pausePresets.map((preset) => <option key={preset.pauseId} value={preset.pauseId}>{preset.pauseId} · {preset.durationMs} ms</option>)}</select></label> : null}
+    {setting.mode === "duration" ? <label>Duration (ms)<input aria-label={`${label} duration (ms)`} type="number" min="0" max="30000" step="1" value={setting.durationMs} onChange={(event) => onChange({ mode: "duration", durationMs: Number(event.target.value) })} /></label> : null}
+  </fieldset>;
+}
+
+export function ProjectsPage({ client, analyzer, previewClient, cacheClient, renderPlanClient }: {
   client: PersistenceClient;
   analyzer: ScriptAnalyzer;
   previewClient: ProjectPreviewClient;
   cacheClient: SpeechCacheClient;
+  renderPlanClient: RenderPlanClient;
 }) {
   const connections = useConnections();
   const { projectId } = useParams();
@@ -119,6 +143,10 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient }: {
   const [previewResult, setPreviewResult] = useState<ProjectPreviewResult>();
   const [previewBusy, setPreviewBusy] = useState(false);
   const [previewError, setPreviewError] = useState("");
+  const [renderPlanSummaries, setRenderPlanSummaries] = useState<RenderPlanSummary[]>([]);
+  const [selectedRenderPlan, setSelectedRenderPlan] = useState<RenderPlan>();
+  const [renderPlanBusy, setRenderPlanBusy] = useState(false);
+  const [renderPlanError, setRenderPlanError] = useState("");
   const previewControllerRef = useRef<AbortController | null>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const revisionRef = useRef(0);
@@ -216,6 +244,8 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient }: {
       draftRef.current = undefined;
       setAnalysis(undefined);
       setConfiguration({ speakers: [], pauses: [], sections: [] });
+      setRenderPlanSummaries([]);
+      setSelectedRenderPlan(undefined);
       return;
     }
     let active = true;
@@ -238,6 +268,19 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient }: {
     }).catch((error: unknown) => { if (active) { setErrors([message(error)]); setBusy(false); } });
     return () => { active = false; };
   }, [clearAutosave, client, projectId]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    let active = true;
+    setRenderPlanError("");
+    setSelectedRenderPlan(undefined);
+    void renderPlanClient.list(projectId).then((summaries) => {
+      if (active) setRenderPlanSummaries(summaries);
+    }).catch((error: unknown) => {
+      if (active) setRenderPlanError(message(error));
+    });
+    return () => { active = false; };
+  }, [projectId, renderPlanClient]);
 
   const updateDraft = useCallback((updater: (current: ProjectDraft) => ProjectDraft, autosave = true) => {
     const current = draftRef.current;
@@ -568,6 +611,35 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient }: {
     }
   };
 
+  const openRenderPlan = async (planId: string) => {
+    setRenderPlanBusy(true);
+    setRenderPlanError("");
+    try {
+      setSelectedRenderPlan(await renderPlanClient.get(planId));
+    } catch (error) {
+      setRenderPlanError(message(error));
+    } finally {
+      setRenderPlanBusy(false);
+    }
+  };
+
+  const freezeRenderPlan = async () => {
+    if (!project) return;
+    setRenderPlanBusy(true);
+    setRenderPlanError("");
+    try {
+      if (!await saveNow()) throw new Error("Save valid project changes before freezing a render plan.");
+      const plan = await renderPlanClient.create(project.id);
+      setSelectedRenderPlan(plan);
+      setRenderPlanSummaries(await renderPlanClient.list(project.id));
+      setNotice(`Frozen render plan ${plan.id}. No speech was synthesized.`);
+    } catch (error) {
+      setRenderPlanError(message(error));
+    } finally {
+      setRenderPlanBusy(false);
+    }
+  };
+
   const clearProjectCache = async () => {
     if (!project || !window.confirm(`Clear every cached speech entry associated with ${project.name}? Identical speech shared with Scratchpad or other projects will also be deleted.`)) return;
     try {
@@ -644,7 +716,18 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient }: {
 
           <aside className={styles.configRail} aria-label="Discovered configuration">
             <section><div className={styles.sectionHeading}><div><span>Discovered</span><h3>Speakers</h3></div><b>{configuration.speakers.filter(({ discovered }) => discovered).length}</b></div>{configuration.speakers.map((row) => <article className={!row.discovered ? styles.unused : ""} key={row.speakerId}><header><code>{row.speakerId}</code><span>{row.occurrenceCount} uses{!row.discovered ? " · unused" : ""}</span></header><div className={styles.sourceLinks}>{analysis?.parseResult.discoveries.speakers.find(({ id }) => id === row.speakerId)?.occurrences.map(({ range }, index) => <button type="button" className={styles.sourceLink} key={`${row.speakerId}:${String(index)}`} onClick={() => focusLine(range.start.line)}>Line {range.start.line}</button>)}</div><label>Display name<input value={row.displayName} onChange={(event) => updateSpeaker(row.speakerId, { displayName: event.target.value })} /></label><label>Voices<select disabled={enabledVoices.length === 0} value={enabledVoices.some(({ voiceId }) => voiceId === row.voiceId) ? row.voiceId ?? "" : ""} onChange={(event) => updateSpeaker(row.speakerId, { voiceId: event.target.value })}>{enabledVoices.length === 0 ? <option value="">{voiceSelectionState === "loading" ? "Loading supported voices…" : "No supported voices"}</option> : enabledVoices.map((entry) => <option key={entry.voiceId} value={entry.voiceId}>{entry.label}</option>)}</select></label>{enabledVoices.length === 0 ? <p className={styles.voiceFieldMessage}>{!selectedConnection && voiceSelectionState === "ready" ? "The global voice catalog has no enabled voices." : voiceSelectionState === "failed" ? speechCatalogState?.status === "failed" ? speechCatalogState.error : "The global voice catalog could not be loaded." : voiceSelectionState === "modelUnavailable" ? "The selected model was not reported by Speaches." : voiceSelectionState === "noSupportedVoices" ? "Speaches reported no voices for the selected model." : voiceSelectionState === "ready" ? "The supported voices are disabled in Settings." : "Loading the selected model's supported voices."} {selectedConnection ? <button type="button" onClick={() => void connections.loadSpeechCatalog(selectedConnection.id, true).catch(() => undefined)}>Retry supported voices</button> : null} <button type="button" onClick={() => void navigate("/settings")}>Open Settings</button></p> : null}<div className={styles.voiceMeta}><strong>{voiceById.get(row.voiceId ?? "")?.label ?? "Voice unavailable"}</strong><code>{row.voiceId || "no raw ID"}</code><span data-state={availability(row.voiceId)}>{availability(row.voiceId)}</span></div><div className={styles.inlineFields}><label>Speed<input type="number" step="0.05" min="0.01" max="4" value={row.speed} onChange={(event) => updateSpeaker(row.speakerId, { speed: Number(event.target.value) })} /></label><label>Gain dB<input type="number" min="-60" max="24" value={row.gainDb} onChange={(event) => updateSpeaker(row.speakerId, { gainDb: Number(event.target.value) })} /></label></div><div className={styles.copyRow}><select aria-label={`Copy settings for ${row.speakerId}`} value={copySource[row.speakerId] ?? ""} onChange={(event) => setCopySource((current) => ({ ...current, [row.speakerId]: event.target.value }))}><option value="">Copy another speaker…</option>{configuration.speakers.filter((item) => item.speakerId !== row.speakerId).map((item) => <option key={item.speakerId} value={item.speakerId}>{item.speakerId}</option>)}</select><button type="button" className={styles.secondary} onClick={() => { const source = draft.speakerMappings.find((item) => item.speakerId === copySource[row.speakerId]); if (source) { setConfiguration((current) => ({ ...current, speakers: current.speakers.map((item) => item.speakerId === row.speakerId ? { ...item, voiceId: source.voiceId, speed: source.speed, gainDb: source.gainDb, roleDescription: source.roleDescription, sampleText: source.sampleText } : item) })); updateDraft((current) => ({ ...current, speakerMappings: current.speakerMappings.map((item) => item.speakerId === row.speakerId ? { ...source, speakerId: row.speakerId, displayName: item.displayName } : item) })); } }}>Copy</button></div></article>)}</section>
-            <section><div className={styles.sectionHeading}><div><span>Timing</span><h3>Pauses</h3></div><b>{configuration.pauses.filter(({ discovered }) => discovered).length}</b></div><label className={styles.check}><input type="checkbox" checked={draft.transitionPauses.paragraph.mode !== "none"} onChange={(event) => updateDraft((current) => ({ ...current, transitionPauses: { ...current.transitionPauses, paragraph: event.target.checked ? { mode: "preset", pauseId: "pause_medium" } : { mode: "none" } } }))} />Pause at paragraph breaks</label>{configuration.pauses.map((row) => <article className={!row.discovered ? styles.unused : ""} key={row.pauseId}><header><code>{row.pauseId}</code><span>{row.occurrenceCount} uses{!row.discovered ? " · unused" : ""}</span></header><div className={styles.sourceLinks}>{analysis?.parseResult.discoveries.pauses.find(({ id }) => id === row.pauseId)?.occurrences.map(({ range }, index) => <button type="button" className={styles.sourceLink} key={`${row.pauseId}:${String(index)}`} onClick={() => focusLine(range.start.line)}>Line {range.start.line}</button>)}</div><label>Duration<input aria-invalid={invalidPauseRef.current[row.pauseId] !== undefined} value={pauseInputs[row.pauseId] ?? ""} onChange={(event) => updatePause(row, event.target.value)} /></label>{invalidPauseRef.current[row.pauseId] ? <p className={styles.fieldError}>{invalidPauseRef.current[row.pauseId]}</p> : null}<label>Description<input value={row.description} onChange={(event) => updateDraft((current) => ({ ...current, pausePresets: current.pausePresets.map((item) => item.pauseId === row.pauseId ? { ...item, description: event.target.value } : item) }))} /></label></article>)}</section>
+            <section><div className={styles.sectionHeading}><div><span>Timing</span><h3>Pauses</h3></div><b>{configuration.pauses.filter(({ discovered }) => discovered).length}</b></div>
+              <div className={styles.transitionPauseGrid}>
+                {(["paragraph", "speakerChange", "section"] as const).map((transition) => <TransitionPauseEditor
+                  key={transition}
+                  label={transition === "paragraph" ? "Paragraph transition" : transition === "speakerChange" ? "Speaker change transition" : "Section transition"}
+                  setting={draft.transitionPauses[transition]}
+                  pausePresets={draft.pausePresets}
+                  onChange={(setting) => updateDraft((current) => ({ ...current, transitionPauses: { ...current.transitionPauses, [transition]: setting } }))}
+                />)}
+              </div>
+              {configuration.pauses.map((row) => <article className={!row.discovered ? styles.unused : ""} key={row.pauseId}><header><code>{row.pauseId}</code><span>{row.occurrenceCount} uses{!row.discovered ? " · unused" : ""}</span></header><div className={styles.sourceLinks}>{analysis?.parseResult.discoveries.pauses.find(({ id }) => id === row.pauseId)?.occurrences.map(({ range }, index) => <button type="button" className={styles.sourceLink} key={`${row.pauseId}:${String(index)}`} onClick={() => focusLine(range.start.line)}>Line {range.start.line}</button>)}</div><label>Duration<input aria-invalid={invalidPauseRef.current[row.pauseId] !== undefined} value={pauseInputs[row.pauseId] ?? ""} onChange={(event) => updatePause(row, event.target.value)} /></label>{invalidPauseRef.current[row.pauseId] ? <p className={styles.fieldError}>{invalidPauseRef.current[row.pauseId]}</p> : null}<label>Description<input value={row.description} onChange={(event) => updateDraft((current) => ({ ...current, pausePresets: current.pausePresets.map((item) => item.pauseId === row.pauseId ? { ...item, description: event.target.value } : item) }))} /></label></article>)}
+            </section>
             <section><div className={styles.sectionHeading}><div><span>Outline</span><h3>Sections</h3></div><b>{configuration.sections.length}</b></div>{configuration.sections.length === 0 ? <p>No sections discovered.</p> : configuration.sections.map((section) => <button type="button" className={styles.sectionLink} key={`${section.sourceLine}:${section.title}`} onClick={() => focusLine(section.sourceLine)}><strong>{section.title}</strong><span>Line {section.sourceLine} · {section.speechSegmentCount} speech segments</span></button>)}</section>
           </aside>
         </>}
@@ -660,6 +743,40 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient }: {
 
         {previewError ? <p className={styles.previewError} role="alert">{previewError} Your project and preview selection are unchanged.</p> : null}
         {previewResult ? <PreviewResultCard result={previewResult} onClearEntry={clearPreviewEntry} /> : null}
+
+        <section className={styles.renderPlansPanel} aria-labelledby="render-plans-heading">
+          <div className={styles.sectionHeading}>
+            <div><span>Immutable handoff</span><h3 id="render-plans-heading">Frozen render plans</h3></div>
+            <button type="button" disabled={renderPlanBusy || analysisState !== "ready" || dryRun?.status === "blocked"} onClick={() => void freezeRenderPlan()}>{renderPlanBusy ? "Freezing…" : "Freeze render plan"}</button>
+          </div>
+          <p>Capture the saved project, pronunciation rules, connection/model identity, ordered entries, cache predictions, and exact silence without contacting Speaches.</p>
+          {renderPlanError ? <p className={styles.fieldError} role="alert">{renderPlanError}</p> : null}
+          <div className={styles.renderPlanWorkspace}>
+            <div className={styles.renderPlanList} aria-label="Saved render plans">
+              {renderPlanSummaries.length === 0 ? <p>No frozen plans yet.</p> : renderPlanSummaries.map((summary) => <button type="button" aria-pressed={selectedRenderPlan?.id === summary.id} key={summary.id} onClick={() => void openRenderPlan(summary.id)}>
+                <strong>{new Date(summary.createdAt).toLocaleString()}</strong>
+                <span>{summary.scriptHash === project.scriptHash && summary.createdAt >= project.updatedAt ? "Matches current project" : "Frozen from earlier project"}</span>
+                <small>{summary.summary.speechCount} speech · {summary.summary.pauseCount} pauses · {summary.summary.cacheHits} predicted hits</small>
+              </button>)}
+            </div>
+            <div className={styles.renderPlanDetail} aria-live="polite">
+              {!selectedRenderPlan ? <p>Select a saved plan to inspect its immutable entries.</p> : <>
+                <header><div><strong>{selectedRenderPlan.scriptHash === project.scriptHash && selectedRenderPlan.createdAt >= project.updatedAt ? "Matches current project" : "Frozen from earlier project"}</strong><span>{new Date(selectedRenderPlan.createdAt).toLocaleString()}</span></div><code>{selectedRenderPlan.id}</code></header>
+                <div className={styles.renderPlanTable} role="table" aria-label="Frozen render plan ordered entries">
+                  <div className={styles.renderPlanRow} role="row"><b>#</b><b>Type / origin</b><b>Duration</b><b>Voice</b><b>Transformed text</b><b>Cache</b></div>
+                  {selectedRenderPlan.entries.map((entry) => <div className={styles.renderPlanRow} role="row" key={entry.ordinal}>
+                    <span>{entry.ordinal}</span>
+                    <strong>{entry.type === "pause" ? `${entry.pauseKind} · ${entry.reason}` : entry.type}</strong>
+                    <span>{entry.type === "pause" ? `${entry.durationMs} ms` : "—"}</span>
+                    <code>{entry.type === "speech" ? entry.voiceId : "—"}</code>
+                    <span>{entry.type === "speech" ? entry.ttsText : entry.type === "section" ? entry.title : entry.pauseId ?? "direct duration"}</span>
+                    <span data-state={entry.type === "speech" ? entry.chunks[0]?.cacheStatus : undefined}>{entry.type === "speech" ? entry.chunks[0]?.cacheStatus : "—"}</span>
+                  </div>)}
+                </div>
+              </>}
+            </div>
+          </div>
+        </section>
 
         <section className={styles.validationPanel}>
           <div className={styles.sectionHeading}><div><span>Offline validation</span><h3>Narration score</h3></div><b>{dryRun?.rows.length ?? 0} ordered rows</b></div>

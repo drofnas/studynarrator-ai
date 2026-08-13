@@ -21,6 +21,8 @@ import {
   ProjectDetailSchema,
   ProjectPreviewResultSchema,
   ProjectSummaryCollectionSchema,
+  RenderPlanSchema,
+  RenderPlanSummaryCollectionSchema,
   RuntimeSchema,
   SpeechCacheCleanupResultSchema,
   SpeechCacheStatusSchema,
@@ -143,10 +145,36 @@ async function fixture() {
     clearProject: async (_projectId: string) => ({ contractVersion: 1 as const, entriesRemoved: 1, bytesFreed: 3 }),
     clearEntry: async (_cacheKey: string) => ({ contractVersion: 1 as const, entriesRemoved: 1, bytesFreed: 3 })
   };
+  const renderPlanId = "00000000-0000-4000-8000-000000000002";
+  const renderPlanFor = (projectId: string) => ({
+    schemaVersion: 1 as const,
+    id: renderPlanId,
+    projectId,
+    createdAt: "2026-08-12T12:00:00.000Z",
+    snapshotHash: "b".repeat(64),
+    planHash: "c".repeat(64),
+    scriptHash: "a".repeat(64),
+    entries: [],
+    summary: { sectionCount: 0, speechCount: 0, pauseCount: 0, cacheHits: 0, cacheMisses: 0, silenceDurationMs: 0 }
+  });
+  let lastRenderPlan = renderPlanFor("00000000-0000-4000-8000-000000000001");
+  const renderPlans = {
+    create: async (projectId: string) => { lastRenderPlan = renderPlanFor(projectId); return lastRenderPlan; },
+    list: async (projectId: string) => lastRenderPlan.projectId === projectId ? [{
+      id: lastRenderPlan.id,
+      projectId: lastRenderPlan.projectId,
+      createdAt: lastRenderPlan.createdAt,
+      snapshotHash: lastRenderPlan.snapshotHash,
+      planHash: lastRenderPlan.planHash,
+      scriptHash: lastRenderPlan.scriptHash,
+      summary: lastRenderPlan.summary
+    }] : [],
+    get: async () => lastRenderPlan
+  };
   openServices.add(service);
   return {
-    service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache,
-    app: await listen(createExpressApp({ service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache, context }))
+    service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache, renderPlans,
+    app: await listen(createExpressApp({ service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache, renderPlans, context }))
   };
 }
 
@@ -308,8 +336,8 @@ interface ExpressRouteLayer {
 
 describe("REST API operation manifest", () => {
   it("matches every registered method and path exactly", async () => {
-    const { service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache } = await fixture();
-    const application = createExpressApp({ service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache, context });
+    const { service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache, renderPlans } = await fixture();
+    const application = createExpressApp({ service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache, renderPlans, context });
     const layers = (application as unknown as { router: { stack: ExpressRouteLayer[] } }).router.stack;
     const registered = layers.flatMap((layer) => layer.route
       ? Object.entries(layer.route.methods)
@@ -318,14 +346,15 @@ describe("REST API operation manifest", () => {
       : []);
     const declared = REST_API_MANIFEST.map(({ method, path }) => `${method} ${path}`);
     expect(registered.sort()).toEqual([...declared].sort());
-    expect(new Set(declared).size).toBe(34);
+    expect(new Set(declared).size).toBe(37);
   });
 
-  it("exercises a successful schema-valid response for all 34 operations", async () => {
+  it("exercises a successful schema-valid response for all 37 operations", async () => {
     const { app } = await fixture();
     const covered = new Set<string>();
     const call = async (method: string, path: string, expected: number, body?: string | object) => {
       covered.add(`${method} ${path
+        .replace(/^\/api\/render-plans\/[0-9a-f-]{36}$/u, "/api/render-plans/:planId")
         .replace(/\/[0-9a-f-]{36}(?=\/|$)/gu, "/:projectId")
         .replace(/\/manifest-profile(?=\/|$)/gu, "/:profileId")
         .replace(/\/[a-f0-9]{64}(?=\/|$)/gu, "/:cacheKey")}`);
@@ -384,6 +413,9 @@ describe("REST API operation manifest", () => {
     ProjectPreviewResultSchema.parse((await call("POST", `/api/projects/${created.id}/preview`, 200, {
       mode: "segment", nodeOrdinal: 1
     })).body as unknown);
+    const renderPlan = RenderPlanSchema.parse((await call("POST", `/api/projects/${created.id}/render-plans`, 201)).body as unknown);
+    RenderPlanSummaryCollectionSchema.parse((await call("GET", `/api/projects/${created.id}/render-plans`, 200)).body as unknown);
+    RenderPlanSchema.parse((await call("GET", `/api/render-plans/${renderPlan.id}`, 200)).body as unknown);
     SpeechCacheStatusSchema.parse((await call("GET", "/api/speech-cache", 200)).body as unknown);
     SpeechCacheCleanupResultSchema.parse((await call("DELETE", `/api/projects/${created.id}/speech-cache`, 200)).body as unknown);
     SpeechCacheCleanupResultSchema.parse((await call("DELETE", `/api/speech-cache/${"a".repeat(64)}`, 200)).body as unknown);
@@ -417,6 +449,9 @@ describe("REST API operation manifest", () => {
       request(app).post("/api/scratchpad/preview").send({ connectionProfileId: "x", text: secret }).expect(400),
       request(app).post("/api/projects/not-a-uuid/preview").send({ mode: "segment", nodeOrdinal: 1 }).expect(400),
       request(app).post("/api/projects/00000000-0000-4000-8000-000000000001/preview").send({ mode: "pronunciation", text: "" }).expect(400),
+      request(app).post("/api/projects/not-a-uuid/render-plans").expect(400),
+      request(app).get("/api/projects/not-a-uuid/render-plans").expect(400),
+      request(app).get("/api/render-plans/not-a-uuid").expect(400),
       request(app).delete("/api/projects/not-a-uuid/speech-cache").expect(400),
       request(app).delete("/api/speech-cache/not-a-key").expect(400)
     ];

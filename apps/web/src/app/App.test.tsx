@@ -34,7 +34,7 @@ afterEach(cleanup);
 function renderApp(route: string, client: SystemClient = { diagnostics: vi.fn() }, connections = unusedConnections) {
   return render(
     <MemoryRouter initialEntries={[route]}>
-      <App analyzer={unusedAnalyzer} client={client} persistence={unusedPersistence} connections={connections} voiceCatalog={unusedVoiceCatalog} scratchpad={unusedScratchpad} projectPreview={unusedProjectPreview} speechCache={unusedSpeechCache} />
+      <App analyzer={unusedAnalyzer} client={client} persistence={unusedPersistence} connections={connections} voiceCatalog={unusedVoiceCatalog} scratchpad={unusedScratchpad} projectPreview={unusedProjectPreview} speechCache={unusedSpeechCache} renderPlans={{ create: vi.fn(), list: vi.fn(async () => []), get: vi.fn() }} />
     </MemoryRouter>
   );
 }

@@ -139,4 +139,24 @@ describe("render plan application service", () => {
     const second = createRenderPlanService({ repository: repository({ project: disabled }), cache: cache(), store: createRenderPlanStore(secondRoot), createId: () => planId });
     expect((await second.create(projectId)).entries.some((entry) => entry.type === "pause")).toBe(false);
   });
+
+  it("preserves repeated section boundaries while an explicit pause suppresses every automatic candidate", async () => {
+    const base = project();
+    base.scriptSource = [
+      "[speaker_teacher] One.",
+      "",
+      "[section: Repeated A]",
+      "[section: Repeated B]",
+      "[pause_short]",
+      "[speaker_student] Two.",
+      "[section: Trailing]"
+    ].join("\n");
+    const root = await mkdtemp(join(tmpdir(), "studynarrator-explicit-render-plan-"));
+    const service = createRenderPlanService({ repository: repository({ project: base }), cache: cache(), store: createRenderPlanStore(root), createId: () => planId });
+    const plan = await service.create(projectId);
+    expect(plan.entries.map((entry) => entry.type === "pause" ? `${entry.pauseKind}:${entry.reason}` : entry.type)).toEqual([
+      "speech", "section", "section", "explicit:explicit", "speech", "section"
+    ]);
+    expect(plan.entries.filter((entry) => entry.type === "pause" && entry.pauseKind === "automatic")).toEqual([]);
+  });
 });

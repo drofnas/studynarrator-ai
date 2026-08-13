@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, readdir, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -207,8 +207,10 @@ describe("render plan silence and storage", () => {
     const store = createRenderPlanStore(root);
     const { silence, snapshot, plan } = bundle();
     await store.save(snapshot, plan, new Map([[silence.asset!.checksum, silence.bytes!]]));
+    await mkdir(join(root, `${planId}.interrupted.tmp`));
+    await writeFile(join(root, `${planId}.interrupted.tmp`, "render-plan.json"), "{\"incomplete\":true}");
     await expect(store.save(snapshot, plan, new Map([[silence.asset!.checksum, silence.bytes!]]))).rejects.toThrow();
-    expect((await readdir(root)).filter((name) => name.endsWith(".tmp"))).toEqual([]);
+    expect((await readdir(root)).filter((name) => name.endsWith(".tmp"))).toEqual([`${planId}.interrupted.tmp`]);
     await expect(store.list(projectId)).resolves.toEqual([expect.objectContaining({ id: planId, planHash: plan.planHash })]);
     await expect(store.get(planId)).resolves.toEqual(plan);
     const silencePath = join(root, planId, silence.asset!.relativePath);
@@ -227,5 +229,26 @@ describe("render plan silence and storage", () => {
     const symlinkId = "00000000-0000-4000-8000-000000000003";
     await symlink(join(root, planId), join(root, symlinkId));
     await expect(store.get(symlinkId)).rejects.toThrow(/unsafe/iu);
+  });
+
+  it("rejects a schema-valid manifest whose checksum was changed after the atomic save", async () => {
+    const root = await mkdtemp(join(tmpdir(), "studynarrator-render-plan-manifest-"));
+    const store = createRenderPlanStore(root);
+    const { silence, snapshot, plan } = bundle();
+    await store.save(snapshot, plan, new Map([[silence.asset!.checksum, silence.bytes!]]));
+    await writeFile(join(root, planId, "render-plan.json"), `${JSON.stringify({ ...plan, planHash: "0".repeat(64) })}\n`);
+    await expect(store.get(planId)).rejects.toThrow(/hash/iu);
+  });
+
+  it("rejects a schema-valid manifest whose ID does not match its bundle directory", async () => {
+    const root = await mkdtemp(join(tmpdir(), "studynarrator-render-plan-id-"));
+    const store = createRenderPlanStore(root);
+    const { silence, snapshot, plan } = bundle();
+    await store.save(snapshot, plan, new Map([[silence.asset!.checksum, silence.bytes!]]));
+    const { planHash: _planHash, ...payload } = plan;
+    void _planHash;
+    const moved = withRenderPlanHash({ ...payload, id: "00000000-0000-4000-8000-000000000004" });
+    await writeFile(join(root, planId, "render-plan.json"), `${JSON.stringify(moved)}\n`);
+    await expect(store.get(planId)).rejects.toThrow(/hash/iu);
   });
 });

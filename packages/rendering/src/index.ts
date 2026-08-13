@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { chmod, lstat, mkdir, open, readdir, rename, rm, unlink, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join, resolve, sep } from "node:path";
 import {
   ProjectSnapshotSchema,
   RenderPlanIdSchema,
@@ -695,7 +695,7 @@ export function createRenderPlanStore(rootDirectoryInput: string): RenderPlanSto
     if (!details.isDirectory() || details.isSymbolicLink()) throw new Error("Render plan directory is unsafe.");
     const snapshot = ProjectSnapshotSchema.parse(await boundedJson(join(directory, "project-snapshot.json")));
     const plan = RenderPlanSchema.parse(await boundedJson(join(directory, "render-plan.json")));
-    if (snapshot.project.id !== plan.projectId || snapshot.snapshotHash !== plan.snapshotHash
+    if (plan.id !== planId || snapshot.project.id !== plan.projectId || snapshot.project.scriptHash !== plan.scriptHash || snapshot.snapshotHash !== plan.snapshotHash
       || !verifiedSnapshotHash(snapshot) || !verifiedPlanHash(plan)) throw new Error("Render plan hashes are inconsistent.");
     const silenceDirectory = join(directory, "silence");
     const silenceEntries = plan.entries.filter((entry) => entry.type === "pause" && entry.silence !== null);
@@ -717,11 +717,13 @@ export function createRenderPlanStore(rootDirectoryInput: string): RenderPlanSto
       const snapshot = ProjectSnapshotSchema.parse(snapshotInput);
       const plan = RenderPlanSchema.parse(planInput);
       if (!verifiedSnapshotHash(snapshot) || !verifiedPlanHash(plan) || snapshot.snapshotHash !== plan.snapshotHash
-        || snapshot.project.id !== plan.projectId) throw new Error("Render plan cannot be saved with inconsistent hashes.");
+        || snapshot.project.id !== plan.projectId || snapshot.project.scriptHash !== plan.scriptHash) {
+        throw new Error("Render plan cannot be saved with inconsistent hashes.");
+      }
       await ensureRoot();
       const finalDirectory = join(rootDirectory, plan.id);
       const temporaryDirectory = join(rootDirectory, `${plan.id}.${randomUUID()}.tmp`);
-      if (!temporaryDirectory.startsWith(`${rootDirectory}/`)) throw new Error("Render plan temporary path escaped its root.");
+      if (!temporaryDirectory.startsWith(`${rootDirectory}${sep}`)) throw new Error("Render plan temporary path escaped its root.");
       try {
         await mkdir(temporaryDirectory, { mode: 0o700 });
         await mkdir(join(temporaryDirectory, "silence"), { mode: 0o700 });

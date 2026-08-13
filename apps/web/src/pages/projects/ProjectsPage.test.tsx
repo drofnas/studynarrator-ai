@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { Link, MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseScript, resolveParagraphPauses, transformScript } from "@studynarrator/core";
-import type { ConnectionProfile, IgnoredDiagnosticCollection, PersistenceClient, ProjectDetail, ProjectPreviewResult, ProjectReplaceInput, ProjectPreviewClient, SpeechCacheClient, SpeechCatalog, VoiceCatalog } from "@studynarrator/shared-types";
+import type { ConnectionProfile, IgnoredDiagnosticCollection, PersistenceClient, ProjectDetail, ProjectPreviewResult, ProjectReplaceInput, ProjectPreviewClient, RenderPlan, RenderPlanClient, RenderPlanSummary, SpeechCacheClient, SpeechCatalog, VoiceCatalog } from "@studynarrator/shared-types";
 import type { ScriptAnalyzer } from "@/workers/parser/parserClient.js";
 import type { ScriptAnalysisInput } from "@/workers/parser/parserWorkerProtocol.js";
 import { GLOBAL_VOICE_CATALOG_MODEL_ID } from "@/features/projects/projectAuthoring.js";
@@ -65,6 +65,36 @@ function projectPreviewResult(mode: "segment" | "pronunciation" = "segment"): Pr
   };
 }
 
+function frozenPlan(id: string, scriptHash: string, createdAt: string): RenderPlan {
+  return {
+    schemaVersion: 1,
+    id,
+    projectId: project.id,
+    createdAt,
+    snapshotHash: "b".repeat(64),
+    planHash: id.endsWith("2") ? "c".repeat(64) : "d".repeat(64),
+    scriptHash,
+    entries: [
+      { type: "section", ordinal: 1, nodeOrdinal: 1, title: "Opening", sectionTitle: "Opening", sourceRange: null },
+      {
+        type: "speech", ordinal: 2, nodeOrdinal: 2, sectionTitle: "Opening", sourceRange: null,
+        speakerId: "teacher", voiceId: "voice_teacher", speed: 1, gainDb: 0,
+        originalText: "SQL.", readableText: "SQL.", ttsText: "sequel.",
+        chunks: [{ ordinal: 1, text: "sequel.", cacheKey: "e".repeat(64), cacheStatus: "miss" }]
+      },
+      { type: "pause", ordinal: 3, sectionTitle: "Opening", sourceRange: null, pauseKind: "automatic", reason: "paragraph", pauseId: "pause_medium", durationMs: 750, silence: null }
+    ],
+    summary: { sectionCount: 1, speechCount: 1, pauseCount: 1, cacheHits: 0, cacheMisses: 1, silenceDurationMs: 750 }
+  };
+}
+
+function summaryOf(plan: RenderPlan): RenderPlanSummary {
+  return {
+    id: plan.id, projectId: plan.projectId, createdAt: plan.createdAt, snapshotHash: plan.snapshotHash,
+    planHash: plan.planHash, scriptHash: plan.scriptHash, summary: plan.summary
+  };
+}
+
 function fixture(sourceProject = project) {
   let stored = structuredClone(sourceProject);
   let ignoredDiagnostics: Array<{ code: string; pattern: string }> = [];
@@ -113,6 +143,7 @@ function renderPage(client: PersistenceClient, analyze: ScriptAnalyzer["analyze"
   discovery?: (profileId: string) => Promise<SpeechCatalog>;
   previewClient?: ProjectPreviewClient;
   cacheClient?: SpeechCacheClient;
+  renderPlanClient?: RenderPlanClient;
 } = {}) {
   const profiles = options.profiles ?? [];
   const discoveredCatalog = options.speechCatalog ?? {
@@ -136,7 +167,8 @@ function renderPage(client: PersistenceClient, analyze: ScriptAnalyzer["analyze"
     clearProject: vi.fn(async () => ({ contractVersion: 1 as const, entriesRemoved: 0, bytesFreed: 0 })),
     clearEntry: vi.fn(async () => ({ contractVersion: 1 as const, entriesRemoved: 0, bytesFreed: 0 }))
   } as unknown as SpeechCacheClient;
-  return { ...render(<ConnectionProvider connections={connections} voiceCatalog={voiceCatalog}><MemoryRouter initialEntries={[`/projects/${project.id}`]}><Link to="/settings">Settings test link</Link><Routes><Route path="/projects/:projectId" element={<ProjectsPage client={client} analyzer={{ analyze }} previewClient={previewClient} cacheClient={cacheClient} />} /><Route path="/settings" element={<p>Settings destination</p>} /></Routes></MemoryRouter></ConnectionProvider>), connections, voiceCatalog, previewClient, cacheClient };
+  const renderPlanClient = options.renderPlanClient ?? { create: vi.fn(), list: vi.fn(async () => []), get: vi.fn() } as unknown as RenderPlanClient;
+  return { ...render(<ConnectionProvider connections={connections} voiceCatalog={voiceCatalog}><MemoryRouter initialEntries={[`/projects/${project.id}`]}><Link to="/settings">Settings test link</Link><Routes><Route path="/projects/:projectId" element={<ProjectsPage client={client} analyzer={{ analyze }} previewClient={previewClient} cacheClient={cacheClient} renderPlanClient={renderPlanClient} />} /><Route path="/settings" element={<p>Settings destination</p>} /></Routes></MemoryRouter></ConnectionProvider>), connections, voiceCatalog, previewClient, cacheClient, renderPlanClient };
 }
 
 function deferred<T>() {
@@ -468,6 +500,71 @@ describe("Projects workbench", () => {
     await userEvent.click(screen.getByRole("button", { name: "Clear project cache" }));
     expect(clearProject).toHaveBeenCalledWith(project.id);
     expect(confirm.mock.calls.flat().join(" ")).toContain("shared with Scratchpad or other projects");
+  });
+
+  it("configures every transition and creates, reopens, and replaces immutable plans", async () => {
+    const { client, analyze, replace } = fixture();
+    const first = frozenPlan("00000000-0000-4000-8000-000000000002", "b".repeat(64), "2026-08-12T14:00:00.000Z");
+    const second = frozenPlan("00000000-0000-4000-8000-000000000003", "c".repeat(64), "2026-08-12T16:00:00.000Z");
+    const plans: RenderPlan[] = [];
+    const create = vi.fn(async () => {
+      const plan = plans.length === 0 ? first : second;
+      plans.unshift(plan);
+      return plan;
+    });
+    const list = vi.fn(async () => plans.map(summaryOf));
+    const get = vi.fn(async (planId: string) => plans.find(({ id }) => id === planId)!);
+    renderPage(client, analyze, { renderPlanClient: { create, list, get } });
+
+    await screen.findByRole("button", { name: "Freeze render plan" });
+    await userEvent.selectOptions(screen.getByLabelText("Paragraph transition mode"), "duration");
+    fireEvent.change(screen.getByLabelText("Paragraph transition duration (ms)"), { target: { value: "600" } });
+    await userEvent.selectOptions(screen.getByLabelText("Speaker change transition mode"), "preset");
+    await userEvent.selectOptions(screen.getByLabelText("Speaker change transition preset"), "pause_short");
+    await userEvent.selectOptions(screen.getByLabelText("Section transition mode"), "duration");
+    fireEvent.change(screen.getByLabelText("Section transition duration (ms)"), { target: { value: "1500" } });
+    fireEvent.change(screen.getByDisplayValue("Offline fixture"), { target: { value: "Pending frozen revision" } });
+    const freeze = screen.getByRole("button", { name: "Freeze render plan" });
+    await waitFor(() => expect(screen.getByText("Parsing")).toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText("Parsing")).not.toBeInTheDocument(), { timeout: 2_000 });
+    await waitFor(() => expect(freeze).toBeEnabled());
+    await userEvent.click(freeze);
+
+    await waitFor(() => expect(create).toHaveBeenCalledWith(project.id));
+    expect(replace).toHaveBeenCalledWith(project.id, expect.objectContaining({
+      description: "Pending frozen revision",
+      transitionPauses: {
+        paragraph: { mode: "duration", durationMs: 600 },
+        speakerChange: { mode: "preset", pauseId: "pause_short" },
+        section: { mode: "duration", durationMs: 1500 }
+      }
+    }));
+    expect(replace.mock.invocationCallOrder[0]).toBeLessThan(create.mock.invocationCallOrder[0]!);
+    const planTable = await screen.findByRole("table", { name: "Frozen render plan ordered entries" });
+    expect(planTable).toHaveTextContent("automatic · paragraph");
+    expect(planTable).toHaveTextContent("750 ms");
+    expect(planTable).toHaveTextContent("voice_teacher");
+    expect(planTable).toHaveTextContent("sequel.");
+    expect(planTable).toHaveTextContent("miss");
+    expect(screen.getAllByText("Matches current project").length).toBeGreaterThan(0);
+
+    replace.mockImplementationOnce(async (_id, input) => ({
+      ...project, ...input, modelId: input.modelId ?? project.modelId, scriptHash: "c".repeat(64), lexiconEntries: project.lexiconEntries,
+      updatedAt: "2026-08-12T15:00:00.000Z"
+    }));
+    fireEvent.change(screen.getByLabelText("Script source"), { target: { value: "[speaker_teacher] Changed live script." } });
+    await waitFor(() => expect(screen.getAllByText("Frozen from earlier project").length).toBeGreaterThan(0), { timeout: 2_000 });
+    expect(planTable).toHaveTextContent("sequel.");
+
+    await waitFor(() => expect(screen.queryByText("Parsing")).not.toBeInTheDocument(), { timeout: 2_000 });
+    await waitFor(() => expect(freeze).toBeEnabled());
+    await userEvent.click(freeze);
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(2));
+    const savedPlans = screen.getByLabelText("Saved render plans");
+    expect(within(savedPlans).getAllByRole("button")).toHaveLength(2);
+    await userEvent.click(within(savedPlans).getAllByRole("button")[1]!);
+    await waitFor(() => expect(get).toHaveBeenCalledWith(first.id));
+    expect(screen.getByRole("table", { name: "Frozen render plan ordered entries" })).toHaveTextContent("sequel.");
   });
 
   it("shows failed saves and guards unload and route navigation", async () => {
