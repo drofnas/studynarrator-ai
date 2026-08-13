@@ -12,7 +12,7 @@ const now = "2026-08-12T00:00:00.000Z";
 
 function entry(overrides: Partial<LexiconEntry> = {}): LexiconEntry {
   return LexiconEntrySchema.parse({
-    id: "g03-global-001",
+    id: "global-sql-existing",
     scope: "global",
     entryType: "exactTerm",
     displayText: "SQL",
@@ -28,7 +28,7 @@ function entry(overrides: Partial<LexiconEntry> = {}): LexiconEntry {
   });
 }
 
-describe("G03 lexicon JSON authoring", () => {
+describe("lexicon JSON authoring", () => {
   it("applies authoring defaults while preserving required behavior", () => {
     expect(LexiconEntryAuthoringSchema.parse({
       scope: "global",
@@ -63,26 +63,26 @@ describe("G03 lexicon JSON authoring", () => {
     if (!result.success) expect(result.error.issues[0]?.path).toEqual([1, "id"]);
   });
 
-  it("generates deterministic collision-free IDs and preserves array order", () => {
+  it("generates deterministic neutral IDs and preserves supplied opaque IDs", () => {
     const result = normalizeLexiconEntries([
-      { id: "g03-global-001", scope: "global", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel" },
+      { id: "opaque-imported-id", scope: "global", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel" },
       { scope: "global", entryType: "exactTerm", displayText: "API", spokenText: "A P I" },
       { scope: "project", entryType: "namedSense", displayText: "resume", senseId: "cv", spokenText: "rez-oo-may" }
     ], { nextId: 1, timestamp: now });
 
     expect(result.entries.map(({ id, displayText }) => [id, displayText])).toEqual([
-      ["g03-global-001", "SQL"],
-      ["g03-global-002", "API"],
-      ["g03-project-003", "resume"]
+      ["opaque-imported-id", "SQL"],
+      ["lexicon-global-001", "API"],
+      ["lexicon-project-002", "resume"]
     ]);
-    expect(result.nextId).toBe(4);
+    expect(result.nextId).toBe(3);
   });
 
   it("preserves timestamps for unchanged IDs and updates changed entries", () => {
-    const existing = [entry(), entry({ id: "g03-project-002", scope: "project", displayText: "API", spokenText: "old" })];
+    const existing = [entry(), entry({ id: "project-api-existing", scope: "project", displayText: "API", spokenText: "old" })];
     const result = normalizeLexiconEntries([
-      { id: "g03-global-001", scope: "global", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel" },
-      { id: "g03-project-002", scope: "project", entryType: "exactTerm", displayText: "API", spokenText: "new" }
+      { id: "global-sql-existing", scope: "global", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel" },
+      { id: "project-api-existing", scope: "project", entryType: "exactTerm", displayText: "API", spokenText: "new" }
     ], { existingEntries: existing, nextId: 3, timestamp: now });
 
     expect(result.entries[0]).toMatchObject({ createdAt: earlier, updatedAt: earlier });

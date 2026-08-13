@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted for G02.
+Accepted.
 
 ## Context
 
@@ -15,7 +15,7 @@ The original grammar treated any valid-looking bracket token as a speaker and om
 - `\[` escapes an otherwise valid inline control token and leaves it as readable literal text.
 - Unknown or malformed directives and malformed pronunciation annotations produce diagnostics and remain literal speech under the active speaker.
 - A user may suppress a diagnostic by code and focused malformed-token pattern. The full offending line remains diagnostic context, but surrounding sentence text does not participate in matching. Suppression applies to every occurrence of that pattern and does not change CIR recovery behavior.
-- G02 keeps suppressions in Script Lab memory. G04 will persist personal diagnostic preferences with the rest of application storage.
+- Diagnostic suppressions are persisted as personal preferences with the rest of application storage and are managed from the Projects validation workflow.
 
 ## Consequences
 

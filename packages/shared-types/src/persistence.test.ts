@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   ConnectionProfileAuthoringSchema,
@@ -12,7 +11,7 @@ import {
 } from "./persistence.js";
 
 const validProject = {
-  name: "Gate 04",
+  name: "Persistence contract",
   description: "",
   scriptSource: "SQL",
   connectionProfileId: null,
@@ -23,23 +22,7 @@ const validProject = {
   lexiconEntries: []
 };
 
-const g04Manual = readFileSync(new URL("../../../docs/gates/G04-manual-test.md", import.meta.url), "utf8");
-
-function jsonExampleUnder(heading: string): unknown {
-  const section = g04Manual.split(`### ${heading}\n`)[1];
-  if (!section) throw new Error(`Missing G04 manual heading: ${heading}.`);
-  const example = section.match(/```json\n([\s\S]*?)\n```/u)?.[1];
-  if (!example) throw new Error(`Missing JSON example under G04 manual heading: ${heading}.`);
-  return JSON.parse(example) as unknown;
-}
-
-function connectionField(label: string): string {
-  const value = g04Manual.match(new RegExp(`- \\*\\*${label}:\\*\\* \\x60([^\\x60]+)\\x60`, "u"))?.[1];
-  if (!value) throw new Error(`Missing G04 connection field: ${label}.`);
-  return value;
-}
-
-describe("G04 persistence contracts", () => {
+describe("persistence contracts", () => {
   it("accepts a strict complete aggregate and rejects mismatched pacing", () => {
     expect(ProjectReplaceInputSchema.parse(validProject)).toEqual(validProject);
     expect(() => ProjectReplaceInputSchema.parse({ ...validProject, unknown: true })).toThrow();
@@ -71,46 +54,50 @@ describe("G04 persistence contracts", () => {
     })).toThrow();
   });
 
-  it("keeps every G04 manual review payload copy/paste ready", () => {
-    const speakerMappings = SpeakerMappingCollectionSchema.parse(jsonExampleUnder("Speaker mappings JSON"));
-    const pausePresets = PausePresetCollectionSchema.parse(jsonExampleUnder("Pause presets JSON"));
-    const paragraphPause = jsonExampleUnder("Paragraph pacing JSON");
-    const lexiconEntries = ProjectLexiconAuthoringCollectionSchema.parse(jsonExampleUnder("Project lexicon JSON"));
+  it("accepts representative persisted product data", () => {
+    const speakerMappings = SpeakerMappingCollectionSchema.parse([
+      { speakerId: "teacher", displayName: "Teacher", voiceId: "voice_teacher", speed: 1, gainDb: 0, roleDescription: "Guide", sampleText: "Welcome" }
+    ]);
+    const pausePresets = PausePresetCollectionSchema.parse([
+      { pauseId: "pause_medium", durationMs: 750, description: "Paragraph" }
+    ]);
+    const paragraphPause = { enabled: true, pauseId: "pause_medium", durationMs: 750 };
+    const lexiconEntries = ProjectLexiconAuthoringCollectionSchema.parse([
+      { id: "project-resume", scope: "project", entryType: "namedSense", displayText: "resume", senseId: "cv", spokenText: "rez-oo-may" }
+    ]);
 
     expect(ProjectReplaceInputSchema.parse({
-      name: "Gate 04 Persistence",
-      description: "Two-restart review",
+      name: "Persistent project",
+      description: "Reopen proof",
       scriptSource: "{{resume|cv}} SQL",
-      connectionProfileId: connectionField("ID"),
+      connectionProfileId: "local-speaches",
+      modelId: null,
       speakerMappings,
       pausePresets,
       paragraphPause,
       lexiconEntries
     })).toBeDefined();
-    expect(GlobalLexiconReplaceInputSchema.parse(jsonExampleUnder("Global lexicon JSON"))).toHaveLength(1);
-    expect(IgnoredDiagnosticCollectionSchema.parse(jsonExampleUnder("Ignored diagnostic patterns JSON"))).toHaveLength(1);
+    expect(GlobalLexiconReplaceInputSchema.parse([
+      { id: "global-sql", scope: "global", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel" }
+    ])).toHaveLength(1);
+    expect(IgnoredDiagnosticCollectionSchema.parse([
+      { code: "MALFORMED_SECTION_DIRECTIVE", pattern: "[section bad]" }
+    ])).toHaveLength(1);
     expect(ConnectionProfileAuthoringSchema.parse({
-      id: connectionField("ID"),
-      name: connectionField("Name"),
-      baseUrl: connectionField("HTTP\\(S\\) base URL"),
-      defaultModelId: connectionField("Model hint"),
-      defaultVoiceId: connectionField("Voice hint")
+      id: "local-speaches",
+      name: "Local Speaches",
+      baseUrl: "http://127.0.0.1:8000",
+      defaultModelId: "speaches-ai/Kokoro-82M-v1.0-ONNX",
+      defaultVoiceId: "af_heart"
     })).toBeDefined();
 
-    const allJsonExamples = [...g04Manual.matchAll(/[ \\t]*```json\n([\s\S]*?)\n[ \\t]*```/gu)]
-      .map((match) => {
-        const example = match[1];
-        if (!example) throw new Error("The G04 manual contains an empty JSON example.");
-        return JSON.parse(example) as unknown;
-      });
-    expect(allJsonExamples).toHaveLength(8);
-    expect(PausePresetCollectionSchema.parse(allJsonExamples[6])).toEqual([
+    const updatedPauses = PausePresetCollectionSchema.parse([
       { pauseId: "pause_medium", durationMs: 900, description: "Automatic paragraph transition" }
     ]);
     expect(ProjectReplaceInputSchema.parse({
       ...validProject,
-      pausePresets: allJsonExamples[6],
-      paragraphPause: allJsonExamples[7]
+      pausePresets: updatedPauses,
+      paragraphPause: { enabled: true, pauseId: "pause_medium", durationMs: 900 }
     }).paragraphPause).toEqual({ enabled: true, pauseId: "pause_medium", durationMs: 900 });
   });
 });

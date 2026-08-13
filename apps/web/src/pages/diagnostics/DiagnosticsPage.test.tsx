@@ -9,38 +9,38 @@ import { DiagnosticsPage } from "./DiagnosticsPage.js";
 afterEach(cleanup);
 
 const passingDiagnostics: SystemDiagnostics = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   overall: "pass",
   client: "web",
   transport: "rest",
   runtime: {
-    schemaVersion: 2,
+    schemaVersion: 3,
     applicationVersion: "0.1.0",
     runtimeName: "node",
     runtimeVersion: "26.7.0",
     electronVersion: null,
     platform: "darwin",
     architecture: "arm64",
-    dataDirectory: "/tmp/g01/web"
+    dataDirectory: "/tmp/studynarrator/web"
   },
   checks: {
-    sharedCore: { status: "pass", marker: "study-narrator-g01" },
+    sharedCore: { status: "pass", marker: "study-narrator-core" },
     storage: {
       status: "pass",
       driver: "better-sqlite3",
       sqliteVersion: "3.50.0",
       migrationVersion: 3,
-      databasePath: "/tmp/g01/web/studynarrator.sqlite",
+      databasePath: "/tmp/studynarrator/web/studynarrator.sqlite",
       latestBackupPath: null,
-      markerKey: "g01.runtime-self-test",
-      markerValue: "study-narrator-g01",
+      markerKey: "runtime.storage-self-test",
+      markerValue: "study-narrator-storage-ok",
       createdAt: "2026-08-11T12:00:00.000Z"
     },
     ffmpeg: { status: "pass", executable: "ffmpeg", version: "ffmpeg version 8.1.2" }
   }
 };
 
-describe("G01 status screen", () => {
+describe("system diagnostics screen", () => {
   it("shows a disabled checking state while diagnostics are in flight", async () => {
     const user = userEvent.setup();
     let finish: ((value: SystemDiagnostics) => void) | undefined;
@@ -64,7 +64,8 @@ describe("G01 status screen", () => {
     expect(await screen.findByText("REST")).toBeInTheDocument();
     expect(screen.getByText("Web")).toBeInTheDocument();
     expect(screen.getAllByText("PASS")).toHaveLength(3);
-    expect(screen.getByText(/study-narrator-g01/u)).toBeInTheDocument();
+    expect(screen.getByText(/Schema 3 · verified/u)).toBeInTheDocument();
+    expect(screen.getByText(/diagnostics schema 3/u)).toBeInTheDocument();
   });
 
   it("renders Electron/IPC metadata from the same contract", async () => {

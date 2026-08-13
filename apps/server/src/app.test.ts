@@ -27,7 +27,7 @@ const context: DiagnosticsContext = {
   electronVersion: null,
   platform: "darwin",
   architecture: "arm64",
-  dataDirectory: "/tmp/g01"
+  dataDirectory: "/tmp/studynarrator"
 };
 
 const openServers = new Set<Server>();
@@ -92,7 +92,7 @@ describe("Express diagnostics API", () => {
   it("sanitizes an invalid boundary result", async () => {
     const service = {
       health: () => ({ status: "ok", applicationVersion: "0.1.0" } as const),
-      runtime: () => ({ ...context, schemaVersion: 2, applicationVersion: "0.1.0" } as never),
+      runtime: () => ({ ...context, schemaVersion: 3, applicationVersion: "0.1.0" } as never),
       diagnostics: async () => ({ secret: "must-not-leak" } as never),
       close: () => undefined
     };
@@ -172,7 +172,7 @@ describe("Express persistence API", () => {
 describe("Express connection API", () => {
   it("uses managed connection routes and rejects Web credential entry without echoing it", async () => {
     const { app } = await fixture();
-    const secret = "g06-secret-must-not-appear";
+    const secret = "test-secret-must-not-appear";
     const rejected = BoundaryErrorSchema.parse((await request(app).post("/api/connections").send({
       profile: { id: "web-profile", name: "Web", baseUrl: "http://127.0.0.1:8000", defaultModelId: "model", defaultVoiceId: "voice" },
       credential: { action: "replace", apiKey: secret }
@@ -272,7 +272,7 @@ describe("REST API operation manifest", () => {
 
   it("rejects malformed path, query, body, policy, conflict, missing, and unavailable cases without credentials", async () => {
     const { app, service } = await fixture();
-    const secret = "g06-secret-must-not-appear";
+    const secret = "test-secret-must-not-appear";
     const invalidCases = [
       request(app).post("/api/projects").send({ name: "", password: secret }).expect(400),
       request(app).get("/api/projects/not-a-uuid").expect(400),

@@ -40,7 +40,7 @@ export function normalizeLexiconEntries(
 ): NormalizeLexiconEntriesResult {
   const authoredEntries = LexiconEntryAuthoringCollectionSchema.parse(value);
   const timestamp = TimestampSchema.parse(options.timestamp);
-  const idPrefix = IdPrefixSchema.parse(options.idPrefix ?? "g03");
+  const idPrefix = IdPrefixSchema.parse(options.idPrefix ?? "lexicon");
   if (!Number.isSafeInteger(options.nextId) || options.nextId < 1) {
     throw new Error("The next lexicon entry ID must be a positive safe integer.");
   }

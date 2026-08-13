@@ -5,22 +5,22 @@ import { PUBLIC_IPC_CHANNEL_MANIFEST, registerConnectionHandlers, registerDiagno
 import { isApprovedExternalUrl, SECURE_WEB_PREFERENCES } from "./security.js";
 
 const diagnostics = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   overall: "fail",
   client: "electron",
   transport: "ipc",
   runtime: {
-    schemaVersion: 2,
+    schemaVersion: 3,
     applicationVersion: "0.1.0",
     runtimeName: "electron",
     runtimeVersion: "24.0.0",
     electronVersion: "43.3.0",
     platform: "darwin",
     architecture: "arm64",
-    dataDirectory: "/tmp/g01"
+    dataDirectory: "/tmp/studynarrator"
   },
   checks: {
-    sharedCore: { status: "pass", marker: "study-narrator-g01" },
+    sharedCore: { status: "pass", marker: "study-narrator-core" },
     storage: { status: "fail", code: "STORAGE_UNAVAILABLE", message: "Storage unavailable." },
     ffmpeg: { status: "fail", executable: "ffmpeg", code: "FFMPEG_NOT_FOUND", message: "FFmpeg not found." }
   }
@@ -100,7 +100,7 @@ describe("Electron boundary", () => {
     await expect(handlers.get(PERSISTENCE_CHANNELS.projectsList)?.()).resolves.toEqual([]);
     await expect(handlers.get(PERSISTENCE_CHANNELS.projectsCreate)?.(undefined, { name: "", secret: "must-not-leak" }))
       .rejects.toThrow("The request does not match the persistence contract.");
-    await expect(handlers.get(CONNECTION_CHANNELS.create)?.(undefined, { profile: {}, credential: { action: "replace", apiKey: "g06-secret-must-not-appear" } }))
+    await expect(handlers.get(CONNECTION_CHANNELS.create)?.(undefined, { profile: {}, credential: { action: "replace", apiKey: "test-secret-must-not-appear" } }))
       .rejects.toThrow("The request does not match the connection contract.");
   });
 
@@ -231,7 +231,7 @@ describe("Electron boundary", () => {
     }
     expect(invoked).toEqual(new Set(PUBLIC_IPC_CHANNEL_MANIFEST));
 
-    const secret = "g06-secret-must-not-appear";
+    const secret = "test-secret-must-not-appear";
     for (const channel of Object.keys(inputs)) {
       await expect(handlers.get(channel)?.(undefined, { malformed: true, apiKey: secret })).rejects.toThrow();
     }

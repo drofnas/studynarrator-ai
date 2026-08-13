@@ -47,7 +47,7 @@ function renderApp(connections: ConnectionsClient, route = "/projects") {
   return render(<MemoryRouter initialEntries={[route]}><App analyzer={{ analyze: vi.fn() }} client={{ diagnostics: vi.fn() }} persistence={persistence} connections={connections} voiceCatalog={voiceCatalog} /></MemoryRouter>);
 }
 
-describe("G06 onboarding", () => {
+describe("connection onboarding", () => {
   it("redirects first run, shows Web guidance, and persists Continue offline", async () => {
     const connections = clients("web");
     renderApp(connections);
@@ -62,12 +62,12 @@ describe("G06 onboarding", () => {
     const connections = clients("electron");
     renderApp(connections, "/onboarding");
     const password = await screen.findByLabelText(/API key \(one shot\)/u);
-    await userEvent.type(password, "g06-secret-must-not-appear");
+    await userEvent.type(password, "test-secret-must-not-appear");
     await userEvent.click(screen.getByRole("button", { name: "Create + Test Connection" }));
-    expect(connections.create).toHaveBeenCalledWith(expect.objectContaining({ credential: { action: "replace", apiKey: "g06-secret-must-not-appear" } }));
+    expect(connections.create).toHaveBeenCalledWith(expect.objectContaining({ credential: { action: "replace", apiKey: "test-secret-must-not-appear" } }));
     expect(await screen.findByRole("alert")).toHaveTextContent("modelUnavailable");
     expect(password).toHaveValue("");
-    expect(JSON.stringify(await connections.list())).not.toContain("g06-secret-must-not-appear");
+    expect(JSON.stringify(await connections.list())).not.toContain("test-secret-must-not-appear");
   });
 
   it("shows Testing in the shell while a staged check is pending", async () => {

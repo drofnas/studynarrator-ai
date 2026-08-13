@@ -9,7 +9,7 @@ import { ConnectionProvider } from "@/features/connections/ConnectionProvider.js
 
 afterEach(cleanup);
 
-describe("G05 System Settings", () => {
+describe("System Settings", () => {
   it("normalizes and saves new-project pacing without touching projects", async () => {
     const updatePacing = vi.fn(async (input: { enabled: boolean; durationMs: number }) => input);
     const replaceProject = vi.fn();

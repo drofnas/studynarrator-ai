@@ -18,11 +18,10 @@
     "dev:web": "concurrently --kill-others --names api,web \"npm run dev --workspace @studynarrator/server\" \"npm run dev --workspace @studynarrator/web\"",
     "dev:desktop": "npm run build --workspace @studynarrator/desktop && npm run rebuild:native --workspace @studynarrator/desktop && concurrently --kill-others --names web,desktop \"npm run dev --workspace @studynarrator/web\" \"wait-on http://127.0.0.1:5173 && npm run start --workspace @studynarrator/desktop\"",
     "fake:speaches": "npm run start --workspace @studynarrator/fake-speaches",
-    "fake:speaches:inspect": "node scripts/g06/fake-speaches-control.mjs inspect",
-    "fake:speaches:reset": "node scripts/g06/fake-speaches-control.mjs reset",
-    "fake:speaches:scenario": "node scripts/g06/fake-speaches-control.mjs scenario",
+    "fake:speaches:inspect": "node scripts/fake-speaches/control.mjs inspect",
+    "fake:speaches:reset": "node scripts/fake-speaches/control.mjs reset",
+    "fake:speaches:scenario": "node scripts/fake-speaches/control.mjs scenario",
     "e2e:install": "playwright install chromium",
-    "gate:reset": "node scripts/gates/reset-gate.mjs",
     "lint": "eslint . --max-warnings 0",
     "test": "vitest run",
     "test:api": "vitest run --config vitest.api.config.ts",
@@ -30,7 +29,7 @@
     "test:e2e:electron": "npm run build --workspace @studynarrator/web && npm run build --workspace @studynarrator/desktop && npm run rebuild:native --workspace @studynarrator/desktop && playwright test --project=electron",
     "test:e2e": "npm run build --workspace @studynarrator/web && npm run build --workspace @studynarrator/desktop && npm run rebuild:native --workspace @studynarrator/desktop && playwright test",
     "typecheck": "tsc --build --pretty false",
-    "verify:gate": "node scripts/gates/verify-gate.mjs"
+    "verify": "node scripts/verify.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

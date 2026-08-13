@@ -48,8 +48,8 @@ import {
   type Migration
 } from "./migrations.js";
 
-export const G01_MARKER_KEY = "g01.runtime-self-test";
-export const G01_MARKER_VALUE = "study-narrator-g01";
+export const STORAGE_SELF_TEST_KEY = "runtime.storage-self-test";
+export const STORAGE_SELF_TEST_VALUE = "study-narrator-storage-ok";
 export const CURRENT_MIGRATION_VERSION = DATABASE_SCHEMA_VERSION;
 
 interface ProjectRow {
@@ -129,8 +129,8 @@ export interface MarkerEvidence {
   migrationVersion: typeof CURRENT_MIGRATION_VERSION;
   databasePath: string;
   latestBackupPath: string | null;
-  markerKey: typeof G01_MARKER_KEY;
-  markerValue: typeof G01_MARKER_VALUE;
+  markerKey: typeof STORAGE_SELF_TEST_KEY;
+  markerValue: typeof STORAGE_SELF_TEST_VALUE;
   createdAt: string;
 }
 
@@ -405,9 +405,10 @@ function createRepository(options: {
     runMarker() {
       assertOpen();
       const timestamp = options.now().toISOString();
+      database.prepare("DELETE FROM diagnostic_kv WHERE key <> ?").run(STORAGE_SELF_TEST_KEY);
       database.prepare("INSERT OR IGNORE INTO diagnostic_kv (key, value, created_at) VALUES (?, ?, ?)")
-        .run(G01_MARKER_KEY, G01_MARKER_VALUE, timestamp);
-      const row = database.prepare("SELECT key, value, created_at FROM diagnostic_kv WHERE key = ?").get(G01_MARKER_KEY) as MarkerRow | undefined;
+        .run(STORAGE_SELF_TEST_KEY, STORAGE_SELF_TEST_VALUE, timestamp);
+      const row = database.prepare("SELECT key, value, created_at FROM diagnostic_kv WHERE key = ?").get(STORAGE_SELF_TEST_KEY) as MarkerRow | undefined;
       const version = database.prepare("SELECT sqlite_version() AS version").get() as VersionRow | undefined;
       if (!row || !version?.version) throw new Error("Diagnostic storage verification failed");
       return {
@@ -417,8 +418,8 @@ function createRepository(options: {
         migrationVersion: CURRENT_MIGRATION_VERSION,
         databasePath: options.databasePath,
         latestBackupPath: options.latestBackupPath,
-        markerKey: G01_MARKER_KEY,
-        markerValue: G01_MARKER_VALUE,
+        markerKey: STORAGE_SELF_TEST_KEY,
+        markerValue: STORAGE_SELF_TEST_VALUE,
         createdAt: row.created_at
       };
     },

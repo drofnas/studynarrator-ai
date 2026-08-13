@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   LexiconEntrySchema,
@@ -10,6 +8,21 @@ import {
 } from "./index.js";
 
 const timestamp = "2026-08-11T00:00:00.000Z";
+const studyGuideSource = `[section: Resumes and background processing]
+
+[speaker_teacher] Today we will compare two meanings of the word {{resume|cv}}.
+[pause_short]
+[speaker_student] That is the document I send with a job application.
+[pause_short]
+[speaker_teacher] Correct. A paused job can {{resume|continue}} after a restart.
+[pause_long]
+
+[section: SQL pronunciation]
+
+[speaker_teacher] SQL indexes can speed up database reads.
+[pause_short]
+[speaker_student] In this project, SQL is pronounced using the project lexicon.
+`;
 
 function entry(overrides: Partial<LexiconEntry> & Pick<LexiconEntry, "id" | "displayText" | "spokenText">): LexiconEntry {
   return LexiconEntrySchema.parse({
@@ -36,15 +49,9 @@ function deepFreeze(value: unknown): void {
   for (const child of Object.values(value)) deepFreeze(child);
 }
 
-describe("G03 lexicon transformation", () => {
-  it("transforms the canonical fixture while preserving its readable transcript and source", () => {
-    const source = readFileSync(resolve(process.cwd(), "fixtures/gates/study-guide-valid.txt"), "utf8");
-    const expected = JSON.parse(readFileSync(resolve(process.cwd(), "fixtures/gates/expected/study-guide-valid.transform.json"), "utf8")) as {
-      readableTranscript: string;
-      ttsTranscript: string;
-      matches: Array<Record<string, unknown>>;
-    };
-    const parsedScript = parseScript({ source });
+describe("lexicon transformation", () => {
+  it("transforms a representative study guide while preserving its readable transcript and source", () => {
+    const parsedScript = parseScript({ source: studyGuideSource });
     const entries = [
       entry({ id: "global-sql", displayText: "SQL", spokenText: "sequel" }),
       entry({ id: "project-resume-cv", scope: "project", entryType: "namedSense", displayText: "resume", senseId: "cv", spokenText: "rez-oo-may" }),
@@ -53,9 +60,9 @@ describe("G03 lexicon transformation", () => {
 
     const result = transformScript({ parsedScript, entries });
 
-    expect(result.source).toBe(source);
-    expect(result.readableTranscript).toBe(expected.readableTranscript);
-    expect(result.ttsTranscript).toBe(expected.ttsTranscript);
+    expect(result.source).toBe(studyGuideSource);
+    expect(result.readableTranscript).toBe("Today we will compare two meanings of the word resume.\nThat is the document I send with a job application.\nCorrect. A paused job can resume after a restart.\nSQL indexes can speed up database reads.\nIn this project, SQL is pronounced using the project lexicon.");
+    expect(result.ttsTranscript).toBe("Today we will compare two meanings of the word rez-oo-may.\nThat is the document I send with a job application.\nCorrect. A paused job can ree-zoom after a restart.\nsequel indexes can speed up database reads.\nIn this project, sequel is pronounced using the project lexicon.");
     expect(result.matches.map((match) => ({
       entryId: match.entryId,
       originalText: match.originalText,
@@ -65,8 +72,13 @@ describe("G03 lexicon transformation", () => {
       sourceEndOffset: match.sourceEndOffset,
       line: match.range.start.line,
       column: match.range.start.column
-    }))).toEqual(expected.matches);
-    expect(result.matches.every((match) => source.slice(match.sourceStartOffset, match.sourceEndOffset) === match.originalText)).toBe(true);
+    }))).toEqual([
+      { entryId: "project-resume-cv", originalText: "resume", replacement: "rez-oo-may", nodeOrdinal: 3, sourceStartOffset: 113, sourceEndOffset: 119, line: 3, column: 68 },
+      { entryId: "project-resume-continue", originalText: "resume", replacement: "ree-zoom", nodeOrdinal: 7, sourceStartOffset: 270, sourceEndOffset: 276, line: 7, column: 47 },
+      { entryId: "global-sql", originalText: "SQL", replacement: "sequel", nodeOrdinal: 12, sourceStartOffset: 367, sourceEndOffset: 370, line: 12, column: 19 },
+      { entryId: "global-sql", originalText: "SQL", replacement: "sequel", nodeOrdinal: 14, sourceStartOffset: 457, sourceEndOffset: 460, line: 14, column: 36 }
+    ]);
+    expect(result.matches.every((match) => studyGuideSource.slice(match.sourceStartOffset, match.sourceEndOffset) === match.originalText)).toBe(true);
     expect(result.errors).toEqual([]);
     expect(result.synthesisReady).toBe(true);
     expect(TransformScriptResultSchema.parse(result)).toEqual(result);

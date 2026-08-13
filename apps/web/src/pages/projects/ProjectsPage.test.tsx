@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { Link, MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseScript, resolveParagraphPauses, transformScript } from "@studynarrator/core";
-import type { ConnectionProfile, PersistenceClient, ProjectDetail, ProjectReplaceInput, VoiceCatalog } from "@studynarrator/shared-types";
+import type { ConnectionProfile, IgnoredDiagnosticCollection, PersistenceClient, ProjectDetail, ProjectReplaceInput, VoiceCatalog } from "@studynarrator/shared-types";
 import type { ScriptAnalyzer } from "@/workers/parser/parserClient.js";
 import type { ScriptAnalysisInput } from "@/workers/parser/parserWorkerProtocol.js";
 import { ProjectsPage } from "./ProjectsPage.js";
@@ -36,11 +36,16 @@ const project: ProjectDetail = {
 
 function fixture(sourceProject = project) {
   let stored = structuredClone(sourceProject);
+  let ignoredDiagnostics: Array<{ code: string; pattern: string }> = [];
   const replace = vi.fn(async (_id: string, input: ProjectReplaceInput) => {
     stored = { ...stored, ...input, modelId: input.modelId ?? stored.modelId, scriptHash: "b".repeat(64), updatedAt: "2026-08-12T13:00:00.000Z", lexiconEntries: stored.lexiconEntries };
     return structuredClone(stored);
   });
   const duplicate = vi.fn(async () => structuredClone(stored));
+  const replaceIgnoredDiagnostics = vi.fn(async (input: IgnoredDiagnosticCollection) => {
+    ignoredDiagnostics = structuredClone(input);
+    return structuredClone(input);
+  });
   const client: PersistenceClient = {
     status: vi.fn(),
     projects: {
@@ -52,7 +57,10 @@ function fixture(sourceProject = project) {
       delete: vi.fn(async () => undefined)
     },
     settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() },
-    preferences: { getIgnoredDiagnostics: vi.fn(async () => []), replaceIgnoredDiagnostics: vi.fn() },
+    preferences: {
+      getIgnoredDiagnostics: vi.fn(async () => structuredClone(ignoredDiagnostics)),
+      replaceIgnoredDiagnostics
+    },
     globalLexicon: { list: vi.fn(async () => []), replace: vi.fn(async () => []) }
   };
   const analyze = vi.fn(async (input: ScriptAnalysisInput) => {
@@ -64,7 +72,7 @@ function fixture(sourceProject = project) {
       transformResult: transformScript({ parsedScript: parseResult, entries })
     };
   });
-  return { client, analyze, replace, duplicate };
+  return { client, analyze, replace, duplicate, replaceIgnoredDiagnostics };
 }
 
 function renderPage(client: PersistenceClient, analyze: ScriptAnalyzer["analyze"], options: { profiles?: ConnectionProfile[]; catalog?: VoiceCatalog } = {}) {
@@ -86,7 +94,7 @@ function deferred<T>() {
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
-describe("G05 Projects workbench", () => {
+describe("Projects workbench", () => {
   it("selects a managed profile/model and maps searchable friendly voices with raw IDs", async () => {
     const { client, analyze, replace } = fixture();
     const summary = {
@@ -141,6 +149,23 @@ describe("G05 Projects workbench", () => {
     await waitFor(() => expect(replace).toHaveBeenCalled(), { timeout: 2_000 });
     expect(replace.mock.calls.at(-1)?.[1]).toMatchObject({ name: "Autosaved study" });
     await waitFor(() => expect(screen.getByText("Saved")).toBeInTheDocument());
+  });
+
+  it("persists and restores exact diagnostic suppressions", async () => {
+    const { client, analyze, replaceIgnoredDiagnostics } = fixture({ ...project, scriptSource: "[section Topic]\n[speaker_teacher] Second." });
+    renderPage(client, analyze);
+
+    expect(await screen.findByText("MALFORMED_SECTION_DIRECTIVE")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Ignore this pattern" }));
+    await waitFor(() => expect(replaceIgnoredDiagnostics).toHaveBeenCalledWith([
+      expect.objectContaining({ code: "MALFORMED_SECTION_DIRECTIVE" })
+    ]));
+    expect(await screen.findByRole("region", { name: "Ignored diagnostic patterns" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Ignore this pattern" })).not.toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole("button", { name: "Restore this pattern" }));
+    await waitFor(() => expect(replaceIgnoredDiagnostics).toHaveBeenLastCalledWith([]));
+    expect(await screen.findByText("MALFORMED_SECTION_DIRECTIVE")).toBeInTheDocument();
   });
 
   it("schedules one autosave for an edit burst instead of re-arming while saving", async () => {

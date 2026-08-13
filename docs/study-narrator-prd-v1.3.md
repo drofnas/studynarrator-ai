@@ -620,7 +620,7 @@ A bracketed token is interpreted as one of the following:
 3. A malformed reserved token when it uses reserved syntax but fails validation.
 4. Ordinary literal bracketed speech otherwise.
 
-An unknown or malformed directive produces a blocking diagnostic and remains literal speech under the active speaker. It is never inferred to be a speaker. Diagnostics retain the full offending line for context and a focused malformed-token pattern for suppression. The user may suppress every occurrence matching the same diagnostic code and token pattern, regardless of surrounding sentence text; suppression keeps literal speech unchanged. G02 holds these preferences in memory, and G04 persists them as personal application data.
+An unknown or malformed directive produces a blocking diagnostic and remains literal speech under the active speaker. It is never inferred to be a speaker. Diagnostics retain the full offending line for context and a focused malformed-token pattern for suppression. The user may suppress every occurrence matching the same diagnostic code and token pattern, regardless of surrounding sentence text; suppression keeps literal speech unchanged. These preferences persist as personal application data.
 
 ### 9.9 Example script
 
@@ -2254,7 +2254,7 @@ A separate opt-in integration suite should test an actual Speaches installation.
 
 ### 19.8 Distribution and deployment tests
 
-Automated or release-gate tests must cover:
+Automated release acceptance tests must cover:
 
 - Application-only Compose startup with an external mock or real Speaches endpoint.
 - Linux Docker-host routing through `host.docker.internal` and the host-gateway mapping when that example is shipped.

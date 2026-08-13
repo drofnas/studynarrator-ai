@@ -37,18 +37,13 @@ test.describe("shell, onboarding, and runtime routes", () => {
 
     await navigation.getByRole("link", { name: "Settings" }).click();
     await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
-    await navigation.getByText("Review tools").click();
-    await navigation.getByRole("link", { name: "Script Lab" }).click();
-    await expect(page.getByRole("heading", { name: "Script Lab" })).toBeVisible();
-    await navigation.getByText("Review tools").click();
-    await navigation.getByRole("link", { name: "Persistence Lab" }).click();
-    await expect(page.getByRole("heading", { name: "Persistence Lab" })).toBeVisible();
-    await navigation.getByText("Review tools").click();
-    await navigation.getByRole("link", { name: "Runtime diagnostics" }).click();
+    await expect(navigation.getByText("Review tools")).toHaveCount(0);
+    await navigation.getByRole("link", { name: "System diagnostics" }).click();
     await expect(page.getByRole("heading", { name: "Runtime self-test" })).toBeVisible();
     await page.getByRole("button", { name: "Run self-test" }).click();
     await expect(page.getByText(/SQLite 3/u)).toBeVisible();
-    await expect(page.getByText("REST")).toBeVisible();
+    await expect(page.getByText(/diagnostics schema 3/u)).toBeVisible();
+    await expect(page.getByText("REST", { exact: true })).toBeVisible();
     await navigation.getByRole("link", { name: "Projects" }).click();
     await expect(page.getByRole("heading", { name: "Projects", exact: true })).toBeVisible();
   });

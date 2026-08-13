@@ -41,24 +41,19 @@ describe("application routing", () => {
     expect(diagnostics).not.toHaveBeenCalled();
   });
 
-  it("navigates between stable page routes", async () => {
+  it("navigates directly to system diagnostics", async () => {
     const user = userEvent.setup();
     renderApp("/projects");
-    const reviewTools = screen.getByText("Review tools").closest("details");
-    await user.click(screen.getByText("Review tools"));
-    await user.click(screen.getByRole("link", { name: "Runtime diagnostics" }));
+    await user.click(screen.getByRole("link", { name: "System diagnostics" }));
     expect(screen.getByRole("heading", { name: "Runtime self-test" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Runtime diagnostics" })).toHaveAttribute("aria-current", "page");
-    expect(reviewTools).not.toHaveAttribute("open");
+    expect(screen.getByRole("link", { name: "System diagnostics" })).toHaveAttribute("aria-current", "page");
+    expect(screen.queryByText("Review tools")).not.toBeInTheDocument();
   });
 
-  it("exposes the dedicated persistence route without changing Script Lab", async () => {
-    const user = userEvent.setup();
-    renderApp("/script-lab");
-    await user.click(screen.getByText("Review tools"));
-    await user.click(screen.getByRole("link", { name: "Persistence Lab" }));
-    expect(screen.getByRole("heading", { name: "Persistence Lab" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Persistence Lab" })).toHaveAttribute("aria-current", "page");
+  it.each(["/script-lab", "/persistence-lab"])("redirects removed review route %s to Projects", async (route) => {
+    renderApp(route);
+    expect(await screen.findByRole("heading", { name: "Projects" })).toBeInTheDocument();
+    expect(screen.queryByText(/Lab/u)).not.toBeInTheDocument();
   });
 
   it.each([

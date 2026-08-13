@@ -149,7 +149,7 @@ class MemoryVault implements CredentialStore {
 function mutation(name = "Local") {
   return {
     profile: { id: "local", name, baseUrl: "http://127.0.0.1:8000/v1", defaultModelId: "model", defaultVoiceId: "voice" },
-    credential: { action: "replace" as const, apiKey: "g06-secret-must-not-appear" }
+    credential: { action: "replace" as const, apiKey: "test-secret-must-not-appear" }
   };
 }
 
@@ -200,7 +200,7 @@ describe("connections service", () => {
     expect(created.baseUrl).toBe("http://127.0.0.1:8000");
     expect(created).toMatchObject({ apiKeyConfigured: true, credentialEntryAllowed: true });
     expect(repository.references.get("local")).toBe("safe-storage:local");
-    expect(JSON.stringify(created)).not.toContain("g06-secret-must-not-appear");
+    expect(JSON.stringify(created)).not.toContain("test-secret-must-not-appear");
   });
 
   it("rejects Web credential replacement before persisting anything", async () => {
@@ -226,7 +226,7 @@ describe("connections service", () => {
     repository.failDelete = true;
     await expect(service.delete("local")).rejects.toThrow("database delete failed");
     expect(repository.profiles.has("local")).toBe(true);
-    expect(vault.entries.get("safe-storage:local")).toBe("g06-secret-must-not-appear");
+    expect(vault.entries.get("safe-storage:local")).toBe("test-secret-must-not-appear");
   });
 
   it("records diagnostics without touching project state and emits a redacted export", async () => {
@@ -240,17 +240,17 @@ describe("connections service", () => {
     const exported = await service.exportDiagnostics("local");
     expect(exported).toMatchObject({ endpointClass: "loopback", apiKeyConfigured: true, requestCounts: { health: 1, models: 1, voices: 1, speech: 1 } });
     expect(JSON.stringify(exported)).not.toContain("127.0.0.1");
-    expect(JSON.stringify(exported)).not.toContain("g06-secret-must-not-appear");
+    expect(JSON.stringify(exported)).not.toContain("test-secret-must-not-appear");
   });
 
   it("reconciles and locks the stable environment profile without storing its key", () => {
     const repository = new MemoryRepository();
     const result = reconcileEnvironmentConnectionProfile(repository, {
       SPEACHES_BASE_URL: "https://speech.example.test/v1",
-      SPEACHES_API_KEY: "g06-secret-must-not-appear",
+      SPEACHES_API_KEY: "test-secret-must-not-appear",
       STUDYNARRATOR_LOCK_SPEACHES_SETTINGS: "true"
     });
-    expect(result).toEqual({ activeProfileLocked: true, apiKey: "g06-secret-must-not-appear" });
+    expect(result).toEqual({ activeProfileLocked: true, apiKey: "test-secret-must-not-appear" });
     expect(repository.getConnectionProfile("environment-speaches")).toMatchObject({ baseUrl: "https://speech.example.test", source: "environment", editable: false });
     expect(repository.getConnectionCredentialReference("environment-speaches")).toBe("environment:SPEACHES_API_KEY");
     expect(repository.setup.activeProfileId).toBe("environment-speaches");

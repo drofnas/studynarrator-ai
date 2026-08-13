@@ -8,14 +8,14 @@ describe("desktop data directory", () => {
   it("resolves a relative configured directory from the initiating workspace", () => {
     expect(resolveDesktopDataDirectory("/default/data", {
       INIT_CWD: "/workspace/studynarrator",
-      STUDYNARRATOR_DATA_DIR: ".tmp/gates/G04/manual"
-    })).toBe(resolve("/workspace/studynarrator/.tmp/gates/G04/manual"));
+      STUDYNARRATOR_DATA_DIR: ".tmp/dev/manual"
+    })).toBe(resolve("/workspace/studynarrator/.tmp/dev/manual"));
   });
 });
 
 describe("desktop connection credential bootstrap", () => {
   it("keeps the credential out of SQLite, responses, and encrypted vault text", async () => {
-    const dataDirectory = await mkdtemp(join(tmpdir(), "studynarrator-g06-desktop-"));
+    const dataDirectory = await mkdtemp(join(tmpdir(), "studynarrator-desktop-"));
     const safeStorage = {
       isEncryptionAvailable: () => true,
       getSelectedStorageBackend: () => "keychain",
@@ -27,11 +27,11 @@ describe("desktop connection credential bootstrap", () => {
       if (!runtime.connections || !runtime.credentialVault) throw new Error("Expected desktop connection services.");
       const profile = await runtime.connections.create({
         profile: { id: "desktop-secret", name: "Desktop", baseUrl: "http://127.0.0.1:8000", defaultModelId: "model", defaultVoiceId: "voice" },
-        credential: { action: "replace", apiKey: "g06-secret-must-not-appear" }
+        credential: { action: "replace", apiKey: "test-secret-must-not-appear" }
       });
-      expect(JSON.stringify(profile)).not.toContain("g06-secret-must-not-appear");
-      expect((await readFile(join(dataDirectory, "studynarrator.sqlite"))).toString("latin1")).not.toContain("g06-secret-must-not-appear");
-      expect(await readFile(runtime.credentialVault.filePath, "utf8")).not.toContain("g06-secret-must-not-appear");
+      expect(JSON.stringify(profile)).not.toContain("test-secret-must-not-appear");
+      expect((await readFile(join(dataDirectory, "studynarrator.sqlite"))).toString("latin1")).not.toContain("test-secret-must-not-appear");
+      expect(await readFile(runtime.credentialVault.filePath, "utf8")).not.toContain("test-secret-must-not-appear");
     } finally {
       runtime.service.close();
     }

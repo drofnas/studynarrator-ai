@@ -1,37 +1,32 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ParseScriptInputSchema, ParseScriptResultSchema, SYSTEM_DEFAULT_SPEAKER_ID, parseScript } from "./index.js";
 
-const fixture = (name: string) => readFileSync(resolve(process.cwd(), "fixtures/gates", name), "utf8");
-const expected = (name: string): unknown => JSON.parse(readFileSync(resolve(process.cwd(), "fixtures/gates/expected", name), "utf8"));
+const validStudyGuide = `[section: Resumes and background processing]
 
-function goldenProjection(result: ReturnType<typeof parseScript>) {
-  return {
-    grammarVersion: result.grammarVersion,
-    cirSchemaVersion: result.cirSchemaVersion,
-    nodes: result.nodes.map((node) => ({
-      ordinal: node.ordinal,
-      type: node.type,
-      line: node.range.start.line,
-      value: node.type === "speech" ? `${node.speakerId}: ${node.readableText}`
-        : node.type === "pause" ? node.pauseId
-          : node.type === "section" ? node.title
-            : String(node.lineCount)
-    })),
-    speakers: result.discoveries.speakers.map(({ id }) => id),
-    pauses: result.discoveries.pauses.map(({ id }) => id),
-    sections: result.discoveries.sections.map(({ title }) => title),
-    pronunciations: result.discoveries.pronunciations.map(({ displayText, senseId, range }) => `${displayText}|${senseId}@${String(range.start.line)}:${String(range.start.column)}`),
-    summary: result.summary,
-    errors: result.errors.map(({ code, line, column }) => `${code}@${String(line)}:${String(column)}`),
-    warnings: result.warnings.map(({ code, line, column }) => `${code}@${String(line)}:${String(column)}`)
-  };
-}
+[speaker_teacher] Today we will compare two meanings of the word {{resume|cv}}.
+[pause_short]
+[speaker_student] That is the document I send with a job application.
+[pause_short]
+[speaker_teacher] Correct. A paused job can {{resume|continue}} after a restart.
+[pause_long]
 
-describe("G02 script parser", () => {
-  it("parses the canonical valid fixture with exact discoveries", () => {
-    const result = parseScript({ source: fixture("study-guide-valid.txt") });
+[section: SQL pronunciation]
+
+[speaker_teacher] SQL indexes can speed up database reads.
+[pause_short]
+[speaker_student] In this project, SQL is pronounced using the project lexicon.
+`;
+
+const invalidStudyGuide = `[speaker_1bad] This speaker name begins with a number and can be mapped later.
+[section Database indexes]
+[pause_short] This speech follows the pause on [pause_short] {{resume|cv the same line.
+[section Database indexes]
+[speaker_1bad] This annotation [speaker_teacher] is not closed: {{resume|cv
+`;
+
+describe("script parser", () => {
+  it("parses a representative study guide with exact discoveries", () => {
+    const result = parseScript({ source: validStudyGuide });
 
     expect(result.errors).toEqual([]);
     expect(result.summary).toMatchObject({
@@ -51,8 +46,8 @@ describe("G02 script parser", () => {
     expect(ParseScriptResultSchema.parse(result)).toEqual(result);
   });
 
-  it("returns stable errors while preserving recoverable invalid fixture lines as speech", () => {
-    const result = parseScript({ source: fixture("study-guide-invalid.txt") });
+  it("returns stable errors while preserving recoverable invalid lines as speech", () => {
+    const result = parseScript({ source: invalidStudyGuide });
 
     expect(result.errors.map(({ code, line }) => ({ code, line }))).toEqual([
       { code: "MALFORMED_SECTION_DIRECTIVE", line: 2 },
@@ -65,13 +60,6 @@ describe("G02 script parser", () => {
     ]);
     expect(result.discoveries.speakers.map(({ id }) => id)).toEqual(["1bad", "teacher"]);
     expect(result.errors.every(({ offendingText, suggestion }) => offendingText.length > 0 && suggestion.length > 0)).toBe(true);
-  });
-
-  it.each([
-    ["study-guide-valid.txt", "study-guide-valid.parse.json"],
-    ["study-guide-invalid.txt", "study-guide-invalid.parse.json"]
-  ])("matches the reviewable golden result for %s", (sourceName, expectedName) => {
-    expect(goldenProjection(parseScript({ source: fixture(sourceName) }))).toEqual(expected(expectedName));
   });
 
   it("supports standalone, inline, multiple, and consecutive speaker directives", () => {

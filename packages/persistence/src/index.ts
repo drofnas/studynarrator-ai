@@ -14,8 +14,8 @@ export {
 } from "./migrations.js";
 export {
   CURRENT_MIGRATION_VERSION,
-  G01_MARKER_KEY,
-  G01_MARKER_VALUE,
+  STORAGE_SELF_TEST_KEY,
+  STORAGE_SELF_TEST_VALUE,
   openStudyNarratorRepository,
   type MarkerEvidence,
   type StudyNarratorRepository

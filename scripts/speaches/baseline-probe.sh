@@ -9,7 +9,7 @@ readonly CONNECT_TIMEOUT_SECONDS="10"
 readonly REQUEST_TIMEOUT_SECONDS="180"
 
 die() {
-  printf 'GATE G00: ERROR: %s\n' "$*" >&2
+  printf 'SPEACHES BASELINE: ERROR: %s\n' "$*" >&2
   exit 1
 }
 
@@ -17,19 +17,19 @@ usage() {
   cat <<'EOF'
 Usage:
   SPEACHES_BASE_URL=https://speaches.example.test \
-    bash scripts/gates/g00-speaches-baseline.sh
+    bash scripts/speaches/baseline-probe.sh
 
   SPEACHES_BASE_URL=https://speaches.example.test \
-    bash scripts/gates/g00-speaches-baseline.sh --expect-unavailable
+    bash scripts/speaches/baseline-probe.sh --expect-unavailable
 
 Environment:
   SPEACHES_BASE_URL       Required. A server root URL or URL ending in /v1.
   SPEACHES_API_KEY        Optional. Sent as a bearer token without logging it.
-  SPEACHES_MODEL_ID       Optional. Defaults to the G00 Kokoro model.
+  SPEACHES_MODEL_ID       Optional. Defaults to the validated Kokoro model.
   SPEACHES_DEFAULT_VOICE  Optional. Defaults to af_heart.
 
 The normal mode performs two WAV requests and two MP3 requests. Generated files
-and machine-readable evidence are written under .tmp/gates/G00/ and are ignored
+and machine-readable evidence are written under .tmp/speaches-baseline/ and are ignored
 by Git. The unavailable mode succeeds only for a network failure or HTTP 5xx.
 EOF
 }
@@ -58,10 +58,9 @@ fi
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_root="$(cd -- "$script_dir/../.." && pwd -P)"
-fixture_path="$repo_root/fixtures/baseline/speaches-smoke.txt"
-output_root="$repo_root/.tmp/gates/G00"
+output_root="$repo_root/.tmp/speaches-baseline"
+smoke_input_path="$output_root/input.txt"
 
-[[ -f "$fixture_path" ]] || die "smoke fixture not found: $fixture_path"
 [[ -n "${SPEACHES_BASE_URL:-}" ]] || die "SPEACHES_BASE_URL is required"
 if [[ "$SPEACHES_BASE_URL" == *$'\n'* || "$SPEACHES_BASE_URL" == *$'\r'* ]]; then
   die "SPEACHES_BASE_URL must not contain newlines"
@@ -100,13 +99,12 @@ fi
 speech_endpoint="$api_base/audio/speech"
 model_id="${SPEACHES_MODEL_ID:-$DEFAULT_MODEL_ID}"
 voice_id="${SPEACHES_DEFAULT_VOICE:-$DEFAULT_VOICE_ID}"
-smoke_text="$(<"$fixture_path")"
+smoke_text="This is the StudyNarrator baseline. SQL indexes can speed up database reads."
 
 [[ -n "$model_id" ]] || die "SPEACHES_MODEL_ID must not be empty"
 [[ -n "$voice_id" ]] || die "SPEACHES_DEFAULT_VOICE must not be empty"
-[[ -n "$smoke_text" ]] || die "smoke fixture must not be empty"
-
 mkdir -p -- "$output_root"
+printf '%s\n' "$smoke_text" > "$smoke_input_path"
 
 auth_header_file=""
 declare -a curl_auth_args=(--header 'Accept: */*')
@@ -308,7 +306,7 @@ perform_success_request() {
     --arg http_status "$http_status" \
     --arg content_type "$content_type" \
     --arg media_description "$media_description" \
-    --arg artifact ".tmp/gates/G00/run-$run_number/speaches-baseline.$format" \
+    --arg artifact ".tmp/speaches-baseline/run-$run_number/speaches-baseline.$format" \
     --arg sha256 "$sha256" \
     --argjson byte_size "$byte_size" \
     --argjson authorization_header_sent "$auth_header_sent" \
@@ -375,8 +373,8 @@ perform_expected_failure() {
     '{endpoint: $endpoint, failure_class: $failure_class, curl_exit: $curl_exit, http_status: $http_status, authorization_header_sent: $authorization_header_sent, captured_at: $captured_at, expected_failure_captured: true}' \
     > "$result_path"
 
-  printf 'GATE G00: EXPECTED UNAVAILABLE FAILURE CAPTURED\n'
-  printf 'Evidence: .tmp/gates/G00/failure/failure.json\n'
+  printf 'SPEACHES BASELINE: EXPECTED UNAVAILABLE FAILURE CAPTURED\n'
+  printf 'Evidence: .tmp/speaches-baseline/failure/failure.json\n'
 }
 
 if [[ "$mode" == "expect-unavailable" ]]; then
@@ -426,5 +424,5 @@ jq -n \
   '{generated_at: $generated_at, supplied_url_form: $supplied_url_form, endpoint: $endpoint, model: $model, voice: $voice, authorization_header_sent: $authorization_header_sent, tools: {curl: $curl_version, jq: $jq_version, ffmpeg: $ffmpeg_version, ffprobe: $ffprobe_version, file: $file_version, shasum: $shasum_version}, optional_preflight: {health: $health[0], models: $models[0]}, results: $results[0]}' \
   > "$output_root/evidence.json"
 
-printf 'GATE G00: AUTOMATED CHECKS PASSED\n'
-printf 'Evidence: .tmp/gates/G00/evidence.json\n'
+printf 'SPEACHES BASELINE: AUTOMATED CHECKS PASSED\n'
+printf 'Evidence: .tmp/speaches-baseline/evidence.json\n'

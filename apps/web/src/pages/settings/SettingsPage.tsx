@@ -138,7 +138,7 @@ export function SettingsPage({ client }: { client: PersistenceClient }) {
 
   return (
     <div className={styles.page}>
-      <header><p>G06 · Installation + connections</p><h2>Settings</h2><span>Manage local authoring defaults, connection profiles, staged diagnostics, and the voice catalog.</span></header>
+      <header><p>Installation + connections</p><h2>Settings</h2><span>Manage local authoring defaults, connection profiles, staged diagnostics, and the voice catalog.</span></header>
       {error || workspace.error ? <p className={styles.error} role="alert">{error || workspace.error}</p> : null}
       <p className={styles.status} aria-live="polite">{status}</p>
 
@@ -154,7 +154,7 @@ export function SettingsPage({ client }: { client: PersistenceClient }) {
             <datalist id="known-models"><option value="speaches-ai/Kokoro-82M-v1.0-ONNX" /></datalist>
             <label>Default voice ID<input disabled={managed} list="known-voices" value={draft.defaultVoiceId} onChange={(event) => setDraft({ ...draft, defaultVoiceId: event.target.value })} /></label>
             <datalist id="known-voices">{catalog?.entries.filter(({ enabled }) => enabled).map((entry) => <option key={entry.voiceId} value={entry.voiceId}>{entry.label}</option>)}</datalist>
-            <div className={styles.inline}><label>Timeout (seconds)<input disabled={managed} type="number" min="1" max="600" value={draft.timeoutSeconds} onChange={(event) => setDraft({ ...draft, timeoutSeconds: Number(event.target.value) })} /></label><label>Retries (G07+)<input disabled={managed} type="number" min="0" max="5" value={draft.retryCount} onChange={(event) => setDraft({ ...draft, retryCount: Number(event.target.value) })} /></label></div>
+            <div className={styles.inline}><label>Timeout (seconds)<input disabled={managed} type="number" min="1" max="600" value={draft.timeoutSeconds} onChange={(event) => setDraft({ ...draft, timeoutSeconds: Number(event.target.value) })} /></label><label>Retries<input disabled={managed} type="number" min="0" max="5" value={draft.retryCount} onChange={(event) => setDraft({ ...draft, retryCount: Number(event.target.value) })} /></label></div>
             <p className={styles.keyState}>API key: {selected?.apiKeyConfigured ? "configured" : "not configured"}{workspace.setup?.client === "web" ? " · server-managed" : ""}</p>
             {workspace.setup?.client === "electron" && !managed ? <><label>Replace API key (one shot)<input type="password" autoComplete="off" value={apiKey} onChange={(event) => setApiKey(event.target.value)} /></label><label className={styles.check}><input type="checkbox" checked={clearKey} onChange={(event) => setClearKey(event.target.checked)} />Clear stored key</label></> : null}
             <div className={styles.actions}><button type="button" disabled={managed || !draft.name.trim()} onClick={() => void saveProfile()}>{selected ? "Save profile" : "Create profile"}</button>{selected ? <button type="button" className={styles.secondary} disabled={workspace.testingProfileId === selected.id || !selected.configured} onClick={() => void testProfile()}>{workspace.testingProfileId === selected.id ? "Testing…" : "Test Connection"}</button> : null}{selected?.source === "saved" ? <button type="button" className={styles.danger} onClick={() => { if (window.confirm(`Delete ${selected.name}? Project references will be cleared.`)) void workspace.delete(selected.id).then(() => setSelectedId(null)); }}>Delete</button> : null}</div>
