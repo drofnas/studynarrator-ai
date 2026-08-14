@@ -39,6 +39,7 @@ export function SettingsPage({ client, cacheClient }: { client: PersistenceClien
   const [status, setStatus] = useState("Loading settings…");
   const [error, setError] = useState("");
   const [draft, setDraft] = useState(EMPTY_CONNECTION);
+  const [connectionTestAttempted, setConnectionTestAttempted] = useState(false);
   const [catalog, setCatalog] = useState<VoiceCatalog | null>(null);
   const [catalogSearch, setCatalogSearch] = useState("");
   const [catalogJson, setCatalogJson] = useState("");
@@ -121,6 +122,7 @@ export function SettingsPage({ client, cacheClient }: { client: PersistenceClien
   };
 
   const saveConnection = async () => {
+    setConnectionTestAttempted(true);
     setError("");
     try {
       await workspace.update({ baseUrl: draft.baseUrl || null, defaultModelId: draft.defaultModelId || null, defaultVoiceId: draft.defaultVoiceId || null, timeoutSeconds: draft.timeoutSeconds, retryCount: draft.retryCount, responseFormat: "wav" });
@@ -184,6 +186,12 @@ export function SettingsPage({ client, cacheClient }: { client: PersistenceClien
   const filteredLexicon = useMemo(() => globalLexicon.filter((entry) => (lexiconType === "all" || entry.entryType === lexiconType) && (!lexiconSearch || `${entry.displayText} ${entry.senseId ?? ""} ${entry.spokenText}`.toLocaleLowerCase().includes(lexiconSearch.toLocaleLowerCase()))), [globalLexicon, lexiconSearch, lexiconType]);
   const speechModels = workspace.catalog.status === "ready" ? workspace.catalog.catalog.models : [];
   const selectedSpeechModel = speechModels.find(({ modelId }) => modelId === draft.defaultModelId);
+  const connectionSummary = workspace.connection?.lastTestSummary;
+  const showConnectionDiagnostics = Boolean(
+    connectionSummary
+    && connectionSummary.overall !== "connected"
+    && (workspace.connection?.configured || connectionTestAttempted)
+  );
 
   return (
     <div className={styles.page}>
@@ -200,7 +208,7 @@ export function SettingsPage({ client, cacheClient }: { client: PersistenceClien
           <div className={styles.inline}><label>Timeout (seconds)<input type="number" min="1" max="600" value={draft.timeoutSeconds} onChange={(event) => setDraft({ ...draft, timeoutSeconds: Number(event.target.value) })} /></label><label>Retries<input type="number" min="0" max="5" value={draft.retryCount} onChange={(event) => setDraft({ ...draft, retryCount: Number(event.target.value) })} /></label></div>
           <div className={styles.actions}><button type="button" disabled={workspace.testing || !draft.baseUrl || !draft.defaultModelId || !draft.defaultVoiceId} onClick={() => void saveConnection()}>{workspace.testing ? "Testing…" : "Save and Test"}</button></div>
         </div>
-        {workspace.connection?.lastTestSummary ? <div className={styles.diagnostics}><div className={styles.diagnosticHeader}><div><p>Signal path</p><h4>{workspace.connection.lastTestSummary.overall}</h4></div><button type="button" className={styles.secondary} onClick={() => void exportDiagnostics()}>Export redacted JSON</button></div><ol>{workspace.connection.lastTestSummary.stages.map((item, index) => <li data-status={item.status} key={item.stage}><b>{String(index + 1).padStart(2, "0")}</b><div><strong>{item.stage}</strong><code>{item.code} · {item.durationMs} ms</code><span>{item.message}</span></div></li>)}</ol></div> : null}
+        {showConnectionDiagnostics && connectionSummary ? <div className={styles.diagnostics}><div className={styles.diagnosticHeader}><div><p>Signal path</p><h4>{connectionSummary.overall}</h4></div><button type="button" className={styles.secondary} onClick={() => void exportDiagnostics()}>Export redacted JSON</button></div><ol>{connectionSummary.stages.map((item, index) => <li data-status={item.status} key={item.stage}><b>{String(index + 1).padStart(2, "0")}</b><div><strong>{item.stage}</strong><code>{item.code} · {item.durationMs} ms</code><span>{item.message}</span></div></li>)}</ol></div> : null}
       </section>
 
       <section className={styles.catalog}>

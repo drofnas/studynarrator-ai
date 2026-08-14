@@ -40,7 +40,8 @@ test.describe("Settings and connection diagnostics", () => {
     await testButton.click();
     await expect(page.getByText("Connection test: connected.")).toBeVisible();
     expect(studyNarrator.fakeSpeaches.getState().requests.every(({ path }) => !path.includes("/v1/v1"))).toBe(true);
-    await expect(page.getByRole("heading", { name: "connected" })).toBeVisible();
+    await expect(page.getByText("Signal path")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Export redacted JSON" })).toHaveCount(0);
     const endpointHost = new URL(studyNarrator.fakeSpeaches.baseUrl).host.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
     await expect(page.getByRole("link", { name: new RegExp(`Connected\\. ${endpointHost}\\. Manage connection\\.`, "u") })).toBeVisible();
     await expect(page.getByText(/New saved profile|Active profile|API key|Environment Speaches/u)).toHaveCount(0);
@@ -58,11 +59,10 @@ test.describe("Settings and connection diagnostics", () => {
       studyNarrator.fakeSpeaches.setScenario(scenario);
       await testButton.click();
       await expect(page.getByText(`Connection test: ${expected}.`)).toBeVisible();
+      await expect(page.getByText("Signal path")).toBeVisible();
+      await expect(page.getByRole("heading", { name: expected })).toBeVisible();
     }
 
-    studyNarrator.fakeSpeaches.setScenario("healthy");
-    await testButton.click();
-    await expect(page.getByText("Connection test: connected.")).toBeVisible();
     const downloadPromise = page.waitForEvent("download");
     await page.getByRole("button", { name: "Export redacted JSON" }).click();
     const download = await downloadPromise;
@@ -73,6 +73,11 @@ test.describe("Settings and connection diagnostics", () => {
     expect(exported).toContain('"endpointClass": "loopback"');
     expect(exported).not.toContain("127.0.0.1");
     expect(exported).not.toContain("authorization");
+
+    studyNarrator.fakeSpeaches.setScenario("healthy");
+    await testButton.click();
+    await expect(page.getByText("Connection test: connected.")).toBeVisible();
+    await expect(page.getByText("Signal path")).toHaveCount(0);
 
     await page.reload();
     await expect(page.getByLabel("Address")).toHaveValue(studyNarrator.fakeSpeaches.baseUrl);

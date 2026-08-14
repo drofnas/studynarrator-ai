@@ -3,7 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { GlobalLexiconReplaceInput, PersistenceClient, SpeachesConnectionClient } from "@studynarrator/shared-types";
+import type { ConnectionTestOverall, GlobalLexiconReplaceInput, PersistenceClient, SpeachesConnection, SpeachesConnectionClient } from "@studynarrator/shared-types";
 import { SettingsPage } from "./SettingsPage.js";
 import { ConnectionProvider } from "@/features/connections/ConnectionProvider.js";
 
@@ -21,6 +21,28 @@ const savedConnection = {
   responseFormat: "wav" as const, lastTestedAt: null, lastSuccessfulTestAt: null, lastTestSummary: null,
   createdAt: timestamp, updatedAt: timestamp
 };
+function connectionWithTest(overall: ConnectionTestOverall, configured = true): SpeachesConnection {
+  const stages = ["url", "dns", "tcp", "http", "authentication", "model", "voice", "audio"] as const;
+  return {
+    ...savedConnection,
+    baseUrl: configured ? savedConnection.baseUrl : null,
+    suppliedUrlForm: configured ? "root" : "unconfigured",
+    configured,
+    defaultModelId: configured ? savedConnection.defaultModelId : null,
+    defaultVoiceId: configured ? savedConnection.defaultVoiceId : null,
+    lastTestedAt: timestamp,
+    lastSuccessfulTestAt: overall === "connected" ? timestamp : null,
+    lastTestSummary: {
+      schemaVersion: 1,
+      overall,
+      testedAt: timestamp,
+      httpStatus: overall === "connected" ? 200 : null,
+      stages: stages.map((stage) => ({ stage, status: overall === "connected" ? "pass" as const : "fail" as const, code: `TEST_${stage.toUpperCase()}`, message: `${stage} result`, durationMs: 1 })),
+      availableModelIds: configured ? [savedConnection.defaultModelId] : [],
+      availableVoiceIds: configured ? [savedConnection.defaultVoiceId] : null
+    }
+  };
+}
 function connectionClient(overrides: Partial<SpeachesConnectionClient> = {}): SpeachesConnectionClient {
   return {
     get: vi.fn(async () => savedConnection),
@@ -47,6 +69,29 @@ function connectionClient(overrides: Partial<SpeachesConnectionClient> = {}): Sp
 const voiceCatalog = { get: vi.fn(async (modelId: string) => ({ schemaVersion: 1 as const, modelId, entries: [] })), replace: vi.fn() };
 
 describe("System Settings", () => {
+  it("shows the Signal path only for an actual connection error", async () => {
+    const client = {
+      settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() },
+      globalLexicon: { list: vi.fn(async () => []), replace: vi.fn(async (entries: GlobalLexiconReplaceInput) => entries) }
+    } as unknown as PersistenceClient;
+
+    const connected = render(<ConnectionProvider connectionClient={connectionClient({ get: vi.fn(async () => connectionWithTest("connected")) })} voiceCatalog={voiceCatalog}><SettingsPage client={client} cacheClient={cacheClient} /></ConnectionProvider>);
+    await screen.findByDisplayValue(savedConnection.baseUrl);
+    expect(screen.queryByText("Signal path")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Export redacted JSON" })).not.toBeInTheDocument();
+    connected.unmount();
+
+    const failed = render(<ConnectionProvider connectionClient={connectionClient({ get: vi.fn(async () => connectionWithTest("disconnected")) })} voiceCatalog={voiceCatalog}><SettingsPage client={client} cacheClient={cacheClient} /></ConnectionProvider>);
+    expect(await screen.findByText("Signal path")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "disconnected" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Export redacted JSON" })).toBeInTheDocument();
+    failed.unmount();
+
+    render(<ConnectionProvider connectionClient={connectionClient({ get: vi.fn(async () => connectionWithTest("configurationError", false)) })} voiceCatalog={voiceCatalog}><SettingsPage client={client} cacheClient={cacheClient} /></ConnectionProvider>);
+    await waitFor(() => expect(screen.getByLabelText("Address")).toHaveValue(""));
+    expect(screen.queryByText("Signal path")).not.toBeInTheDocument();
+  });
+
   it("manages persisted global lexicon entries outside project settings", async () => {
     let stored = [{ id: "global-sql", scope: "global", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel", caseSensitive: true, wholeWord: true, priority: 0, enabled: true, notes: "", createdAt: timestamp, updatedAt: timestamp }];
     const replace = vi.fn(async (entries: Array<Record<string, unknown>>) => {
