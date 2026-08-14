@@ -375,6 +375,24 @@ export function createExpressApp(options: {
       response.setHeader("content-length", String(file.bytes.byteLength));
       response.send(Buffer.from(file.bytes));
     };
+    app.post("/api/script-generation/prompt-preview", async (request, response, next) => {
+      try {
+        const input = ScriptGenerationPromptInputSchema.parse(request.body);
+        response.json(await options.scriptGeneration!.previewPrompt(null, input.kind));
+      } catch (error) { next(error); }
+    });
+    app.post("/api/script-generation/prompt-export", async (request, response, next) => {
+      try {
+        const input = ScriptGenerationPromptInputSchema.parse(request.body);
+        sendGeneratedFile(response, await options.scriptGeneration!.resolvePromptExport(null, input.kind));
+      } catch (error) { next(error); }
+    });
+    app.post("/api/script-generation/skill-export", async (request, response, next) => {
+      try {
+        ScriptGenerationSkillInputSchema.parse(request.body);
+        sendGeneratedFile(response, await options.scriptGeneration!.resolveSkillPackage(null));
+      } catch (error) { next(error); }
+    });
     app.post("/api/projects/:projectId/prompt-preview", async (request, response, next) => {
       try {
         const input = ScriptGenerationPromptInputSchema.parse(request.body);

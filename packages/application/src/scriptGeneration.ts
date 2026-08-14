@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { strToU8, zipSync } from "fflate";
 import {
   SCRIPT_GENERATION_SCHEMA_VERSION,
+  DEFAULT_PARAGRAPH_PAUSE_DURATION_MS,
+  DEFAULT_PARAGRAPH_PAUSE_ID,
   ScriptGenerationContextSchema,
   ScriptPromptKindSchema,
   buildExternalLlmPrompt,
@@ -34,9 +36,9 @@ export interface ResolvedGeneratedFile {
 }
 
 export interface ScriptGenerationService {
-  previewPrompt(projectId: string, kind: ScriptPromptKind): Promise<PromptDocument>;
-  resolvePromptExport(projectId: string, kind: ScriptPromptKind): Promise<ResolvedGeneratedFile>;
-  resolveSkillPackage(projectId: string): Promise<ResolvedGeneratedFile>;
+  previewPrompt(projectId: string | null, kind: ScriptPromptKind): Promise<PromptDocument>;
+  resolvePromptExport(projectId: string | null, kind: ScriptPromptKind): Promise<ResolvedGeneratedFile>;
+  resolveSkillPackage(projectId: string | null): Promise<ResolvedGeneratedFile>;
 }
 
 function sha256(value: string | Uint8Array): string {
@@ -62,28 +64,30 @@ function lexicon(repository: ScriptGenerationRepository, project: ProjectDetail)
   return [...repository.listGlobalLexicon(), ...project.lexiconEntries];
 }
 
-function generationContext(project: ProjectDetail): ScriptGenerationContext {
+function generationContext(project?: ProjectDetail): ScriptGenerationContext {
   return ScriptGenerationContextSchema.parse({
     schemaVersion: SCRIPT_GENERATION_SCHEMA_VERSION,
-    projectName: project.name,
-    speakers: project.speakerMappings.length > 0
+    projectName: project?.name ?? "StudyNarrator",
+    speakers: project && project.speakerMappings.length > 0
       ? project.speakerMappings.map(({ speakerId, displayName, roleDescription }) => ({
         speakerId,
         roleDescription: roleDescription.trim() || `${displayName} contributes clear spoken explanations.`
       }))
       : [{ speakerId: "narrator", roleDescription: "Explains the material clearly and accurately." }],
-    pauses: project.pausePresets.map(({ pauseId, durationMs, description }) => ({
-      pauseId,
-      description: description.trim() || `${String(durationMs)} millisecond pause.`
-    }))
+    pauses: project
+      ? project.pausePresets.map(({ pauseId, durationMs, description }) => ({
+        pauseId,
+        description: description.trim() || `${String(durationMs)} millisecond pause.`
+      }))
+      : [{ pauseId: DEFAULT_PARAGRAPH_PAUSE_ID, description: `${String(DEFAULT_PARAGRAPH_PAUSE_DURATION_MS)} millisecond paragraph or subtopic separation.` }]
   });
 }
 
-function promptDocument(project: ProjectDetail, kind: ScriptPromptKind, entries: readonly LexiconEntry[]): PromptDocument {
+function promptDocument(project: ProjectDetail | undefined, kind: ScriptPromptKind, entries: readonly LexiconEntry[]): PromptDocument {
   const content = buildExternalLlmPrompt({ kind, context: generationContext(project), lexiconEntries: entries });
   return PromptDocumentSchema.parse({
     kind,
-    fileName: `${slug(project.name)}-${kind}-prompt.md`,
+    fileName: `${slug(project?.name ?? "StudyNarrator")}-${kind}-prompt.md`,
     mimeType: "text/markdown; charset=utf-8",
     content,
     checksum: sha256(content)
@@ -91,7 +95,8 @@ function promptDocument(project: ProjectDetail, kind: ScriptPromptKind, entries:
 }
 
 export function createScriptGenerationService(dependencies: { repository: ScriptGenerationRepository }): ScriptGenerationService {
-  const load = (projectIdInput: string): { project: ProjectDetail; entries: LexiconEntry[] } => {
+  const load = (projectIdInput: string | null): { project?: ProjectDetail; entries: LexiconEntry[] } => {
+    if (projectIdInput === null) return { entries: [...dependencies.repository.listGlobalLexicon()] };
     const project = dependencies.repository.getProject(ProjectIdSchema.parse(projectIdInput));
     return { project, entries: lexicon(dependencies.repository, project) };
   };
@@ -121,7 +126,7 @@ export function createScriptGenerationService(dependencies: { repository: Script
         }
         const bytes = zipSync(archiveEntries, { level: 9 });
         return await Promise.resolve({
-          fileName: `${slug(project.name)}-script-skill.zip`,
+          fileName: `${slug(project?.name ?? "StudyNarrator")}-script-skill.zip`,
           mimeType: "application/zip" as const,
           bytes,
           checksum: sha256(bytes)

@@ -24,19 +24,19 @@ export const FileExportResultSchema = z.object({
 export type FileExportResult = z.infer<typeof FileExportResultSchema>;
 
 export const ScriptGenerationPromptRequestSchema = z.object({
-  projectId: ProjectIdSchema,
+  projectId: ProjectIdSchema.nullable(),
   kind: ScriptPromptKindSchema
 }).strict();
 
 export const ScriptGenerationPromptInputSchema = z.object({ kind: ScriptPromptKindSchema }).strict();
 
-export const ScriptGenerationSkillRequestSchema = z.object({ projectId: ProjectIdSchema }).strict();
+export const ScriptGenerationSkillRequestSchema = z.object({ projectId: ProjectIdSchema.nullable() }).strict();
 export const ScriptGenerationSkillInputSchema = z.object({}).strict();
 
 export interface ScriptGenerationClient {
-  previewPrompt(projectId: string, kind: z.infer<typeof ScriptPromptKindSchema>): Promise<PromptDocument>;
-  exportPrompt(projectId: string, kind: z.infer<typeof ScriptPromptKindSchema>): Promise<FileExportResult>;
-  exportSkillPackage(projectId: string): Promise<FileExportResult>;
+  previewPrompt(projectId: string | null, kind: z.infer<typeof ScriptPromptKindSchema>): Promise<PromptDocument>;
+  exportPrompt(projectId: string | null, kind: z.infer<typeof ScriptPromptKindSchema>): Promise<FileExportResult>;
+  exportSkillPackage(projectId: string | null): Promise<FileExportResult>;
 }
 
 export { SCRIPT_GENERATION_SCHEMA_VERSION, ScriptGenerationContextSchema, ScriptPromptKindSchema };

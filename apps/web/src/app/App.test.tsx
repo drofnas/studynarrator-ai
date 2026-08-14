@@ -8,9 +8,10 @@ import type { ConnectionTestOverall, PersistenceClient, SystemClient } from "@st
 import { App } from "./App.js";
 
 const unusedAnalyzer = { analyze: vi.fn() };
+const unusedProjectGet = vi.fn();
 const unusedPersistence: PersistenceClient = {
   status: vi.fn(async () => { throw new Error("unused"); }),
-  projects: { list: vi.fn(async () => []), create: vi.fn(), get: vi.fn(), replace: vi.fn(), duplicate: vi.fn(), delete: vi.fn() },
+  projects: { list: vi.fn(async () => []), create: vi.fn(), get: unusedProjectGet, replace: vi.fn(), duplicate: vi.fn(), delete: vi.fn() },
   settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() },
   preferences: { getIgnoredDiagnostics: vi.fn(async () => []), replaceIgnoredDiagnostics: vi.fn() },
   globalLexicon: { list: vi.fn(async () => []), replace: vi.fn() }
@@ -28,7 +29,12 @@ const unusedSpeechCache = {
   status: vi.fn(async () => ({ contractVersion: 1 as const, entryCount: 0, totalBytes: 0, lastUsedAt: null, sessionHits: 0, sessionMisses: 0, sessionWrites: 0, sessionCorruptMisses: 0, inFlight: 0 })),
   clearAll: vi.fn(), clearProject: vi.fn(), clearEntry: vi.fn()
 };
-const unusedScriptGeneration = { previewPrompt: vi.fn(), exportPrompt: vi.fn(), exportSkillPackage: vi.fn() };
+const promptDocuments = {
+  creation: { kind: "creation" as const, fileName: "studynarrator-creation-prompt.md", mimeType: "text/markdown; charset=utf-8" as const, content: "KNOWLEDGE TO GATHER AND TEACH", checksum: "a".repeat(64) },
+  update: { kind: "update" as const, fileName: "studynarrator-update-prompt.md", mimeType: "text/markdown; charset=utf-8" as const, content: "SCRIPT AND CHANGE REQUEST", checksum: "b".repeat(64) }
+};
+const unusedPromptPreview = vi.fn(async (_projectId: string | null, kind: "creation" | "update") => promptDocuments[kind]);
+const unusedScriptGeneration = { previewPrompt: unusedPromptPreview, exportPrompt: vi.fn(), exportSkillPackage: vi.fn() };
 
 afterEach(cleanup);
 
@@ -64,6 +70,16 @@ describe("application routing", () => {
     await user.click(screen.getByRole("link", { name: "Quick Scratchpad" }));
     expect(await screen.findByRole("heading", { name: "Quick Scratchpad" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Quick Scratchpad" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("reaches the project-free script prompt kit through primary navigation", async () => {
+    const user = userEvent.setup();
+    renderApp("/projects");
+    await user.click(screen.getByRole("link", { name: "Script prompt kit" }));
+    expect(await screen.findByRole("heading", { name: "Script prompt kit" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Script prompt kit" })).toHaveAttribute("aria-current", "page");
+    expect(unusedProjectGet).not.toHaveBeenCalled();
+    expect(unusedPromptPreview).toHaveBeenCalledWith(null, "creation");
   });
 
   it.each(["/script-lab", "/persistence-lab"])("redirects removed review route %s to Projects", async (route) => {

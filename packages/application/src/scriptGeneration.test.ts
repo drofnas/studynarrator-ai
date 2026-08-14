@@ -46,6 +46,19 @@ describe("script generation service", () => {
     expect(update.content).toContain("SCRIPT AND CHANGE REQUEST");
   });
 
+  it("builds a default prompt kit from global lexicon without loading a project", async () => {
+    const getProject = vi.fn(() => project);
+    const globalSql = { ...project.lexiconEntries[0]!, id: "global-sql", scope: "global" as const };
+    const service = createScriptGenerationService({ repository: { getProject, listGlobalLexicon: vi.fn(() => [globalSql]) } });
+    const document = await service.previewPrompt(null, "creation");
+    expect(document.fileName).toBe("studynarrator-creation-prompt.md");
+    expect(document.content).toContain("[speaker_narrator]");
+    expect(document.content).toContain("[pause_medium]");
+    expect(document.content).toContain("SQL → sequel");
+    expect(getProject).not.toHaveBeenCalled();
+    await expect(service.resolveSkillPackage(null)).resolves.toMatchObject({ fileName: "studynarrator-script-skill.zip" });
+  });
+
   it("creates byte-identical ZIPs with both prompts, safe paths, and no saved script", async () => {
     const service = createScriptGenerationService({ repository: repository() });
     const first = await service.resolveSkillPackage(project.id);

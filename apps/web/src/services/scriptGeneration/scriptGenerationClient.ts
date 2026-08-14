@@ -33,27 +33,30 @@ async function download(response: Response, fallback: string) {
   return FileExportResultSchema.parse({ disposition: "download", fileName });
 }
 
+function endpointRoot(projectIdInput: string | null): string {
+  if (projectIdInput === null) return "/api/script-generation";
+  const projectId = ProjectIdSchema.parse(projectIdInput);
+  return `/api/projects/${encodeURIComponent(projectId)}`;
+}
+
 export function createRestScriptGenerationClient(fetchInput: typeof fetch = fetch): ScriptGenerationClient {
   return {
     async previewPrompt(projectIdInput, kindInput) {
-      const projectId = ProjectIdSchema.parse(projectIdInput);
       const kind = ScriptPromptKindSchema.parse(kindInput);
-      const response = await fetchInput(`/api/projects/${encodeURIComponent(projectId)}/prompt-preview`, {
+      const response = await fetchInput(`${endpointRoot(projectIdInput)}/prompt-preview`, {
         method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind })
       });
       if (!response.ok) throw await failure(response);
       return PromptDocumentSchema.parse(await response.json() as unknown);
     },
     async exportPrompt(projectIdInput, kindInput) {
-      const projectId = ProjectIdSchema.parse(projectIdInput);
       const kind = ScriptPromptKindSchema.parse(kindInput);
-      return await download(await fetchInput(`/api/projects/${encodeURIComponent(projectId)}/prompt-export`, {
+      return await download(await fetchInput(`${endpointRoot(projectIdInput)}/prompt-export`, {
         method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind })
       }), "study-narrator-prompt.md");
     },
     async exportSkillPackage(projectIdInput) {
-      const projectId = ProjectIdSchema.parse(projectIdInput);
-      return await download(await fetchInput(`/api/projects/${encodeURIComponent(projectId)}/skill-export`, {
+      return await download(await fetchInput(`${endpointRoot(projectIdInput)}/skill-export`, {
         method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({})
       }), "study-narrator-script-skill.zip");
     }

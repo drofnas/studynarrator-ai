@@ -390,10 +390,10 @@ describe("REST API operation manifest", () => {
       : []);
     const declared = REST_API_MANIFEST.map(({ method, path }) => `${method} ${path}`);
     expect(registered.sort()).toEqual([...declared].sort());
-    expect(new Set(declared).size).toBe(52);
+    expect(new Set(declared).size).toBe(55);
   });
 
-  it("exercises a successful schema-valid response for all 52 operations", async () => {
+  it("exercises a successful schema-valid response for all 55 operations", async () => {
     const { app } = await fixture();
     const covered = new Set<string>();
     const call = async (method: string, path: string, expected: number, body?: string | object) => {
@@ -461,6 +461,9 @@ describe("REST API operation manifest", () => {
     ProjectPreviewResultSchema.parse((await call("POST", `/api/projects/${created.id}/preview`, 200, {
       mode: "segment", nodeOrdinal: 1
     })).body as unknown);
+    await call("POST", "/api/script-generation/prompt-preview", 200, { kind: "creation" });
+    await call("POST", "/api/script-generation/prompt-export", 200, { kind: "update" });
+    await call("POST", "/api/script-generation/skill-export", 200, {});
     await call("POST", `/api/projects/${created.id}/prompt-preview`, 200, { kind: "creation" });
     await call("POST", `/api/projects/${created.id}/prompt-export`, 200, { kind: "update" });
     await call("POST", `/api/projects/${created.id}/skill-export`, 200, {});
@@ -512,6 +515,8 @@ describe("REST API operation manifest", () => {
       request(app).post("/api/scratchpad/preview").send({ connectionProfileId: "x", text: secret }).expect(400),
       request(app).post("/api/projects/not-a-uuid/preview").send({ mode: "segment", nodeOrdinal: 1 }).expect(400),
       request(app).post("/api/projects/00000000-0000-4000-8000-000000000001/preview").send({ mode: "pronunciation", text: "" }).expect(400),
+      request(app).post("/api/script-generation/prompt-preview").send({ kind: "invalid", apiKey: secret }).expect(400),
+      request(app).post("/api/script-generation/skill-export").send({ sourceMaterial: secret }).expect(400),
       request(app).post("/api/projects/not-a-uuid/prompt-preview").send({}).expect(400),
       request(app).post("/api/projects/00000000-0000-4000-8000-000000000001/prompt-export").send({ kind: "invalid", sourceMaterial: secret }).expect(400),
       request(app).post("/api/projects/00000000-0000-4000-8000-000000000001/skill-export").send({ sourceMaterial: secret }).expect(400),

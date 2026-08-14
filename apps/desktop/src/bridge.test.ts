@@ -397,9 +397,9 @@ describe("Electron boundary", () => {
       [RENDER_CHANNELS.segments]: { renderId: renderJob.id },
       [RENDER_CHANNELS.waveform]: { renderId: renderJob.id },
       [RENDER_CHANNELS.exportSegment]: { renderId: renderJob.id, ordinal: 1 },
-      [SCRIPT_GENERATION_CHANNELS.previewPrompt]: { projectId: project.id, kind: "creation" },
-      [SCRIPT_GENERATION_CHANNELS.exportPrompt]: { projectId: project.id, kind: "update" },
-      [SCRIPT_GENERATION_CHANNELS.exportSkillPackage]: { projectId: project.id }
+      [SCRIPT_GENERATION_CHANNELS.previewPrompt]: { projectId: null, kind: "creation" },
+      [SCRIPT_GENERATION_CHANNELS.exportPrompt]: { projectId: null, kind: "update" },
+      [SCRIPT_GENERATION_CHANNELS.exportSkillPackage]: { projectId: null }
     };
     const invoked = new Set<string>();
     for (const channel of PUBLIC_IPC_CHANNEL_MANIFEST) {

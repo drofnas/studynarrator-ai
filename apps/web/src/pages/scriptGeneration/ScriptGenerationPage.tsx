@@ -24,7 +24,8 @@ export function ScriptGenerationPage({ persistence, generation }: {
   persistence: PersistenceClient;
   generation: ScriptGenerationClient;
 }) {
-  const { projectId } = useParams();
+  const { projectId: routeProjectId } = useParams();
+  const projectId = routeProjectId ?? null;
   const [project, setProject] = useState<ProjectDetail>();
   const [globalLexiconCount, setGlobalLexiconCount] = useState(0);
   const [documents, setDocuments] = useState<Partial<Record<ScriptPromptKind, PromptDocument>>>({});
@@ -35,10 +36,14 @@ export function ScriptGenerationPage({ persistence, generation }: {
   const [busy, setBusy] = useState<"copy" | "prompt" | "skill" | null>(null);
 
   useEffect(() => {
-    if (!projectId) { setLoadingError("Choose a project before opening the prompt kit."); return; }
     let active = true;
+    setProject(undefined);
+    setDocuments({});
+    setLoadingError("");
+    setOperationError("");
+    setNotice("");
     void Promise.all([
-      persistence.projects.get(projectId),
+      projectId ? persistence.projects.get(projectId) : Promise.resolve(undefined),
       persistence.globalLexicon.list(),
       generation.previewPrompt(projectId, "creation"),
       generation.previewPrompt(projectId, "update")
@@ -65,7 +70,6 @@ export function ScriptGenerationPage({ persistence, generation }: {
   };
 
   const exportPrompt = async () => {
-    if (!projectId) return;
     setBusy("prompt"); setOperationError("");
     try {
       const result = await generation.exportPrompt(projectId, selected);
@@ -75,7 +79,6 @@ export function ScriptGenerationPage({ persistence, generation }: {
   };
 
   const exportSkill = async () => {
-    if (!projectId) return;
     setBusy("skill"); setOperationError("");
     try {
       const result = await generation.exportSkillPackage(projectId);
@@ -85,12 +88,12 @@ export function ScriptGenerationPage({ persistence, generation }: {
   };
 
   if (loadingError) return <section className={styles.loadingState} role="alert"><h2>Prompt kit unavailable</h2><p>{loadingError}</p><Link to="/projects">Return to Projects</Link></section>;
-  if (!project || !documents.creation || !documents.update || !document) return <section className={styles.loadingState} aria-live="polite"><h2>Preparing prompt kit</h2><p>Reading the project’s script format and pronunciation lexicon…</p></section>;
+  if (!documents.creation || !documents.update || !document || (projectId && !project)) return <section className={styles.loadingState} aria-live="polite"><h2>Preparing prompt kit</h2><p>Reading the script format and pronunciation lexicon…</p></section>;
 
   return <div className={styles.page}>
     <header className={styles.header}>
       <div><p className={styles.kicker}>External-LLM handoff</p><h2>Script prompt kit</h2><p>Copy a starting contract, add your subject matter or edit request, then use it with the LLM of your choice.</p></div>
-      <Link className={styles.backLink} to={`/projects/${project.id}`}>Back to {project.name}</Link>
+      <Link className={styles.backLink} to={project ? `/projects/${project.id}` : "/projects"}>{project ? `Back to ${project.name}` : "View Projects"}</Link>
     </header>
 
     <aside className={styles.selector} aria-label="Choose a prompt template">
@@ -106,11 +109,11 @@ export function ScriptGenerationPage({ persistence, generation }: {
       <section className={styles.context} aria-labelledby="included-heading">
         <h3 id="included-heading">Included automatically</h3>
         <dl>
-          <div><dt>Speakers</dt><dd>{project.speakerMappings.length || 1}</dd></div>
-          <div><dt>Pauses</dt><dd>{project.pausePresets.length}</dd></div>
+          <div><dt>Speakers</dt><dd>{project?.speakerMappings.length || 1}</dd></div>
+          <div><dt>Pauses</dt><dd>{project ? project.pausePresets.length : 1}</dd></div>
           <div><dt>Lexicon</dt><dd>{enabledProjectLexicon + globalLexiconCount}</dd></div>
         </dl>
-        <p>The prompt explains valid IDs and commands. You do not need to configure them again here.</p>
+        <p>{project ? "This kit uses the project’s format plus enabled project and global lexicon entries." : "This kit uses StudyNarrator’s default narrator and pause commands plus enabled global lexicon entries."} You do not need to configure them again here.</p>
       </section>
 
       <button type="button" className={styles.packageButton} disabled={busy !== null} onClick={() => void exportSkill()}>{window.studyNarrator ? "Save both prompts as a kit" : "Download both prompts as a kit"}</button>
@@ -134,7 +137,7 @@ export function ScriptGenerationPage({ persistence, generation }: {
         <div aria-hidden="true">{selected.toUpperCase()} / MARKDOWN / {document.content.split("\n").length} LINES</div>
         <pre tabIndex={0} aria-label={`${promptLabels[selected].title} prompt preview`}>{document.content}</pre>
       </div>
-      <aside className={styles.privacy}><strong>Your saved script stays out</strong><p>Neither prompt contains the project’s script. The update template gives you a marked place to paste it only when you choose to.</p></aside>
+      <aside className={styles.privacy}><strong>Your script stays out</strong><p>Neither prompt contains a saved script. The update template gives you a marked place to paste one only when you choose to.</p></aside>
     </main>
   </div>;
 }

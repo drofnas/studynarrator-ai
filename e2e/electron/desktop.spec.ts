@@ -167,17 +167,12 @@ test.describe("Electron acceptance", () => {
     const { page, application, dataDirectory } = electronStudyNarrator;
     await continueElectronOffline(page);
     studyNarrator.fakeSpeaches.reset();
-    const source = "DESKTOP-SESSION-SOURCE: Explain deterministic local exports.";
-    await page.getByLabel("Project name").fill("Desktop script package");
-    await page.getByRole("button", { name: "Create project" }).click();
-    await page.getByLabel("Script source").fill(`[speaker_narrator] ${source}`);
-    await page.getByRole("button", { name: "Save now" }).click();
-    await expect(page.getByText("All changes saved.")).toBeVisible();
-    await page.getByRole("button", { name: "Open script prompt kit" }).click();
+    await page.getByRole("link", { name: "Script prompt kit" }).click();
     await expect(page.getByRole("heading", { name: "Script prompt kit" })).toBeVisible();
     const creationPreview = page.getByLabel("Create a script prompt preview");
     await expect(creationPreview).toContainText("KNOWLEDGE TO GATHER AND TEACH");
-    await expect(creationPreview).not.toContainText(source);
+    await expect(creationPreview).toContainText("[speaker_narrator]");
+    await expect(creationPreview).toContainText("[pause_medium]");
 
     const creationDestination = resolve(dataDirectory, "desktop-creation-prompt.md");
     const updateDestination = resolve(dataDirectory, "desktop-update-prompt.md");
@@ -199,10 +194,9 @@ test.describe("Electron acceptance", () => {
 
     expect(await readFile(creationDestination, "utf8")).toContain("KNOWLEDGE TO GATHER AND TEACH");
     expect(await readFile(updateDestination, "utf8")).toContain("SCRIPT AND CHANGE REQUEST");
-    expect(await readFile(updateDestination, "utf8")).not.toContain(source);
     const files = unzipSync(await readFile(skillDestination));
     expect(Object.keys(files).sort()).toEqual(["CREATION_PROMPT.md", "LEXICON_ALIASES.md", "SCRIPT_FORMAT.md", "SKILL.md", "UPDATE_PROMPT.md", "examples/single-narrator.txt"]);
-    expect(Object.values(files).map((bytes) => strFromU8(bytes)).join("\n")).not.toContain(source);
+    expect(Object.values(files).map((bytes) => strFromU8(bytes)).join("\n")).toContain("[speaker_narrator]");
     expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/speech"] ?? 0).toBe(0);
   });
 

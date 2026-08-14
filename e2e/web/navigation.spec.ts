@@ -35,6 +35,8 @@ test.describe("shell, onboarding, and runtime routes", () => {
     await continueOffline(page, studyNarrator);
     const navigation = page.getByRole("navigation", { name: "StudyNarrator tools" });
 
+    await navigation.getByRole("link", { name: "Script prompt kit" }).click();
+    await expect(page.getByRole("heading", { name: "Script prompt kit" })).toBeVisible();
     await navigation.getByRole("link", { name: "Quick Scratchpad" }).click();
     await expect(page.getByRole("heading", { name: "Quick Scratchpad" })).toBeVisible();
     await navigation.getByRole("link", { name: "Settings" }).click();
@@ -58,6 +60,8 @@ test.describe("shell, onboarding, and runtime routes", () => {
 
     await page.keyboard.press("Tab");
     await expect(page.getByRole("link", { name: "Projects" })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", { name: "Script prompt kit" })).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(page.getByRole("link", { name: "Quick Scratchpad" })).toBeFocused();
     await page.keyboard.press("Tab");

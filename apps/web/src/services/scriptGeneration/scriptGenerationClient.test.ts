@@ -7,11 +7,11 @@ const projectId = "00000000-0000-4000-8000-000000000001";
 afterEach(() => vi.restoreAllMocks());
 
 describe("REST script generation client", () => {
-  it("previews a validated prompt", async () => {
+  it("previews a validated prompt without a project", async () => {
     const document = { kind: "creation" as const, fileName: "prompt.md", mimeType: "text/markdown; charset=utf-8" as const, content: "Prompt", checksum: "a".repeat(64) };
     const fetchMock = vi.fn(async () => new Response(JSON.stringify(document), { status: 200, headers: { "content-type": "application/json" } }));
-    await expect(createRestScriptGenerationClient(fetchMock).previewPrompt(projectId, "creation")).resolves.toEqual(document);
-    expect(fetchMock).toHaveBeenCalledWith(`/api/projects/${projectId}/prompt-preview`, expect.objectContaining({ method: "POST", body: JSON.stringify({ kind: "creation" }) }));
+    await expect(createRestScriptGenerationClient(fetchMock).previewPrompt(null, "creation")).resolves.toEqual(document);
+    expect(fetchMock).toHaveBeenCalledWith("/api/script-generation/prompt-preview", expect.objectContaining({ method: "POST", body: JSON.stringify({ kind: "creation" }) }));
   });
 
   it("downloads prompt and skill exports with server filenames", async () => {
@@ -23,9 +23,16 @@ describe("REST script generation client", () => {
       headers: { "content-disposition": `attachment; filename="${(typeof input === "string" ? input : input instanceof URL ? input.href : input.url).includes("skill") ? "skill.zip" : "prompt.md"}"` }
     }));
     const client = createRestScriptGenerationClient(fetchMock);
-    await expect(client.exportPrompt(projectId, "update")).resolves.toEqual({ disposition: "download", fileName: "prompt.md" });
-    await expect(client.exportSkillPackage(projectId)).resolves.toEqual({ disposition: "download", fileName: "skill.zip" });
+    await expect(client.exportPrompt(null, "update")).resolves.toEqual({ disposition: "download", fileName: "prompt.md" });
+    await expect(client.exportSkillPackage(null)).resolves.toEqual({ disposition: "download", fileName: "skill.zip" });
     expect(click).toHaveBeenCalledTimes(2);
+  });
+
+  it("retains project-scoped endpoints for compatible deep links", async () => {
+    const document = { kind: "creation" as const, fileName: "prompt.md", mimeType: "text/markdown; charset=utf-8" as const, content: "Prompt", checksum: "a".repeat(64) };
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(document), { status: 200 }));
+    await createRestScriptGenerationClient(fetchMock).previewPrompt(projectId, "creation");
+    expect(fetchMock).toHaveBeenCalledWith(`/api/projects/${projectId}/prompt-preview`, expect.any(Object));
   });
 
   it("surfaces sanitized boundary errors", async () => {
