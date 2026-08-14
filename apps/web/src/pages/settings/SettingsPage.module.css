@@ -13,6 +13,9 @@
 .globalLexicon > p { color: #557080; font-size: 0.78rem; }
 .sectionHeading, .diagnosticHeader { display: flex; justify-content: space-between; gap: 16px; align-items: center; margin-bottom: 16px; }
 .sectionHeading h3, .diagnosticHeader h4, .pacing h3 { margin: 0; }
+.catalogMeta { display: grid; justify-items: end; gap: 5px; max-width: min(52%, 520px); color: #557080; font-size: 0.7rem; text-align: right; }
+.catalogMeta code { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.defaultModelBadge { padding: 3px 7px; color: white; background: var(--signal); font: 800 0.6rem ui-monospace, monospace; letter-spacing: 0.08em; text-transform: uppercase; }
 .connectionGrid { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 18px; }
 .profileList { display: grid; gap: 6px; align-content: start; }
 .profileList button { display: grid; gap: 4px; min-height: 0; padding: 12px; color: var(--ink); text-align: left; background: white; border: 1px solid var(--line); }
@@ -39,20 +42,33 @@
 .diagnostics li div { display: grid; gap: 5px; margin-top: 8px; }
 .diagnostics li strong { text-transform: capitalize; }
 .diagnostics li code, .diagnostics li span { overflow-wrap: anywhere; font-size: 0.62rem; }
-.voiceList { display: grid; gap: 5px; max-height: 420px; margin: 12px 0; overflow: auto; }
+.voiceList { display: grid; gap: 12px; max-height: 520px; margin: 12px 0; padding-right: 3px; overflow: auto; }
 .voiceTestScript { margin-bottom: 12px; }
 .voiceTestScript textarea { min-height: 76px; resize: vertical; font-family: inherit; line-height: 1.5; }
-.auditionError { margin: -3px 0 12px; color: var(--fault); font-size: 0.75rem; font-weight: 800; }
+.auditionError, .favoriteError { margin: -3px 0 12px; color: var(--fault); font-size: 0.75rem; font-weight: 800; }
+.voiceGroup { display: grid; gap: 5px; }
+.voiceGroupRibbon { display: flex; justify-content: space-between; align-items: center; min-height: 27px; padding: 4px 9px; color: white; background: var(--ink); border-left: 5px solid var(--signal); }
+.voiceGroup[data-group="favorites"] .voiceGroupRibbon { border-left-color: var(--copper); }
+.voiceGroupRibbon strong { font: 800 0.67rem ui-monospace, monospace; letter-spacing: 0.08em; text-transform: uppercase; }
+.voiceGroupRibbon span { color: #c7d8dd; font: 700 0.62rem ui-monospace, monospace; }
+.voiceGroupEntries { display: grid; gap: 5px; }
 .voiceList article { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 12px; background: white; border-left: 4px solid var(--signal); }
 .voiceList article > div { display: grid; gap: 3px; min-width: 0; }
 .voiceList article[data-enabled="false"] { border-left-color: var(--line); }
-.voiceList article[data-enabled="false"] > div { opacity: 0.58; }
+.voiceList article[data-enabled="false"] > div:first-child { opacity: 0.58; }
 .voiceList code, .voiceList span { font-size: 0.66rem; }
-.auditionButton { display: grid; width: 36px; min-height: 36px; padding: 7px; place-items: center; color: var(--signal); background: var(--mist); border: 1px solid #91a9b2; border-radius: 50%; }
+.voiceList article > .voiceActions { display: flex; gap: 7px; align-items: center; }
+.favoriteButton, .auditionButton { display: grid; width: 36px; min-height: 36px; padding: 7px; place-items: center; border: 1px solid #91a9b2; border-radius: 50%; }
+.favoriteButton { color: #78909b; background: white; }
+.favoriteButton:hover:not(:disabled) { color: var(--copper); border-color: var(--copper); }
+.favoriteButton[data-active="true"] { color: white; background: var(--copper); border-color: var(--copper); }
+.favoriteButton:focus-visible, .auditionButton:focus-visible { outline: 3px solid color-mix(in srgb, var(--signal) 35%, transparent); outline-offset: 2px; }
+.favoriteButton:disabled, .auditionButton:disabled { cursor: not-allowed; opacity: 0.55; }
+.favoriteButton svg, .auditionButton svg { width: 20px; height: 20px; fill: currentColor; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.favoriteButton:not([data-active="true"]) svg { fill: none; }
+.auditionButton { color: var(--signal); background: var(--mist); }
 .auditionButton:hover:not(:disabled) { color: white; background: var(--signal); }
-.auditionButton:focus-visible { outline: 3px solid color-mix(in srgb, var(--signal) 35%, transparent); outline-offset: 2px; }
-.auditionButton:disabled { color: #78909b; cursor: not-allowed; opacity: 0.55; }
-.auditionButton svg { width: 20px; height: 20px; fill: currentColor; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.auditionButton:disabled { color: #78909b; }
 .auditionButton[data-state="processing"] svg { fill: none; animation: audition-spin 800ms linear infinite; }
 .auditionButton[data-state="playing"] { color: white; background: var(--copper); border-color: var(--copper); }
 .auditionButton[data-state="playing"] svg { fill: none; }
@@ -80,4 +96,4 @@
 .cacheGrid span { color: var(--signal); font-size: 0.62rem; font-weight: 800; text-transform: uppercase; }
 .cacheGrid code, .cache > p { color: #557080; font-size: 0.68rem; line-height: 1.45; }
 @media (max-width: 960px) { .page { grid-template-columns: 1fr; } .connections, .globalLexicon, .page > header, .page > .error, .page > .status { grid-column: 1; } .diagnostics ol { grid-template-columns: repeat(4, 1fr); } }
-@media (max-width: 700px) { .connectionGrid, .profileForm, .lexiconAdd { grid-template-columns: 1fr; } .managed, .keyState, .actions { grid-column: 1; } .diagnostics ol { grid-template-columns: repeat(2, 1fr); } .lexiconAdd > span, .lexiconEntries article > span[aria-hidden="true"] { display: none; } .lexiconEntries article { grid-template-columns: 1fr; align-items: start; } .lexiconSaveState { max-width: none; } }
+@media (max-width: 700px) { .connectionGrid, .profileForm, .lexiconAdd { grid-template-columns: 1fr; } .managed, .keyState, .actions { grid-column: 1; } .diagnostics ol { grid-template-columns: repeat(2, 1fr); } .catalog .sectionHeading { align-items: flex-start; } .catalogMeta { max-width: 58%; } .voiceList article { gap: 8px; padding-inline: 9px; } .voiceList article > .voiceActions { gap: 5px; } .lexiconAdd > span, .lexiconEntries article > span[aria-hidden="true"] { display: none; } .lexiconEntries article { grid-template-columns: 1fr; align-items: start; } .lexiconSaveState { max-width: none; } }

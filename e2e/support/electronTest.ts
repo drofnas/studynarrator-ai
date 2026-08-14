@@ -94,6 +94,7 @@ export async function configureElectronConnection(page: Page, application: Study
   await page.getByRole("button", { name: "Load catalog" }).click();
   await expect(page.getByLabel("Model")).toHaveValue("speaches-ai/Kokoro-82M-v1.0-ONNX");
   await expect(page.getByLabel("Default Voice")).toHaveValue("af_heart");
+  await expect(page.getByRole("option", { name: "Heart (af_heart | en-US)" })).toBeAttached();
   await page.getByRole("button", { name: "Save and Test" }).click();
   await expect(projects).toBeVisible();
   await page.evaluate(async () => {

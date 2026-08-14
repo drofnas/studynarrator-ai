@@ -1,6 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
+import type { VoiceCatalog } from "@studynarrator/shared-types";
 import { useConnections } from "@/features/connections/ConnectionProvider.js";
+import { groupPresentedVoices, presentVoices, voiceOptionLabel } from "@/features/connections/voicePresentation.js";
 import styles from "./OnboardingPage.module.css";
 
 export function OnboardingPage() {
@@ -10,16 +12,30 @@ export function OnboardingPage() {
   const [modelId, setModelId] = useState("");
   const [voiceId, setVoiceId] = useState("");
   const [catalogAddress, setCatalogAddress] = useState("");
+  const [localCatalog, setLocalCatalog] = useState<VoiceCatalog | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const catalog = workspace.catalog.status === "ready" && catalogAddress === baseUrl ? workspace.catalog.catalog : null;
   const selectedModel = useMemo(() => catalog?.models.find((model) => model.modelId === modelId) ?? null, [catalog, modelId]);
+  const voiceGroups = useMemo(() => groupPresentedVoices(
+    presentVoices(selectedModel?.voices ?? [], localCatalog?.modelId === modelId ? localCatalog.entries : [])
+      .filter(({ availableOnServer }) => availableOnServer)
+  ), [localCatalog, modelId, selectedModel]);
+
+  useEffect(() => {
+    if (!modelId) { setLocalCatalog(null); return; }
+    let active = true;
+    void workspace.getCatalog(modelId).then((loaded) => { if (active) setLocalCatalog(loaded); })
+      .catch(() => { if (active) setLocalCatalog(null); });
+    return () => { active = false; };
+  }, [modelId, workspace]);
 
   const addressChanged = (value: string) => {
     setBaseUrl(value);
     setModelId("");
     setVoiceId("");
     setCatalogAddress("");
+    setLocalCatalog(null);
     setError("");
   };
 
@@ -79,7 +95,7 @@ export function OnboardingPage() {
       {catalog ? <button type="button" disabled={busy || !baseUrl} onClick={() => void loadCatalog()}>{workspace.catalog.status === "loading" ? "Loading catalog…" : "Refresh catalog"}</button> : null}
       {catalog ? <>
         <label>Model<select value={modelId} onChange={(event) => modelChanged(event.target.value)}>{catalog.models.map((model) => <option key={model.modelId} value={model.modelId}>{model.modelId}</option>)}</select></label>
-        <label>Default Voice<select value={voiceId} onChange={(event) => setVoiceId(event.target.value)}>{selectedModel?.voices.map((voice) => <option key={voice.voiceId} value={voice.voiceId}>{voice.name ? `${voice.name} — ${voice.voiceId}` : voice.voiceId}</option>)}</select></label>
+        <label>Default Voice<select value={voiceId} onChange={(event) => setVoiceId(event.target.value)}>{voiceGroups.map((group) => <optgroup key={group.key} label={group.label}>{group.voices.map((voice) => <option key={voice.voiceId} value={voice.voiceId}>{voiceOptionLabel(voice)}</option>)}</optgroup>)}</select></label>
       </> : null}
       {error || workspace.catalog.status === "failed" ? <p className={styles.error} role="alert">{error || workspace.catalog.error}</p> : null}
       <div className={styles.actions}><button type="submit" disabled={busy || (catalog !== null && (!modelId || !voiceId))}>{busy ? "Working…" : catalog ? "Save and Test" : "Load catalog"}</button><button className={styles.offline} type="button" disabled={busy} onClick={() => void continueOffline()}>Continue offline</button></div>

@@ -36,6 +36,8 @@ test.describe("Settings and connection diagnostics", () => {
     await page.getByRole("button", { name: "Refresh catalog" }).click();
     await expect(page.getByLabel("Model")).toHaveValue(modelId);
     await expect(page.getByLabel("Default Voice")).toHaveValue("af_heart");
+    await expect(page.getByRole("option", { name: "Heart (af_heart | en-US)" })).toBeAttached();
+    await expect(page.getByText("Default model")).toBeVisible();
     const testButton = page.getByRole("button", { name: "Save and Test" });
 
     await testButton.click();
@@ -86,12 +88,17 @@ test.describe("Settings and connection diagnostics", () => {
     await expect(page.getByLabel("Default Voice")).toHaveValue("af_heart");
   });
 
-  test("auditions a catalog voice without a player and persists pacing", async ({ page, studyNarrator }) => {
+  test("groups, favorites, and auditions catalog voices while persisting settings", async ({ page, studyNarrator }) => {
     await openRoute(page, studyNarrator, "/settings");
-    await page.getByLabel("Search voice catalog").fill("Heart");
-    await expect(page.getByRole("article").filter({ hasText: "Heart — American English — af_heart" })).toBeVisible();
-    await expect(page.getByLabel("Voice test script")).toHaveValue("Welcome to StudyNarrator. This short sample lets you hear how this voice handles clear narration.");
+    await page.getByLabel("Search voice catalog").fill("en-US");
+    await expect(page.getByLabel("en-US voices")).toBeVisible();
+    await expect(page.getByRole("article").filter({ hasText: "af_heart" })).toBeVisible();
+    await expect(page.getByLabel("Voice test script")).toHaveValue("This short sample lets you hear how this voice handles clear narration.");
     await expect(page.getByLabel("Strict override JSON")).toHaveCount(0);
+    await page.getByRole("button", { name: "Add Heart to favorites" }).click();
+    await expect(page.getByLabel("Favorites voices")).toContainText("Heart");
+    await expect(page.getByRole("button", { name: "Remove Heart from favorites" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByLabel("Default Voice").locator('optgroup[label="Favorites"]')).toBeAttached();
     const script = "A precise browser voice audition.";
     await page.getByLabel("Voice test script").fill(script);
     studyNarrator.fakeSpeaches.reset();
@@ -112,6 +119,8 @@ test.describe("Settings and connection diagnostics", () => {
     await expect(page.getByText("Pacing defaults saved. Existing projects were not changed.")).toBeVisible();
     await page.reload();
     await expect(page.getByLabel(/Default pause_medium duration/u)).toHaveValue("1250 ms");
+    await expect(page.getByLabel("Favorites voices")).toContainText("Heart");
+    await expect(page.getByRole("button", { name: "Remove Heart from favorites" })).toHaveAttribute("aria-pressed", "true");
   });
 
   test("manages the fixed-scope global lexicon with validation and persistence", async ({ page, studyNarrator }) => {

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConnectionTestOverall, GlobalLexiconReplaceInput, PersistenceClient, ScratchpadClient, SpeachesConnection, SpeachesConnectionClient } from "@studynarrator/shared-types";
@@ -217,23 +217,62 @@ describe("System Settings", () => {
     expect(screen.queryByText(/Environment Speaches|Active profile|API key/u)).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByLabelText("Model")).toHaveValue("model-b"));
     expect(screen.getByLabelText("Default Voice")).toHaveValue("voice-b2");
-    expect(screen.getByRole("option", { name: "Second — voice-b2" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "First — voice-b1" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Voice test script")).toHaveValue("Welcome to StudyNarrator. This short sample lets you hear how this voice handles clear narration.");
+    expect(await screen.findByRole("option", { name: "Second (voice-b2 | en-US)" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "First (voice-b1 | en-US)" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Voice test script")).toHaveValue("This short sample lets you hear how this voice handles clear narration.");
+    expect(screen.getByText("Default model")).toBeInTheDocument();
+    expect(screen.getByLabelText("en-US voices")).toBeInTheDocument();
     expect(screen.queryByLabelText("Strict override JSON")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Replace model overrides" })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Voice test script"), { target: { value: "Hear this exact sample." } });
-    await userEvent.click(await screen.findByRole("button", { name: "Test First voice" }));
-    expect(screen.getByRole("button", { name: "Preparing First voice" })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Test Disabled locally" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Test First" }));
+    expect(screen.getByRole("button", { name: "Preparing First" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Test Second" }));
     expect(firstSignal?.aborted).toBe(true);
-    expect(await screen.findByRole("button", { name: "Playing Disabled locally" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Playing Second" })).toBeInTheDocument();
     expect(preview).toHaveBeenLastCalledWith({ modelId: "model-b", voiceId: "voice-b2", speed: 1, text: "Hear this exact sample.", applyGlobalLexicon: false }, expect.any(AbortSignal));
     expect(document.querySelector("audio")).not.toBeInTheDocument();
     act(() => audioSource.onended?.());
-    expect(screen.getByRole("button", { name: "Test Disabled locally" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Test Second" })).toBeInTheDocument();
     expect(audioContext.close).toHaveBeenCalled();
+  });
+
+  it("searches locales and persists favorites with rollback on failure", async () => {
+    let stored = {
+      schemaVersion: 1 as const,
+      modelId: "model-b",
+      entries: [
+        { voiceId: "voice-b1", label: "Catalog First", enabled: true, favorite: false, language: "English", locale: "en-US", accent: null, category: null, style: null, sampleText: null },
+        { voiceId: "voice-b2", label: "Catalog Second", enabled: false, favorite: true, language: "English", locale: "en-US", accent: null, category: null, style: null, sampleText: null },
+        { voiceId: "voice-local", label: "Local Only — British English — voice-local", enabled: true, favorite: false, language: "British English", locale: "en-GB", accent: null, category: null, style: null, sampleText: null }
+      ]
+    };
+    const replace = vi.fn(async (input: typeof stored) => { stored = structuredClone(input); return structuredClone(stored); });
+    const localVoiceCatalog = { get: vi.fn(async () => structuredClone(stored)), replace };
+    const client = { settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() }, globalLexicon: { list: vi.fn(async () => []), replace: vi.fn(async (entries: GlobalLexiconReplaceInput) => entries) } } as unknown as PersistenceClient;
+    render(<ConnectionProvider connectionClient={connectionClient()} voiceCatalog={localVoiceCatalog}><SettingsPage client={client} cacheClient={cacheClient} scratchpadClient={scratchpadClient} /></ConnectionProvider>);
+
+    const favorites = await screen.findByLabelText("Favorites voices");
+    expect(within(favorites).getByText("Second")).toBeInTheDocument();
+    expect(screen.getByLabelText("en-GB voices")).toHaveTextContent("Local Only");
+    expect(screen.getByLabelText("en-US voices")).toHaveTextContent("First");
+    expect(screen.getByRole("button", { name: "Remove Second from favorites" })).toBeEnabled();
+
+    fireEvent.change(screen.getByLabelText("Search voice catalog"), { target: { value: "en-US" } });
+    expect(screen.queryByLabelText("en-GB voices")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Favorites voices")).toHaveTextContent("Second");
+
+    await userEvent.click(screen.getByRole("button", { name: "Add First to favorites" }));
+    await waitFor(() => expect(replace).toHaveBeenCalledOnce());
+    expect(replace.mock.calls[0]?.[0].entries.find(({ voiceId }) => voiceId === "voice-b1")?.favorite).toBe(true);
+    expect(within(screen.getByLabelText("Favorites voices")).getByText("First")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove First from favorites" })).toHaveAttribute("aria-pressed", "true");
+
+    replace.mockRejectedValueOnce(new Error("Catalog storage unavailable"));
+    await userEvent.click(screen.getByRole("button", { name: "Remove First from favorites" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Favorite not saved: Catalog storage unavailable");
+    expect(screen.getByRole("button", { name: "Remove First from favorites" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("returns an audition button to normal and reports decoding failures", async () => {
@@ -241,9 +280,9 @@ describe("System Settings", () => {
     const localVoiceCatalog = { get: vi.fn(async (modelId: string) => ({ schemaVersion: 1 as const, modelId, entries: [{ voiceId: "voice-b2", label: "Second voice", enabled: true, favorite: false, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }] })), replace: vi.fn() };
     const client = { settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() }, globalLexicon: { list: vi.fn(async () => []), replace: vi.fn(async (entries: GlobalLexiconReplaceInput) => entries) } } as unknown as PersistenceClient;
     render(<ConnectionProvider connectionClient={connectionClient()} voiceCatalog={localVoiceCatalog}><SettingsPage client={client} cacheClient={cacheClient} scratchpadClient={scratchpadClient} /></ConnectionProvider>);
-    await userEvent.click(await screen.findByRole("button", { name: "Test Second voice" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Test Second" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Voice test failed: Unsupported WAV data");
-    expect(screen.getByRole("button", { name: "Test Second voice" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Test Second" })).toBeInTheDocument();
   });
 
   it("disables invalid auditions and aborts pending synthesis on unmount", async () => {
@@ -255,7 +294,7 @@ describe("System Settings", () => {
     const localVoiceCatalog = { get: vi.fn(async (modelId: string) => ({ schemaVersion: 1 as const, modelId, entries: [{ voiceId: "voice-b2", label: "Second voice", enabled: true, favorite: false, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }] })), replace: vi.fn() };
     const client = { settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() }, globalLexicon: { list: vi.fn(async () => []), replace: vi.fn(async (entries: GlobalLexiconReplaceInput) => entries) } } as unknown as PersistenceClient;
     const view = render(<ConnectionProvider connectionClient={connectionClient()} voiceCatalog={localVoiceCatalog}><SettingsPage client={client} cacheClient={cacheClient} scratchpadClient={{ preview }} /></ConnectionProvider>);
-    const button = await screen.findByRole("button", { name: "Test Second voice" });
+    const button = await screen.findByRole("button", { name: "Test Second" });
     fireEvent.change(screen.getByLabelText("Voice test script"), { target: { value: "" } });
     expect(button).toBeDisabled();
     fireEvent.change(screen.getByLabelText("Voice test script"), { target: { value: "Ready sample" } });

@@ -232,7 +232,12 @@ test.describe("Electron acceptance", () => {
     await expect(page.getByLabel("Address")).toHaveValue(studyNarrator.fakeSpeaches.baseUrl);
     await expect(page.getByLabel("Model")).toHaveValue("speaches-ai/Kokoro-82M-v1.0-ONNX");
     await expect(page.getByLabel("Default Voice")).toHaveValue("af_heart");
+    await expect(page.getByRole("option", { name: "Heart (af_heart | en-US)" })).toBeAttached();
     await expect(page.getByText(/New saved profile|Active profile|API key|Environment Speaches/u)).toHaveCount(0);
+    await page.getByLabel("Search voice catalog").fill("en-US");
+    await expect(page.getByLabel("en-US voices")).toBeVisible();
+    await page.getByRole("button", { name: "Add Heart to favorites" }).click();
+    await expect(page.getByLabel("Favorites voices")).toContainText("Heart");
     const script = "Electron voice audition without a player.";
     await page.getByLabel("Voice test script").fill(script);
     studyNarrator.fakeSpeaches.reset();
@@ -252,6 +257,8 @@ test.describe("Electron acceptance", () => {
     await page.getByRole("link", { name: "Settings", exact: true }).click();
     await expect(page.getByLabel("Address")).toHaveValue(studyNarrator.fakeSpeaches.baseUrl);
     await expect(page.getByLabel("Model")).toHaveValue("speaches-ai/Kokoro-82M-v1.0-ONNX");
+    await expect(page.getByLabel("Favorites voices")).toContainText("Heart");
+    await expect(page.getByRole("button", { name: "Remove Heart from favorites" })).toHaveAttribute("aria-pressed", "true");
   });
 
   test("opens only approved Speaches links outside the renderer", async ({ electronStudyNarrator }) => {

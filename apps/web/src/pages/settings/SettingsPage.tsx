@@ -10,6 +10,7 @@ import {
   type VoiceCatalog
 } from "@studynarrator/shared-types";
 import { useConnections } from "@/features/connections/ConnectionProvider.js";
+import { filterPresentedVoices, groupPresentedVoices, presentVoices, voiceOptionLabel, type PresentedVoice } from "@/features/connections/voicePresentation.js";
 import { authoringLexicon } from "@/features/projects/projectAuthoring.js";
 import styles from "./SettingsPage.module.css";
 
@@ -28,7 +29,7 @@ type SimplifiedGlobalEntry = {
 };
 
 const EMPTY_GLOBAL_LEXICON: SimplifiedGlobalEntry = { scope: "global", entryType: "exactTerm", displayText: "", spokenText: "", caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: "" };
-const VOICE_TEST_SCRIPT = "Welcome to StudyNarrator. This short sample lets you hear how this voice handles clear narration.";
+const VOICE_TEST_SCRIPT = "This short sample lets you hear how this voice handles clear narration.";
 
 type AuditionState = { voiceId: string; phase: "processing" | "playing" } | null;
 type LexiconRowState = "saving" | "saved" | "error";
@@ -84,6 +85,8 @@ export function SettingsPage({ client, cacheClient, scratchpadClient }: { client
   const [voiceTestScript, setVoiceTestScript] = useState(VOICE_TEST_SCRIPT);
   const [audition, setAudition] = useState<AuditionState>(null);
   const [auditionError, setAuditionError] = useState("");
+  const [favoriteSaving, setFavoriteSaving] = useState("");
+  const [favoriteError, setFavoriteError] = useState("");
   const [cacheStatus, setCacheStatus] = useState<SpeechCacheStatus | null>(null);
   const [cacheBusy, setCacheBusy] = useState(false);
   const [globalLexicon, setGlobalLexicon] = useState<SimplifiedGlobalEntry[]>([]);
@@ -361,10 +364,13 @@ export function SettingsPage({ client, cacheClient, scratchpadClient }: { client
     await persistGlobalLexicon(globalLexiconRef.current.filter((entry) => entry.id !== id), [id], "Global pronunciation deleted.");
   };
 
-  const filteredVoices = useMemo(() => catalog?.entries.filter((entry) => !catalogSearch || `${entry.label} ${entry.voiceId} ${entry.language ?? ""}`.toLocaleLowerCase().includes(catalogSearch.toLocaleLowerCase())) ?? [], [catalog, catalogSearch]);
-  const filteredLexicon = useMemo(() => globalLexicon.filter((entry) => !lexiconSearch || `${entry.displayText} ${entry.spokenText}`.toLocaleLowerCase().includes(lexiconSearch.toLocaleLowerCase())), [globalLexicon, lexiconSearch]);
   const speechModels = workspace.catalog.status === "ready" ? workspace.catalog.catalog.models : [];
   const selectedSpeechModel = speechModels.find(({ modelId }) => modelId === draft.defaultModelId);
+  const presentedVoices = useMemo(() => presentVoices(selectedSpeechModel?.voices ?? [], catalog?.entries ?? []), [catalog, selectedSpeechModel]);
+  const filteredVoices = useMemo(() => filterPresentedVoices(presentedVoices, catalogSearch), [catalogSearch, presentedVoices]);
+  const voiceGroups = useMemo(() => groupPresentedVoices(filteredVoices.slice(0, 100)), [filteredVoices]);
+  const defaultVoiceGroups = useMemo(() => groupPresentedVoices(presentedVoices.filter(({ availableOnServer }) => availableOnServer)), [presentedVoices]);
+  const filteredLexicon = useMemo(() => globalLexicon.filter((entry) => !lexiconSearch || `${entry.displayText} ${entry.spokenText}`.toLocaleLowerCase().includes(lexiconSearch.toLocaleLowerCase())), [globalLexicon, lexiconSearch]);
   const connectionSummary = workspace.connection?.lastTestSummary;
   const showConnectionDiagnostics = Boolean(
     connectionSummary
@@ -379,6 +385,30 @@ export function SettingsPage({ client, cacheClient, scratchpadClient }: { client
     && voiceTestScript.trim()
   );
 
+  const toggleVoiceFavorite = async (voice: PresentedVoice) => {
+    if (!catalog || favoriteSaving) return;
+    const modelId = catalog.modelId;
+    const previous = catalog;
+    const nextFavorite = !voice.favorite;
+    const includesVoice = catalog.entries.some(({ voiceId }) => voiceId === voice.voiceId);
+    const optimistic: VoiceCatalog = {
+      ...catalog,
+      entries: includesVoice
+        ? catalog.entries.map((entry) => entry.voiceId === voice.voiceId ? { ...entry, favorite: nextFavorite } : entry)
+        : [...catalog.entries, { ...voice.catalogEntry, favorite: nextFavorite }]
+    };
+    setFavoriteSaving(voice.voiceId);
+    setFavoriteError("");
+    setCatalog(optimistic);
+    try {
+      const saved = await workspace.replaceCatalog(optimistic);
+      setCatalog((current) => current?.modelId === modelId ? saved : current);
+    } catch (reason) {
+      setCatalog((current) => current?.modelId === modelId ? previous : current);
+      setFavoriteError(reason instanceof Error ? reason.message : "This favorite could not be saved. Try the heart again.");
+    } finally { setFavoriteSaving(""); }
+  };
+
   return (
     <div className={styles.page}>
       <header><p>Installation + connection</p><h2>Settings</h2><span>Manage the Speaches server, local authoring defaults, staged diagnostics, and the voice catalog.</span></header>
@@ -390,7 +420,7 @@ export function SettingsPage({ client, cacheClient, scratchpadClient }: { client
         <div className={styles.profileForm}>
           <label>Address<input type="url" value={draft.baseUrl} onChange={(event) => setDraft({ ...draft, baseUrl: event.target.value, defaultModelId: "", defaultVoiceId: "" })} placeholder="http://127.0.0.1:8000" /></label>
           <label>Model<select value={draft.defaultModelId} disabled={speechModels.length === 0} onChange={(event) => { const modelId = event.target.value; setDraft({ ...draft, defaultModelId: modelId, defaultVoiceId: speechModels.find((model) => model.modelId === modelId)?.voices[0]?.voiceId ?? "" }); }}><option value="">Load catalog to choose</option>{speechModels.map((model) => <option key={model.modelId} value={model.modelId}>{model.modelId}</option>)}</select></label>
-          <label>Default Voice<select value={draft.defaultVoiceId} disabled={!selectedSpeechModel} onChange={(event) => setDraft({ ...draft, defaultVoiceId: event.target.value })}><option value="">Choose a voice</option>{selectedSpeechModel?.voices.map((voice) => <option key={voice.voiceId} value={voice.voiceId}>{voice.name ? `${voice.name} — ${voice.voiceId}` : voice.voiceId}</option>)}</select></label>
+          <label>Default Voice<select value={draft.defaultVoiceId} disabled={!selectedSpeechModel} onChange={(event) => setDraft({ ...draft, defaultVoiceId: event.target.value })}><option value="">Choose a voice</option>{defaultVoiceGroups.map((group) => <optgroup key={group.key} label={group.label}>{group.voices.map((voice) => <option key={voice.voiceId} value={voice.voiceId}>{voiceOptionLabel(voice)}</option>)}</optgroup>)}</select></label>
           <div className={styles.inline}><label>Timeout (seconds)<input type="number" min="1" max="600" value={draft.timeoutSeconds} onChange={(event) => setDraft({ ...draft, timeoutSeconds: Number(event.target.value) })} /></label><label>Retries<input type="number" min="0" max="5" value={draft.retryCount} onChange={(event) => setDraft({ ...draft, retryCount: Number(event.target.value) })} /></label></div>
           <div className={styles.actions}><button type="button" disabled={workspace.testing || !draft.baseUrl || !draft.defaultModelId || !draft.defaultVoiceId} onClick={() => void saveConnection()}>{workspace.testing ? "Testing…" : "Save and Test"}</button></div>
         </div>
@@ -398,20 +428,29 @@ export function SettingsPage({ client, cacheClient, scratchpadClient }: { client
       </section>
 
       <section className={styles.catalog}>
-        <div className={styles.sectionHeading}><div><p>Versioned local catalog</p><h3>Voice browser</h3></div><span>{filteredVoices.length} matching voices</span></div>
+        <div className={styles.sectionHeading}><div><p>Versioned local catalog</p><h3>Voice browser</h3></div><div className={styles.catalogMeta}>{catalog && catalog.modelId === workspace.connection?.defaultModelId ? <><span className={styles.defaultModelBadge}>Default model</span><code>{catalog.modelId}</code></> : null}<span>{filteredVoices.length} matching voices</span></div></div>
         <label className={styles.voiceTestScript}>Voice test script<textarea rows={3} maxLength={1200} value={voiceTestScript} onChange={(event) => { setVoiceTestScript(event.target.value); setAuditionError(""); }} /></label>
         {auditionError ? <p className={styles.auditionError} role="alert">Voice test failed: {auditionError}</p> : null}
-        <input aria-label="Search voice catalog" placeholder="Search label, ID, or language" value={catalogSearch} onChange={(event) => setCatalogSearch(event.target.value)} />
-        <div className={styles.voiceList}>{filteredVoices.slice(0, 100).map((entry) => {
-          const phase = audition?.voiceId === entry.voiceId ? audition.phase : "normal";
-          const action = phase === "processing" ? "Preparing" : phase === "playing" ? "Playing" : "Test";
-          return <article data-enabled={entry.enabled} key={entry.voiceId}>
-            <div><strong>{entry.label}</strong><code>{entry.voiceId}</code><span>{entry.enabled ? "enabled" : "disabled"} · {entry.locale ?? entry.language ?? "unspecified"}</span></div>
-            <button type="button" className={styles.auditionButton} data-state={phase} disabled={!auditionReady} aria-label={`${action} ${entry.label}`} onClick={() => void auditionVoice(entry.voiceId)}>
-              {phase === "normal" ? <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8 5.75v12.5L18 12 8 5.75Z" /></svg> : phase === "processing" ? <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 1-8.3 5.5" /></svg> : <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 9v6M12 6v12M17 9v6" /></svg>}
-            </button>
-          </article>;
-        })}</div>
+        {favoriteError ? <p className={styles.favoriteError} role="alert">Favorite not saved: {favoriteError}</p> : null}
+        <input aria-label="Search voice catalog" placeholder="Search name, ID, language, or locale" value={catalogSearch} onChange={(event) => setCatalogSearch(event.target.value)} />
+        <div className={styles.voiceList}>{voiceGroups.map((group) => <section className={styles.voiceGroup} data-group={group.key === "favorites" ? "favorites" : "locale"} aria-label={`${group.label} voices`} key={group.key}>
+          <div className={styles.voiceGroupRibbon}><strong>{group.label}</strong><span>{group.voices.length}</span></div>
+          <div className={styles.voiceGroupEntries}>{group.voices.map((entry) => {
+            const phase = audition?.voiceId === entry.voiceId ? audition.phase : "normal";
+            const action = phase === "processing" ? "Preparing" : phase === "playing" ? "Playing" : "Test";
+            return <article data-enabled={entry.enabled} key={entry.voiceId}>
+              <div><strong>{entry.friendlyName}</strong><code>{entry.voiceId}</code><span>{entry.enabled ? "enabled" : "disabled"} · {entry.localeLabel}</span></div>
+              <div className={styles.voiceActions}>
+                <button type="button" className={styles.favoriteButton} data-active={entry.favorite} disabled={Boolean(favoriteSaving)} aria-pressed={entry.favorite} aria-label={`${entry.favorite ? "Remove" : "Add"} ${entry.friendlyName} ${entry.favorite ? "from" : "to"} favorites`} onClick={() => void toggleVoiceFavorite(entry)}>
+                  <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 20.5 4.4 13A5.1 5.1 0 0 1 11.6 5.8L12 6.2l.4-.4A5.1 5.1 0 0 1 19.6 13L12 20.5Z" /></svg>
+                </button>
+                <button type="button" className={styles.auditionButton} data-state={phase} disabled={!auditionReady} aria-label={`${action} ${entry.friendlyName}`} onClick={() => void auditionVoice(entry.voiceId)}>
+                  {phase === "normal" ? <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8 5.75v12.5L18 12 8 5.75Z" /></svg> : phase === "processing" ? <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 1-8.3 5.5" /></svg> : <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 9v6M12 6v12M17 9v6" /></svg>}
+                </button>
+              </div>
+            </article>;
+          })}</div>
+        </section>)}</div>
         <p className={styles.attribution}>Bundled Kokoro identifiers: hexgrad/Kokoro-82M VOICES.md · Apache-2.0. Labels omit subjective quality claims.</p>
       </section>
 

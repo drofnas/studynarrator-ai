@@ -24,7 +24,12 @@ const persistence = {
   globalLexicon: { list: vi.fn(async () => []), replace: vi.fn() },
   preferences: { getIgnoredDiagnostics: vi.fn(async () => []), replaceIgnoredDiagnostics: vi.fn() }
 } as unknown as PersistenceClient;
-const voiceCatalog = { get: vi.fn(async (modelId: string) => ({ schemaVersion: 1 as const, modelId, entries: [] })), replace: vi.fn() };
+const voiceCatalog = { get: vi.fn(async (modelId: string) => ({ schemaVersion: 1 as const, modelId, entries: modelId === "model-z" ? [
+  { voiceId: "voice-z", label: "Catalog First", enabled: true, favorite: false, language: "English", locale: "en-US", accent: null, category: null, style: null, sampleText: null },
+  { voiceId: "voice-y", label: "Catalog Favorite", enabled: true, favorite: true, language: "English", locale: "en-GB", accent: null, category: null, style: null, sampleText: null }
+] : [
+  { voiceId: "voice-a", label: "Catalog Other", enabled: true, favorite: false, language: "French", locale: "fr-FR", accent: null, category: null, style: null, sampleText: null }
+] })), replace: vi.fn() };
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
@@ -78,10 +83,14 @@ describe("connection onboarding", () => {
     await userEvent.click(screen.getByRole("button", { name: "Load catalog" }));
     expect(await screen.findByLabelText("Model")).toHaveValue("model-z");
     expect(screen.getByLabelText("Default Voice")).toHaveValue("voice-z");
+    expect(await screen.findByRole("option", { name: "First Voice (voice-z | en-US)" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Catalog Favorite (voice-y | en-GB)" })).toBeInTheDocument();
+    expect([...screen.getByLabelText("Default Voice").querySelectorAll("optgroup")].map(({ label }) => label)).toEqual(["Favorites", "en-US"]);
     expect(connection.update).not.toHaveBeenCalled();
 
     await userEvent.selectOptions(screen.getByLabelText("Model"), "model-a");
     expect(screen.getByLabelText("Default Voice")).toHaveValue("voice-a");
+    expect(await screen.findByRole("option", { name: "Other Voice (voice-a | fr-FR)" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Save and Test" }));
     await waitFor(() => expect(connection.update).toHaveBeenCalledWith(expect.objectContaining({
       baseUrl: "http://127.0.0.1:8000", defaultModelId: "model-a", defaultVoiceId: "voice-a"
