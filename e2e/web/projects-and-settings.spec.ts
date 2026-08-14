@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { Page } from "@playwright/test";
 import { FAKE_SPEACHES_SECONDARY_MODEL_ID, FAKE_SPEACHES_SECONDARY_VOICE_ID, type FakeSpeachesScenario } from "@studynarrator/fake-speaches";
 import {
@@ -85,20 +86,26 @@ test.describe("Settings and connection diagnostics", () => {
     await expect(page.getByLabel("Default Voice")).toHaveValue("af_heart");
   });
 
-  test("searches and strictly replaces catalog overrides and persists pacing", async ({ page, studyNarrator }) => {
+  test("auditions a catalog voice without a player and persists pacing", async ({ page, studyNarrator }) => {
     await openRoute(page, studyNarrator, "/settings");
     await page.getByLabel("Search voice catalog").fill("Heart");
     await expect(page.getByRole("article").filter({ hasText: "Heart — American English — af_heart" })).toBeVisible();
-
-    await page.getByLabel("Strict override JSON").fill(JSON.stringify({
-      schemaVersion: 1,
-      modelId,
-      entries: [{ voiceId: "af_heart", label: "Heart renamed", enabled: false }, { voiceId: "manual_voice", label: "Manual catalog voice", enabled: true }]
-    }));
-    await page.getByRole("button", { name: "Replace model overrides" }).click();
-    await expect(page.getByText(`Catalog overrides replaced for ${modelId}.`)).toBeVisible();
-    await page.getByLabel("Search voice catalog").fill("Manual catalog");
-    await expect(page.getByRole("article").filter({ hasText: "Manual catalog voice" })).toBeVisible();
+    await expect(page.getByLabel("Voice test script")).toHaveValue("Welcome to StudyNarrator. This short sample lets you hear how this voice handles clear narration.");
+    await expect(page.getByLabel("Strict override JSON")).toHaveCount(0);
+    const script = "A precise browser voice audition.";
+    await page.getByLabel("Voice test script").fill(script);
+    studyNarrator.fakeSpeaches.reset();
+    await page.getByRole("button", { name: /^Test Heart/u }).click();
+    await expect.poll(() => studyNarrator.fakeSpeaches.getState().requests.filter(({ path, status }) => path === "/v1/audio/speech" && status === 200).length).toBe(1);
+    expect(studyNarrator.fakeSpeaches.getState().requests.find(({ path }) => path === "/v1/audio/speech")).toMatchObject({
+      model: modelId,
+      voice: "af_heart",
+      speed: 1,
+      inputLength: script.length,
+      inputHash: createHash("sha256").update(script).digest("hex")
+    });
+    await expect(page.locator("audio")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Test Heart/u })).toBeVisible({ timeout: 5_000 });
 
     await page.getByLabel(/Default pause_medium duration/u).fill("1.25 s");
     await page.getByRole("button", { name: "Save pacing defaults" }).click();
@@ -109,38 +116,49 @@ test.describe("Settings and connection diagnostics", () => {
 
   test("manages the fixed-scope global lexicon with validation and persistence", async ({ page, studyNarrator }) => {
     await openRoute(page, studyNarrator, "/settings#global-lexicon");
-    await expect(page.getByRole("heading", { name: "Global lexicon" })).toBeVisible();
-    await page.getByRole("button", { name: "Add entry" }).click();
-    await expect(page.getByRole("alert")).toContainText("Display text and spoken text are required.");
+    const lexicon = page.getByRole("region", { name: "Global lexicon" });
+    await expect(lexicon).toBeVisible();
+    await expect(lexicon.getByLabel("Script Text").nth(1)).toHaveValue("API");
+    await expect(lexicon.getByLabel("Spoken Text").nth(1)).toHaveValue("A P I");
+    await expect(lexicon.getByText(/complete words regardless of capitalization/u)).toBeVisible();
+    await expect(lexicon.getByText(/Case sensitive|Whole word|Sense ID|Notes/u)).toHaveCount(0);
+    await lexicon.getByRole("button", { name: "Add" }).click();
+    await expect(page.getByRole("alert")).toContainText("Script Text and Spoken Text are required.");
 
-    await page.getByLabel("Display text").fill("SQL");
-    await page.getByLabel("Spoken text").fill("sequel");
-    await page.getByRole("button", { name: "Add entry" }).click();
+    await lexicon.getByLabel("Script Text").first().fill("api");
+    await lexicon.getByLabel("Spoken Text").first().fill("duplicate");
+    await lexicon.getByRole("button", { name: "Add" }).click();
+    await expect(page.getByRole("alert")).toContainText("unique regardless of capitalization");
+    await lexicon.getByLabel("Script Text").first().fill("CLI");
+    await lexicon.getByLabel("Spoken Text").first().fill("C L I");
+    await lexicon.getByRole("button", { name: "Add" }).click();
     await expect(page.getByText("Global pronunciation added.")).toBeVisible();
     await page.reload();
-    await expect(page.getByRole("article").filter({ hasText: "SQL" })).toContainText("→ sequel");
+    await expect(lexicon.getByRole("article", { name: "Global lexicon entry CLI" })).toBeVisible();
 
-    await page.getByLabel("Search global lexicon").fill("not present");
-    await expect(page.getByText("No matching global lexicon entries.")).toBeVisible();
-    await page.getByLabel("Search global lexicon").fill("");
-    const entry = page.getByRole("article").filter({ hasText: "SQL" });
-    await entry.getByRole("button", { name: "Disable" }).click();
-    await expect(entry).toContainText("disabled");
-    await entry.getByRole("button", { name: "Edit" }).click();
-    await page.getByLabel("Spoken text").fill("ess cue ell");
-    await page.getByRole("button", { name: "Save entry" }).click();
-    await expect(entry).toContainText("→ ess cue ell");
+    const entry = lexicon.getByRole("article", { name: "Global lexicon entry CLI" });
+    await entry.getByLabel("Spoken Text").fill("command line interface");
+    await expect(entry.getByText("Saved")).toBeVisible();
+    await entry.getByRole("checkbox", { name: "Enabled" }).uncheck();
+    await expect(entry.getByText("Saved")).toBeVisible();
+    await page.reload();
+    await expect(entry.getByLabel("Spoken Text")).toHaveValue("command line interface");
+    await expect(entry.getByRole("checkbox", { name: "Enabled" })).not.toBeChecked();
+    await lexicon.getByLabel("Search global lexicon").fill("not present");
+    await expect(lexicon.getByText("No matching global lexicon entries.")).toBeVisible();
+    await lexicon.getByLabel("Search global lexicon").fill("");
     await entry.getByRole("button", { name: "Delete" }).click();
-    await expect(page.getByText("No matching global lexicon entries.")).toBeVisible();
+    await expect(entry).toHaveCount(0);
 
     await page.route("**/api/lexicon/global", async (route) => {
       if (route.request().method() === "PUT") await route.abort();
       else await route.continue();
     });
-    await page.getByLabel("Display text").fill("API");
-    await page.getByLabel("Spoken text").fill("A P I");
-    await page.getByRole("button", { name: "Add entry" }).click();
+    await lexicon.getByLabel("Script Text").first().fill("GraphQL");
+    await lexicon.getByLabel("Spoken Text").first().fill("graph Q L");
+    await lexicon.getByRole("button", { name: "Add" }).click();
     await expect(page.getByRole("alert")).toBeVisible();
+    await expect(lexicon.getByLabel("Script Text").first()).toHaveValue("GraphQL");
   });
 });
 

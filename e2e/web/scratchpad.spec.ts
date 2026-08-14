@@ -24,7 +24,7 @@ test.describe("Quick Scratchpad", () => {
         entryType: "exactTerm",
         displayText: "SQL",
         spokenText: "sequel",
-        caseSensitive: true,
+        caseSensitive: false,
         wholeWord: true,
         priority: 0,
         enabled: true,

@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { parsePauseDuration, type LexiconEntryAuthoring } from "@studynarrator/core";
 import {
-  VoiceCatalogSchema,
   type SpeachesConnection,
+  type ScratchpadClient,
   type PersistenceClient,
   type SpeechCacheClient,
   type SpeechCacheStatus,
@@ -14,7 +14,46 @@ import { authoringLexicon } from "@/features/projects/projectAuthoring.js";
 import styles from "./SettingsPage.module.css";
 
 const EMPTY_CONNECTION = { baseUrl: "", defaultModelId: "", defaultVoiceId: "", timeoutSeconds: 120, retryCount: 2 };
-const EMPTY_GLOBAL_LEXICON: LexiconEntryAuthoring = { scope: "global", entryType: "exactTerm", displayText: "", spokenText: "", caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: "" };
+type SimplifiedGlobalEntry = {
+  id?: string;
+  scope: "global";
+  entryType: "exactTerm";
+  displayText: string;
+  spokenText: string;
+  caseSensitive: false;
+  wholeWord: true;
+  priority: 0;
+  enabled: boolean;
+  notes: "";
+};
+
+const EMPTY_GLOBAL_LEXICON: SimplifiedGlobalEntry = { scope: "global", entryType: "exactTerm", displayText: "", spokenText: "", caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: "" };
+const VOICE_TEST_SCRIPT = "Welcome to StudyNarrator. This short sample lets you hear how this voice handles clear narration.";
+
+type AuditionState = { voiceId: string; phase: "processing" | "playing" } | null;
+type LexiconRowState = "saving" | "saved" | "error";
+
+function fixedGlobalEntry(entry: LexiconEntryAuthoring): SimplifiedGlobalEntry {
+  return {
+    ...(entry.id ? { id: entry.id } : {}),
+    scope: "global",
+    entryType: "exactTerm",
+    displayText: entry.displayText,
+    spokenText: entry.spokenText,
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: entry.enabled ?? true,
+    notes: ""
+  };
+}
+
+function decodedAudio(base64: string): ArrayBuffer {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes.buffer;
+}
 
 function connectionDraft(connection: SpeachesConnection | null) {
   return connection ? {
@@ -32,7 +71,7 @@ function formatBytes(value: number): string {
   return `${(value / (1024 * 1024)).toFixed(1)} MiB`;
 }
 
-export function SettingsPage({ client, cacheClient }: { client: PersistenceClient; cacheClient: SpeechCacheClient }) {
+export function SettingsPage({ client, cacheClient, scratchpadClient }: { client: PersistenceClient; cacheClient: SpeechCacheClient; scratchpadClient: ScratchpadClient }) {
   const workspace = useConnections();
   const [pacing, setPacing] = useState<SystemPacingDefaults>({ enabled: true, durationMs: 750 });
   const [duration, setDuration] = useState("750 ms");
@@ -42,14 +81,25 @@ export function SettingsPage({ client, cacheClient }: { client: PersistenceClien
   const [connectionTestAttempted, setConnectionTestAttempted] = useState(false);
   const [catalog, setCatalog] = useState<VoiceCatalog | null>(null);
   const [catalogSearch, setCatalogSearch] = useState("");
-  const [catalogJson, setCatalogJson] = useState("");
+  const [voiceTestScript, setVoiceTestScript] = useState(VOICE_TEST_SCRIPT);
+  const [audition, setAudition] = useState<AuditionState>(null);
+  const [auditionError, setAuditionError] = useState("");
   const [cacheStatus, setCacheStatus] = useState<SpeechCacheStatus | null>(null);
   const [cacheBusy, setCacheBusy] = useState(false);
-  const [globalLexicon, setGlobalLexicon] = useState<LexiconEntryAuthoring[]>([]);
-  const [lexiconDraft, setLexiconDraft] = useState<LexiconEntryAuthoring>(EMPTY_GLOBAL_LEXICON);
-  const [editingLexiconId, setEditingLexiconId] = useState<string>();
+  const [globalLexicon, setGlobalLexicon] = useState<SimplifiedGlobalEntry[]>([]);
+  const [lexiconDraft, setLexiconDraft] = useState<SimplifiedGlobalEntry>(EMPTY_GLOBAL_LEXICON);
   const [lexiconSearch, setLexiconSearch] = useState("");
-  const [lexiconType, setLexiconType] = useState<"all" | LexiconEntryAuthoring["entryType"]>("all");
+  const [lexiconRowState, setLexiconRowState] = useState<Record<string, LexiconRowState>>({});
+  const [lexiconAdding, setLexiconAdding] = useState(false);
+  const globalLexiconRef = useRef(globalLexicon);
+  const lexiconRevisionRef = useRef(0);
+  const lexiconQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const lexiconTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const pendingLexiconRowsRef = useRef(new Set<string>());
+  const auditionAbortRef = useRef<AbortController | undefined>(undefined);
+  const auditionContextRef = useRef<AudioContext | undefined>(undefined);
+  const auditionSourceRef = useRef<AudioBufferSourceNode | undefined>(undefined);
+  const auditionGenerationRef = useRef(0);
 
   const refreshCache = async () => {
     try { setCacheStatus(await cacheClient.status()); }
@@ -71,7 +121,12 @@ export function SettingsPage({ client, cacheClient }: { client: PersistenceClien
 
   useEffect(() => {
     let active = true;
-    void client.globalLexicon.list().then((entries) => { if (active) setGlobalLexicon(authoringLexicon(entries)); })
+    void client.globalLexicon.list().then((entries) => {
+      if (!active) return;
+      const loaded = authoringLexicon(entries).map(fixedGlobalEntry);
+      globalLexiconRef.current = loaded;
+      setGlobalLexicon(loaded);
+    })
       .catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : "The global lexicon could not be loaded."); });
     return () => { active = false; };
   }, [client]);
@@ -95,6 +150,28 @@ export function SettingsPage({ client, cacheClient }: { client: PersistenceClien
     void workspace.getCatalog(draft.defaultModelId).then((next) => { if (active) setCatalog(next); }).catch(() => { if (active) setCatalog(null); });
     return () => { active = false; };
   }, [draft.defaultModelId, workspace]);
+
+  const stopAudition = useCallback((resetState = true) => {
+    auditionGenerationRef.current += 1;
+    auditionAbortRef.current?.abort();
+    auditionAbortRef.current = undefined;
+    if (auditionSourceRef.current) {
+      auditionSourceRef.current.onended = null;
+      try { auditionSourceRef.current.stop(); } catch { /* The source may not have started yet. */ }
+      auditionSourceRef.current.disconnect();
+      auditionSourceRef.current = undefined;
+    }
+    if (auditionContextRef.current) {
+      void auditionContextRef.current.close().catch(() => undefined);
+      auditionContextRef.current = undefined;
+    }
+    if (resetState) setAudition(null);
+  }, []);
+
+  useEffect(() => () => {
+    stopAudition(false);
+    if (lexiconTimerRef.current) clearTimeout(lexiconTimerRef.current);
+  }, [stopAudition]);
 
   const savePacing = async () => {
     const parsed = parsePauseDuration(duration);
@@ -142,12 +219,48 @@ export function SettingsPage({ client, cacheClient }: { client: PersistenceClien
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Diagnostics could not be exported."); }
   };
 
-  const replaceCatalog = async () => {
+  const auditionVoice = async (voiceId: string) => {
+    stopAudition();
+    setAuditionError("");
+    const generation = auditionGenerationRef.current;
+    const controller = new AbortController();
+    auditionAbortRef.current = controller;
+    let context: AudioContext;
     try {
-      const parsed = VoiceCatalogSchema.parse(JSON.parse(catalogJson) as unknown);
-      const saved = await workspace.replaceCatalog(parsed);
-      setCatalog(saved); setCatalogJson(""); setStatus(`Catalog overrides replaced for ${saved.modelId}.`);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Catalog JSON is invalid."); }
+      context = new AudioContext();
+      auditionContextRef.current = context;
+      await context.resume();
+      if (controller.signal.aborted || generation !== auditionGenerationRef.current) return;
+      setAudition({ voiceId, phase: "processing" });
+      const result = await scratchpadClient.preview({
+        modelId: draft.defaultModelId,
+        voiceId,
+        speed: 1,
+        text: voiceTestScript.trim(),
+        applyGlobalLexicon: false
+      }, controller.signal);
+      if (controller.signal.aborted || generation !== auditionGenerationRef.current) return;
+      const buffer = await context.decodeAudioData(decodedAudio(result.audio.base64));
+      if (controller.signal.aborted || generation !== auditionGenerationRef.current) return;
+      const source = context.createBufferSource();
+      source.buffer = buffer;
+      source.connect(context.destination);
+      auditionSourceRef.current = source;
+      source.onended = () => {
+        if (generation !== auditionGenerationRef.current) return;
+        auditionSourceRef.current = undefined;
+        auditionContextRef.current = undefined;
+        auditionAbortRef.current = undefined;
+        setAudition(null);
+        void context.close().catch(() => undefined);
+      };
+      setAudition({ voiceId, phase: "playing" });
+      source.start();
+    } catch (reason) {
+      if (controller.signal.aborted || generation !== auditionGenerationRef.current) return;
+      stopAudition();
+      setAuditionError(reason instanceof Error ? reason.message : "This voice sample could not be played. Check the connection and try again.");
+    }
   };
 
   const clearAllCache = async () => {
@@ -161,40 +274,95 @@ export function SettingsPage({ client, cacheClient }: { client: PersistenceClien
     finally { setCacheBusy(false); }
   };
 
-  const replaceGlobalLexicon = async (entries: LexiconEntryAuthoring[], success: string) => {
-    try {
-      setGlobalLexicon(authoringLexicon(await client.globalLexicon.replace(entries.map((entry) => ({
-        ...(entry.id ? { id: entry.id } : {}),
-        scope: "global",
-        entryType: "exactTerm",
-        displayText: entry.displayText,
-        spokenText: entry.spokenText,
-        caseSensitive: false,
-        wholeWord: true,
-        priority: 0,
-        enabled: entry.enabled,
-        notes: ""
-      })))));
-      setStatus(success);
-      setError("");
+  const persistGlobalLexicon = useCallback((entries: SimplifiedGlobalEntry[], affectedIds: string[], success?: string) => {
+    const snapshot = entries.map(fixedGlobalEntry);
+    const blankEntry = snapshot.find((entry) => !entry.displayText.trim() || !entry.spokenText.trim());
+    const seenTerms = new Set<string>();
+    const duplicateEntry = snapshot.find((entry) => {
+      if (!entry.enabled) return false;
+      const key = entry.displayText.trim().toLocaleLowerCase("en-US");
+      if (!key || !seenTerms.has(key)) { seenTerms.add(key); return false; }
       return true;
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "The global lexicon could not be saved.");
-      return false;
+    });
+    if (blankEntry || duplicateEntry) {
+      const invalidId = blankEntry?.id ?? duplicateEntry?.id;
+      const ids = invalidId ? [invalidId] : affectedIds;
+      setLexiconRowState((current) => ({ ...current, ...Object.fromEntries(ids.map((id) => [id, "error" as const])) }));
+      setError(blankEntry ? "Script Text and Spoken Text are required." : "Script Text must be unique regardless of capitalization.");
+      return Promise.resolve(false);
+    }
+    const revision = lexiconRevisionRef.current;
+    setLexiconRowState((current) => ({ ...current, ...Object.fromEntries(affectedIds.map((id) => [id, "saving" as const])) }));
+    const task = lexiconQueueRef.current.then(async () => {
+      try {
+        const saved = authoringLexicon(await client.globalLexicon.replace(snapshot)).map(fixedGlobalEntry);
+        if (revision === lexiconRevisionRef.current) {
+          globalLexiconRef.current = saved;
+          setGlobalLexicon(saved);
+          setLexiconRowState((current) => ({ ...current, ...Object.fromEntries(affectedIds.map((id) => [id, "saved" as const])) }));
+          if (success) setStatus(success);
+          setError("");
+        }
+        return true;
+      } catch (reason) {
+        if (revision === lexiconRevisionRef.current) {
+          setLexiconRowState((current) => ({ ...current, ...Object.fromEntries(affectedIds.map((id) => [id, "error" as const])) }));
+          setError(reason instanceof Error ? reason.message : "The global lexicon could not be saved. Your edits are still here; try again.");
+        }
+        return false;
+      }
+    });
+    lexiconQueueRef.current = task.then(() => undefined, () => undefined);
+    return task;
+  }, [client]);
+
+  const flushGlobalLexicon = useCallback(() => {
+    if (lexiconTimerRef.current) clearTimeout(lexiconTimerRef.current);
+    lexiconTimerRef.current = undefined;
+    const affectedIds = [...pendingLexiconRowsRef.current];
+    pendingLexiconRowsRef.current.clear();
+    if (affectedIds.length === 0) return;
+    void persistGlobalLexicon(globalLexiconRef.current, affectedIds, "Global pronunciation saved.");
+  }, [persistGlobalLexicon]);
+
+  const updateGlobalLexiconEntry = (id: string, change: Partial<Pick<SimplifiedGlobalEntry, "displayText" | "spokenText" | "enabled">>, immediate = false) => {
+    lexiconRevisionRef.current += 1;
+    const next = globalLexiconRef.current.map((entry) => entry.id === id ? fixedGlobalEntry({ ...entry, ...change }) : entry);
+    globalLexiconRef.current = next;
+    setGlobalLexicon(next);
+    pendingLexiconRowsRef.current.add(id);
+    setLexiconRowState((current) => ({ ...current, [id]: "saving" }));
+    if (immediate) flushGlobalLexicon();
+    else {
+      if (lexiconTimerRef.current) clearTimeout(lexiconTimerRef.current);
+      lexiconTimerRef.current = setTimeout(flushGlobalLexicon, 500);
     }
   };
 
   const saveGlobalLexiconEntry = async () => {
-    const candidate: LexiconEntryAuthoring = { ...lexiconDraft, scope: "global", ...(editingLexiconId ? { id: editingLexiconId } : {}) };
-    if (!candidate.displayText.trim() || !candidate.spokenText.trim()) { setError("Display text and spoken text are required."); return; }
-    const next = editingLexiconId ? globalLexicon.map((entry) => entry.id === editingLexiconId ? candidate : entry) : [...globalLexicon, candidate];
-    if (!await replaceGlobalLexicon(next, editingLexiconId ? "Global pronunciation updated." : "Global pronunciation added.")) return;
-    setLexiconDraft(EMPTY_GLOBAL_LEXICON);
-    setEditingLexiconId(undefined);
+    const displayText = lexiconDraft.displayText.trim();
+    const spokenText = lexiconDraft.spokenText.trim();
+    if (!displayText || !spokenText) { setError("Script Text and Spoken Text are required."); return; }
+    if (globalLexiconRef.current.some((entry) => entry.displayText.trim().toLocaleLowerCase("en-US") === displayText.toLocaleLowerCase("en-US"))) {
+      setError("Script Text must be unique regardless of capitalization.");
+      return;
+    }
+    flushGlobalLexicon();
+    setLexiconAdding(true);
+    lexiconRevisionRef.current += 1;
+    const added = await persistGlobalLexicon([...globalLexiconRef.current, fixedGlobalEntry({ ...EMPTY_GLOBAL_LEXICON, displayText, spokenText })], [], "Global pronunciation added.");
+    setLexiconAdding(false);
+    if (added) setLexiconDraft(EMPTY_GLOBAL_LEXICON);
+  };
+
+  const deleteGlobalLexiconEntry = async (id: string) => {
+    flushGlobalLexicon();
+    lexiconRevisionRef.current += 1;
+    await persistGlobalLexicon(globalLexiconRef.current.filter((entry) => entry.id !== id), [id], "Global pronunciation deleted.");
   };
 
   const filteredVoices = useMemo(() => catalog?.entries.filter((entry) => !catalogSearch || `${entry.label} ${entry.voiceId} ${entry.language ?? ""}`.toLocaleLowerCase().includes(catalogSearch.toLocaleLowerCase())) ?? [], [catalog, catalogSearch]);
-  const filteredLexicon = useMemo(() => globalLexicon.filter((entry) => (lexiconType === "all" || entry.entryType === lexiconType) && (!lexiconSearch || `${entry.displayText} ${entry.senseId ?? ""} ${entry.spokenText}`.toLocaleLowerCase().includes(lexiconSearch.toLocaleLowerCase()))), [globalLexicon, lexiconSearch, lexiconType]);
+  const filteredLexicon = useMemo(() => globalLexicon.filter((entry) => !lexiconSearch || `${entry.displayText} ${entry.spokenText}`.toLocaleLowerCase().includes(lexiconSearch.toLocaleLowerCase())), [globalLexicon, lexiconSearch]);
   const speechModels = workspace.catalog.status === "ready" ? workspace.catalog.catalog.models : [];
   const selectedSpeechModel = speechModels.find(({ modelId }) => modelId === draft.defaultModelId);
   const connectionSummary = workspace.connection?.lastTestSummary;
@@ -202,6 +370,13 @@ export function SettingsPage({ client, cacheClient }: { client: PersistenceClien
     connectionSummary
     && connectionSummary.overall !== "connected"
     && (workspace.connection?.configured || connectionTestAttempted)
+  );
+  const auditionReady = Boolean(
+    workspace.connection?.configured
+    && workspace.connection.baseUrl
+    && workspace.connection.baseUrl === draft.baseUrl
+    && draft.defaultModelId
+    && voiceTestScript.trim()
   );
 
   return (
@@ -224,29 +399,44 @@ export function SettingsPage({ client, cacheClient }: { client: PersistenceClien
 
       <section className={styles.catalog}>
         <div className={styles.sectionHeading}><div><p>Versioned local catalog</p><h3>Voice browser</h3></div><span>{filteredVoices.length} matching voices</span></div>
+        <label className={styles.voiceTestScript}>Voice test script<textarea rows={3} maxLength={1200} value={voiceTestScript} onChange={(event) => { setVoiceTestScript(event.target.value); setAuditionError(""); }} /></label>
+        {auditionError ? <p className={styles.auditionError} role="alert">Voice test failed: {auditionError}</p> : null}
         <input aria-label="Search voice catalog" placeholder="Search label, ID, or language" value={catalogSearch} onChange={(event) => setCatalogSearch(event.target.value)} />
-        <div className={styles.voiceList}>{filteredVoices.slice(0, 100).map((entry) => <article data-enabled={entry.enabled} key={entry.voiceId}><strong>{entry.label}</strong><code>{entry.voiceId}</code><span>{entry.enabled ? "enabled" : "disabled"} · {entry.locale ?? entry.language ?? "unspecified"}</span></article>)}</div>
-        <label>Strict override JSON<textarea rows={7} spellCheck={false} value={catalogJson} onChange={(event) => setCatalogJson(event.target.value)} placeholder={'{"schemaVersion":1,"modelId":"…","entries":[]}'}/></label>
-        <button type="button" disabled={!catalogJson.trim()} onClick={() => void replaceCatalog()}>Replace model overrides</button>
+        <div className={styles.voiceList}>{filteredVoices.slice(0, 100).map((entry) => {
+          const phase = audition?.voiceId === entry.voiceId ? audition.phase : "normal";
+          const action = phase === "processing" ? "Preparing" : phase === "playing" ? "Playing" : "Test";
+          return <article data-enabled={entry.enabled} key={entry.voiceId}>
+            <div><strong>{entry.label}</strong><code>{entry.voiceId}</code><span>{entry.enabled ? "enabled" : "disabled"} · {entry.locale ?? entry.language ?? "unspecified"}</span></div>
+            <button type="button" className={styles.auditionButton} data-state={phase} disabled={!auditionReady} aria-label={`${action} ${entry.label}`} onClick={() => void auditionVoice(entry.voiceId)}>
+              {phase === "normal" ? <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8 5.75v12.5L18 12 8 5.75Z" /></svg> : phase === "processing" ? <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 1-8.3 5.5" /></svg> : <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 9v6M12 6v12M17 9v6" /></svg>}
+            </button>
+          </article>;
+        })}</div>
         <p className={styles.attribution}>Bundled Kokoro identifiers: hexgrad/Kokoro-82M VOICES.md · Apache-2.0. Labels omit subjective quality claims.</p>
       </section>
 
       <section className={styles.globalLexicon} id="global-lexicon" aria-labelledby="global-lexicon-heading">
         <div className={styles.sectionHeading}><div><p>Shared pronunciation</p><h3 id="global-lexicon-heading">Global lexicon</h3></div><span>{globalLexicon.length} entries</span></div>
-        <p>These rules apply to every project and pronunciation preview. Project-only rules stay with their project.</p>
-        <div className={styles.lexiconFilters}><input aria-label="Search global lexicon" placeholder="Search terms and replacements" value={lexiconSearch} onChange={(event) => setLexiconSearch(event.target.value)} /><select aria-label="Global lexicon type filter" value={lexiconType} onChange={(event) => setLexiconType(event.target.value as typeof lexiconType)}><option value="all">All types</option><option value="exactTerm">Exact terms</option><option value="exactPhrase">Exact phrases</option><option value="namedSense">Named senses</option></select></div>
-        <div className={styles.lexiconWorkspace}>
-          <form onSubmit={(event) => { event.preventDefault(); void saveGlobalLexiconEntry(); }}>
-            <label>Type<select value={lexiconDraft.entryType} onChange={(event) => setLexiconDraft((current) => ({ ...current, entryType: event.target.value as LexiconEntryAuthoring["entryType"] }))}><option value="exactTerm">Exact term</option><option value="exactPhrase">Exact phrase</option><option value="namedSense">Named sense</option></select></label>
-            <label>Display text<input value={lexiconDraft.displayText} onChange={(event) => setLexiconDraft((current) => ({ ...current, displayText: event.target.value }))} /></label>
-            {lexiconDraft.entryType === "namedSense" ? <label>Sense ID<input value={lexiconDraft.senseId ?? ""} onChange={(event) => setLexiconDraft((current) => ({ ...current, senseId: event.target.value }))} /></label> : null}
-            <label>Spoken text<input value={lexiconDraft.spokenText} onChange={(event) => setLexiconDraft((current) => ({ ...current, spokenText: event.target.value }))} /></label>
-            <label>Notes<input value={lexiconDraft.notes ?? ""} onChange={(event) => setLexiconDraft((current) => ({ ...current, notes: event.target.value }))} /></label>
-            <div className={styles.lexiconChecks}><label><input type="checkbox" checked={lexiconDraft.caseSensitive ?? true} onChange={(event) => setLexiconDraft((current) => ({ ...current, caseSensitive: event.target.checked }))} />Case sensitive</label><label><input type="checkbox" checked={lexiconDraft.wholeWord ?? true} onChange={(event) => setLexiconDraft((current) => ({ ...current, wholeWord: event.target.checked }))} />Whole word</label><label><input type="checkbox" checked={lexiconDraft.enabled ?? true} onChange={(event) => setLexiconDraft((current) => ({ ...current, enabled: event.target.checked }))} />Enabled</label></div>
-            <div className={styles.actions}><button type="submit">{editingLexiconId ? "Save entry" : "Add entry"}</button>{editingLexiconId ? <button type="button" className={styles.secondary} onClick={() => { setEditingLexiconId(undefined); setLexiconDraft(EMPTY_GLOBAL_LEXICON); }}>Cancel</button> : null}</div>
-          </form>
-          <div className={styles.lexiconEntries}>{filteredLexicon.length === 0 ? <p>No matching global lexicon entries.</p> : filteredLexicon.map((entry, index) => <article key={entry.id ?? `global-${String(index)}`}><div><strong>{entry.displayText}{entry.senseId ? ` + ${entry.senseId}` : ""}</strong><span>→ {entry.spokenText}</span></div><code>{entry.entryType} · {entry.enabled === false ? "disabled" : "enabled"}</code><div className={styles.actions}><button type="button" className={styles.secondary} onClick={() => { setEditingLexiconId(entry.id); setLexiconDraft({ ...entry, scope: "global", caseSensitive: entry.caseSensitive ?? true, wholeWord: entry.wholeWord ?? true, priority: entry.priority ?? 0, enabled: entry.enabled ?? true, notes: entry.notes ?? "" }); }}>Edit</button><button type="button" className={styles.secondary} onClick={() => void replaceGlobalLexicon(globalLexicon.map((item) => item.id === entry.id ? { ...item, enabled: !(item.enabled ?? true) } : item), `Global pronunciation ${entry.enabled === false ? "enabled" : "disabled"}.`)}>{entry.enabled === false ? "Enable" : "Disable"}</button><button type="button" className={styles.danger} onClick={() => void replaceGlobalLexicon(globalLexicon.filter((item) => item.id !== entry.id), "Global pronunciation deleted.")}>Delete</button></div></article>)}</div>
-        </div>
+        <p>Script Text matches complete words regardless of capitalization. These rules apply to every project and pronunciation preview; project-only rules stay with their project.</p>
+        <form className={styles.lexiconAdd} onSubmit={(event) => { event.preventDefault(); void saveGlobalLexiconEntry(); }}>
+          <label>Script Text<input value={lexiconDraft.displayText} onChange={(event) => setLexiconDraft((current) => ({ ...current, displayText: event.target.value }))} /></label>
+          <span aria-hidden="true">→</span>
+          <label>Spoken Text<input value={lexiconDraft.spokenText} onChange={(event) => setLexiconDraft((current) => ({ ...current, spokenText: event.target.value }))} /></label>
+          <button type="submit" disabled={lexiconAdding}>{lexiconAdding ? "Adding…" : "Add"}</button>
+        </form>
+        <input className={styles.lexiconSearch} aria-label="Search global lexicon" placeholder="Search Script Text or Spoken Text" value={lexiconSearch} onChange={(event) => setLexiconSearch(event.target.value)} />
+        <div className={styles.lexiconEntries}>{filteredLexicon.length === 0 ? <p>No matching global lexicon entries.</p> : filteredLexicon.map((entry, index) => {
+          const id = entry.id ?? `global-${String(index)}`;
+          const rowState = lexiconRowState[id];
+          return <article key={id} aria-label={`Global lexicon entry ${entry.displayText || "without Script Text"}`}>
+            <label>Script Text<input disabled={lexiconAdding} value={entry.displayText} onChange={(event) => updateGlobalLexiconEntry(id, { displayText: event.target.value })} onBlur={() => { pendingLexiconRowsRef.current.add(id); flushGlobalLexicon(); }} /></label>
+            <span aria-hidden="true">→</span>
+            <label>Spoken Text<input disabled={lexiconAdding} value={entry.spokenText} onChange={(event) => updateGlobalLexiconEntry(id, { spokenText: event.target.value })} onBlur={() => { pendingLexiconRowsRef.current.add(id); flushGlobalLexicon(); }} /></label>
+            <label className={styles.enabledCheck}><input type="checkbox" disabled={lexiconAdding} checked={entry.enabled !== false} onChange={(event) => updateGlobalLexiconEntry(id, { enabled: event.target.checked }, true)} />Enabled</label>
+            <span className={styles.lexiconSaveState} data-state={rowState} aria-live="polite">{rowState === "saving" ? "Saving…" : rowState === "saved" ? "Saved" : rowState === "error" ? "Not saved — edit or blur to retry" : ""}</span>
+            <button type="button" className={styles.danger} disabled={lexiconAdding} onClick={() => void deleteGlobalLexiconEntry(id)}>Delete</button>
+          </article>;
+        })}</div>
       </section>
 
       <section className={styles.pacing}>

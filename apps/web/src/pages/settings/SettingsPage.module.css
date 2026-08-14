@@ -8,7 +8,7 @@
 .status { color: #557080; font-size: 0.8rem; }
 .connections, .catalog, .globalLexicon, .pacing, .cache { padding: 22px; background: var(--paper); border: 1px solid var(--line); border-top: 5px solid var(--signal); }
 .connections { grid-column: 1 / -1; }
-.catalog { border-top-color: var(--copper); }
+.catalog { grid-column: 1 / -1; border-top-color: var(--copper); }
 .globalLexicon { grid-column: 1 / -1; scroll-margin-top: 24px; }
 .globalLexicon > p { color: #557080; font-size: 0.78rem; }
 .sectionHeading, .diagnosticHeader { display: flex; justify-content: space-between; gap: 16px; align-items: center; margin-bottom: 16px; }
@@ -40,25 +40,37 @@
 .diagnostics li strong { text-transform: capitalize; }
 .diagnostics li code, .diagnostics li span { overflow-wrap: anywhere; font-size: 0.62rem; }
 .voiceList { display: grid; gap: 5px; max-height: 420px; margin: 12px 0; overflow: auto; }
-.voiceList article { display: grid; gap: 3px; padding: 10px; background: white; border-left: 4px solid var(--signal); }
-.voiceList article[data-enabled="false"] { opacity: 0.55; border-left-color: var(--line); }
+.voiceTestScript { margin-bottom: 12px; }
+.voiceTestScript textarea { min-height: 76px; resize: vertical; font-family: inherit; line-height: 1.5; }
+.auditionError { margin: -3px 0 12px; color: var(--fault); font-size: 0.75rem; font-weight: 800; }
+.voiceList article { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 12px; background: white; border-left: 4px solid var(--signal); }
+.voiceList article > div { display: grid; gap: 3px; min-width: 0; }
+.voiceList article[data-enabled="false"] { border-left-color: var(--line); }
+.voiceList article[data-enabled="false"] > div { opacity: 0.58; }
 .voiceList code, .voiceList span { font-size: 0.66rem; }
-.catalog textarea { resize: vertical; font-family: ui-monospace, monospace; }
+.auditionButton { display: grid; width: 36px; min-height: 36px; padding: 7px; place-items: center; color: var(--signal); background: var(--mist); border: 1px solid #91a9b2; border-radius: 50%; }
+.auditionButton:hover:not(:disabled) { color: white; background: var(--signal); }
+.auditionButton:focus-visible { outline: 3px solid color-mix(in srgb, var(--signal) 35%, transparent); outline-offset: 2px; }
+.auditionButton:disabled { color: #78909b; cursor: not-allowed; opacity: 0.55; }
+.auditionButton svg { width: 20px; height: 20px; fill: currentColor; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.auditionButton[data-state="processing"] svg { fill: none; animation: audition-spin 800ms linear infinite; }
+.auditionButton[data-state="playing"] { color: white; background: var(--copper); border-color: var(--copper); }
+.auditionButton[data-state="playing"] svg { fill: none; }
+@keyframes audition-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .auditionButton[data-state="processing"] svg { animation: none; } }
 .attribution { color: #557080; font-size: 0.7rem; line-height: 1.5; }
-.lexiconFilters { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 8px; margin-top: 16px; }
-.lexiconFilters input, .lexiconFilters select, .lexiconWorkspace input, .lexiconWorkspace select { width: 100%; padding: 9px 10px; color: var(--ink); background: white; border: 1px solid #91a9b2; }
-.lexiconWorkspace { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 18px; margin-top: 14px; }
-.lexiconWorkspace form { padding: 15px; background: var(--mist); }
-.lexiconWorkspace form > label { display: grid; gap: 5px; margin-top: 12px; font-size: 0.72rem; font-weight: 800; }
-.lexiconWorkspace form > label:first-child { margin-top: 0; }
-.lexiconChecks { display: grid; gap: 5px; margin: 12px 0; }
-.lexiconChecks label { display: flex; gap: 6px; align-items: center; font-size: 0.72rem; font-weight: 800; }
-.lexiconChecks input { width: auto; }
+.lexiconAdd { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto; gap: 8px; align-items: end; margin: 16px 0 10px; padding: 14px; background: var(--mist); }
+.lexiconAdd label, .lexiconEntries label { display: grid; gap: 5px; min-width: 0; font-size: 0.72rem; font-weight: 800; }
+.lexiconAdd > span { align-self: center; padding-top: 18px; color: var(--signal); font-weight: 900; }
+.lexiconAdd input, .lexiconSearch, .lexiconEntries input[type="text"], .lexiconEntries label > input:not([type]) { width: 100%; padding: 9px 10px; color: var(--ink); background: white; border: 1px solid #91a9b2; }
+.lexiconSearch { margin-bottom: 12px; }
 .lexiconEntries { display: grid; gap: 8px; align-content: start; }
-.lexiconEntries article { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px 14px; padding: 12px 14px; background: white; border-left: 4px solid var(--signal); }
-.lexiconEntries article > div:first-child { display: flex; gap: 10px; }
-.lexiconEntries article code { font-size: 0.68rem; }
-.lexiconEntries article .actions { grid-column: 2; grid-row: 1 / span 2; align-items: center; }
+.lexiconEntries article { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto auto auto; gap: 8px 12px; align-items: end; padding: 12px 14px; background: white; border-left: 4px solid var(--signal); }
+.lexiconEntries article > span[aria-hidden="true"] { align-self: center; padding-top: 18px; color: var(--signal); font-weight: 900; }
+.enabledCheck { display: flex !important; flex-direction: row; align-items: center; min-height: 36px; }
+.enabledCheck input { width: auto; }
+.lexiconSaveState { align-self: center; max-width: 150px; color: #557080; font: 700 0.65rem ui-monospace, monospace; }
+.lexiconSaveState[data-state="error"] { color: var(--fault); }
 .pacing { align-self: start; }
 .pacing label { margin: 13px 0; }
 .cache { align-self: start; border-top-color: var(--ink); }
@@ -68,4 +80,4 @@
 .cacheGrid span { color: var(--signal); font-size: 0.62rem; font-weight: 800; text-transform: uppercase; }
 .cacheGrid code, .cache > p { color: #557080; font-size: 0.68rem; line-height: 1.45; }
 @media (max-width: 960px) { .page { grid-template-columns: 1fr; } .connections, .globalLexicon, .page > header, .page > .error, .page > .status { grid-column: 1; } .diagnostics ol { grid-template-columns: repeat(4, 1fr); } }
-@media (max-width: 700px) { .connectionGrid, .profileForm, .lexiconFilters, .lexiconWorkspace { grid-template-columns: 1fr; } .managed, .keyState, .actions { grid-column: 1; } .diagnostics ol { grid-template-columns: repeat(2, 1fr); } .lexiconEntries article { grid-template-columns: 1fr; } .lexiconEntries article .actions { grid-column: 1; grid-row: auto; } }
+@media (max-width: 700px) { .connectionGrid, .profileForm, .lexiconAdd { grid-template-columns: 1fr; } .managed, .keyState, .actions { grid-column: 1; } .diagnostics ol { grid-template-columns: repeat(2, 1fr); } .lexiconAdd > span, .lexiconEntries article > span[aria-hidden="true"] { display: none; } .lexiconEntries article { grid-template-columns: 1fr; align-items: start; } .lexiconSaveState { max-width: none; } }

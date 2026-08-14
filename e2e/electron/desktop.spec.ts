@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { strFromU8, unzipSync } from "fflate";
@@ -232,6 +233,20 @@ test.describe("Electron acceptance", () => {
     await expect(page.getByLabel("Model")).toHaveValue("speaches-ai/Kokoro-82M-v1.0-ONNX");
     await expect(page.getByLabel("Default Voice")).toHaveValue("af_heart");
     await expect(page.getByText(/New saved profile|Active profile|API key|Environment Speaches/u)).toHaveCount(0);
+    const script = "Electron voice audition without a player.";
+    await page.getByLabel("Voice test script").fill(script);
+    studyNarrator.fakeSpeaches.reset();
+    await page.getByRole("button", { name: /^Test Heart/u }).click();
+    await expect.poll(() => studyNarrator.fakeSpeaches.getState().requests.filter(({ path, status }) => path === "/v1/audio/speech" && status === 200).length).toBe(1);
+    expect(studyNarrator.fakeSpeaches.getState().requests.find(({ path }) => path === "/v1/audio/speech")).toMatchObject({
+      model: "speaches-ai/Kokoro-82M-v1.0-ONNX",
+      voice: "af_heart",
+      speed: 1,
+      inputLength: script.length,
+      inputHash: createHash("sha256").update(script).digest("hex")
+    });
+    await expect(page.locator("audio")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Test Heart/u })).toBeVisible({ timeout: 5_000 });
 
     page = await electronStudyNarrator.relaunch();
     await page.getByRole("link", { name: "Settings", exact: true }).click();
