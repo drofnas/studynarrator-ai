@@ -79,4 +79,41 @@ test.describe("shell, onboarding, and runtime routes", () => {
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(1);
   });
+
+  test("opens projects from the ledger and preserves accessible tab state", async ({ page, request, studyNarrator }) => {
+    await continueOffline(page, studyNarrator);
+    const response = await request.post(`${studyNarrator.baseUrl}/api/projects`, { data: { name: "Ledger workspace", description: "A project-index acceptance fixture." } });
+    expect(response.status()).toBe(201);
+    const created = await response.json() as { id: string };
+    await page.reload();
+
+    const table = page.getByRole("table");
+    await expect(table.getByRole("columnheader")).toHaveText(["Name", "Description", "Created", "Last updated", "Open"]);
+    const row = table.getByRole("row", { name: /Ledger workspace/u });
+    await row.getByRole("link", { name: "Open" }).click();
+    await expect(page.getByRole("tab", { name: "Script Editor" })).toHaveAttribute("aria-selected", "true");
+    await page.getByRole("tab", { name: "Script Editor" }).press("ArrowRight");
+    await expect(page.getByRole("tab", { name: "Settings" })).toHaveAttribute("aria-selected", "true");
+    await expect(page).toHaveURL(new RegExp(`/projects/${created.id}\\?tab=settings$`, "u"));
+    await page.reload();
+    await expect(page.getByRole("tab", { name: "Settings" })).toHaveAttribute("aria-selected", "true");
+
+    await openRoute(page, studyNarrator, `/projects/${created.id}?tab=not-a-tab`);
+    await expect(page.getByRole("tab", { name: "Script Editor" })).toHaveAttribute("aria-selected", "true");
+    await page.getByRole("link", { name: "← Back to Projects" }).click();
+    await expect(page.getByRole("heading", { name: "Projects", exact: true })).toBeVisible();
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    const scrollRegion = page.getByRole("table").locator("..");
+    await expect(scrollRegion).toBeVisible();
+    expect(await scrollRegion.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+
+    await page.getByRole("row", { name: /Ledger workspace/u }).getByRole("link", { name: "Open" }).click();
+    const tabList = page.getByRole("tablist", { name: "Project workspace" });
+    expect(await tabList.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+    await page.getByRole("tab", { name: "Details" }).click();
+    await expect(page.getByRole("heading", { name: "Narration score" })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+  });
 });

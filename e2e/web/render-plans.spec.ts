@@ -4,6 +4,7 @@ test.describe("Frozen render plans", () => {
   test("creates and reopens immutable plans without synthesizing speech", async ({ page, studyNarrator }) => {
     await continueOffline(page, studyNarrator);
     studyNarrator.fakeSpeaches.reset();
+    await page.getByRole("button", { name: "New project" }).click();
     await page.getByLabel("Project name").fill("Frozen plan acceptance");
     await page.getByRole("button", { name: "Create project" }).click();
     await page.getByLabel("Script source").fill([
@@ -17,6 +18,7 @@ test.describe("Frozen render plans", () => {
       "[pause_short]",
       "[speaker_teacher] After explicit pause."
     ].join("\n"));
+    await page.getByRole("tab", { name: "Settings" }).click();
     await page.getByLabel("Connection profile").selectOption("environment-speaches");
     await page.getByLabel("Optional model override").fill("speaches-ai/Kokoro-82M-v1.0-ONNX");
     await expect(page.getByLabel("Voices").first()).toHaveValue("af_heart");
@@ -28,6 +30,7 @@ test.describe("Frozen render plans", () => {
     await page.getByLabel("Section transition mode").selectOption("duration");
     await page.getByLabel("Section transition duration (ms)").fill("1500");
 
+    await page.getByRole("tab", { name: "Render" }).click();
     const freeze = page.getByRole("button", { name: "Freeze render plan" });
     await expect(freeze).toBeEnabled();
     await freeze.click();
@@ -47,9 +50,11 @@ test.describe("Frozen render plans", () => {
     await expect(page.getByText("Matches current project").first()).toBeVisible();
     expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/speech"] ?? 0).toBe(0);
 
+    await page.getByRole("tab", { name: "Settings" }).click();
     await page.getByLabel("Paragraph transition duration (ms)").fill("900");
     await page.getByRole("button", { name: "Save now" }).click();
     await expect(page.getByText("All changes saved.")).toBeVisible();
+    await page.getByRole("tab", { name: "Render" }).click();
     await expect(page.getByText("Frozen from earlier project").first()).toBeVisible();
     await expect(table).toContainText("600 ms");
 

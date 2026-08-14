@@ -93,7 +93,7 @@ test("Docker Web remains authorable offline and renders after Speaches reconnect
   await page.getByRole("button", { name: "Run self-test" }).click();
   await expect(page.getByText("Docker Web")).toBeVisible();
   await expect(page.getByText(String(runtime.sourceRevision), { exact: true })).toBeVisible();
-  await page.goto(`/#/projects/${created.id}`);
+  await page.goto(`/#/projects/${created.id}?tab=render`);
   await expect(page.getByText(/Phase: complete/u)).toBeVisible();
 
   const diagnostics = await jsonRequest(request, "get", "/api/diagnostics");

@@ -41,7 +41,7 @@ test.describe("project preview cache", () => {
       await expect(result).toBeVisible();
     };
 
-    await openRoute(page, studyNarrator, `/projects/${created.id}`);
+    await openRoute(page, studyNarrator, `/projects/${created.id}?tab=details`);
     await expect(page.getByRole("heading", { name: "Narration score" })).toBeVisible();
     await previewFirstSegment();
     await expect(result.getByText("Cache miss")).toBeVisible();
@@ -51,19 +51,25 @@ test.describe("project preview cache", () => {
     await expect(result.getByText("Cache hit")).toBeVisible();
     expect(speechRequests()).toHaveLength(1);
 
+    await page.getByRole("tab", { name: "Script Editor" }).click();
     await page.getByLabel("Script source").fill(changedScript);
+    await page.getByRole("tab", { name: "Details" }).click();
     await expect(page.getByLabel("Dry run ordered segment table")).toContainText("Cache this changed sentence.");
     await previewFirstSegment();
     await expect(result.getByText("Cache miss")).toBeVisible();
     expect(speechRequests()).toHaveLength(2);
 
+    await page.getByRole("tab", { name: "Script Editor" }).click();
     await page.getByLabel("Script source").fill(originalScript);
+    await page.getByRole("tab", { name: "Details" }).click();
     await expect(page.getByLabel("Dry run ordered segment table")).toContainText("Cache this exact sentence.");
     await previewFirstSegment();
     await expect(result.getByText("Cache hit")).toBeVisible();
     expect(speechRequests()).toHaveLength(2);
 
+    await page.getByRole("tab", { name: "Script Editor" }).click();
     await page.getByLabel("Script source").fill(`${originalScript}\n[pause_short]`);
+    await page.getByRole("tab", { name: "Details" }).click();
     await expect(page.getByLabel("Dry run ordered segment table")).toContainText("pause_short");
     await previewFirstSegment();
     await expect(result.getByText("Cache hit")).toBeVisible();
@@ -75,17 +81,21 @@ test.describe("project preview cache", () => {
     await expect(page.getByText(/Result · cache hit/u)).toBeVisible();
     expect(speechRequests()).toHaveLength(2);
 
-    await openRoute(page, studyNarrator, `/projects/${created.id}`);
+    await openRoute(page, studyNarrator, `/projects/${created.id}?tab=settings`);
     await expect(page.getByLabel("Voices")).toHaveValue("af_heart");
     await page.getByLabel("Voices").selectOption("af_sky");
+    await page.getByRole("tab", { name: "Details" }).click();
     await previewFirstSegment();
     await expect(result.getByText("Cache miss")).toBeVisible();
     expect(speechRequests()).toHaveLength(3);
+    await page.getByRole("tab", { name: "Settings" }).click();
     await page.getByLabel("Voices").selectOption("af_heart");
+    await page.getByRole("tab", { name: "Details" }).click();
     await previewFirstSegment();
     await expect(result.getByText("Cache hit")).toBeVisible();
     expect(speechRequests()).toHaveLength(3);
 
+    await page.getByRole("tab", { name: "Settings" }).click();
     await page.getByLabel("Pronunciation test").fill("A pronunciation cache sample.");
     await page.getByRole("button", { name: "Preview pronunciation" }).click();
     await expect(result.getByText("Cache miss")).toBeVisible();
@@ -94,6 +104,7 @@ test.describe("project preview cache", () => {
     await expect(result.getByText("Cache hit")).toBeVisible();
     expect(speechRequests()).toHaveLength(4);
 
+    await page.getByRole("tab", { name: "Details" }).click();
     await previewFirstSegment();
     const cacheKey = (await result.locator("footer code").innerText()).trim();
     expect(cacheKey).toMatch(/^[a-f0-9]{64}$/u);
@@ -115,7 +126,7 @@ test.describe("project preview cache", () => {
     await page.getByRole("button", { name: "Clear all cached speech" }).click();
     await expect(page.getByText(/Cleared \d+ cached speech/u)).toBeVisible();
 
-    await openRoute(page, studyNarrator, `/projects/${created.id}`);
+    await openRoute(page, studyNarrator, `/projects/${created.id}?tab=details`);
     await previewFirstSegment();
     expect(speechRequests()).toHaveLength(7);
     await page.getByRole("button", { name: "Clear project cache" }).click();

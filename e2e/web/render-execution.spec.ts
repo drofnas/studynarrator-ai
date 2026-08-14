@@ -23,7 +23,7 @@ test.describe("render execution", () => {
     } });
     studyNarrator.fakeSpeaches.reset();
 
-    await openRoute(page, studyNarrator, `/projects/${created.id}`);
+    await openRoute(page, studyNarrator, `/projects/${created.id}?tab=render`);
     await expect(page.getByRole("button", { name: "Freeze render plan" })).toBeEnabled();
     await page.getByRole("button", { name: "Freeze render plan" }).click();
     await expect(page.getByRole("button", { name: "Render this frozen plan" })).toBeVisible();
@@ -62,6 +62,8 @@ test.describe("render execution", () => {
     expect((await downloadPromise).suggestedFilename()).toMatch(/^\d{6}\.wav$/u);
     await firstSpeech.getByRole("button", { name: /Source line/u }).click();
     await expect(page.getByLabel("Script source")).toBeFocused();
+    await expect(page.getByRole("tab", { name: "Script Editor" })).toHaveAttribute("aria-selected", "true");
+    await page.getByRole("tab", { name: "Render" }).click();
 
     const renders = await request.get(`${studyNarrator.baseUrl}/api/projects/${created.id}/renders`);
     const [render] = await renders.json() as Array<{ id: string; state: string }>;
@@ -100,7 +102,7 @@ test.describe("render execution", () => {
       speakerMappings: [{ speakerId: "teacher", displayName: "Teacher", voiceId: "af_heart", speed: 1, gainDb: 0, roleDescription: "", sampleText: "" }],
       pausePresets: created.pausePresets, transitionPauses: created.transitionPauses, lexiconEntries: []
     } });
-    await openRoute(page, studyNarrator, `/projects/${created.id}`);
+    await openRoute(page, studyNarrator, `/projects/${created.id}?tab=render`);
     await page.getByRole("button", { name: "Freeze render plan" }).click();
     await expect(page.getByRole("button", { name: "Render this frozen plan" })).toBeVisible();
 

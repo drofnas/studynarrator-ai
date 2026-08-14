@@ -3,7 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { PersistenceClient } from "@studynarrator/shared-types";
+import type { GlobalLexiconReplaceInput, PersistenceClient } from "@studynarrator/shared-types";
 import { SettingsPage } from "./SettingsPage.js";
 import { ConnectionProvider } from "@/features/connections/ConnectionProvider.js";
 
@@ -16,11 +16,45 @@ const cacheClient = {
 };
 
 describe("System Settings", () => {
+  it("manages persisted global lexicon entries outside project settings", async () => {
+    const timestamp = "2026-08-12T12:00:00.000Z";
+    let stored = [{ id: "global-sql", scope: "global", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel", caseSensitive: true, wholeWord: true, priority: 0, enabled: true, notes: "", createdAt: timestamp, updatedAt: timestamp }];
+    const replace = vi.fn(async (entries: Array<Record<string, unknown>>) => {
+      stored = entries.map((entry, index) => ({ ...entry, id: typeof entry.id === "string" ? entry.id : `global-${String(index + 1)}`, scope: "global", createdAt: timestamp, updatedAt: timestamp })) as typeof stored;
+      return structuredClone(stored);
+    });
+    const client = {
+      settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() },
+      globalLexicon: { list: vi.fn(async () => structuredClone(stored)), replace }
+    } as unknown as PersistenceClient;
+    const connections = {
+      list: vi.fn(async () => []), create: vi.fn(), replace: vi.fn(), delete: vi.fn(), test: vi.fn(), exportDiagnostics: vi.fn(), discoverSpeechCatalog: vi.fn(),
+      getSetupState: vi.fn(async () => ({ activeProfileId: null, activeProfileLocked: false, onboardingCompletedAt: timestamp, client: "web" as const })),
+      setActiveProfile: vi.fn(), completeOnboarding: vi.fn()
+    };
+    const voiceCatalog = { get: vi.fn(async (modelId: string) => ({ schemaVersion: 1 as const, modelId, entries: [] })), replace: vi.fn() };
+    render(<ConnectionProvider connections={connections} voiceCatalog={voiceCatalog}><SettingsPage client={client} cacheClient={cacheClient} /></ConnectionProvider>);
+
+    expect(await screen.findByRole("heading", { name: "Global lexicon" })).toBeInTheDocument();
+    expect(screen.getByText("SQL")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Disable" }));
+    expect(replace).toHaveBeenLastCalledWith([expect.objectContaining({ id: "global-sql", enabled: false, scope: "global" })]);
+
+    await userEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText("Spoken text"), { target: { value: "ess cue ell" } });
+    await userEvent.click(screen.getByRole("button", { name: "Save entry" }));
+    expect(await screen.findByText("→ ess cue ell")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(await screen.findByText("No matching global lexicon entries.")).toBeInTheDocument();
+  });
+
   it("normalizes and saves new-project pacing without touching projects", async () => {
     const updatePacing = vi.fn(async (input: { enabled: boolean; durationMs: number }) => input);
     const replaceProject = vi.fn();
     const client = {
       settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing },
+      globalLexicon: { list: vi.fn(async () => []), replace: vi.fn(async (entries: GlobalLexiconReplaceInput) => entries) },
       projects: { replace: replaceProject }
     } as unknown as PersistenceClient;
     const connections = {
@@ -59,7 +93,8 @@ describe("System Settings", () => {
       replace: replaceCatalog
     };
     const client = {
-      settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() }
+      settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() },
+      globalLexicon: { list: vi.fn(async () => []), replace: vi.fn(async (entries: GlobalLexiconReplaceInput) => entries) }
     } as unknown as PersistenceClient;
     render(<ConnectionProvider connections={connections} voiceCatalog={voiceCatalog}><SettingsPage client={client} cacheClient={cacheClient} /></ConnectionProvider>);
     expect(await screen.findByDisplayValue("Environment Speaches")).toBeDisabled();
@@ -79,7 +114,7 @@ describe("System Settings", () => {
       setActiveProfile: vi.fn(), completeOnboarding: vi.fn()
     };
     const voiceCatalog = { get: vi.fn(async (modelId: string) => ({ schemaVersion: 1 as const, modelId, entries: [] })), replace: vi.fn() };
-    const client = { settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() } } as unknown as PersistenceClient;
+    const client = { settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() }, globalLexicon: { list: vi.fn(async () => []), replace: vi.fn(async (entries: GlobalLexiconReplaceInput) => entries) } } as unknown as PersistenceClient;
     const status = vi.fn()
       .mockResolvedValueOnce({ contractVersion: 1, entryCount: 2, totalBytes: 2048, lastUsedAt: "2026-08-12T12:00:00.000Z", sessionHits: 3, sessionMisses: 2, sessionWrites: 2, sessionCorruptMisses: 1, inFlight: 0 })
       .mockResolvedValueOnce({ contractVersion: 1, entryCount: 0, totalBytes: 0, lastUsedAt: null, sessionHits: 3, sessionMisses: 2, sessionWrites: 2, sessionCorruptMisses: 1, inFlight: 0 });

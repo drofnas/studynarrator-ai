@@ -1,5 +1,5 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import {
   buildAuthoringDryRun,
   parsePauseDuration,
@@ -54,6 +54,14 @@ type SaveState = "saved" | "unsaved" | "saving" | "invalid" | "failed";
 type AnalysisState = "idle" | "parsing" | "ready" | "failed";
 type VoiceCatalogState = "idle" | "loading" | "ready" | "failed";
 type VoiceSelectionState = VoiceCatalogState | "modelUnavailable" | "noSupportedVoices";
+type ProjectTab = "script" | "settings" | "details" | "render";
+
+const projectTabs: Array<{ id: ProjectTab; label: string }> = [
+  { id: "script", label: "Script Editor" },
+  { id: "settings", label: "Settings" },
+  { id: "details", label: "Details" },
+  { id: "render", label: "Render" }
+];
 
 const emptyLexiconDraft: LexiconEntryAuthoring = {
   scope: "project",
@@ -112,6 +120,9 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
   const connections = useConnections();
   const { projectId } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const activeTab: ProjectTab = requestedTab === "settings" || requestedTab === "details" || requestedTab === "render" ? requestedTab : "script";
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [project, setProject] = useState<ProjectDetail>();
   const [draft, setDraft] = useState<ProjectDraft>();
@@ -128,6 +139,7 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
   const [busy, setBusy] = useState(true);
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [pauseInputs, setPauseInputs] = useState<Record<string, string>>({});
   const invalidPauseRef = useRef<Record<string, string>>({});
   const [search, setSearch] = useState("");
@@ -135,9 +147,8 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
   const [caseSensitive, setCaseSensitive] = useState(true);
   const [cleanupUndo, setCleanupUndo] = useState<string>();
   const [lexiconDraft, setLexiconDraft] = useState<LexiconEntryAuthoring>(emptyLexiconDraft);
-  const [editingLexicon, setEditingLexicon] = useState<{ scope: "global" | "project"; id: string }>();
+  const [editingLexicon, setEditingLexicon] = useState<string>();
   const [lexiconSearch, setLexiconSearch] = useState("");
-  const [lexiconScope, setLexiconScope] = useState<"all" | "global" | "project">("all");
   const [lexiconType, setLexiconType] = useState<"all" | LexiconEntryAuthoring["entryType"]>("all");
   const [sample, setSample] = useState("");
   const [sampleSpeaker, setSampleSpeaker] = useState("");
@@ -156,6 +167,8 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
   const [renderError, setRenderError] = useState("");
   const previewControllerRef = useRef<AbortController | null>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
+  const pendingFocusLineRef = useRef<number | undefined>(undefined);
+  const tabRefs = useRef<Record<ProjectTab, HTMLButtonElement | null>>({ script: null, settings: null, details: null, render: null });
   const revisionRef = useRef(0);
   const savedRevisionRef = useRef(0);
   const analysisRevisionRef = useRef(0);
@@ -488,14 +501,9 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
       const created = await client.projects.create({ name: newName, description: newDescription });
       await reloadProjects();
       setNewName(""); setNewDescription("");
+      setNewProjectOpen(false);
       void navigate(`/projects/${created.id}`);
     } catch (error) { setErrors([message(error)]); } finally { setBusy(false); }
-  };
-
-  const chooseProject = (id: string) => {
-    if (id === projectId) return;
-    if (isDirty && !window.confirm("Discard unsaved project changes?")) return;
-    void navigate(`/projects/${id}`);
   };
 
   const duplicateProject = async () => {
@@ -540,12 +548,40 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
     });
   };
 
-  const focusLine = (line: number) => {
-    if (!draft || !editorRef.current) return;
-    const start = draft.scriptSource.split(/\r?\n/u).slice(0, line - 1).reduce((length, item) => length + item.length + 1, 0);
-    editorRef.current.focus();
-    editorRef.current.setSelectionRange(start, start);
+  const selectTab = (tab: ProjectTab, focus = false) => {
+    setSearchParams(tab === "script" ? {} : { tab });
+    if (focus) window.setTimeout(() => tabRefs.current[tab]?.focus(), 0);
   };
+
+  const moveTabFocus = (event: KeyboardEvent<HTMLButtonElement>, tab: ProjectTab) => {
+    const index = projectTabs.findIndex(({ id }) => id === tab);
+    const destination = event.key === "ArrowRight" ? projectTabs[(index + 1) % projectTabs.length]?.id
+      : event.key === "ArrowLeft" ? projectTabs[(index - 1 + projectTabs.length) % projectTabs.length]?.id
+        : event.key === "Home" ? projectTabs[0]?.id
+          : event.key === "End" ? projectTabs.at(-1)?.id : undefined;
+    if (!destination) return;
+    event.preventDefault();
+    selectTab(destination, true);
+  };
+
+  const focusLine = (line: number) => {
+    if (!draft) return;
+    pendingFocusLineRef.current = line;
+    selectTab("script");
+  };
+
+  useEffect(() => {
+    const line = pendingFocusLineRef.current;
+    if (activeTab !== "script" || line === undefined || !draft) return;
+    pendingFocusLineRef.current = undefined;
+    window.setTimeout(() => {
+      const editor = editorRef.current;
+      if (!editor) return;
+      const start = draft.scriptSource.split(/\r?\n/u).slice(0, line - 1).reduce((length, item) => length + item.length + 1, 0);
+      editor.focus();
+      editor.setSelectionRange(start, start);
+    }, 0);
+  }, [activeTab, draft]);
 
   const findNext = () => {
     const editor = editorRef.current;
@@ -577,27 +613,18 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
     catch (error) { setErrors([message(error)]); }
   };
 
-  const saveLexicon = async () => {
-    const candidate: LexiconEntryAuthoring = { ...lexiconDraft, ...(editingLexicon ? { id: editingLexicon.id } : {}) };
+  const saveLexicon = () => {
+    const candidate: LexiconEntryAuthoring = { ...lexiconDraft, scope: "project", ...(editingLexicon ? { id: editingLexicon } : {}) };
     if (!candidate.displayText.trim() || !candidate.spokenText.trim()) { setErrors(["Display text and spoken text are required."]); return; }
-    if (candidate.scope === "global") {
-      const next = editingLexicon?.scope === "global"
-        ? globalLexicon.map((entry) => entry.id === editingLexicon.id ? candidate : entry)
-        : [...globalLexicon, candidate];
-      try { setGlobalLexicon(authoringLexicon(await client.globalLexicon.replace(next))); }
-      catch (error) { setErrors([message(error)]); return; }
-    } else {
-      updateDraft((current) => ({ ...current, lexiconEntries: editingLexicon?.scope === "project"
-        ? current.lexiconEntries.map((entry) => entry.id === editingLexicon.id ? candidate : entry)
-        : [...current.lexiconEntries, candidate] }));
-    }
+    updateDraft((current) => ({ ...current, lexiconEntries: editingLexicon
+      ? current.lexiconEntries.map((entry) => entry.id === editingLexicon ? candidate : entry)
+      : [...current.lexiconEntries, candidate] }));
     setLexiconDraft(emptyLexiconDraft); setEditingLexicon(undefined);
   };
 
-  const removeLexicon = async (scope: "global" | "project", id: string | undefined) => {
+  const removeLexicon = (id: string | undefined) => {
     if (!id) return;
-    if (scope === "global") setGlobalLexicon(authoringLexicon(await client.globalLexicon.replace(globalLexicon.filter((entry) => entry.id !== id))));
-    else updateDraft((current) => ({ ...current, lexiconEntries: current.lexiconEntries.filter((entry) => entry.id !== id) }));
+    updateDraft((current) => ({ ...current, lexiconEntries: current.lexiconEntries.filter((entry) => entry.id !== id) }));
   };
 
   const replaceIgnoredDiagnostics = async (next: IgnoredDiagnosticCollection, successMessage: string) => {
@@ -733,10 +760,9 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
     } catch (error) { setPreviewError(message(error)); }
   };
 
-  const allLexicon = [...globalLexicon, ...(draft?.lexiconEntries ?? [])];
-  const filteredLexicon = allLexicon.filter((entry) =>
-    (lexiconScope === "all" || entry.scope === lexiconScope)
-    && (lexiconType === "all" || entry.entryType === lexiconType)
+  const projectLexicon = draft?.lexiconEntries ?? [];
+  const filteredLexicon = projectLexicon.filter((entry) =>
+    (lexiconType === "all" || entry.entryType === lexiconType)
     && (!lexiconSearch || `${entry.displayText} ${entry.senseId ?? ""} ${entry.spokenText}`.toLocaleLowerCase().includes(lexiconSearch.toLocaleLowerCase())));
   const activeDiagnostics: IgnoredDiagnostic[] = analysis ? [
     ...analysis.parseResult.errors,
@@ -746,52 +772,76 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
   ].map((item) => ({ code: item.code, pattern: item.ignorePattern })) : [];
   const activeDiagnosticsByKey = new Map(activeDiagnostics.map((item) => [diagnosticKey(item), item]));
 
-  return (
+  if (!projectId) return (
     <div className={styles.page}>
       <header className={styles.pageHeader}>
-        <div><p className={styles.kicker}>Connected authoring</p><h2>Projects</h2><p>Shape the script, map every discovered cue, then read the narration score before audio exists.</p></div>
-        <div className={styles.status} data-state={saveState}><span>{analysisState === "parsing" ? "Parsing" : analysisState === "failed" ? "Parser failed" : dryRun?.status === "ready" ? "Ready to render" : dryRun?.status === "readyWithWarnings" ? "Ready with warnings" : "Blocked by errors"}</span><strong>{saveState === "saved" ? "Saved" : saveState === "saving" ? "Saving…" : saveState === "invalid" ? "Invalid" : saveState === "failed" ? "Save failed" : "Unsaved"}</strong></div>
+        <div><p className={styles.kicker}>Project index</p><h2>Projects</h2><p>Open a narration workspace or start a new study guide.</p></div>
+        <button type="button" aria-expanded={newProjectOpen} aria-controls="new-project-form" onClick={() => setNewProjectOpen((open) => !open)}>{newProjectOpen ? "Close form" : "New project"}</button>
+      </header>
+      {errors.length > 0 ? <div className={styles.alert} role="alert"><strong>Review these items</strong><ul>{errors.map((item) => <li key={item}>{item}</li>)}</ul><button type="button" onClick={() => setErrors([])}>Dismiss</button></div> : null}
+      {newProjectOpen ? <form id="new-project-form" className={styles.newProjectForm} onSubmit={(event) => { event.preventDefault(); void createProject(); }}>
+        <div><p className={styles.kicker}>New workspace</p><h3>Create project</h3></div>
+        <label>Project name<input autoFocus value={newName} onChange={(event) => setNewName(event.target.value)} /></label>
+        <label>Description<input value={newDescription} onChange={(event) => setNewDescription(event.target.value)} /></label>
+        <div className={styles.actionRow}><button type="submit" disabled={busy || !newName.trim()}>Create project</button><button type="button" className={styles.secondary} onClick={() => { setNewProjectOpen(false); setNewName(""); setNewDescription(""); }}>Cancel</button></div>
+      </form> : null}
+      <section className={styles.projectIndex} aria-labelledby="project-index-heading">
+        <div className={styles.sectionHeading}><div><span>Authoring ledger</span><h3 id="project-index-heading">All projects</h3></div><b>{projects.length}</b></div>
+        <div className={styles.projectTableScroll} tabIndex={0}>
+          <table className={styles.projectTable}>
+            <thead><tr><th scope="col">Name</th><th scope="col">Description</th><th scope="col">Created</th><th scope="col">Last updated</th><th scope="col"><span className={styles.visuallyHidden}>Open</span></th></tr></thead>
+            <tbody>{busy ? <tr><td colSpan={5}>Loading projects…</td></tr> : projects.length === 0 ? <tr><td colSpan={5}>No projects yet. Create the first study guide.</td></tr> : projects.map((item) => <tr key={item.id}><th scope="row">{item.name}</th><td>{item.description || "No description"}</td><td><time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString()}</time></td><td><time dateTime={item.updatedAt}>{new Date(item.updatedAt).toLocaleString()}</time></td><td><Link to={`/projects/${item.id}`}>Open</Link></td></tr>)}</tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  );
+
+  return (
+    <div className={styles.page}>
+      <Link className={styles.backLink} to="/projects">← Back to Projects</Link>
+      <header className={styles.pageHeader}>
+        <div><p className={styles.kicker}>Project workspace</p><h2>Project details</h2><p>Shape the script, tune its voice and timing, inspect the narration score, then render a frozen plan.</p></div>
       </header>
       {errors.length > 0 ? <div className={styles.alert} role="alert"><strong>Review these items</strong><ul>{errors.map((item) => <li key={item}>{item}</li>)}</ul><button type="button" onClick={() => setErrors([])}>Dismiss</button></div> : null}
       <p className={styles.notice} aria-live="polite">{notice}</p>
 
-      <div className={styles.workspace}>
-        <aside className={styles.projectRail} aria-label="Project list">
-          <h3>Your projects</h3>
-          <label>Project name<input value={newName} onChange={(event) => setNewName(event.target.value)} /></label>
-          <label>Description<input value={newDescription} onChange={(event) => setNewDescription(event.target.value)} /></label>
-          <button type="button" disabled={busy || !newName.trim()} onClick={() => void createProject()}>Create project</button>
-          <div className={styles.projectList}>{projects.length === 0 ? <p>No projects yet. Create the first study guide.</p> : projects.map((item) => <button type="button" className={item.id === projectId ? styles.activeProject : ""} key={item.id} onClick={() => chooseProject(item.id)}><strong>{item.name}</strong><span>{new Date(item.updatedAt).toLocaleString()}</span></button>)}</div>
-        </aside>
+      {draft && project ? <>
+        <section className={styles.projectIdentity} aria-label="Project details">
+          <label>Project name<input value={draft.name} onChange={(event) => updateDraft((current) => ({ ...current, name: event.target.value }))} /></label>
+          <label>Description<input value={draft.description} onChange={(event) => updateDraft((current) => ({ ...current, description: event.target.value }))} /></label>
+          <div className={styles.projectActions}><div className={styles.actionRow}><button type="button" onClick={() => void saveNow()} disabled={saveState === "saving"}>Save now</button><button type="button" className={styles.secondary} onClick={() => void duplicateProject()}>Duplicate</button><button type="button" className={styles.secondary} onClick={() => void clearProjectCache()}>Clear project cache</button><button type="button" className={styles.danger} onClick={() => void deleteProject()}>Delete</button></div><span className={styles.saveState} data-state={saveState} aria-live="polite">{saveState === "saved" ? "Saved" : saveState === "saving" ? "Saving…" : saveState === "invalid" ? "Invalid changes" : saveState === "failed" ? "Save failed" : "Unsaved changes"}</span></div>
+        </section>
+        <div className={styles.tabList} role="tablist" aria-label="Project workspace">
+          {projectTabs.map(({ id, label }) => <button ref={(element) => { tabRefs.current[id] = element; }} type="button" role="tab" id={`project-tab-${id}`} aria-controls={`project-panel-${id}`} aria-selected={activeTab === id} tabIndex={activeTab === id ? 0 : -1} key={id} onClick={() => selectTab(id)} onKeyDown={(event) => moveTabFocus(event, id)}>{label}</button>)}
+        </div>
+      </> : null}
 
-        {!draft || !project ? <section className={styles.empty}><h3>Start with a project</h3><p>Create a project or choose one from the rail. Speaches can remain offline throughout this workflow.</p></section> : <>
-          <main className={styles.editorColumn}>
-            <section className={styles.connectionPanel}>
+      <div className={styles.tabPanel} role={draft && project ? "tabpanel" : undefined} id={draft && project ? `project-panel-${activeTab}` : undefined} aria-labelledby={draft && project ? `project-tab-${activeTab}` : undefined}>
+      <div className={styles.workspace}>
+        {!draft || !project ? <section className={styles.empty}><h3>{busy ? "Loading project" : "Project unavailable"}</h3><p>{busy ? "Opening the saved project workspace…" : "Return to the project index and choose another project."}</p></section> : <>
+          {activeTab === "script" || activeTab === "settings" ? <main className={styles.editorColumn}>
+            {activeTab === "settings" ? <section className={styles.connectionPanel}>
               <div><span>Voice backend</span><h3>Project connection</h3></div>
               <label>Connection profile<select value={draft.connectionProfileId ?? ""} onChange={(event) => updateDraft((current) => ({ ...current, connectionProfileId: event.target.value || null }))}><option value="">No connection</option>{connections.profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name} — {profile.source}</option>)}</select></label>
               <label>Optional model override<input list="project-models" value={draft.modelId ?? ""} placeholder={selectedConnection?.defaultModelId ?? "Use profile default"} onChange={(event) => updateDraft((current) => ({ ...current, modelId: event.target.value || null }))} /></label>
               <datalist id="project-models">{speechCatalogState?.status === "ready" ? speechCatalogState.catalog.models.map(({ modelId }) => <option key={modelId} value={modelId} />) : null}</datalist>
               <p data-state={selectedConnection?.lastTestSummary?.overall ?? "unverified"}>{selectedConnection ? `${selectedConnection.lastTestSummary?.overall ?? "unverified"} · ${effectiveModelId ?? "no model"}` : "Offline · no profile selected"}</p>
-            </section>
-            <section className={styles.projectIdentity}>
-              <label>Project name<input value={draft.name} onChange={(event) => updateDraft((current) => ({ ...current, name: event.target.value }))} /></label>
-              <label>Description<input value={draft.description} onChange={(event) => updateDraft((current) => ({ ...current, description: event.target.value }))} /></label>
-              <div className={styles.actionRow}><button type="button" onClick={() => void saveNow()} disabled={saveState === "saving"}>Save now</button><button type="button" className={styles.secondary} onClick={() => void duplicateProject()}>Duplicate</button><button type="button" className={styles.secondary} onClick={() => void clearProjectCache()}>Clear project cache</button><button type="button" className={styles.danger} onClick={() => void deleteProject()}>Delete</button></div>
-            </section>
+            </section> : null}
 
-            <section className={styles.scriptPanel} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void importFile(event.dataTransfer.files[0]); }}>
+            {activeTab === "script" ? <section className={styles.scriptPanel} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void importFile(event.dataTransfer.files[0]); }}>
               <div className={styles.sectionHeading}><div><span>Source</span><h3>Script editor</h3></div><label className={styles.fileButton}>Upload .txt<input type="file" accept=".txt,text/plain" onChange={(event) => void importFile(event.target.files?.[0])} /></label></div>
               <div className={styles.panelScrollBody} role="region" aria-label="Script editor content" tabIndex={0}>
                 <div className={styles.searchBar}><input aria-label="Find text" placeholder="Find literal text" value={search} onChange={(event) => setSearch(event.target.value)} /><input aria-label="Replacement text" placeholder="Replace with" value={replacement} onChange={(event) => setReplacement(event.target.value)} /><label><input type="checkbox" checked={caseSensitive} onChange={(event) => setCaseSensitive(event.target.checked)} />Case sensitive</label><button type="button" onClick={findNext}>Find next</button><button type="button" onClick={replaceNext}>Replace next</button><button type="button" onClick={() => updateDraft((current) => ({ ...current, scriptSource: replaceLiteral(current.scriptSource, search, replacement, caseSensitive) }))}>Replace all</button></div>
                 <div className={styles.sourceEditor}><pre aria-hidden="true">{lineNumbers}</pre><textarea ref={editorRef} aria-label="Script source" spellCheck={false} value={draft.scriptSource} onChange={(event) => updateDraft((current) => ({ ...current, scriptSource: event.target.value }))} /></div>
                 <div className={styles.sourceActions}><span>{draft.scriptSource.length.toLocaleString()} characters · drop a UTF-8 .txt file anywhere in this panel</span>{cleanedFencedSource !== undefined ? <button type="button" className={styles.secondary} onClick={() => { setCleanupUndo(draft.scriptSource); updateDraft((current) => ({ ...current, scriptSource: cleanedFencedSource })); }}>Remove surrounding code fence</button> : null}{cleanupUndo !== undefined ? <button type="button" className={styles.secondary} onClick={() => { updateDraft((current) => ({ ...current, scriptSource: cleanupUndo })); setCleanupUndo(undefined); }}>Restore fenced source</button> : null}</div>
               </div>
-            </section>
-          </main>
+            </section> : null}
+          </main> : null}
 
-          <aside className={styles.configRail} aria-label="Discovered configuration">
-            <section><div className={styles.sectionHeading}><div><span>Discovered</span><h3>Speakers</h3></div><b>{configuration.speakers.filter(({ discovered }) => discovered).length}</b></div>{configuration.speakers.map((row) => <article className={!row.discovered ? styles.unused : ""} key={row.speakerId}><header><code>{row.speakerId}</code><span>{row.occurrenceCount} uses{!row.discovered ? " · unused" : ""}</span></header><div className={styles.sourceLinks}>{analysis?.parseResult.discoveries.speakers.find(({ id }) => id === row.speakerId)?.occurrences.map(({ range }, index) => <button type="button" className={styles.sourceLink} key={`${row.speakerId}:${String(index)}`} onClick={() => focusLine(range.start.line)}>Line {range.start.line}</button>)}</div><label>Display name<input value={row.displayName} onChange={(event) => updateSpeaker(row.speakerId, { displayName: event.target.value })} /></label><label>Voices<select disabled={enabledVoices.length === 0} value={enabledVoices.some(({ voiceId }) => voiceId === row.voiceId) ? row.voiceId ?? "" : ""} onChange={(event) => updateSpeaker(row.speakerId, { voiceId: event.target.value })}>{enabledVoices.length === 0 ? <option value="">{voiceSelectionState === "loading" ? "Loading supported voices…" : "No supported voices"}</option> : enabledVoices.map((entry) => <option key={entry.voiceId} value={entry.voiceId}>{entry.label}</option>)}</select></label>{enabledVoices.length === 0 ? <p className={styles.voiceFieldMessage}>{!selectedConnection && voiceSelectionState === "ready" ? "The global voice catalog has no enabled voices." : voiceSelectionState === "failed" ? speechCatalogState?.status === "failed" ? speechCatalogState.error : "The global voice catalog could not be loaded." : voiceSelectionState === "modelUnavailable" ? "The selected model was not reported by Speaches." : voiceSelectionState === "noSupportedVoices" ? "Speaches reported no voices for the selected model." : voiceSelectionState === "ready" ? "The supported voices are disabled in Settings." : "Loading the selected model's supported voices."} {selectedConnection ? <button type="button" onClick={() => void connections.loadSpeechCatalog(selectedConnection.id, true).catch(() => undefined)}>Retry supported voices</button> : null} <button type="button" onClick={() => void navigate("/settings")}>Open Settings</button></p> : null}<div className={styles.voiceMeta}><strong>{voiceById.get(row.voiceId ?? "")?.label ?? "Voice unavailable"}</strong><code>{row.voiceId || "no raw ID"}</code><span data-state={availability(row.voiceId)}>{availability(row.voiceId)}</span></div><div className={styles.inlineFields}><label>Speed<input type="number" step="0.05" min="0.01" max="4" value={row.speed} onChange={(event) => updateSpeaker(row.speakerId, { speed: Number(event.target.value) })} /></label><label>Gain dB<input type="number" min="-60" max="24" value={row.gainDb} onChange={(event) => updateSpeaker(row.speakerId, { gainDb: Number(event.target.value) })} /></label></div><div className={styles.copyRow}><select aria-label={`Copy settings for ${row.speakerId}`} value={copySource[row.speakerId] ?? ""} onChange={(event) => setCopySource((current) => ({ ...current, [row.speakerId]: event.target.value }))}><option value="">Copy another speaker…</option>{configuration.speakers.filter((item) => item.speakerId !== row.speakerId).map((item) => <option key={item.speakerId} value={item.speakerId}>{item.speakerId}</option>)}</select><button type="button" className={styles.secondary} onClick={() => { const source = draft.speakerMappings.find((item) => item.speakerId === copySource[row.speakerId]); if (source) { setConfiguration((current) => ({ ...current, speakers: current.speakers.map((item) => item.speakerId === row.speakerId ? { ...item, voiceId: source.voiceId, speed: source.speed, gainDb: source.gainDb, roleDescription: source.roleDescription, sampleText: source.sampleText } : item) })); updateDraft((current) => ({ ...current, speakerMappings: current.speakerMappings.map((item) => item.speakerId === row.speakerId ? { ...source, speakerId: row.speakerId, displayName: item.displayName } : item) })); } }}>Copy</button></div></article>)}</section>
-            <section><div className={styles.sectionHeading}><div><span>Timing</span><h3>Pauses</h3></div><b>{configuration.pauses.filter(({ discovered }) => discovered).length}</b></div>
+          {activeTab === "settings" || activeTab === "details" ? <aside className={styles.configRail} aria-label={activeTab === "settings" ? "Project configuration" : "Project outline"}>
+            {activeTab === "settings" ? <section><div className={styles.sectionHeading}><div><span>Discovered</span><h3>Speakers</h3></div><b>{configuration.speakers.filter(({ discovered }) => discovered).length}</b></div>{configuration.speakers.map((row) => <article className={!row.discovered ? styles.unused : ""} key={row.speakerId}><header><code>{row.speakerId}</code><span>{row.occurrenceCount} uses{!row.discovered ? " · unused" : ""}</span></header><div className={styles.sourceLinks}>{analysis?.parseResult.discoveries.speakers.find(({ id }) => id === row.speakerId)?.occurrences.map(({ range }, index) => <button type="button" className={styles.sourceLink} key={`${row.speakerId}:${String(index)}`} onClick={() => focusLine(range.start.line)}>Line {range.start.line}</button>)}</div><label>Display name<input value={row.displayName} onChange={(event) => updateSpeaker(row.speakerId, { displayName: event.target.value })} /></label><label>Voices<select disabled={enabledVoices.length === 0} value={enabledVoices.some(({ voiceId }) => voiceId === row.voiceId) ? row.voiceId ?? "" : ""} onChange={(event) => updateSpeaker(row.speakerId, { voiceId: event.target.value })}>{enabledVoices.length === 0 ? <option value="">{voiceSelectionState === "loading" ? "Loading supported voices…" : "No supported voices"}</option> : enabledVoices.map((entry) => <option key={entry.voiceId} value={entry.voiceId}>{entry.label}</option>)}</select></label>{enabledVoices.length === 0 ? <p className={styles.voiceFieldMessage}>{!selectedConnection && voiceSelectionState === "ready" ? "The global voice catalog has no enabled voices." : voiceSelectionState === "failed" ? speechCatalogState?.status === "failed" ? speechCatalogState.error : "The global voice catalog could not be loaded." : voiceSelectionState === "modelUnavailable" ? "The selected model was not reported by Speaches." : voiceSelectionState === "noSupportedVoices" ? "Speaches reported no voices for the selected model." : voiceSelectionState === "ready" ? "The supported voices are disabled in Settings." : "Loading the selected model's supported voices."} {selectedConnection ? <button type="button" onClick={() => void connections.loadSpeechCatalog(selectedConnection.id, true).catch(() => undefined)}>Retry supported voices</button> : null} <button type="button" onClick={() => void navigate("/settings")}>Open Settings</button></p> : null}<div className={styles.voiceMeta}><strong>{voiceById.get(row.voiceId ?? "")?.label ?? "Voice unavailable"}</strong><code>{row.voiceId || "no raw ID"}</code><span data-state={availability(row.voiceId)}>{availability(row.voiceId)}</span></div><div className={styles.inlineFields}><label>Speed<input type="number" step="0.05" min="0.01" max="4" value={row.speed} onChange={(event) => updateSpeaker(row.speakerId, { speed: Number(event.target.value) })} /></label><label>Gain dB<input type="number" min="-60" max="24" value={row.gainDb} onChange={(event) => updateSpeaker(row.speakerId, { gainDb: Number(event.target.value) })} /></label></div><div className={styles.copyRow}><select aria-label={`Copy settings for ${row.speakerId}`} value={copySource[row.speakerId] ?? ""} onChange={(event) => setCopySource((current) => ({ ...current, [row.speakerId]: event.target.value }))}><option value="">Copy another speaker…</option>{configuration.speakers.filter((item) => item.speakerId !== row.speakerId).map((item) => <option key={item.speakerId} value={item.speakerId}>{item.speakerId}</option>)}</select><button type="button" className={styles.secondary} onClick={() => { const source = draft.speakerMappings.find((item) => item.speakerId === copySource[row.speakerId]); if (source) { setConfiguration((current) => ({ ...current, speakers: current.speakers.map((item) => item.speakerId === row.speakerId ? { ...item, voiceId: source.voiceId, speed: source.speed, gainDb: source.gainDb, roleDescription: source.roleDescription, sampleText: source.sampleText } : item) })); updateDraft((current) => ({ ...current, speakerMappings: current.speakerMappings.map((item) => item.speakerId === row.speakerId ? { ...source, speakerId: row.speakerId, displayName: item.displayName } : item) })); } }}>Copy</button></div></article>)}</section> : null}
+            {activeTab === "settings" ? <section><div className={styles.sectionHeading}><div><span>Timing</span><h3>Pauses</h3></div><b>{configuration.pauses.filter(({ discovered }) => discovered).length}</b></div>
               <div className={styles.transitionPauseGrid}>
                 {(["paragraph", "speakerChange", "section"] as const).map((transition) => <TransitionPauseEditor
                   key={transition}
@@ -802,24 +852,25 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
                 />)}
               </div>
               {configuration.pauses.map((row) => <article className={!row.discovered ? styles.unused : ""} key={row.pauseId}><header><code>{row.pauseId}</code><span>{row.occurrenceCount} uses{!row.discovered ? " · unused" : ""}</span></header><div className={styles.sourceLinks}>{analysis?.parseResult.discoveries.pauses.find(({ id }) => id === row.pauseId)?.occurrences.map(({ range }, index) => <button type="button" className={styles.sourceLink} key={`${row.pauseId}:${String(index)}`} onClick={() => focusLine(range.start.line)}>Line {range.start.line}</button>)}</div><label>Duration<input aria-invalid={invalidPauseRef.current[row.pauseId] !== undefined} value={pauseInputs[row.pauseId] ?? ""} onChange={(event) => updatePause(row, event.target.value)} /></label>{invalidPauseRef.current[row.pauseId] ? <p className={styles.fieldError}>{invalidPauseRef.current[row.pauseId]}</p> : null}<label>Description<input value={row.description} onChange={(event) => updateDraft((current) => ({ ...current, pausePresets: current.pausePresets.map((item) => item.pauseId === row.pauseId ? { ...item, description: event.target.value } : item) }))} /></label></article>)}
-            </section>
-            <section><div className={styles.sectionHeading}><div><span>Outline</span><h3>Sections</h3></div><b>{configuration.sections.length}</b></div>{configuration.sections.length === 0 ? <p>No sections discovered.</p> : configuration.sections.map((section) => <button type="button" className={styles.sectionLink} key={`${section.sourceLine}:${section.title}`} onClick={() => focusLine(section.sourceLine)}><strong>{section.title}</strong><span>Line {section.sourceLine} · {section.speechSegmentCount} speech segments</span></button>)}</section>
-          </aside>
+            </section> : null}
+            {activeTab === "details" ? <section><div className={styles.sectionHeading}><div><span>Outline</span><h3>Sections</h3></div><b>{configuration.sections.length}</b></div>{configuration.sections.length === 0 ? <p>No sections discovered.</p> : configuration.sections.map((section) => <button type="button" className={styles.sectionLink} key={`${section.sourceLine}:${section.title}`} onClick={() => focusLine(section.sourceLine)}><strong>{section.title}</strong><span>Line {section.sourceLine} · {section.speechSegmentCount} speech segments</span></button>)}</section> : null}
+          </aside> : null}
         </>}
       </div>
 
       {draft && project ? <>
-        <section className={styles.lexiconPanel}>
-          <div className={styles.sectionHeading}><div><span>Pronunciation</span><h3>Persisted lexicon workbench</h3></div><b>{allLexicon.length} entries</b></div>
-          <div className={styles.lexiconFilters}><input aria-label="Search lexicon" placeholder="Search terms and replacements" value={lexiconSearch} onChange={(event) => setLexiconSearch(event.target.value)} /><select aria-label="Lexicon scope filter" value={lexiconScope} onChange={(event) => setLexiconScope(event.target.value as typeof lexiconScope)}><option value="all">All scopes</option><option value="global">Global</option><option value="project">Project</option></select><select aria-label="Lexicon type filter" value={lexiconType} onChange={(event) => setLexiconType(event.target.value as typeof lexiconType)}><option value="all">All types</option><option value="exactTerm">Exact terms</option><option value="exactPhrase">Exact phrases</option><option value="namedSense">Named senses</option></select></div>
-          <div className={styles.lexiconGrid}><form onSubmit={(event) => { event.preventDefault(); void saveLexicon(); }}><label>Scope<select value={lexiconDraft.scope} onChange={(event) => setLexiconDraft((current) => ({ ...current, scope: event.target.value as "global" | "project" }))}><option value="project">Project</option><option value="global">Global</option></select></label><label>Type<select value={lexiconDraft.entryType} onChange={(event) => setLexiconDraft((current) => ({ ...current, entryType: event.target.value as LexiconEntryAuthoring["entryType"] }))}><option value="exactTerm">Exact term</option><option value="exactPhrase">Exact phrase</option><option value="namedSense">Named sense</option></select></label><label>Display text<input value={lexiconDraft.displayText} onChange={(event) => setLexiconDraft((current) => ({ ...current, displayText: event.target.value }))} /></label>{lexiconDraft.entryType === "namedSense" ? <label>Sense ID<input value={lexiconDraft.senseId ?? ""} onChange={(event) => setLexiconDraft((current) => ({ ...current, senseId: event.target.value }))} /></label> : null}<label>Spoken text<input value={lexiconDraft.spokenText} onChange={(event) => setLexiconDraft((current) => ({ ...current, spokenText: event.target.value }))} /></label><label>Notes<input value={lexiconDraft.notes ?? ""} onChange={(event) => setLexiconDraft((current) => ({ ...current, notes: event.target.value }))} /></label><div className={styles.checks}><label><input type="checkbox" checked={lexiconDraft.caseSensitive ?? true} onChange={(event) => setLexiconDraft((current) => ({ ...current, caseSensitive: event.target.checked }))} />Case sensitive</label><label><input type="checkbox" checked={lexiconDraft.wholeWord ?? true} onChange={(event) => setLexiconDraft((current) => ({ ...current, wholeWord: event.target.checked }))} />Whole word</label><label><input type="checkbox" checked={lexiconDraft.enabled ?? true} onChange={(event) => setLexiconDraft((current) => ({ ...current, enabled: event.target.checked }))} />Enabled</label></div><div className={styles.actionRow}><button type="submit">{editingLexicon ? "Save entry" : "Add entry"}</button>{editingLexicon ? <button type="button" className={styles.secondary} onClick={() => { setEditingLexicon(undefined); setLexiconDraft(emptyLexiconDraft); }}>Cancel</button> : null}</div></form><div className={styles.lexiconEntries}>{filteredLexicon.length === 0 ? <p>No matching lexicon entries.</p> : filteredLexicon.map((entry, index) => { const matches = analysis?.transformResult.matches.filter(({ entryId }) => entryId === entry.id) ?? []; return <article key={entry.id ?? `${entry.scope}-${String(index)}`}><div><strong>{entry.displayText}{entry.senseId ? ` + ${entry.senseId}` : ""}</strong><span>→ {entry.spokenText}</span></div><code>{entry.scope} · {entry.entryType} · {entry.enabled === false ? "disabled" : "enabled"} · {matches.length} matches</code><div className={styles.sourceLinks}>{matches.map((match) => <button type="button" className={styles.sourceLink} key={`${match.entryId}:${String(match.sourceStartOffset)}`} onClick={() => focusLine(match.range.start.line)}>Line {match.range.start.line}:{match.range.start.column}</button>)}</div><div className={styles.actionRow}><button type="button" className={styles.secondary} onClick={() => { setEditingLexicon({ scope: entry.scope, id: entry.id ?? "" }); setLexiconDraft({ ...entry, caseSensitive: entry.caseSensitive ?? true, wholeWord: entry.wholeWord ?? true, priority: entry.priority ?? 0, enabled: entry.enabled ?? true, notes: entry.notes ?? "" }); }}>Edit</button><button type="button" className={styles.secondary} onClick={() => { const next = { ...entry, enabled: !(entry.enabled ?? true) }; if (entry.scope === "global") void client.globalLexicon.replace(globalLexicon.map((item) => item.id === entry.id ? next : item)).then((saved) => setGlobalLexicon(authoringLexicon(saved))); else updateDraft((current) => ({ ...current, lexiconEntries: current.lexiconEntries.map((item) => item.id === entry.id ? next : item) })); }}>{entry.enabled === false ? "Enable" : "Disable"}</button><button type="button" className={styles.danger} onClick={() => void removeLexicon(entry.scope, entry.id)}>Delete</button></div></article>; })}</div></div>
+        {activeTab === "settings" ? <section className={styles.lexiconPanel}>
+          <div className={styles.sectionHeading}><div><span>Project pronunciation</span><h3>Project lexicon</h3></div><b>{projectLexicon.length} entries</b></div>
+          <p className={styles.lexiconNote}>These pronunciations apply only to this project. <Link to="/settings#global-lexicon">Manage global lexicon in application Settings.</Link></p>
+          <div className={styles.lexiconFilters}><input aria-label="Search project lexicon" placeholder="Search terms and replacements" value={lexiconSearch} onChange={(event) => setLexiconSearch(event.target.value)} /><select aria-label="Project lexicon type filter" value={lexiconType} onChange={(event) => setLexiconType(event.target.value as typeof lexiconType)}><option value="all">All types</option><option value="exactTerm">Exact terms</option><option value="exactPhrase">Exact phrases</option><option value="namedSense">Named senses</option></select></div>
+          <div className={styles.lexiconGrid}><form onSubmit={(event) => { event.preventDefault(); saveLexicon(); }}><label>Type<select value={lexiconDraft.entryType} onChange={(event) => setLexiconDraft((current) => ({ ...current, entryType: event.target.value as LexiconEntryAuthoring["entryType"] }))}><option value="exactTerm">Exact term</option><option value="exactPhrase">Exact phrase</option><option value="namedSense">Named sense</option></select></label><label>Display text<input value={lexiconDraft.displayText} onChange={(event) => setLexiconDraft((current) => ({ ...current, displayText: event.target.value }))} /></label>{lexiconDraft.entryType === "namedSense" ? <label>Sense ID<input value={lexiconDraft.senseId ?? ""} onChange={(event) => setLexiconDraft((current) => ({ ...current, senseId: event.target.value }))} /></label> : null}<label>Spoken text<input value={lexiconDraft.spokenText} onChange={(event) => setLexiconDraft((current) => ({ ...current, spokenText: event.target.value }))} /></label><label>Notes<input value={lexiconDraft.notes ?? ""} onChange={(event) => setLexiconDraft((current) => ({ ...current, notes: event.target.value }))} /></label><div className={styles.checks}><label><input type="checkbox" checked={lexiconDraft.caseSensitive ?? true} onChange={(event) => setLexiconDraft((current) => ({ ...current, caseSensitive: event.target.checked }))} />Case sensitive</label><label><input type="checkbox" checked={lexiconDraft.wholeWord ?? true} onChange={(event) => setLexiconDraft((current) => ({ ...current, wholeWord: event.target.checked }))} />Whole word</label><label><input type="checkbox" checked={lexiconDraft.enabled ?? true} onChange={(event) => setLexiconDraft((current) => ({ ...current, enabled: event.target.checked }))} />Enabled</label></div><div className={styles.actionRow}><button type="submit">{editingLexicon ? "Save entry" : "Add entry"}</button>{editingLexicon ? <button type="button" className={styles.secondary} onClick={() => { setEditingLexicon(undefined); setLexiconDraft(emptyLexiconDraft); }}>Cancel</button> : null}</div></form><div className={styles.lexiconEntries}>{filteredLexicon.length === 0 ? <p>No matching project lexicon entries.</p> : filteredLexicon.map((entry, index) => { const matches = analysis?.transformResult.matches.filter(({ entryId }) => entryId === entry.id) ?? []; return <article key={entry.id ?? `project-${String(index)}`}><div><strong>{entry.displayText}{entry.senseId ? ` + ${entry.senseId}` : ""}</strong><span>→ {entry.spokenText}</span></div><code>project · {entry.entryType} · {entry.enabled === false ? "disabled" : "enabled"} · {matches.length} matches</code><div className={styles.sourceLinks}>{matches.map((match) => <button type="button" className={styles.sourceLink} key={`${match.entryId}:${String(match.sourceStartOffset)}`} onClick={() => focusLine(match.range.start.line)}>Line {match.range.start.line}:{match.range.start.column}</button>)}</div><div className={styles.actionRow}><button type="button" className={styles.secondary} onClick={() => { setEditingLexicon(entry.id ?? ""); setLexiconDraft({ ...entry, scope: "project", caseSensitive: entry.caseSensitive ?? true, wholeWord: entry.wholeWord ?? true, priority: entry.priority ?? 0, enabled: entry.enabled ?? true, notes: entry.notes ?? "" }); }}>Edit</button><button type="button" className={styles.secondary} onClick={() => updateDraft((current) => ({ ...current, lexiconEntries: current.lexiconEntries.map((item) => item.id === entry.id ? { ...item, enabled: !(item.enabled ?? true) } : item) }))}>{entry.enabled === false ? "Enable" : "Disable"}</button><button type="button" className={styles.danger} onClick={() => removeLexicon(entry.id)}>Delete</button></div></article>; })}</div></div>
           <div className={styles.sample}><label>Pronunciation test<textarea value={sample} onChange={(event) => setSample(event.target.value)} placeholder="Enter a word, phrase, or sentence." /></label><label>Speaker<select value={sampleSpeaker} onChange={(event) => setSampleSpeaker(event.target.value)}><option value="">System narrator</option>{configuration.speakers.map((row) => <option key={row.speakerId} value={row.speakerId}>{row.displayName} — {row.voiceId || "unmapped"}</option>)}</select><button type="button" disabled={previewBusy || !sample.trim() || !sampleResult?.synthesisReady} onClick={() => void runPreview({ mode: "pronunciation", text: sample, ...(sampleSpeaker ? { speakerId: sampleSpeaker } : {}) })}>{previewBusy ? "Previewing…" : "Preview pronunciation"}</button></label><div><span>Original</span><p>{sample || "—"}</p><span>Readable</span><p>{sampleResult?.readableTranscript || "—"}</p><span>TTS text</span><p>{sampleResult?.ttsTranscript || "—"}</p></div></div>
-        </section>
+        </section> : null}
 
-        {previewError ? <p className={styles.previewError} role="alert">{previewError} Your project and preview selection are unchanged.</p> : null}
-        {previewResult ? <PreviewResultCard result={previewResult} onClearEntry={clearPreviewEntry} /> : null}
+        {previewError && (activeTab === "settings" || activeTab === "details") ? <p className={styles.previewError} role="alert">{previewError} Your project and preview selection are unchanged.</p> : null}
+        {previewResult && ((previewResult.mode === "pronunciation" && activeTab === "settings") || (previewResult.mode === "segment" && activeTab === "details")) ? <PreviewResultCard result={previewResult} onClearEntry={clearPreviewEntry} /> : null}
 
-        <section className={styles.renderPlansPanel} aria-labelledby="render-plans-heading">
+        {activeTab === "render" ? <section className={styles.renderPlansPanel} aria-labelledby="render-plans-heading">
           <div className={styles.sectionHeading}>
             <div><span>Immutable handoff</span><h3 id="render-plans-heading">Frozen render plans</h3></div>
             <button type="button" disabled={renderPlanBusy || !dryRun || dryRun.status === "blocked"} onClick={() => void freezeRenderPlan()}>{renderPlanBusy ? "Freezing…" : "Freeze render plan"}</button>
@@ -869,9 +920,9 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
               voiceCatalog={voiceCatalog}
             />
           </section> : null}
-        </section>
+        </section> : null}
 
-        <section className={styles.validationPanel}>
+        {activeTab === "details" ? <section className={styles.validationPanel}>
           <div className={styles.sectionHeading}><div><span>Offline validation</span><h3>Narration score</h3></div><b>{dryRun?.rows.length ?? 0} ordered rows</b></div>
           <div className={styles.panelScrollBody} role="region" aria-label="Narration score content" tabIndex={0}>
             {analysisError ? <p className={styles.fieldError}>{analysisError}</p> : null}
@@ -890,8 +941,9 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
               </div>)}
             </div>
           </div>
-        </section>
+        </section> : null}
       </> : null}
+      </div>
     </div>
   );
 }

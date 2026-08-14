@@ -24,6 +24,14 @@ async function createSavedProfile(page: Page, application: StudyNarratorTestAppl
   await page.getByLabel("Active profile").selectOption({ label: "Playwright Speaches" });
 }
 
+async function createProject(page: Page, name: string, description = ""): Promise<void> {
+  await page.getByRole("button", { name: "New project" }).click();
+  await page.getByLabel("Project name").fill(name);
+  if (description) await page.getByLabel("Description").fill(description);
+  await page.getByRole("button", { name: "Create project" }).click();
+  await expect(page.getByRole("tab", { name: "Script Editor" })).toHaveAttribute("aria-selected", "true");
+}
+
 test.describe("Settings and connection diagnostics", () => {
   test.beforeEach(async ({ page, studyNarrator }) => {
     await continueOffline(page, studyNarrator);
@@ -94,6 +102,42 @@ test.describe("Settings and connection diagnostics", () => {
     await page.reload();
     await expect(page.getByLabel(/Default pause_medium duration/u)).toHaveValue("1250 ms");
   });
+
+  test("manages the fixed-scope global lexicon with validation and persistence", async ({ page, studyNarrator }) => {
+    await openRoute(page, studyNarrator, "/settings#global-lexicon");
+    await expect(page.getByRole("heading", { name: "Global lexicon" })).toBeVisible();
+    await page.getByRole("button", { name: "Add entry" }).click();
+    await expect(page.getByRole("alert")).toContainText("Display text and spoken text are required.");
+
+    await page.getByLabel("Display text").fill("SQL");
+    await page.getByLabel("Spoken text").fill("sequel");
+    await page.getByRole("button", { name: "Add entry" }).click();
+    await expect(page.getByText("Global pronunciation added.")).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole("article").filter({ hasText: "SQL" })).toContainText("→ sequel");
+
+    await page.getByLabel("Search global lexicon").fill("not present");
+    await expect(page.getByText("No matching global lexicon entries.")).toBeVisible();
+    await page.getByLabel("Search global lexicon").fill("");
+    const entry = page.getByRole("article").filter({ hasText: "SQL" });
+    await entry.getByRole("button", { name: "Disable" }).click();
+    await expect(entry).toContainText("disabled");
+    await entry.getByRole("button", { name: "Edit" }).click();
+    await page.getByLabel("Spoken text").fill("ess cue ell");
+    await page.getByRole("button", { name: "Save entry" }).click();
+    await expect(entry).toContainText("→ ess cue ell");
+    await entry.getByRole("button", { name: "Delete" }).click();
+    await expect(page.getByText("No matching global lexicon entries.")).toBeVisible();
+
+    await page.route("**/api/lexicon/global", async (route) => {
+      if (route.request().method() === "PUT") await route.abort();
+      else await route.continue();
+    });
+    await page.getByLabel("Display text").fill("API");
+    await page.getByLabel("Spoken text").fill("A P I");
+    await page.getByRole("button", { name: "Add entry" }).click();
+    await expect(page.getByRole("alert")).toBeVisible();
+  });
 });
 
 test.describe("Projects connected authoring", () => {
@@ -102,13 +146,12 @@ test.describe("Projects connected authoring", () => {
     studyNarrator.fakeSpeaches.reset();
     await page.reload();
     await expect(page.getByRole("heading", { name: "Projects", exact: true })).toBeVisible();
-    await page.getByLabel("Project name").fill("Automated narration");
-    await page.getByLabel("Description").first().fill("Acceptance project");
-    await page.getByRole("button", { name: "Create project" }).click();
+    await createProject(page, "Automated narration", "Acceptance project");
     await expect(page.getByRole("heading", { name: "Script editor" })).toBeVisible();
 
     const longScript = ["[section: Start]", ...Array.from({ length: 48 }, (_value, index) => `[speaker_teacher] Welcome line ${String(index + 1)}.`), "[pause_short] Continue."].join("\n");
     await page.getByLabel("Script source").fill(longScript);
+    await page.getByRole("tab", { name: "Settings" }).click();
     const voices = page.getByLabel("Voices");
     await expect(voices).toBeVisible();
     await expect(voices).toHaveValue("af_heart");
@@ -129,44 +172,31 @@ test.describe("Projects connected authoring", () => {
     expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/models"] ?? 0).toBe(1);
     expect(await voices.evaluate((element) => ({ tagName: element.tagName, hasManualOption: [...(element as HTMLSelectElement).options].some(({ value }) => value === "manual_voice_id") }))).toEqual({ tagName: "SELECT", hasManualOption: false });
     await page.getByRole("article").filter({ hasText: "pause_short" }).getByLabel("Duration").fill("400 ms");
+    await page.getByRole("tab", { name: "Details" }).click();
     await expect(page.getByLabel("Dry run ordered segment table")).toContainText("Welcome line 48.");
 
-    const scriptHeading = page.getByRole("heading", { name: "Script editor" });
-    const scoreHeading = page.getByRole("heading", { name: "Narration score" });
-    const scriptBody = page.getByRole("region", { name: "Script editor content" });
     const scoreBody = page.getByRole("region", { name: "Narration score content" });
-    const layout = await page.evaluate(() => {
-      const script = document.querySelector('[aria-label="Script editor content"]');
+    const detailsLayout = await page.evaluate(() => {
       const score = document.querySelector('[aria-label="Narration score content"]');
-      const scriptPanel = script?.closest("section");
       const scorePanel = score?.closest("section");
-      if (!(script instanceof HTMLElement) || !(score instanceof HTMLElement) || !(scriptPanel instanceof HTMLElement) || !(scorePanel instanceof HTMLElement)) throw new Error("Expected bounded project panels.");
+      if (!(score instanceof HTMLElement) || !(scorePanel instanceof HTMLElement)) throw new Error("Expected a bounded narration score panel.");
       return {
-        scriptPanelHeight: scriptPanel.getBoundingClientRect().height,
         scorePanelHeight: scorePanel.getBoundingClientRect().height,
-        scriptOverflows: script.scrollHeight > script.clientHeight,
         scoreOverflows: score.scrollHeight > score.clientHeight
       };
     });
-    expect(layout.scriptPanelHeight).toBeLessThanOrEqual(600);
-    expect(layout.scorePanelHeight).toBeLessThanOrEqual(600);
-    expect(layout.scriptOverflows).toBe(true);
-    expect(layout.scoreOverflows).toBe(true);
-
-    const scriptHeadingY = (await scriptHeading.boundingBox())?.y;
-    const scoreHeadingY = (await scoreHeading.boundingBox())?.y;
-    await scriptBody.evaluate((element) => { element.scrollTop = 250; });
-    await expect.poll(() => scriptBody.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
-    expect(await scoreBody.evaluate((element) => element.scrollTop)).toBe(0);
+    expect(detailsLayout.scorePanelHeight).toBeLessThanOrEqual(600);
+    expect(detailsLayout.scoreOverflows).toBe(true);
     await scoreBody.evaluate((element) => { element.scrollTop = 250; });
     await expect.poll(() => scoreBody.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
-    expect((await scriptHeading.boundingBox())?.y).toBe(scriptHeadingY);
-    expect((await scoreHeading.boundingBox())?.y).toBe(scoreHeadingY);
 
     await page.getByRole("button", { name: "Save now" }).click();
     await expect(page.getByText("All changes saved.")).toBeVisible();
     await page.reload();
+    await expect(page.getByRole("tab", { name: "Details" })).toHaveAttribute("aria-selected", "true");
+    await page.getByRole("tab", { name: "Script Editor" }).click();
     await expect(page.getByLabel("Script source")).toHaveValue(longScript);
+    await page.getByRole("tab", { name: "Settings" }).click();
     await expect(page.getByLabel("Connection profile")).toHaveValue("environment-speaches");
     await expect(page.getByLabel("Optional model override")).toHaveValue(modelId);
     await expect(page.getByLabel("Voices")).toHaveValue("af_sky");
@@ -185,10 +215,10 @@ test.describe("Projects connected authoring", () => {
 
   test("persists diagnostic suppression and supports complete project CRUD", async ({ page, studyNarrator }) => {
     await continueOffline(page, studyNarrator);
-    await page.getByLabel("Project name").fill("Diagnostic study");
-    await page.getByRole("button", { name: "Create project" }).click();
+    await createProject(page, "Diagnostic study");
     await page.getByLabel("Script source").fill("[section Topic]\n[speaker_teacher] Second.");
 
+    await page.getByRole("tab", { name: "Details" }).click();
     await expect(page.getByText("MALFORMED_SECTION_DIRECTIVE")).toBeVisible();
     await page.getByRole("button", { name: "Save now" }).click();
     await expect(page.getByText("All changes saved.")).toBeVisible();
