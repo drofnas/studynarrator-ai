@@ -21,6 +21,7 @@ async function createSavedProfile(page: Page, application: StudyNarratorTestAppl
   await page.getByLabel("Timeout (seconds)").fill("1");
   await page.getByRole("button", { name: "Create profile" }).click();
   await expect(page.getByText("Playwright Speaches saved.")).toBeVisible();
+  await page.getByLabel("Active profile").selectOption({ label: "Playwright Speaches" });
 }
 
 test.describe("Settings and connection diagnostics", () => {
@@ -36,7 +37,7 @@ test.describe("Settings and connection diagnostics", () => {
     await expect(page.getByText("Connection test: connected.")).toBeVisible();
     expect(studyNarrator.fakeSpeaches.getState().requests.every(({ path }) => !path.includes("/v1/v1"))).toBe(true);
     await expect(page.getByRole("heading", { name: "connected" })).toBeVisible();
-    await expect(page.getByRole("link", { name: /^Connected\./u })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Connected. Playwright Speaches. Manage connection." })).toBeVisible();
 
     const scenarios: ReadonlyArray<[FakeSpeachesScenario, string]> = [
       ["unauthorized", "authenticationRequired"],
