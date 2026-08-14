@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  ConnectionProfileMutationSchema,
-  ConnectionProfileSchema,
   ConnectionTestSummarySchema,
+  SpeachesConnectionAuthoringSchema,
+  SpeachesConnectionSchema,
   SpeechCatalogSchema,
   VoiceCatalogSchema
 } from "./connections.js";
@@ -16,28 +16,11 @@ const stages = ["url", "dns", "tcp", "http", "authentication", "model", "voice",
 }));
 
 describe("connection contracts", () => {
-  it("accepts a one-shot credential mutation but excludes raw keys from profile output", () => {
-    const secret = "test-secret-must-not-appear";
-    expect(ConnectionProfileMutationSchema.parse({
-      profile: {
-        name: "LAN Speaches",
-        baseUrl: "http://speaches.lan:8000/v1",
-        defaultModelId: "speaches-ai/Kokoro-82M-v1.0-ONNX",
-        defaultVoiceId: "af_heart"
-      },
-      credential: { action: "replace", apiKey: secret }
-    }).credential).toEqual({ action: "replace", apiKey: secret });
-
-    const profile = ConnectionProfileSchema.parse({
-      id: "lan-speaches",
-      name: "LAN Speaches",
+  it("accepts one address-managed connection without profile or credential fields", () => {
+    const connection = SpeachesConnectionSchema.parse({
       baseUrl: "http://speaches.lan:8000",
       suppliedUrlForm: "v1",
-      source: "saved",
-      editable: true,
-      credentialEntryAllowed: true,
       configured: true,
-      apiKeyConfigured: true,
       defaultModelId: "speaches-ai/Kokoro-82M-v1.0-ONNX",
       defaultVoiceId: "af_heart",
       timeoutSeconds: 120,
@@ -49,8 +32,12 @@ describe("connection contracts", () => {
       createdAt: "2026-08-12T12:00:00.000Z",
       updatedAt: "2026-08-12T12:00:00.000Z"
     });
-    expect(JSON.stringify(profile)).not.toContain(secret);
-    expect(Object.keys(profile)).not.toContain("apiKey");
+    expect(Object.keys(connection)).not.toContain("id");
+    expect(Object.keys(connection)).not.toContain("name");
+    expect(Object.keys(connection)).not.toContain("apiKey");
+    expect(() => SpeachesConnectionAuthoringSchema.parse({
+      baseUrl: "http://speaches.lan:8000", defaultModelId: "model", defaultVoiceId: "voice", apiKey: "unsafe"
+    })).toThrow();
   });
 
   it("requires one result for every progressive diagnostic stage", () => {
@@ -95,17 +82,14 @@ describe("connection contracts", () => {
   it("bounds strict model-scoped speech catalogs", () => {
     expect(SpeechCatalogSchema.parse({
       schemaVersion: 1,
-      profileId: "local",
       models: [{ modelId: "model", voices: [{ voiceId: "voice", name: "Voice", language: "English", gender: null }] }]
     }).models[0]?.voices[0]).toMatchObject({ voiceId: "voice" });
     expect(() => SpeechCatalogSchema.parse({
       schemaVersion: 1,
-      profileId: "local",
       models: [{ modelId: "model", voices: [{ voiceId: "same", name: null, language: null, gender: null }, { voiceId: "same", name: null, language: null, gender: null }] }]
     })).toThrow(/Duplicate voice ID/u);
     expect(() => SpeechCatalogSchema.parse({
       schemaVersion: 1,
-      profileId: "local",
       models: [{ modelId: "model", voices: [], endpoint: "private" }]
     })).toThrow();
   });

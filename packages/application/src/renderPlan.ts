@@ -88,10 +88,9 @@ export function createRenderPlanService(dependencies: {
       try {
         const projectId = ProjectIdSchema.parse(projectIdInput);
         const project = dependencies.repository.getProject(projectId);
-        if (!project.connectionProfileId) throw new RenderPlanServiceError("RENDER_PLAN_CONFIGURATION", "Choose a connection profile before freezing a render plan.");
-        const profile = dependencies.repository.getConnectionProfile(project.connectionProfileId);
-        if (!profile.baseUrl) throw new RenderPlanServiceError("RENDER_PLAN_CONFIGURATION", "The connection profile needs a Speaches URL.");
-        const modelId = project.modelId ?? profile.defaultModelId;
+        const connection = dependencies.repository.getSpeachesConnection();
+        if (!connection.baseUrl) throw new RenderPlanServiceError("RENDER_PLAN_CONFIGURATION", "The Speaches connection needs a server address.");
+        const modelId = project.modelId ?? connection.defaultModelId;
         if (!modelId) throw new RenderPlanServiceError("RENDER_PLAN_CONFIGURATION", "Choose a speech model before freezing a render plan.");
         const globalLexiconEntries = dependencies.repository.listGlobalLexicon();
         const ignoredDiagnostics = dependencies.repository.getIgnoredDiagnostics();
@@ -109,11 +108,8 @@ export function createRenderPlanService(dependencies: {
           globalLexiconEntries,
           ignoredDiagnostics,
           connection: {
-            profileId: profile.id,
-            profileName: profile.name,
-            profileSource: profile.source,
             modelId,
-            serverIdentityHash: sha256(profile.baseUrl)
+            serverIdentityHash: sha256(connection.baseUrl)
           },
           versions: {
             scriptGrammar: SCRIPT_GRAMMAR_VERSION,
@@ -181,8 +177,8 @@ export function createRenderPlanService(dependencies: {
           const cache = await dependencies.cache.inspect({
             adapterId: SPEACHES_CACHE_ADAPTER_ID,
             adapterVersion: SPEACHES_CACHE_ADAPTER_VERSION,
-            serverIdentity: profile.baseUrl,
-            profileId: profile.id,
+            serverIdentity: connection.baseUrl,
+            profileId: connection.id,
             modelId,
             voiceId: speaker.voiceId,
             speed: speaker.speed,

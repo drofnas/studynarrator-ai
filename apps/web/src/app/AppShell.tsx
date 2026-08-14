@@ -139,9 +139,9 @@ export function AppShell() {
         </nav>
 
         <div className={styles.sidebarFooter}>
-          <Link className={styles.connectionMonitor} data-state={connectionState} aria-label={`${connectionLabel}. ${connections.activeProfile?.name ?? "No active profile"}. ${onboardingComplete ? "Manage connection" : "Finish setup"}.`} to={connectionPath}>
+          <Link className={styles.connectionMonitor} data-state={connectionState} aria-label={`${connectionLabel}. ${connections.connection?.baseUrl ? new URL(connections.connection.baseUrl).host : "Not configured"}. ${onboardingComplete ? "Manage connection" : "Finish setup"}.`} to={connectionPath}>
             <span className={styles.connectionHeading}><i aria-hidden="true" /><strong>{connectionLabel}</strong></span>
-            <span className={styles.connectionProfile}>{connections.activeProfile?.name ?? "No active profile"}</span>
+            <span className={styles.connectionProfile}>{connections.connection?.baseUrl ? new URL(connections.connection.baseUrl).host : "Not configured"}</span>
             <span className={styles.connectionAction}>{onboardingComplete ? "Manage connection" : "Finish setup"}<span aria-hidden="true">→</span></span>
           </Link>
           <span className={styles.version}>Version 0.1.0</span>

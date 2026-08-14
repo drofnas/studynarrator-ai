@@ -1,26 +1,23 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ConnectionProfile, ConnectionTestSummary, ConnectionsClient, PersistenceClient } from "@studynarrator/shared-types";
+import type { ConnectionTestSummary, PersistenceClient, SpeachesConnectionClient } from "@studynarrator/shared-types";
 import { App } from "@/app/App.js";
 
 const timestamp = "2026-08-12T12:00:00.000Z";
-const profile: ConnectionProfile = {
-  id: "local", name: "Local Speaches", baseUrl: "http://127.0.0.1:8000", suppliedUrlForm: "root", source: "saved", editable: true,
-  credentialEntryAllowed: true, configured: true, apiKeyConfigured: true, defaultModelId: "speaches-ai/Kokoro-82M-v1.0-ONNX", defaultVoiceId: "af_heart",
-  timeoutSeconds: 120, retryCount: 2, responseFormat: "wav", lastTestedAt: null, lastSuccessfulTestAt: null, lastTestSummary: null,
-  createdAt: timestamp, updatedAt: timestamp
+const emptyConnection = {
+  baseUrl: null, suppliedUrlForm: "unconfigured" as const, configured: false, defaultModelId: null, defaultVoiceId: null,
+  timeoutSeconds: 120, retryCount: 2, responseFormat: "wav" as const, lastTestedAt: null, lastSuccessfulTestAt: null,
+  lastTestSummary: null, createdAt: timestamp, updatedAt: timestamp
 };
-const summary: ConnectionTestSummary = {
-  schemaVersion: 1, overall: "modelUnavailable", testedAt: timestamp, httpStatus: 200,
-  stages: ["url", "dns", "tcp", "http", "authentication", "model", "voice", "audio"].map((stage, index) => ({
-    stage: stage as ConnectionTestSummary["stages"][number]["stage"], status: index < 5 ? "pass" : index === 5 ? "fail" : "skipped",
-    code: `${stage}-result`, message: "Diagnostic result.", durationMs: 1
-  })),
-  availableModelIds: [], availableVoiceIds: null
+const connectedSummary: ConnectionTestSummary = {
+  schemaVersion: 1, overall: "connected", testedAt: timestamp, httpStatus: 200,
+  stages: ["url", "dns", "tcp", "http", "authentication", "model", "voice", "audio"].map((stage) => ({
+    stage: stage as ConnectionTestSummary["stages"][number]["stage"], status: "pass", code: `${stage}-pass`, message: "Passed.", durationMs: 1
+  })), availableModelIds: ["model-z", "model-a"], availableVoiceIds: ["voice-z", "voice-a"]
 };
 const persistence = {
   projects: { list: vi.fn(async () => []), create: vi.fn(), get: vi.fn(), replace: vi.fn(), duplicate: vi.fn(), delete: vi.fn() },
@@ -31,63 +28,76 @@ const voiceCatalog = { get: vi.fn(async (modelId: string) => ({ schemaVersion: 1
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
-function clients(client: "web" | "electron") {
-  const completeOnboarding = vi.fn(async () => ({ activeProfileId: null, activeProfileLocked: false, onboardingCompletedAt: timestamp, client }));
+function client(): SpeachesConnectionClient {
+  let onboardingCompletedAt: string | null = null;
   return {
-    list: vi.fn(async () => []),
-    create: vi.fn(async () => profile), replace: vi.fn(), delete: vi.fn(),
-    test: vi.fn(async () => summary), exportDiagnostics: vi.fn(),
-    discoverSpeechCatalog: vi.fn(async (profileId: string) => ({ schemaVersion: 1 as const, profileId, models: [] })),
-    getSetupState: vi.fn(async () => ({ activeProfileId: null, activeProfileLocked: false, onboardingCompletedAt: null, client })),
-    setActiveProfile: vi.fn(async () => ({ activeProfileId: profile.id, activeProfileLocked: false, onboardingCompletedAt: null, client })),
-    completeOnboarding
+    get: vi.fn(async () => emptyConnection),
+    update: vi.fn(async (input) => ({ ...emptyConnection, ...input, suppliedUrlForm: "root" as const, configured: true, baseUrl: input.baseUrl ?? null })),
+    test: vi.fn(async () => connectedSummary),
+    discoverSpeechCatalog: vi.fn(async () => ({
+      schemaVersion: 1 as const,
+      models: [
+        { modelId: "model-z", voices: [{ voiceId: "voice-z", name: "First Voice", language: null, gender: null }, { voiceId: "voice-y", name: null, language: null, gender: null }] },
+        { modelId: "model-a", voices: [{ voiceId: "voice-a", name: "Other Voice", language: null, gender: null }] }
+      ]
+    })),
+    exportDiagnostics: vi.fn(),
+    getSetupState: vi.fn(async () => ({ onboardingCompletedAt, client: "web" as const })),
+    completeOnboarding: vi.fn(async () => {
+      onboardingCompletedAt = timestamp;
+      return { onboardingCompletedAt, client: "web" as const };
+    })
   };
 }
 
-function renderApp(connections: ConnectionsClient, route = "/projects") {
+function renderApp(connection: SpeachesConnectionClient, route = "/projects") {
   const speechCache = {
     status: vi.fn(async () => ({ contractVersion: 1 as const, entryCount: 0, totalBytes: 0, lastUsedAt: null, sessionHits: 0, sessionMisses: 0, sessionWrites: 0, sessionCorruptMisses: 0, inFlight: 0 })),
     clearAll: vi.fn(), clearProject: vi.fn(), clearEntry: vi.fn()
   };
-  return render(<MemoryRouter initialEntries={[route]}><App analyzer={{ analyze: vi.fn() }} client={{ diagnostics: vi.fn() }} persistence={persistence} connections={connections} voiceCatalog={voiceCatalog} scratchpad={{ preview: vi.fn() }} projectPreview={{ preview: vi.fn() }} speechCache={speechCache} renderPlans={{ create: vi.fn(), list: vi.fn(async () => []), get: vi.fn() }} scriptGeneration={{ previewPrompt: vi.fn(), exportPrompt: vi.fn(), exportSkillPackage: vi.fn() }} /></MemoryRouter>);
+  return render(<MemoryRouter initialEntries={[route]}><App analyzer={{ analyze: vi.fn() }} client={{ diagnostics: vi.fn() }} persistence={persistence} connection={connection} voiceCatalog={voiceCatalog} scratchpad={{ preview: vi.fn() }} projectPreview={{ preview: vi.fn() }} speechCache={speechCache} renderPlans={{ create: vi.fn(), list: vi.fn(async () => []), get: vi.fn() }} scriptGeneration={{ previewPrompt: vi.fn(), exportPrompt: vi.fn(), exportSkillPackage: vi.fn() }} /></MemoryRouter>);
 }
 
 describe("connection onboarding", () => {
-  it("redirects first run, shows Web guidance, and persists Continue offline", async () => {
-    const connections = clients("web");
-    renderApp(connections);
+  it("discovers a draft and preselects the first returned model and voice", async () => {
+    const connection = client();
+    renderApp(connection);
     expect(await screen.findByRole("heading", { name: "Connect the voice workshop" })).toBeInTheDocument();
-    expect(screen.getByText(/API keys must come from SPEACHES_API_KEY/u)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Continue offline" }));
-    expect(connections.completeOnboarding).toHaveBeenCalledOnce();
+    expect(screen.queryByText(/API key|profile/u)).not.toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText("Speaches address"), "http://127.0.0.1:8000");
+    await userEvent.click(screen.getByRole("button", { name: "Load catalog" }));
+    expect(await screen.findByLabelText("Model")).toHaveValue("model-z");
+    expect(screen.getByLabelText("Default Voice")).toHaveValue("voice-z");
+    expect(connection.update).not.toHaveBeenCalled();
+
+    await userEvent.selectOptions(screen.getByLabelText("Model"), "model-a");
+    expect(screen.getByLabelText("Default Voice")).toHaveValue("voice-a");
+    await userEvent.click(screen.getByRole("button", { name: "Save and Test" }));
+    await waitFor(() => expect(connection.update).toHaveBeenCalledWith(expect.objectContaining({
+      baseUrl: "http://127.0.0.1:8000", defaultModelId: "model-a", defaultVoiceId: "voice-a"
+    })));
+    expect(connection.test).toHaveBeenCalledOnce();
     expect(await screen.findByRole("heading", { name: "Projects" })).toBeInTheDocument();
   });
 
-  it("submits an Electron key once and clears the password field after a failed diagnostic", async () => {
-    const connections = clients("electron");
-    renderApp(connections, "/onboarding");
-    const password = await screen.findByLabelText(/API key \(one shot\)/u);
-    await userEvent.type(password, "test-secret-must-not-appear");
-    await userEvent.click(screen.getByRole("button", { name: "Create + Test Connection" }));
-    expect(connections.create).toHaveBeenCalledWith(expect.objectContaining({ credential: { action: "replace", apiKey: "test-secret-must-not-appear" } }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("modelUnavailable");
-    expect(password).toHaveValue("");
-    expect(JSON.stringify(await connections.list())).not.toContain("test-secret-must-not-appear");
+  it("invalidates the loaded catalog when the address changes", async () => {
+    const connection = client();
+    renderApp(connection, "/onboarding");
+    const address = await screen.findByLabelText("Speaches address");
+    await userEvent.type(address, "http://127.0.0.1:8000");
+    await userEvent.click(screen.getByRole("button", { name: "Load catalog" }));
+    expect(await screen.findByLabelText("Model")).toBeInTheDocument();
+    await userEvent.type(address, "1");
+    expect(screen.queryByLabelText("Model")).not.toBeInTheDocument();
   });
 
-  it("shows Testing in the shell while a staged check is pending", async () => {
-    let finish: (value: ConnectionTestSummary) => void = () => undefined;
-    const pending = new Promise<ConnectionTestSummary>((resolve) => { finish = resolve; });
-    const connections = {
-      ...clients("web"),
-      list: vi.fn(async () => [profile]),
-      test: vi.fn(() => pending),
-      getSetupState: vi.fn(async () => ({ activeProfileId: profile.id, activeProfileLocked: false, onboardingCompletedAt: null, client: "web" as const }))
-    };
-    renderApp(connections, "/onboarding");
-    const buttons = await screen.findAllByRole("button", { name: "Test Connection" });
-    fireEvent.click(buttons.at(-1)!);
-    expect(screen.getByRole("link", { name: /^Testing connection\./u })).toHaveAttribute("data-state", "testing");
-    await act(async () => finish(summary));
+  it("persists Continue offline without configuring a server", async () => {
+    const connection = client();
+    renderApp(connection);
+    await userEvent.click(await screen.findByRole("button", { name: "Continue offline" }));
+    expect(connection.completeOnboarding).toHaveBeenCalledOnce();
+    expect(connection.update).not.toHaveBeenCalled();
+    expect(await screen.findByRole("heading", { name: "Projects" })).toBeInTheDocument();
   });
 });

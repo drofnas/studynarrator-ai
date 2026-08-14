@@ -111,7 +111,6 @@ export class SpeachesCatalogError extends Error {
 }
 
 export interface SpeachesCatalogInput {
-  profileId: string;
   baseUrl: string;
   apiKey?: string | undefined;
   timeoutSeconds: number;
@@ -362,7 +361,7 @@ function parseCatalogVoice(value: unknown): SpeechCatalogVoice {
   };
 }
 
-function parseSpeechCatalog(payload: unknown, profileId: string): SpeechCatalog {
+function parseSpeechCatalog(payload: unknown): SpeechCatalog {
   if (typeof payload !== "object" || payload === null || !("models" in payload) || !Array.isArray(payload.models)) {
     throw new SpeachesCatalogError("invalidResponse", "Speaches returned invalid speech-model discovery data.", false);
   }
@@ -387,7 +386,6 @@ function parseSpeechCatalog(payload: unknown, profileId: string): SpeechCatalog 
   }
   return SpeechCatalogSchema.parse({
     schemaVersion: 1,
-    profileId,
     models: [...models].map(([modelId, voices]) => ({ modelId, voices: [...voices.values()] }))
   });
 }
@@ -426,15 +424,15 @@ export async function discoverSpeachesSpeechCatalog(
   input: SpeachesCatalogInput,
   dependencies: SpeachesAdapterDependencies = {}
 ): Promise<SpeechCatalog> {
-  if (!input.profileId.trim() || !Number.isInteger(input.timeoutSeconds) || input.timeoutSeconds < 1 || input.timeoutSeconds > 600
+  if (!Number.isInteger(input.timeoutSeconds) || input.timeoutSeconds < 1 || input.timeoutSeconds > 600
     || !Number.isInteger(input.retryCount) || input.retryCount < 0 || input.retryCount > 5) {
-    throw new SpeachesCatalogError("configurationError", "The selected connection profile cannot discover speech models.", false);
+    throw new SpeachesCatalogError("configurationError", "The connection settings cannot be used to discover speech models.", false);
   }
   let normalized: NormalizedSpeachesUrl;
   try {
     normalized = normalizeSpeachesUrl(input.baseUrl);
   } catch {
-    throw new SpeachesCatalogError("configurationError", "The selected connection profile has an invalid Speaches URL.", false);
+    throw new SpeachesCatalogError("configurationError", "The connection has an invalid Speaches URL.", false);
   }
   const fetchImpl = dependencies.fetch ?? fetch;
   const sleep = dependencies.sleep ?? defaultSleep;
@@ -458,7 +456,7 @@ export async function discoverSpeachesSpeechCatalog(
       if (!response.ok) {
         throw new SpeachesCatalogError("invalidResponse", "Speaches rejected speech catalog discovery.", false, response.status);
       }
-      return parseSpeechCatalog(await readJson(response), input.profileId);
+      return parseSpeechCatalog(await readJson(response));
     } catch (error) {
       const failure = catalogFailure(error, input.signal);
       if (!failure.retryable || attempt === maximumAttempts) throw failure;
@@ -557,7 +555,7 @@ export async function diagnoseSpeaches(
     return { normalizedUrl: normalized, summary: result("disconnected", testedAt, null, stages, [], null) };
   }
   if (response.status === 401 || response.status === 403) {
-    stages.push(stage("authentication", "fail", response.status === 401 ? "authentication-required" : "authentication-forbidden", "Authentication was rejected. Check the configured API key.", elapsed(started)));
+    stages.push(stage("authentication", "fail", response.status === 401 ? "authentication-required" : "authentication-forbidden", "This Speaches server requires authentication, which StudyNarrator does not support.", elapsed(started)));
     return { normalizedUrl: normalized, summary: result("authenticationRequired", testedAt, response.status, stages, [], null) };
   }
   if (!response.ok) {
@@ -591,7 +589,7 @@ export async function diagnoseSpeaches(
   try {
     const catalogResponse = await fetchImpl(`${normalized.rootUrl}/v1/audio/models`, { method: "GET", headers: headers(input.apiKey), signal });
     if (catalogResponse.ok) {
-      const catalog = parseSpeechCatalog(await readJson(catalogResponse), "diagnostic");
+      const catalog = parseSpeechCatalog(await readJson(catalogResponse));
       voices = catalog.models.find(({ modelId }) => modelId === input.modelId)?.voices.map(({ voiceId }) => voiceId) ?? [];
       stages.push(stage("voice", "pass", voices.includes(input.voiceId ?? "") ? "voice-listed-for-model" : "model-voice-list-checked", "The selected model's voice catalog was checked; speech remains definitive.", elapsed(started)));
     } else {
@@ -695,7 +693,7 @@ export async function synthesizeSpeech(
   try {
     normalized = normalizeSpeachesUrl(input.baseUrl);
   } catch {
-    throw new SpeachesSynthesisError("configurationError", "The selected connection profile has an invalid Speaches URL.", false);
+    throw new SpeachesSynthesisError("configurationError", "The connection has an invalid Speaches URL.", false);
   }
   const fetchImpl = dependencies.fetch ?? fetch;
   const audioProbe = dependencies.probeAudio ?? probeAudioWithFfprobe;
@@ -720,7 +718,7 @@ export async function synthesizeSpeech(
         signal
       });
       if (response.status === 401 || response.status === 403) {
-        throw new SpeachesSynthesisError("authenticationRequired", "Speaches rejected authentication. Test the profile and update its API key.", false, response.status);
+        throw new SpeachesSynthesisError("authenticationRequired", "This Speaches server requires authentication, which StudyNarrator does not support.", false, response.status);
       }
       if (response.status === 429 || response.status >= 500) {
         throw new SpeachesSynthesisError("unavailable", "Speaches is temporarily unavailable for synthesis.", true, response.status);

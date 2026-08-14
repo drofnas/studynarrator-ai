@@ -10,11 +10,9 @@ const revokeObjectUrl = vi.fn();
 
 function result(index: number): ScratchpadPreviewResult {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     id: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
     createdAt: "2026-08-12T12:00:00.000Z",
-    connectionProfileId: "profile",
-    connectionProfileName: "Local",
     modelId: "model",
     voiceId: `voice-${String(index)}`,
     voiceLabel: `Voice ${String(index)}`,

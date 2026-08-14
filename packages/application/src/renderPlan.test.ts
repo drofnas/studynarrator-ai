@@ -12,21 +12,19 @@ const projectId = "00000000-0000-4000-8000-000000000001";
 const planId = "00000000-0000-4000-8000-000000000002";
 const timestamp = "2026-08-13T12:00:00.000Z";
 const profile = {
-  id: "profile", name: "Local", baseUrl: "http://127.0.0.1:8000", suppliedUrlForm: "root" as const,
-  source: "saved" as const, editable: true, credentialEntryAllowed: false, configured: true, apiKeyConfigured: false,
+  id: "profile", baseUrl: "http://127.0.0.1:8000", suppliedUrlForm: "root" as const, configured: true,
   defaultModelId: "model", defaultVoiceId: "voice-teacher", timeoutSeconds: 120, retryCount: 2, responseFormat: "wav" as const,
   lastTestedAt: null, lastSuccessfulTestAt: null, lastTestSummary: null, createdAt: timestamp, updatedAt: timestamp
 };
 
 function project(): ProjectDetail {
   return {
-    contractVersion: 4,
+    contractVersion: 5,
     id: projectId,
     name: "Render plan fixture",
     description: "",
     scriptSource: `[section: First]\n[speaker_teacher] SQL one.\n\n[speaker_student] Two.\n[section: Second]\n[speaker_teacher] Three.\n\n[speaker_teacher] Four.\n[pause_long]\n[speaker_teacher] Five.\n[pause_short]`,
     scriptHash: "a".repeat(64),
-    connectionProfileId: profile.id,
     modelId: "model",
     speakerMappings: [
       { speakerId: "teacher", displayName: "Teacher", voiceId: "voice-teacher", speed: 1, gainDb: 0, roleDescription: "", sampleText: "" },
@@ -56,8 +54,7 @@ function repository(current: { project: ProjectDetail }): RenderPlanRepository {
       caseSensitive: true, wholeWord: true, priority: 0, enabled: true, notes: "", createdAt: timestamp, updatedAt: timestamp
     }]),
     getIgnoredDiagnostics: vi.fn(() => []),
-    getConnectionProfile: vi.fn(() => profile),
-    getConnectionCredentialReference: vi.fn(() => null),
+    getSpeachesConnection: vi.fn(() => profile),
     getVoiceCatalogOverrides: vi.fn(() => ({ schemaVersion: 1, modelId: "model", entries: [] }))
   } as unknown as RenderPlanRepository;
 }
@@ -87,6 +84,12 @@ describe("render plan application service", () => {
       createId: () => planId, now: () => new Date(timestamp)
     });
     const plan = await service.create(projectId);
+    const frozen = await store.load(planId);
+    expect(frozen.snapshot).toMatchObject({
+      schemaVersion: 2,
+      connection: { modelId: "model", serverIdentityHash: expect.stringMatching(/^[a-f0-9]{64}$/u) }
+    });
+    expect(frozen.snapshot.connection).not.toHaveProperty("profileId");
     expect(plan.entries.map((entry) => entry.type === "pause" ? `${entry.type}:${entry.reason}:${String(entry.durationMs)}` : entry.type)).toEqual([
       "section", "speech", "pause:speakerChange:500", "speech", "section", "pause:section:1500", "speech",
       "pause:paragraph:750", "speech", "pause:explicit:1500", "speech", "pause:explicit:350"

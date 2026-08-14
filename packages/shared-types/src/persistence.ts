@@ -8,15 +8,9 @@ import {
   SpeakerIdSchema
 } from "@studynarrator/core";
 import { z } from "zod";
-import {
-  ConnectionProfileAuthoringSchema,
-  ConnectionProfileCollectionSchema,
-  ConnectionProfileIdInputSchema,
-  type ConnectionProfile
-} from "./connections.js";
 
 export const DATABASE_SCHEMA_VERSION = 7;
-export const PERSISTENCE_CONTRACT_VERSION = 4;
+export const PERSISTENCE_CONTRACT_VERSION = 5;
 export const PERSISTENCE_CHANNELS = Object.freeze({
   status: "persistence.status",
   projectsList: "projects.list",
@@ -149,7 +143,6 @@ const ProjectAggregateShape = {
   name: z.string().trim().min(1).max(200),
   description: z.string().max(10_000),
   scriptSource: z.string().max(5_000_000),
-  connectionProfileId: DurableIdSchema.nullable(),
   modelId: z.string().trim().min(1).max(500).nullable().default(null),
   speakerMappings: SpeakerMappingCollectionSchema,
   pausePresets: PausePresetCollectionSchema,
@@ -214,18 +207,9 @@ export const IgnoredDiagnosticCollectionSchema = z.array(IgnoredDiagnosticSchema
 });
 export type IgnoredDiagnosticCollection = z.infer<typeof IgnoredDiagnosticCollectionSchema>;
 
-export const ConnectionProfileAuthoringCollectionSchema = z.array(ConnectionProfileAuthoringSchema)
-  .superRefine((items, context) => enforceUniqueOptionalIds(items, context, "connection profile"));
-export const ConnectionProfilePlaceholderSchema = ConnectionProfileCollectionSchema.element;
-export type ConnectionProfilePlaceholder = ConnectionProfile;
 export const ProjectIdInputSchema = z.object({ projectId: ProjectIdSchema }).strict();
 export const ProjectReplaceRequestSchema = z.object({ projectId: ProjectIdSchema, project: ProjectReplaceInputSchema }).strict();
 export const ProjectDuplicateRequestSchema = z.object({ projectId: ProjectIdSchema, duplicate: ProjectDuplicateInputSchema }).strict();
-export const ConnectionProfileReplaceRequestSchema = z.object({
-  profileId: DurableIdSchema,
-  profile: ConnectionProfileAuthoringSchema
-}).strict();
-export { ConnectionProfileAuthoringSchema, ConnectionProfileCollectionSchema, ConnectionProfileIdInputSchema };
 export const EmptyResponseSchema = z.object({}).strict();
 
 export const PersistenceReadyStatusSchema = z.object({

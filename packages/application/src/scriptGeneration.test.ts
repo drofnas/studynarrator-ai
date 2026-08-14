@@ -6,13 +6,12 @@ import { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
 
 const timestamp = "2026-08-14T00:00:00.000Z";
 const project: ProjectDetail = {
-  contractVersion: 4,
+  contractVersion: 5,
   id: "00000000-0000-4000-8000-000000000001",
   name: "Résumé / unsafe project",
   description: "",
   scriptSource: "PRIVATE SOURCE MARKER",
   scriptHash: "a".repeat(64),
-  connectionProfileId: null,
   modelId: null,
   speakerMappings: [],
   pausePresets: [],

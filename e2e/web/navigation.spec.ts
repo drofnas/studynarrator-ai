@@ -5,22 +5,26 @@ test.describe("shell, onboarding, and runtime routes", () => {
     await openRoute(page, studyNarrator, "/projects");
 
     await expect(page.getByRole("heading", { name: "Connect the voice workshop" })).toBeVisible();
-    await expect(page.getByText(/Web endpoint settings are server-side/u)).toBeVisible();
-    await expect(page.getByText("SPEACHES_BASE_URL=https://speech.example.test/v1")).toBeVisible();
+    await expect(page.getByLabel("Speaches address")).toHaveValue("");
+    await expect(page.getByText(/API key|profile|environment-managed/u)).toHaveCount(0);
     await page.getByRole("button", { name: "Continue offline" }).click();
     await expect(page.getByRole("heading", { name: "Projects", exact: true })).toBeVisible();
 
     await page.reload();
     await expect(page.getByRole("heading", { name: "Projects", exact: true })).toBeVisible();
-    await page.getByRole("link", { name: /^Disconnected\./u }).click();
+    await page.getByRole("link", { name: /^Configuration error\./u }).click();
     await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
   });
 
-  test("creates and tests a healthy profile from onboarding", async ({ page, studyNarrator }) => {
+  test("discovers, reviews, saves, and tests the singleton from onboarding", async ({ page, studyNarrator }) => {
     await openRoute(page, studyNarrator, "/onboarding");
-    await page.getByLabel("Profile name").fill("Healthy loopback");
-    await page.getByLabel("HTTP(S) endpoint").fill(studyNarrator.fakeSpeaches.baseUrl);
-    await page.getByRole("button", { name: "Create + Test Connection" }).click();
+    await page.getByLabel("Speaches address").fill(`${studyNarrator.fakeSpeaches.baseUrl}/v1`);
+    await page.getByRole("button", { name: "Load catalog" }).click();
+    await expect(page.getByLabel("Model")).toHaveValue("speaches-ai/Kokoro-82M-v1.0-ONNX");
+    await expect(page.getByLabel("Default Voice")).toHaveValue("af_heart");
+    await page.getByLabel("Model").selectOption("speaches-ai/Piper-en_US-lessac-medium");
+    await expect(page.getByLabel("Default Voice")).toHaveValue("en_US-lessac-medium");
+    await page.getByRole("button", { name: "Save and Test" }).click();
 
     await expect(page.getByRole("heading", { name: "Projects", exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: /^Connected\./u })).toBeVisible();

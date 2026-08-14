@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { parsePauseDuration, type LexiconEntryAuthoring } from "@studynarrator/core";
 import {
   VoiceCatalogSchema,
-  type ConnectionProfile,
+  type SpeachesConnection,
   type PersistenceClient,
   type SpeechCacheClient,
   type SpeechCacheStatus,
@@ -13,18 +13,17 @@ import { useConnections } from "@/features/connections/ConnectionProvider.js";
 import { authoringLexicon } from "@/features/projects/projectAuthoring.js";
 import styles from "./SettingsPage.module.css";
 
-const EMPTY_PROFILE = { name: "", baseUrl: "", defaultModelId: "speaches-ai/Kokoro-82M-v1.0-ONNX", defaultVoiceId: "af_heart", timeoutSeconds: 120, retryCount: 2 };
+const EMPTY_CONNECTION = { baseUrl: "", defaultModelId: "", defaultVoiceId: "", timeoutSeconds: 120, retryCount: 2 };
 const EMPTY_GLOBAL_LEXICON: LexiconEntryAuthoring = { scope: "global", entryType: "exactTerm", displayText: "", spokenText: "", caseSensitive: true, wholeWord: true, priority: 0, enabled: true, notes: "" };
 
-function profileDraft(profile: ConnectionProfile | null) {
-  return profile ? {
-    name: profile.name,
-    baseUrl: profile.baseUrl ?? "",
-    defaultModelId: profile.defaultModelId ?? "",
-    defaultVoiceId: profile.defaultVoiceId ?? "",
-    timeoutSeconds: profile.timeoutSeconds,
-    retryCount: profile.retryCount
-  } : { ...EMPTY_PROFILE };
+function connectionDraft(connection: SpeachesConnection | null) {
+  return connection ? {
+    baseUrl: connection.baseUrl ?? "",
+    defaultModelId: connection.defaultModelId ?? "",
+    defaultVoiceId: connection.defaultVoiceId ?? "",
+    timeoutSeconds: connection.timeoutSeconds,
+    retryCount: connection.retryCount
+  } : { ...EMPTY_CONNECTION };
 }
 
 function formatBytes(value: number): string {
@@ -39,11 +38,7 @@ export function SettingsPage({ client, cacheClient }: { client: PersistenceClien
   const [duration, setDuration] = useState("750 ms");
   const [status, setStatus] = useState("Loading settings…");
   const [error, setError] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const selected = workspace.profiles.find(({ id }) => id === selectedId) ?? null;
-  const [draft, setDraft] = useState(EMPTY_PROFILE);
-  const [apiKey, setApiKey] = useState("");
-  const [clearKey, setClearKey] = useState(false);
+  const [draft, setDraft] = useState(EMPTY_CONNECTION);
   const [catalog, setCatalog] = useState<VoiceCatalog | null>(null);
   const [catalogSearch, setCatalogSearch] = useState("");
   const [catalogJson, setCatalogJson] = useState("");
@@ -81,14 +76,17 @@ export function SettingsPage({ client, cacheClient }: { client: PersistenceClien
   }, [client]);
 
   useEffect(() => {
-    if (selectedId === null && workspace.profiles.length > 0) setSelectedId(workspace.setup?.activeProfileId ?? workspace.profiles[0]?.id ?? null);
-  }, [selectedId, workspace.profiles, workspace.setup?.activeProfileId]);
+    setDraft(connectionDraft(workspace.connection));
+  }, [workspace.connection]);
 
   useEffect(() => {
-    setDraft(profileDraft(selected));
-    setApiKey("");
-    setClearKey(false);
-  }, [selected]);
+    if (!workspace.connection?.baseUrl || workspace.catalog.status !== "idle") return;
+    void workspace.discover({
+      baseUrl: workspace.connection.baseUrl,
+      timeoutSeconds: workspace.connection.timeoutSeconds,
+      retryCount: workspace.connection.retryCount
+    }).catch(() => undefined);
+  }, [workspace]);
 
   useEffect(() => {
     if (!draft.defaultModelId) { setCatalog(null); return; }
@@ -107,51 +105,37 @@ export function SettingsPage({ client, cacheClient }: { client: PersistenceClien
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Settings could not be saved."); }
   };
 
-  const saveProfile = async () => {
+  const refreshSpeechCatalog = async () => {
     setError("");
     try {
-      const credential = workspace.setup?.client === "electron" && apiKey
-        ? { action: "replace" as const, apiKey }
-        : clearKey ? { action: "clear" as const } : { action: "keep" as const };
-      const mutation = {
-        profile: {
-          name: draft.name,
-          baseUrl: draft.baseUrl || null,
-          defaultModelId: draft.defaultModelId || null,
-          defaultVoiceId: draft.defaultVoiceId || null,
-          timeoutSeconds: draft.timeoutSeconds,
-          retryCount: draft.retryCount,
-          responseFormat: "wav" as const
-        },
-        credential
-      };
-      const saved = selected ? await workspace.replace(selected.id, mutation) : await workspace.create(mutation);
-      setSelectedId(saved.id);
-      setStatus(`${saved.name} saved.`);
+      const discovered = await workspace.discover({ baseUrl: draft.baseUrl, timeoutSeconds: draft.timeoutSeconds, retryCount: draft.retryCount });
+      const model = discovered.models.find(({ modelId }) => modelId === draft.defaultModelId) ?? discovered.models[0];
+      if (!model) throw new Error("This Speaches server did not report any speech models.");
+      const voice = model.voices.find(({ voiceId }) => voiceId === draft.defaultVoiceId) ?? model.voices[0];
+      if (!voice) throw new Error(`Model ${model.modelId} did not report any voices.`);
+      setDraft((current) => ({ ...current, defaultModelId: model.modelId, defaultVoiceId: voice.voiceId }));
+      setStatus(`Loaded ${String(discovered.models.length)} speech ${discovered.models.length === 1 ? "model" : "models"}.`);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "The connection profile could not be saved.");
-    } finally {
-      setApiKey("");
-      setClearKey(false);
+      setError(reason instanceof Error ? reason.message : "The speech catalog could not be loaded.");
     }
   };
 
-  const testProfile = async () => {
-    if (!selected) return;
+  const saveConnection = async () => {
+    setError("");
     try {
-      const result = await workspace.test(selected.id);
+      await workspace.update({ baseUrl: draft.baseUrl || null, defaultModelId: draft.defaultModelId || null, defaultVoiceId: draft.defaultVoiceId || null, timeoutSeconds: draft.timeoutSeconds, retryCount: draft.retryCount, responseFormat: "wav" });
+      const result = await workspace.test();
       setStatus(`Connection test: ${result.overall}.`);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Connection test failed unexpectedly."); }
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "The Speaches connection could not be saved and tested."); }
   };
 
   const exportDiagnostics = async () => {
-    if (!selected) return;
     try {
-      const exported = await workspace.exportDiagnostics(selected.id);
+      const exported = await workspace.exportDiagnostics();
       const blob = new Blob([`${JSON.stringify(exported, null, 2)}\n`], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
-      anchor.href = url; anchor.download = `studynarrator-${selected.id}-diagnostics.json`; anchor.click();
+      anchor.href = url; anchor.download = "studynarrator-connection-diagnostics.json"; anchor.click();
       URL.revokeObjectURL(url);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Diagnostics could not be exported."); }
   };
@@ -198,34 +182,25 @@ export function SettingsPage({ client, cacheClient }: { client: PersistenceClien
 
   const filteredVoices = useMemo(() => catalog?.entries.filter((entry) => !catalogSearch || `${entry.label} ${entry.voiceId} ${entry.language ?? ""}`.toLocaleLowerCase().includes(catalogSearch.toLocaleLowerCase())) ?? [], [catalog, catalogSearch]);
   const filteredLexicon = useMemo(() => globalLexicon.filter((entry) => (lexiconType === "all" || entry.entryType === lexiconType) && (!lexiconSearch || `${entry.displayText} ${entry.senseId ?? ""} ${entry.spokenText}`.toLocaleLowerCase().includes(lexiconSearch.toLocaleLowerCase()))), [globalLexicon, lexiconSearch, lexiconType]);
-  const managed = selected?.source === "environment";
+  const speechModels = workspace.catalog.status === "ready" ? workspace.catalog.catalog.models : [];
+  const selectedSpeechModel = speechModels.find(({ modelId }) => modelId === draft.defaultModelId);
 
   return (
     <div className={styles.page}>
-      <header><p>Installation + connections</p><h2>Settings</h2><span>Manage local authoring defaults, connection profiles, staged diagnostics, and the voice catalog.</span></header>
+      <header><p>Installation + connection</p><h2>Settings</h2><span>Manage the Speaches server, local authoring defaults, staged diagnostics, and the voice catalog.</span></header>
       {error || workspace.error ? <p className={styles.error} role="alert">{error || workspace.error}</p> : null}
       <p className={styles.status} aria-live="polite">{status}</p>
 
       <section className={styles.connections}>
-        <div className={styles.sectionHeading}><div><p>Speaches profiles</p><h3>Connection workshop</h3></div><button type="button" className={styles.secondary} onClick={() => { setSelectedId("__new__"); setDraft({ ...EMPTY_PROFILE }); }}>New saved profile</button></div>
-        <div className={styles.connectionGrid}>
-          <aside className={styles.profileList}>{workspace.profiles.map((profile) => <button type="button" data-active={profile.id === selectedId} key={profile.id} onClick={() => setSelectedId(profile.id)}><strong>{profile.name}</strong><span>{profile.source} · {profile.lastTestSummary?.overall ?? (profile.configured ? "unverified" : "unconfigured")}</span></button>)}</aside>
-          <div className={styles.profileForm}>
-            {managed ? <p className={styles.managed}>Managed by environment · effective source: server environment · fields are read-only.</p> : null}
-            <label>Name<input disabled={managed} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
-            <label>Endpoint root or /v1<input disabled={managed} value={draft.baseUrl} onChange={(event) => setDraft({ ...draft, baseUrl: event.target.value })} /></label>
-            <label>Model ID<input disabled={managed} list="known-models" value={draft.defaultModelId} onChange={(event) => setDraft({ ...draft, defaultModelId: event.target.value })} /></label>
-            <datalist id="known-models"><option value="speaches-ai/Kokoro-82M-v1.0-ONNX" /></datalist>
-            <label>Default voice ID<input disabled={managed} list="known-voices" value={draft.defaultVoiceId} onChange={(event) => setDraft({ ...draft, defaultVoiceId: event.target.value })} /></label>
-            <datalist id="known-voices">{catalog?.entries.filter(({ enabled }) => enabled).map((entry) => <option key={entry.voiceId} value={entry.voiceId}>{entry.label}</option>)}</datalist>
-            <div className={styles.inline}><label>Timeout (seconds)<input disabled={managed} type="number" min="1" max="600" value={draft.timeoutSeconds} onChange={(event) => setDraft({ ...draft, timeoutSeconds: Number(event.target.value) })} /></label><label>Retries<input disabled={managed} type="number" min="0" max="5" value={draft.retryCount} onChange={(event) => setDraft({ ...draft, retryCount: Number(event.target.value) })} /></label></div>
-            <p className={styles.keyState}>API key: {selected?.apiKeyConfigured ? "configured" : "not configured"}{workspace.setup?.client === "web" ? " · server-managed" : ""}</p>
-            {workspace.setup?.client === "electron" && !managed ? <><label>Replace API key (one shot)<input type="password" autoComplete="off" value={apiKey} onChange={(event) => setApiKey(event.target.value)} /></label><label className={styles.check}><input type="checkbox" checked={clearKey} onChange={(event) => setClearKey(event.target.checked)} />Clear stored key</label></> : null}
-            <div className={styles.actions}><button type="button" disabled={managed || !draft.name.trim()} onClick={() => void saveProfile()}>{selected ? "Save profile" : "Create profile"}</button>{selected ? <button type="button" className={styles.secondary} disabled={workspace.testingProfileId === selected.id || !selected.configured} onClick={() => void testProfile()}>{workspace.testingProfileId === selected.id ? "Testing…" : "Test Connection"}</button> : null}{selected?.source === "saved" ? <button type="button" className={styles.danger} onClick={() => { if (window.confirm(`Delete ${selected.name}? Project references will be cleared.`)) void workspace.delete(selected.id).then(() => setSelectedId(null)); }}>Delete</button> : null}</div>
-            {selected ? <label>Active profile<select disabled={workspace.setup?.activeProfileLocked} value={workspace.setup?.activeProfileId ?? ""} onChange={(event) => void workspace.setActive(event.target.value || null)}><option value="">No active profile</option>{workspace.profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select></label> : null}
-          </div>
+        <div className={styles.sectionHeading}><div><p>Speaches server</p><h3>Connection workshop</h3></div><button type="button" className={styles.secondary} disabled={!draft.baseUrl || workspace.catalog.status === "loading"} onClick={() => void refreshSpeechCatalog()}>{workspace.catalog.status === "loading" ? "Loading…" : "Refresh catalog"}</button></div>
+        <div className={styles.profileForm}>
+          <label>Address<input type="url" value={draft.baseUrl} onChange={(event) => setDraft({ ...draft, baseUrl: event.target.value, defaultModelId: "", defaultVoiceId: "" })} placeholder="http://127.0.0.1:8000" /></label>
+          <label>Model<select value={draft.defaultModelId} disabled={speechModels.length === 0} onChange={(event) => { const modelId = event.target.value; setDraft({ ...draft, defaultModelId: modelId, defaultVoiceId: speechModels.find((model) => model.modelId === modelId)?.voices[0]?.voiceId ?? "" }); }}><option value="">Load catalog to choose</option>{speechModels.map((model) => <option key={model.modelId} value={model.modelId}>{model.modelId}</option>)}</select></label>
+          <label>Default Voice<select value={draft.defaultVoiceId} disabled={!selectedSpeechModel} onChange={(event) => setDraft({ ...draft, defaultVoiceId: event.target.value })}><option value="">Choose a voice</option>{selectedSpeechModel?.voices.map((voice) => <option key={voice.voiceId} value={voice.voiceId}>{voice.name ? `${voice.name} — ${voice.voiceId}` : voice.voiceId}</option>)}</select></label>
+          <div className={styles.inline}><label>Timeout (seconds)<input type="number" min="1" max="600" value={draft.timeoutSeconds} onChange={(event) => setDraft({ ...draft, timeoutSeconds: Number(event.target.value) })} /></label><label>Retries<input type="number" min="0" max="5" value={draft.retryCount} onChange={(event) => setDraft({ ...draft, retryCount: Number(event.target.value) })} /></label></div>
+          <div className={styles.actions}><button type="button" disabled={workspace.testing || !draft.baseUrl || !draft.defaultModelId || !draft.defaultVoiceId} onClick={() => void saveConnection()}>{workspace.testing ? "Testing…" : "Save and Test"}</button></div>
         </div>
-        {selected?.lastTestSummary ? <div className={styles.diagnostics}><div className={styles.diagnosticHeader}><div><p>Signal path</p><h4>{selected.lastTestSummary.overall}</h4></div><button type="button" className={styles.secondary} onClick={() => void exportDiagnostics()}>Export redacted JSON</button></div><ol>{selected.lastTestSummary.stages.map((item, index) => <li data-status={item.status} key={item.stage}><b>{String(index + 1).padStart(2, "0")}</b><div><strong>{item.stage}</strong><code>{item.code} · {item.durationMs} ms</code><span>{item.message}</span></div></li>)}</ol></div> : null}
+        {workspace.connection?.lastTestSummary ? <div className={styles.diagnostics}><div className={styles.diagnosticHeader}><div><p>Signal path</p><h4>{workspace.connection.lastTestSummary.overall}</h4></div><button type="button" className={styles.secondary} onClick={() => void exportDiagnostics()}>Export redacted JSON</button></div><ol>{workspace.connection.lastTestSummary.stages.map((item, index) => <li data-status={item.status} key={item.stage}><b>{String(index + 1).padStart(2, "0")}</b><div><strong>{item.stage}</strong><code>{item.code} · {item.durationMs} ms</code><span>{item.message}</span></div></li>)}</ol></div> : null}
       </section>
 
       <section className={styles.catalog}>

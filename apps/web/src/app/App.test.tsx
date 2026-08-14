@@ -4,7 +4,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ConnectionsClient, ConnectionTestOverall, PersistenceClient, SystemClient } from "@studynarrator/shared-types";
+import type { ConnectionTestOverall, PersistenceClient, SpeachesConnectionClient, SystemClient } from "@studynarrator/shared-types";
 import { App } from "./App.js";
 
 const unusedAnalyzer = { analyze: vi.fn() };
@@ -17,10 +17,15 @@ const unusedPersistence: PersistenceClient = {
   globalLexicon: { list: vi.fn(async () => []), replace: vi.fn() }
 };
 const unusedConnections = {
-  list: vi.fn(async () => []), create: vi.fn(), replace: vi.fn(), delete: vi.fn(), test: vi.fn(), exportDiagnostics: vi.fn(),
-  discoverSpeechCatalog: vi.fn(async (profileId: string) => ({ schemaVersion: 1 as const, profileId, models: [] })),
-  getSetupState: vi.fn(async () => ({ activeProfileId: null, activeProfileLocked: false, onboardingCompletedAt: "2026-08-12T12:00:00.000Z", client: "web" as const })),
-  setActiveProfile: vi.fn(), completeOnboarding: vi.fn()
+  get: vi.fn(async () => ({
+    baseUrl: null, suppliedUrlForm: "unconfigured" as const, configured: false, defaultModelId: null, defaultVoiceId: null,
+    timeoutSeconds: 120, retryCount: 2, responseFormat: "wav" as const, lastTestedAt: null,
+    lastSuccessfulTestAt: null, lastTestSummary: null, createdAt: "2026-08-12T12:00:00.000Z", updatedAt: "2026-08-12T12:00:00.000Z"
+  })),
+  update: vi.fn(), test: vi.fn(), exportDiagnostics: vi.fn(),
+  discoverSpeechCatalog: vi.fn(async () => ({ schemaVersion: 1 as const, models: [] })),
+  getSetupState: vi.fn(async () => ({ onboardingCompletedAt: "2026-08-12T12:00:00.000Z", client: "web" as const })),
+  completeOnboarding: vi.fn()
 };
 const unusedVoiceCatalog = { get: vi.fn(async (modelId: string) => ({ schemaVersion: 1 as const, modelId, entries: [] })), replace: vi.fn() };
 const unusedScratchpad = { preview: vi.fn() };
@@ -38,10 +43,10 @@ const unusedScriptGeneration = { previewPrompt: unusedPromptPreview, exportPromp
 
 afterEach(cleanup);
 
-function renderApp(route: string, client: SystemClient = { diagnostics: vi.fn() }, connections: ConnectionsClient = unusedConnections) {
+function renderApp(route: string, client: SystemClient = { diagnostics: vi.fn() }, connection: SpeachesConnectionClient = unusedConnections) {
   return render(
     <MemoryRouter initialEntries={[route]}>
-      <App analyzer={unusedAnalyzer} client={client} persistence={unusedPersistence} connections={connections} voiceCatalog={unusedVoiceCatalog} scratchpad={unusedScratchpad} projectPreview={unusedProjectPreview} speechCache={unusedSpeechCache} renderPlans={{ create: vi.fn(), list: vi.fn(async () => []), get: vi.fn() }} scriptGeneration={unusedScriptGeneration} />
+      <App analyzer={unusedAnalyzer} client={client} persistence={unusedPersistence} connection={connection} voiceCatalog={unusedVoiceCatalog} scratchpad={unusedScratchpad} projectPreview={unusedProjectPreview} speechCache={unusedSpeechCache} renderPlans={{ create: vi.fn(), list: vi.fn(async () => []), get: vi.fn() }} scriptGeneration={unusedScriptGeneration} />
     </MemoryRouter>
   );
 }
@@ -93,10 +98,10 @@ describe("application routing", () => {
   it("uses the connection monitor to finish incomplete onboarding", async () => {
     const connections = {
       ...unusedConnections,
-      getSetupState: vi.fn(async () => ({ activeProfileId: null, activeProfileLocked: false, onboardingCompletedAt: null, client: "web" as const }))
+      getSetupState: vi.fn(async () => ({ onboardingCompletedAt: null, client: "web" as const }))
     };
     renderApp("/onboarding", { diagnostics: vi.fn() }, connections);
-    const monitor = await screen.findByRole("link", { name: "Configuration error. No active profile. Finish setup." });
+    const monitor = await screen.findByRole("link", { name: "Configuration error. Not configured. Finish setup." });
     expect(monitor).toHaveAttribute("href", "/onboarding");
   });
 
@@ -116,20 +121,19 @@ describe("application routing", () => {
     ["invalidAudio", "Configuration error"]
   ] as const)("shows the %s shell connection state", async (overall, label) => {
     const testedAt = "2026-08-12T12:00:00.000Z";
-    const profile = {
-      id: "local", name: "Local", baseUrl: "http://127.0.0.1:8000", suppliedUrlForm: "root" as const, source: "saved" as const, editable: true,
-      credentialEntryAllowed: false, configured: true, apiKeyConfigured: false, defaultModelId: "model", defaultVoiceId: "voice", timeoutSeconds: 120,
+    const connection = {
+      baseUrl: "http://127.0.0.1:8000", suppliedUrlForm: "root" as const, configured: true, defaultModelId: "model", defaultVoiceId: "voice", timeoutSeconds: 120,
       retryCount: 2, responseFormat: "wav" as const, lastTestedAt: testedAt, lastSuccessfulTestAt: overall === "connected" ? testedAt : null,
       lastTestSummary: { schemaVersion: 1 as const, overall: overall as ConnectionTestOverall, testedAt, httpStatus: 200, stages: [], availableModelIds: [], availableVoiceIds: null },
       createdAt: testedAt, updatedAt: testedAt
     };
     const connections = {
       ...unusedConnections,
-      list: vi.fn(async () => [profile]),
-      getSetupState: vi.fn(async () => ({ activeProfileId: profile.id, activeProfileLocked: false, onboardingCompletedAt: testedAt, client: "web" as const }))
+      get: vi.fn(async () => connection),
+      getSetupState: vi.fn(async () => ({ onboardingCompletedAt: testedAt, client: "web" as const }))
     };
     renderApp("/projects", { diagnostics: vi.fn() }, connections as never);
-    const monitor = await screen.findByRole("link", { name: new RegExp(`^${label}\\. Local\\. Manage connection\\.$`, "u") });
+    const monitor = await screen.findByRole("link", { name: new RegExp(`^${label}\\. 127\\.0\\.0\\.1:8000\\. Manage connection\\.$`, "u") });
     expect(monitor).toHaveAttribute("data-state", overall);
     expect(monitor).toHaveAttribute("href", "/settings");
   });

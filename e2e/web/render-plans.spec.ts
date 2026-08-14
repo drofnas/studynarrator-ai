@@ -1,8 +1,8 @@
-import { continueOffline, expect, test } from "../support/studyNarratorTest.js";
+import { configureConnection, expect, test } from "../support/studyNarratorTest.js";
 
 test.describe("Frozen render plans", () => {
   test("creates and reopens immutable plans without synthesizing speech", async ({ page, studyNarrator }) => {
-    await continueOffline(page, studyNarrator);
+    await configureConnection(page, studyNarrator);
     studyNarrator.fakeSpeaches.reset();
     await page.getByRole("button", { name: "New project" }).click();
     await page.getByLabel("Project name").fill("Frozen plan acceptance");
@@ -19,7 +19,7 @@ test.describe("Frozen render plans", () => {
       "[speaker_teacher] After explicit pause."
     ].join("\n"));
     await page.getByRole("tab", { name: "Settings" }).click();
-    await page.getByLabel("Connection profile").selectOption("environment-speaches");
+    await expect(page.getByLabel("Connection profile")).toHaveCount(0);
     await page.getByLabel("Optional model override").fill("speaches-ai/Kokoro-82M-v1.0-ONNX");
     await expect(page.getByLabel("Voices").first()).toHaveValue("af_heart");
 

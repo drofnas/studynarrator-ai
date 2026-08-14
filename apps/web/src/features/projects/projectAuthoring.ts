@@ -63,7 +63,6 @@ export function draftFromProject(project: ProjectDetail): ProjectDraft {
     name: project.name,
     description: project.description,
     scriptSource: project.scriptSource,
-    connectionProfileId: project.connectionProfileId,
     modelId: project.modelId,
     speakerMappings: project.speakerMappings,
     pausePresets: project.pausePresets,

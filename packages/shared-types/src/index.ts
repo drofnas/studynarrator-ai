@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ConnectionsClient, VoiceCatalogClient } from "./connections.js";
+import type { SpeachesConnectionClient, VoiceCatalogClient } from "./connections.js";
 import type { PersistenceClient } from "./persistence.js";
 import type { ProjectPreviewClient, SpeechCacheClient } from "./preview.js";
 import type { RenderPlanClient } from "./renderPlan.js";
@@ -50,7 +50,7 @@ export const StorageCheckSchema = z.discriminatedUnion("status", [
     status: z.literal("pass"),
     driver: z.literal("better-sqlite3"),
     sqliteVersion: z.string().min(1),
-    migrationVersion: z.literal(6),
+    migrationVersion: z.literal(7),
     databasePath: z.string().min(1),
     latestBackupPath: z.string().min(1).nullable(),
     markerKey: z.literal("runtime.storage-self-test"),
@@ -102,7 +102,7 @@ export interface SystemClient {
 export interface StudyNarratorBridge {
   system: SystemClient;
   persistence: PersistenceClient;
-  connections: ConnectionsClient;
+  connection: SpeachesConnectionClient;
   voiceCatalog: VoiceCatalogClient;
   scratchpad: ScratchpadClient;
   projectPreview: ProjectPreviewClient;

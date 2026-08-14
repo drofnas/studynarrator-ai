@@ -4,13 +4,12 @@ import { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
 import { createPersistenceService, createUnavailablePersistenceService, PersistenceUnavailableError } from "./persistence.js";
 
 const project = {
-  contractVersion: 4 as const,
+  contractVersion: 5 as const,
   id: "00000000-0000-4000-8000-000000000001",
   name: "Persisted study",
   description: "",
   scriptSource: "Résumé\r\nSQL",
   scriptHash: "a".repeat(64),
-  connectionProfileId: null,
   modelId: null,
   speakerMappings: [],
   pausePresets: [{ pauseId: "pause_medium", durationMs: 750, description: "Paragraph" }],
@@ -23,10 +22,10 @@ const project = {
 function repository() {
   return {
     status: vi.fn(() => ({
-      contractVersion: 4 as const,
+      contractVersion: 5 as const,
       state: "ready" as const,
-      databaseSchemaVersion: 6 as const,
-      targetDatabaseSchemaVersion: 6 as const,
+      databaseSchemaVersion: 7 as const,
+      targetDatabaseSchemaVersion: 7 as const,
       databasePath: "/tmp/studynarrator.sqlite",
       latestBackupPath: null
     })),
@@ -42,10 +41,6 @@ function repository() {
     replaceIgnoredDiagnostics: vi.fn((input: IgnoredDiagnosticCollection) => input),
     listGlobalLexicon: vi.fn(() => []),
     replaceGlobalLexicon: vi.fn(() => []),
-    listConnectionProfiles: vi.fn(() => []),
-    createConnectionProfile: vi.fn(),
-    replaceConnectionProfile: vi.fn(),
-    deleteConnectionProfile: vi.fn()
   };
 }
 
@@ -65,7 +60,6 @@ describe("persistence application service", () => {
       name: project.name,
       description: project.description,
       scriptSource: project.scriptSource,
-      connectionProfileId: null,
       modelId: null,
       speakerMappings: [],
       pausePresets: project.pausePresets,
@@ -122,10 +116,10 @@ describe("persistence application service", () => {
 
   it("keeps status available while rejecting degraded persistence operations", async () => {
     const service = createUnavailablePersistenceService({
-      contractVersion: 4,
+      contractVersion: 5,
       state: "unavailable",
       databaseSchemaVersion: 1,
-      targetDatabaseSchemaVersion: 6,
+      targetDatabaseSchemaVersion: 7,
       databasePath: "/tmp/studynarrator.sqlite",
       latestBackupPath: "/tmp/backups/recovery.sqlite",
       code: "MIGRATION_FAILED",

@@ -161,7 +161,7 @@ async function redactedJson(baseUrl, path) {
       const response = await fetch(`${baseUrl}${path}`);
       invariant(response.ok, `${path} returned HTTP ${response.status}`);
       const text = await response.text();
-      invariant(!text.includes(secret), `${path} exposed the Speaches API key`);
+      invariant(!text.includes(secret), `${path} exposed the verification sentinel`);
       return JSON.parse(text);
     } catch (error) {
       lastError = error instanceof Error ? error.message : String(error);
@@ -193,18 +193,12 @@ const hostPort = await reservePort();
 const fakePort = await reservePort();
 const baseUrl = `http://127.0.0.1:${hostPort}`;
 const fakeControlUrl = `http://127.0.0.1:${fakePort}`;
+const fakeApplicationUrl = `http://host.docker.internal:${fakePort}`;
 
 composeEnvironment = {
-  SPEACHES_API_KEY: secret,
-  SPEACHES_BASE_URL: `http://host.docker.internal:${fakePort}`,
-  SPEACHES_DEFAULT_VOICE: "af_heart",
-  SPEACHES_MODEL_ID: "speaches-ai/Kokoro-82M-v1.0-ONNX",
-  SPEACHES_REQUEST_TIMEOUT_SECONDS: "2",
-  SPEACHES_RETRY_COUNT: "0",
   STUDYNARRATOR_BIND_ADDRESS: "127.0.0.1",
   STUDYNARRATOR_HOST_PORT: String(hostPort),
   STUDYNARRATOR_IMAGE_TAG: "verify",
-  STUDYNARRATOR_LOCK_SPEACHES_SETTINGS: "true",
   STUDYNARRATOR_SOURCE_REVISION: sourceRevision
 };
 
@@ -249,7 +243,8 @@ try {
     STUDYNARRATOR_DOCKER_BASE_URL: baseUrl,
     STUDYNARRATOR_DOCKER_TEST_SECRET: secret,
     STUDYNARRATOR_EXPECTED_SOURCE_REVISION: sourceRevision,
-    STUDYNARRATOR_FAKE_SPEACHES_URL: fakeControlUrl
+    STUDYNARRATOR_FAKE_SPEACHES_URL: fakeControlUrl,
+    STUDYNARRATOR_FAKE_SPEACHES_APP_URL: fakeApplicationUrl
   });
   await waitForHealthy(baseUrl);
   invariant(composeOutput("ps", "--quiet", "study-narrator") === initialContainerId, "offline recovery unexpectedly recreated the container");
@@ -263,18 +258,20 @@ try {
   const browserPayload = JSON.stringify({
     runtime,
     diagnostics: await redactedJson(baseUrl, "/api/diagnostics"),
-    connections: await redactedJson(baseUrl, "/api/connections"),
-    connectionDiagnostics: await redactedJson(baseUrl, "/api/connections/environment-speaches/diagnostics"),
+    connection: await redactedJson(baseUrl, "/api/connection"),
+    connectionDiagnostics: await redactedJson(baseUrl, "/api/connection/diagnostics"),
     projects: beforeProjects
   });
-  invariant(!browserPayload.includes(secret), "API or diagnostic payload exposed the Speaches API key");
+  invariant(!browserPayload.includes(secret), "API or diagnostic payload exposed the verification sentinel");
   const logs = composeOutput("logs", "--no-color", "study-narrator");
-  invariant(!logs.includes(secret), "container logs exposed the Speaches API key");
+  invariant(!logs.includes(secret), "container logs exposed the verification sentinel");
 
   run("docker", composeArgs("up", "--detach", "--no-deps", "--force-recreate", "study-narrator"), composeEnvironment);
   await waitForHealthy(baseUrl);
   const recreatedContainerId = composeOutput("ps", "--quiet", "study-narrator");
   invariant(recreatedContainerId !== initialContainerId, "Compose force-recreate retained the old container");
+  const persistedConnection = await redactedJson(baseUrl, "/api/connection");
+  invariant(persistedConnection.configured === true && persistedConnection.baseUrl === fakeApplicationUrl, "Speaches connection did not survive container recreation");
   const afterProjects = await redactedJson(baseUrl, "/api/projects");
   invariant(JSON.stringify(afterProjects.map(({ id }) => id).sort()) === JSON.stringify(beforeProjects.map(({ id }) => id).sort()), "projects did not survive container recreation");
   for (const project of afterProjects) {

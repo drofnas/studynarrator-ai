@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GlobalLexiconReplaceInput, PersistenceClient } from "@studynarrator/shared-types";
@@ -14,10 +14,34 @@ const cacheClient = {
   clearAll: vi.fn(async () => ({ contractVersion: 1 as const, entriesRemoved: 0, bytesFreed: 0 })),
   clearProject: vi.fn(), clearEntry: vi.fn()
 };
+const timestamp = "2026-08-12T12:00:00.000Z";
+const savedConnection = {
+  baseUrl: "https://speech.example.test", suppliedUrlForm: "root" as const, configured: true,
+  defaultModelId: "model-b", defaultVoiceId: "voice-b2", timeoutSeconds: 120, retryCount: 2,
+  responseFormat: "wav" as const, lastTestedAt: null, lastSuccessfulTestAt: null, lastTestSummary: null,
+  createdAt: timestamp, updatedAt: timestamp
+};
+function connectionClient(overrides = {}) {
+  return {
+    get: vi.fn(async () => savedConnection),
+    update: vi.fn(async (input) => ({ ...savedConnection, ...input })),
+    test: vi.fn(), exportDiagnostics: vi.fn(),
+    discoverSpeechCatalog: vi.fn(async () => ({ schemaVersion: 1 as const, models: [
+      { modelId: "model-b", voices: [
+        { voiceId: "voice-b2", name: "Second", language: null, gender: null },
+        { voiceId: "voice-b1", name: "First", language: null, gender: null }
+      ] },
+      { modelId: "model-a", voices: [{ voiceId: "voice-a1", name: null, language: null, gender: null }] }
+    ] })),
+    getSetupState: vi.fn(async () => ({ onboardingCompletedAt: timestamp, client: "web" as const })),
+    completeOnboarding: vi.fn(),
+    ...overrides
+  };
+}
+const voiceCatalog = { get: vi.fn(async (modelId: string) => ({ schemaVersion: 1 as const, modelId, entries: [] })), replace: vi.fn() };
 
 describe("System Settings", () => {
   it("manages persisted global lexicon entries outside project settings", async () => {
-    const timestamp = "2026-08-12T12:00:00.000Z";
     let stored = [{ id: "global-sql", scope: "global", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel", caseSensitive: true, wholeWord: true, priority: 0, enabled: true, notes: "", createdAt: timestamp, updatedAt: timestamp }];
     const replace = vi.fn(async (entries: Array<Record<string, unknown>>) => {
       stored = entries.map((entry, index) => ({ ...entry, id: typeof entry.id === "string" ? entry.id : `global-${String(index + 1)}`, scope: "global", createdAt: timestamp, updatedAt: timestamp })) as typeof stored;
@@ -27,13 +51,7 @@ describe("System Settings", () => {
       settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() },
       globalLexicon: { list: vi.fn(async () => structuredClone(stored)), replace }
     } as unknown as PersistenceClient;
-    const connections = {
-      list: vi.fn(async () => []), create: vi.fn(), replace: vi.fn(), delete: vi.fn(), test: vi.fn(), exportDiagnostics: vi.fn(), discoverSpeechCatalog: vi.fn(),
-      getSetupState: vi.fn(async () => ({ activeProfileId: null, activeProfileLocked: false, onboardingCompletedAt: timestamp, client: "web" as const })),
-      setActiveProfile: vi.fn(), completeOnboarding: vi.fn()
-    };
-    const voiceCatalog = { get: vi.fn(async (modelId: string) => ({ schemaVersion: 1 as const, modelId, entries: [] })), replace: vi.fn() };
-    render(<ConnectionProvider connections={connections} voiceCatalog={voiceCatalog}><SettingsPage client={client} cacheClient={cacheClient} /></ConnectionProvider>);
+    render(<ConnectionProvider connectionClient={connectionClient()} voiceCatalog={voiceCatalog}><SettingsPage client={client} cacheClient={cacheClient} /></ConnectionProvider>);
 
     expect(await screen.findByRole("heading", { name: "Global lexicon" })).toBeInTheDocument();
     expect(screen.getByText("SQL")).toBeInTheDocument();
@@ -57,14 +75,7 @@ describe("System Settings", () => {
       globalLexicon: { list: vi.fn(async () => []), replace: vi.fn(async (entries: GlobalLexiconReplaceInput) => entries) },
       projects: { replace: replaceProject }
     } as unknown as PersistenceClient;
-    const connections = {
-      list: vi.fn(async () => []), create: vi.fn(), replace: vi.fn(), delete: vi.fn(), test: vi.fn(), exportDiagnostics: vi.fn(),
-      discoverSpeechCatalog: vi.fn(async (profileId: string) => ({ schemaVersion: 1 as const, profileId, models: [] })),
-      getSetupState: vi.fn(async () => ({ activeProfileId: null, activeProfileLocked: false, onboardingCompletedAt: "2026-08-12T12:00:00.000Z", client: "web" as const })),
-      setActiveProfile: vi.fn(), completeOnboarding: vi.fn()
-    };
-    const voiceCatalog = { get: vi.fn(async (modelId: string) => ({ schemaVersion: 1 as const, modelId, entries: [] })), replace: vi.fn() };
-    render(<ConnectionProvider connections={connections} voiceCatalog={voiceCatalog}><SettingsPage client={client} cacheClient={cacheClient} /></ConnectionProvider>);
+    render(<ConnectionProvider connectionClient={connectionClient()} voiceCatalog={voiceCatalog}><SettingsPage client={client} cacheClient={cacheClient} /></ConnectionProvider>);
     const input = await screen.findByLabelText(/Default pause_medium duration/u);
     fireEvent.change(input, { target: { value: "1.5 s" } });
     fireEvent.click(screen.getByRole("button", { name: "Save pacing defaults" }));
@@ -73,54 +84,37 @@ describe("System Settings", () => {
     expect(replaceProject).not.toHaveBeenCalled();
   });
 
-  it("locks environment fields and supports catalog search and strict replacement", async () => {
-    const timestamp = "2026-08-12T12:00:00.000Z";
-    const environmentProfile = {
-      id: "environment-speaches", name: "Environment Speaches", baseUrl: "https://speech.example.test", suppliedUrlForm: "v1" as const,
-      source: "environment" as const, editable: false, credentialEntryAllowed: false, configured: true, apiKeyConfigured: true,
-      defaultModelId: "speaches-ai/Kokoro-82M-v1.0-ONNX", defaultVoiceId: "af_heart", timeoutSeconds: 120, retryCount: 2, responseFormat: "wav" as const,
-      lastTestedAt: null, lastSuccessfulTestAt: null, lastTestSummary: null, createdAt: timestamp, updatedAt: timestamp
-    };
-    const connections = {
-      list: vi.fn(async () => [environmentProfile]), create: vi.fn(), replace: vi.fn(), delete: vi.fn(), test: vi.fn(), exportDiagnostics: vi.fn(),
-      discoverSpeechCatalog: vi.fn(async (profileId: string) => ({ schemaVersion: 1 as const, profileId, models: [] })),
-      getSetupState: vi.fn(async () => ({ activeProfileId: environmentProfile.id, activeProfileLocked: true, onboardingCompletedAt: timestamp, client: "web" as const })),
-      setActiveProfile: vi.fn(), completeOnboarding: vi.fn()
-    };
+  it("uses an editable singleton and preserves server ordering in the model and default voice dropdowns", async () => {
     const replaceCatalog = vi.fn(async (input: { schemaVersion: 1; modelId: string; entries: never[] }) => input);
-    const voiceCatalog = {
-      get: vi.fn(async (modelId: string) => ({ schemaVersion: 1 as const, modelId, entries: [{ voiceId: "af_heart", label: "Heart — American English — af_heart", enabled: true, language: "American English", locale: "en-US", accent: "American", category: null, style: null, sampleText: null }] })),
+    const localVoiceCatalog = {
+      get: vi.fn(async (modelId: string) => ({ schemaVersion: 1 as const, modelId, entries: [{ voiceId: "voice-b2", label: "Disabled locally", enabled: false, language: "English", locale: "en-US", accent: null, category: null, style: null, sampleText: null }] })),
       replace: replaceCatalog
     };
     const client = {
       settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() },
       globalLexicon: { list: vi.fn(async () => []), replace: vi.fn(async (entries: GlobalLexiconReplaceInput) => entries) }
     } as unknown as PersistenceClient;
-    render(<ConnectionProvider connections={connections} voiceCatalog={voiceCatalog}><SettingsPage client={client} cacheClient={cacheClient} /></ConnectionProvider>);
-    expect(await screen.findByDisplayValue("Environment Speaches")).toBeDisabled();
-    expect(screen.getByText(/effective source: server environment/u)).toBeInTheDocument();
-    expect(screen.getByLabelText("Active profile")).toBeDisabled();
-    expect((await screen.findAllByText("Heart — American English — af_heart")).length).toBeGreaterThan(0);
+    render(<ConnectionProvider connectionClient={connectionClient()} voiceCatalog={localVoiceCatalog}><SettingsPage client={client} cacheClient={cacheClient} /></ConnectionProvider>);
+    expect(await screen.findByLabelText("Address")).toBeEnabled();
+    expect(screen.queryByText(/Environment Speaches|Active profile|API key/u)).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText("Model")).toHaveValue("model-b"));
+    expect(screen.getByLabelText("Default Voice")).toHaveValue("voice-b2");
+    expect(screen.getByRole("option", { name: "Second — voice-b2" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "First — voice-b1" })).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Strict override JSON"), { target: { value: JSON.stringify({ schemaVersion: 1, modelId: environmentProfile.defaultModelId, entries: [] }) } });
+    fireEvent.change(screen.getByLabelText("Strict override JSON"), { target: { value: JSON.stringify({ schemaVersion: 1, modelId: savedConnection.defaultModelId, entries: [] }) } });
     await userEvent.click(screen.getByRole("button", { name: "Replace model overrides" }));
-    expect(replaceCatalog).toHaveBeenCalledWith({ schemaVersion: 1, modelId: environmentProfile.defaultModelId, entries: [] });
+    expect(replaceCatalog).toHaveBeenCalledWith({ schemaVersion: 1, modelId: savedConnection.defaultModelId, entries: [] });
   });
 
   it("shows session cache statistics and confirms clear-all", async () => {
-    const connections = {
-      list: vi.fn(async () => []), create: vi.fn(), replace: vi.fn(), delete: vi.fn(), test: vi.fn(), exportDiagnostics: vi.fn(),
-      discoverSpeechCatalog: vi.fn(), getSetupState: vi.fn(async () => ({ activeProfileId: null, activeProfileLocked: false, onboardingCompletedAt: "2026-08-12T12:00:00.000Z", client: "web" as const })),
-      setActiveProfile: vi.fn(), completeOnboarding: vi.fn()
-    };
-    const voiceCatalog = { get: vi.fn(async (modelId: string) => ({ schemaVersion: 1 as const, modelId, entries: [] })), replace: vi.fn() };
     const client = { settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() }, globalLexicon: { list: vi.fn(async () => []), replace: vi.fn(async (entries: GlobalLexiconReplaceInput) => entries) } } as unknown as PersistenceClient;
     const status = vi.fn()
       .mockResolvedValueOnce({ contractVersion: 1, entryCount: 2, totalBytes: 2048, lastUsedAt: "2026-08-12T12:00:00.000Z", sessionHits: 3, sessionMisses: 2, sessionWrites: 2, sessionCorruptMisses: 1, inFlight: 0 })
       .mockResolvedValueOnce({ contractVersion: 1, entryCount: 0, totalBytes: 0, lastUsedAt: null, sessionHits: 3, sessionMisses: 2, sessionWrites: 2, sessionCorruptMisses: 1, inFlight: 0 });
     const clearAll = vi.fn(async () => ({ contractVersion: 1 as const, entriesRemoved: 2, bytesFreed: 2048 }));
     vi.spyOn(window, "confirm").mockReturnValue(true);
-    render(<ConnectionProvider connections={connections} voiceCatalog={voiceCatalog}><SettingsPage client={client} cacheClient={{ status, clearAll, clearProject: vi.fn(), clearEntry: vi.fn() }} /></ConnectionProvider>);
+    render(<ConnectionProvider connectionClient={connectionClient()} voiceCatalog={voiceCatalog}><SettingsPage client={client} cacheClient={{ status, clearAll, clearProject: vi.fn(), clearEntry: vi.fn() }} /></ConnectionProvider>);
     expect(await screen.findByText("2 entries")).toBeInTheDocument();
     expect(screen.getByText("3 hits · 2 misses")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Clear all cached speech" }));

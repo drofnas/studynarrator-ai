@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  ConnectionProfileAuthoringSchema,
   GlobalLexiconReplaceInputSchema,
   IgnoredDiagnosticCollectionSchema,
   PausePresetCollectionSchema,
@@ -9,12 +8,12 @@ import {
   SpeakerMappingCollectionSchema,
   SystemPacingDefaultsSchema
 } from "./persistence.js";
+import { SpeachesConnectionAuthoringSchema } from "./connections.js";
 
 const validProject = {
   name: "Persistence contract",
   description: "",
   scriptSource: "SQL",
-  connectionProfileId: null,
   modelId: null,
   speakerMappings: [],
   pausePresets: [{ pauseId: "pause_medium", durationMs: 750, description: "Paragraph" }],
@@ -50,11 +49,11 @@ describe("persistence contracts", () => {
     expect(SystemPacingDefaultsSchema.parse({ enabled: true, durationMs: 0 })).toEqual({ enabled: true, durationMs: 0 });
     expect(SystemPacingDefaultsSchema.parse({ enabled: false, durationMs: 30_000 })).toEqual({ enabled: false, durationMs: 30_000 });
     expect(() => SystemPacingDefaultsSchema.parse({ enabled: true, durationMs: 30_001 })).toThrow();
-    expect(() => ConnectionProfileAuthoringSchema.parse({
-      name: "Unsafe", baseUrl: "http://127.0.0.1:8000", defaultModelId: null, defaultVoiceId: null, apiKey: "secret"
+    expect(() => SpeachesConnectionAuthoringSchema.parse({
+      baseUrl: "http://127.0.0.1:8000", defaultModelId: null, defaultVoiceId: null, apiKey: "secret"
     })).toThrow();
-    expect(() => ConnectionProfileAuthoringSchema.parse({
-      name: "Unsafe", baseUrl: "file:///tmp/socket", defaultModelId: null, defaultVoiceId: null
+    expect(() => SpeachesConnectionAuthoringSchema.parse({
+      baseUrl: "file:///tmp/socket", defaultModelId: null, defaultVoiceId: null
     })).toThrow();
   });
 
@@ -74,7 +73,6 @@ describe("persistence contracts", () => {
       name: "Persistent project",
       description: "Reopen proof",
       scriptSource: "{{resume|cv}} SQL",
-      connectionProfileId: "local-speaches",
       modelId: null,
       speakerMappings,
       pausePresets,
@@ -87,9 +85,7 @@ describe("persistence contracts", () => {
     expect(IgnoredDiagnosticCollectionSchema.parse([
       { code: "MALFORMED_SECTION_DIRECTIVE", pattern: "[section bad]" }
     ])).toHaveLength(1);
-    expect(ConnectionProfileAuthoringSchema.parse({
-      id: "local-speaches",
-      name: "Local Speaches",
+    expect(SpeachesConnectionAuthoringSchema.parse({
       baseUrl: "http://127.0.0.1:8000",
       defaultModelId: "speaches-ai/Kokoro-82M-v1.0-ONNX",
       defaultVoiceId: "af_heart"

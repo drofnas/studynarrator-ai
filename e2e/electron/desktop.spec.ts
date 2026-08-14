@@ -4,15 +4,9 @@ import { strFromU8, unzipSync } from "fflate";
 import type { Page } from "@playwright/test";
 import type { StudyNarratorBridge } from "@studynarrator/shared-types";
 import { FAKE_SPEACHES_SECONDARY_MODEL_ID, FAKE_SPEACHES_SECONDARY_VOICE_ID } from "@studynarrator/fake-speaches";
-import { continueElectronOffline, expect, test } from "../support/electronTest.js";
-
-const secret = "test-secret-must-not-appear";
+import { configureElectronConnection, continueElectronOffline, expect, test } from "../support/electronTest.js";
 
 interface ElectronEvaluationApi {
-  safeStorage: {
-    isEncryptionAvailable(): boolean;
-    getSelectedStorageBackend?: () => string;
-  };
   shell: {
     openExternal(url: string): Promise<void>;
   };
@@ -36,7 +30,7 @@ async function openProject(page: Page, name: string): Promise<void> {
 test.describe("Electron acceptance", () => {
   test("uses typed IPC for Scratchpad playback and exposes no Node or generic primitive", async ({ electronStudyNarrator, studyNarrator }) => {
     const { page } = electronStudyNarrator;
-    await continueElectronOffline(page);
+    await configureElectronConnection(page, studyNarrator);
     const bridgeShape = await page.evaluate(() => {
       const renderer = window as typeof window & { studyNarrator?: StudyNarratorBridge };
       return {
@@ -47,7 +41,7 @@ test.describe("Electron acceptance", () => {
       };
     });
     expect(bridgeShape).toEqual({
-      bridge: ["connections", "persistence", "projectPreview", "renderPlans", "renders", "scratchpad", "scriptGeneration", "speechCache", "system", "voiceCatalog"],
+      bridge: ["connection", "persistence", "projectPreview", "renderPlans", "renders", "scratchpad", "scriptGeneration", "speechCache", "system", "voiceCatalog"],
       hasRequire: false,
       hasProcess: false,
       frozen: true
@@ -82,7 +76,7 @@ test.describe("Electron acceptance", () => {
     await createProject(page, "Desktop model voices");
     await page.getByLabel("Script source").fill("[speaker_narrator] Model scoped voice.");
     await page.getByRole("tab", { name: "Settings" }).click();
-    await page.getByLabel("Connection profile").selectOption("environment-speaches");
+    await expect(page.getByLabel("Connection profile")).toHaveCount(0);
     await page.getByLabel("Optional model override").fill(FAKE_SPEACHES_SECONDARY_MODEL_ID);
     await expect(page.getByLabel("Voices")).toHaveValue(FAKE_SPEACHES_SECONDARY_VOICE_ID);
     await page.getByRole("button", { name: "Save now" }).click();
@@ -114,12 +108,12 @@ test.describe("Electron acceptance", () => {
 
   test("freezes and reopens immutable plans through typed IPC without TTS", async ({ electronStudyNarrator, studyNarrator }) => {
     let page = electronStudyNarrator.page;
-    await continueElectronOffline(page);
+    await configureElectronConnection(page, studyNarrator);
     studyNarrator.fakeSpeaches.reset();
     await createProject(page, "Desktop frozen plan");
     await page.getByLabel("Script source").fill("[speaker_teacher] First.\n\n[speaker_teacher] Second.");
     await page.getByRole("tab", { name: "Settings" }).click();
-    await page.getByLabel("Connection profile").selectOption("environment-speaches");
+    await expect(page.getByLabel("Connection profile")).toHaveCount(0);
     await page.getByLabel("Optional model override").fill("speaches-ai/Kokoro-82M-v1.0-ONNX");
     await expect(page.getByLabel("Voices")).toHaveValue("af_heart");
     await page.getByLabel("Paragraph transition mode").selectOption("duration");
@@ -152,11 +146,11 @@ test.describe("Electron acceptance", () => {
 
   test("auto-resumes an interrupted render and saves a validated artifact through native IPC", async ({ electronStudyNarrator, studyNarrator }) => {
     let page = electronStudyNarrator.page;
-    await continueElectronOffline(page);
+    await configureElectronConnection(page, studyNarrator);
     await createProject(page, "Desktop render recovery");
     await page.getByLabel("Script source").fill("[speaker_teacher] Resume this render.");
     await page.getByRole("tab", { name: "Settings" }).click();
-    await page.getByLabel("Connection profile").selectOption("environment-speaches");
+    await expect(page.getByLabel("Connection profile")).toHaveCount(0);
     await page.getByLabel("Optional model override").fill("speaches-ai/Kokoro-82M-v1.0-ONNX");
     await expect(page.getByLabel("Voices")).toHaveValue("af_heart");
     await page.getByRole("tab", { name: "Render" }).click();
@@ -230,37 +224,19 @@ test.describe("Electron acceptance", () => {
     expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/speech"] ?? 0).toBe(0);
   });
 
-  test("clears one-shot credential input and never stores plaintext", async ({ electronStudyNarrator, studyNarrator }) => {
-    const { page, application, dataDirectory } = electronStudyNarrator;
-    await continueElectronOffline(page);
+  test("exposes and persists only the singleton connection settings", async ({ electronStudyNarrator, studyNarrator }) => {
+    let page = electronStudyNarrator.page;
+    await configureElectronConnection(page, studyNarrator);
     await page.getByRole("link", { name: "Settings", exact: true }).click();
-    await page.getByRole("button", { name: "New saved profile" }).click();
-    await page.getByLabel("Name", { exact: true }).fill("Desktop credential profile");
-    await page.getByLabel("Endpoint root or /v1").fill(studyNarrator.fakeSpeaches.baseUrl);
-    await page.getByLabel("Model ID").fill("speaches-ai/Kokoro-82M-v1.0-ONNX");
-    await page.getByLabel("Default voice ID").fill("af_heart");
-    const credential = page.getByLabel("Replace API key (one shot)");
-    await credential.fill(secret);
-    await page.getByRole("button", { name: "Create profile" }).click();
-    await expect(credential).toHaveValue("");
+    await expect(page.getByLabel("Address")).toHaveValue(studyNarrator.fakeSpeaches.baseUrl);
+    await expect(page.getByLabel("Model")).toHaveValue("speaches-ai/Kokoro-82M-v1.0-ONNX");
+    await expect(page.getByLabel("Default Voice")).toHaveValue("af_heart");
+    await expect(page.getByText(/New saved profile|Active profile|API key|Environment Speaches/u)).toHaveCount(0);
 
-    const encryptionAvailable = await application.evaluate(({ safeStorage }: ElectronEvaluationApi) =>
-      safeStorage.isEncryptionAvailable() && safeStorage.getSelectedStorageBackend?.() !== "basic_text");
-    if (encryptionAvailable) {
-      await expect(page.getByText("Desktop credential profile saved.")).toBeVisible();
-      await expect(page.getByText(/API key: configured/u)).toBeVisible();
-      const vaultPath = resolve(dataDirectory, "credentials.safe-storage.json");
-      const vault = await readFile(vaultPath, "utf8");
-      expect(vault).not.toContain(secret);
-      expect((await stat(vaultPath)).mode & 0o777).toBe(0o600);
-    } else {
-      await expect(page.getByRole("alert")).toContainText("could not complete the connection operation");
-    }
-
-    const rendererStorage = await page.evaluate(() => `${JSON.stringify(localStorage)}${JSON.stringify(sessionStorage)}${document.body.textContent ?? ""}`);
-    expect(rendererStorage).not.toContain(secret);
-    const database = await readFile(resolve(dataDirectory, "studynarrator.sqlite"));
-    expect(database.includes(Buffer.from(secret))).toBe(false);
+    page = await electronStudyNarrator.relaunch();
+    await page.getByRole("link", { name: "Settings", exact: true }).click();
+    await expect(page.getByLabel("Address")).toHaveValue(studyNarrator.fakeSpeaches.baseUrl);
+    await expect(page.getByLabel("Model")).toHaveValue("speaches-ai/Kokoro-82M-v1.0-ONNX");
   });
 
   test("opens only approved Speaches links outside the renderer", async ({ electronStudyNarrator }) => {

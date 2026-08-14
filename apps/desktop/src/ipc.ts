@@ -1,12 +1,6 @@
 import { copyFile, writeFile } from "node:fs/promises";
 import {
-  ActiveConnectionProfileInputSchema,
   CONNECTION_CHANNELS,
-  ConnectionProfileCollectionSchema,
-  ConnectionProfileIdInputSchema,
-  ConnectionProfileMutationRequestSchema,
-  ConnectionProfileMutationSchema,
-  ConnectionProfileSchema,
   ConnectionSetupStateSchema,
   ConnectionTestSummarySchema,
   EmptyResponseSchema,
@@ -54,6 +48,9 @@ import {
   ScratchpadPreviewInputSchema,
   ScratchpadPreviewResultSchema,
   SpeechCatalogSchema,
+  SpeachesCatalogDiscoveryInputSchema,
+  SpeachesConnectionAuthoringSchema,
+  SpeachesConnectionSchema,
   SPEECH_CACHE_CHANNELS,
   SpeechCacheCleanupResultSchema,
   SpeechCacheKeyInputSchema,
@@ -61,7 +58,7 @@ import {
   SpeechCacheStatusSchema,
   VoiceCatalogModelInputSchema,
   VoiceCatalogSchema,
-  type ConnectionsClient,
+  type SpeachesConnectionClient,
   type PersistenceClient,
   type ProjectPreviewClient,
   type RenderPlanClient,
@@ -150,7 +147,7 @@ export function registerPersistenceHandlers(ipcMain: IpcMainLike, persistence: P
 
 export function registerConnectionHandlers(
   ipcMain: IpcMainLike,
-  connections: ConnectionsClient,
+  connection: SpeachesConnectionClient,
   voiceCatalog: VoiceCatalogClient
 ) {
   const handle = (channel: string, listener: (input: unknown) => Promise<unknown>) => {
@@ -160,33 +157,23 @@ export function registerConnectionHandlers(
         return await listener(input);
       } catch (error) {
         const record = error && typeof error === "object" ? error as Record<string, unknown> : undefined;
-        // The original error is intentionally not attached: it may contain a one-shot credential.
+        // The original error is intentionally not attached: it may contain a private endpoint.
         /* eslint-disable preserve-caught-error */
         if (record && Array.isArray(record.issues)) throw new Error("The request does not match the connection contract.");
-        if (record?.code === "CONNECTION_POLICY" && typeof record.message === "string") throw new Error(record.message);
         if (typeof record?.code === "string" && record.code.startsWith("CONNECTION_CATALOG_") && typeof record.message === "string") throw new Error(record.message);
-        if (record?.code === "PERSISTENCE_NOT_FOUND") throw new Error("The requested connection profile does not exist.");
+        if (record?.code === "PERSISTENCE_NOT_FOUND") throw new Error("The Speaches connection does not exist.");
         throw new Error("StudyNarrator could not complete the connection operation.");
         /* eslint-enable preserve-caught-error */
       }
     });
   };
-  handle(CONNECTION_CHANNELS.list, async () => ConnectionProfileCollectionSchema.parse(await connections.list()));
-  handle(CONNECTION_CHANNELS.create, async (input) => ConnectionProfileSchema.parse(await connections.create(ConnectionProfileMutationSchema.parse(input))));
-  handle(CONNECTION_CHANNELS.replace, async (input) => {
-    const request = ConnectionProfileMutationRequestSchema.parse(input);
-    return ConnectionProfileSchema.parse(await connections.replace(request.profileId, request.mutation));
-  });
-  handle(CONNECTION_CHANNELS.delete, async (input) => {
-    await connections.delete(ConnectionProfileIdInputSchema.parse(input).profileId);
-    return EmptyResponseSchema.parse({});
-  });
-  handle(CONNECTION_CHANNELS.test, async (input) => ConnectionTestSummarySchema.parse(await connections.test(ConnectionProfileIdInputSchema.parse(input).profileId)));
-  handle(CONNECTION_CHANNELS.speechCatalogDiscover, async (input) => SpeechCatalogSchema.parse(await connections.discoverSpeechCatalog(ConnectionProfileIdInputSchema.parse(input).profileId)));
-  handle(CONNECTION_CHANNELS.exportDiagnostics, async (input) => RedactedConnectionDiagnosticsSchema.parse(await connections.exportDiagnostics(ConnectionProfileIdInputSchema.parse(input).profileId)));
-  handle(CONNECTION_CHANNELS.setupGet, async () => ConnectionSetupStateSchema.parse(await connections.getSetupState()));
-  handle(CONNECTION_CHANNELS.setupSetActive, async (input) => ConnectionSetupStateSchema.parse(await connections.setActiveProfile(ActiveConnectionProfileInputSchema.parse(input).profileId)));
-  handle(CONNECTION_CHANNELS.setupComplete, async () => ConnectionSetupStateSchema.parse(await connections.completeOnboarding()));
+  handle(CONNECTION_CHANNELS.get, async () => SpeachesConnectionSchema.parse(await connection.get()));
+  handle(CONNECTION_CHANNELS.update, async (input) => SpeachesConnectionSchema.parse(await connection.update(SpeachesConnectionAuthoringSchema.parse(input))));
+  handle(CONNECTION_CHANNELS.test, async () => ConnectionTestSummarySchema.parse(await connection.test()));
+  handle(CONNECTION_CHANNELS.speechCatalogDiscover, async (input) => SpeechCatalogSchema.parse(await connection.discoverSpeechCatalog(SpeachesCatalogDiscoveryInputSchema.parse(input))));
+  handle(CONNECTION_CHANNELS.exportDiagnostics, async () => RedactedConnectionDiagnosticsSchema.parse(await connection.exportDiagnostics()));
+  handle(CONNECTION_CHANNELS.setupGet, async () => ConnectionSetupStateSchema.parse(await connection.getSetupState()));
+  handle(CONNECTION_CHANNELS.setupComplete, async () => ConnectionSetupStateSchema.parse(await connection.completeOnboarding()));
   handle(CONNECTION_CHANNELS.voiceCatalogGet, async (input) => VoiceCatalogSchema.parse(await voiceCatalog.get(VoiceCatalogModelInputSchema.parse(input).modelId)));
   handle(CONNECTION_CHANNELS.voiceCatalogReplace, async (input) => VoiceCatalogSchema.parse(await voiceCatalog.replace(VoiceCatalogSchema.parse(input))));
 }

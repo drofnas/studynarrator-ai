@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import { FAKE_SPEACHES_SECONDARY_MODEL_ID, FAKE_SPEACHES_SECONDARY_VOICE_ID, type FakeSpeachesScenario } from "@studynarrator/fake-speaches";
 import {
+  configureConnection,
   continueOffline,
   expect,
   openRoute,
@@ -10,18 +11,10 @@ import {
 
 const modelId = "speaches-ai/Kokoro-82M-v1.0-ONNX";
 
-async function createSavedProfile(page: Page, application: StudyNarratorTestApplication): Promise<void> {
+async function openConnectionSettings(page: Page, application: StudyNarratorTestApplication): Promise<void> {
+  await configureConnection(page, application);
   await openRoute(page, application, "/settings");
   await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
-  await page.getByRole("button", { name: "New saved profile" }).click();
-  await page.getByLabel("Name", { exact: true }).fill("Playwright Speaches");
-  await page.getByLabel("Endpoint root or /v1").fill(`${application.fakeSpeaches.baseUrl}/v1`);
-  await page.getByLabel("Model ID").fill(modelId);
-  await page.getByLabel("Default voice ID").fill("af_heart");
-  await page.getByLabel("Timeout (seconds)").fill("1");
-  await page.getByRole("button", { name: "Create profile" }).click();
-  await expect(page.getByText("Playwright Speaches saved.")).toBeVisible();
-  await page.getByLabel("Active profile").selectOption({ label: "Playwright Speaches" });
 }
 
 async function createProject(page: Page, name: string, description = ""): Promise<void> {
@@ -34,18 +27,23 @@ async function createProject(page: Page, name: string, description = ""): Promis
 
 test.describe("Settings and connection diagnostics", () => {
   test.beforeEach(async ({ page, studyNarrator }) => {
-    await continueOffline(page, studyNarrator);
+    await openConnectionSettings(page, studyNarrator);
   });
 
-  test("manages profiles, normalizes /v1, stages every fake failure, and exports redacted JSON", async ({ page, studyNarrator }) => {
-    await createSavedProfile(page, studyNarrator);
-    const testButton = page.getByRole("button", { name: "Test Connection" });
+  test("persists the singleton, normalizes /v1, stages every fake failure, and exports redacted JSON", async ({ page, studyNarrator }) => {
+    await page.getByLabel("Address").fill(`${studyNarrator.fakeSpeaches.baseUrl}/v1`);
+    await page.getByRole("button", { name: "Refresh catalog" }).click();
+    await expect(page.getByLabel("Model")).toHaveValue(modelId);
+    await expect(page.getByLabel("Default Voice")).toHaveValue("af_heart");
+    const testButton = page.getByRole("button", { name: "Save and Test" });
 
     await testButton.click();
     await expect(page.getByText("Connection test: connected.")).toBeVisible();
     expect(studyNarrator.fakeSpeaches.getState().requests.every(({ path }) => !path.includes("/v1/v1"))).toBe(true);
     await expect(page.getByRole("heading", { name: "connected" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Connected. Playwright Speaches. Manage connection." })).toBeVisible();
+    const endpointHost = new URL(studyNarrator.fakeSpeaches.baseUrl).host.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+    await expect(page.getByRole("link", { name: new RegExp(`Connected\\. ${endpointHost}\\. Manage connection\\.`, "u") })).toBeVisible();
+    await expect(page.getByText(/New saved profile|Active profile|API key|Environment Speaches/u)).toHaveCount(0);
 
     const scenarios: ReadonlyArray<[FakeSpeachesScenario, string]> = [
       ["unauthorized", "authenticationRequired"],
@@ -76,9 +74,10 @@ test.describe("Settings and connection diagnostics", () => {
     expect(exported).not.toContain("127.0.0.1");
     expect(exported).not.toContain("authorization");
 
-    page.on("dialog", (dialog) => dialog.accept());
-    await page.getByRole("button", { name: "Delete" }).click();
-    await expect(page.getByRole("button", { name: "Playwright Speaches" })).toHaveCount(0);
+    await page.reload();
+    await expect(page.getByLabel("Address")).toHaveValue(studyNarrator.fakeSpeaches.baseUrl);
+    await expect(page.getByLabel("Model")).toHaveValue(modelId);
+    await expect(page.getByLabel("Default Voice")).toHaveValue("af_heart");
   });
 
   test("searches and strictly replaces catalog overrides and persists pacing", async ({ page, studyNarrator }) => {
@@ -142,7 +141,7 @@ test.describe("Settings and connection diagnostics", () => {
 
 test.describe("Projects connected authoring", () => {
   test("defaults and persists catalog voices in bounded editor panels without requesting TTS", async ({ page, studyNarrator }) => {
-    await continueOffline(page, studyNarrator);
+    await configureConnection(page, studyNarrator);
     studyNarrator.fakeSpeaches.reset();
     await page.reload();
     await expect(page.getByRole("heading", { name: "Projects", exact: true })).toBeVisible();
@@ -155,8 +154,7 @@ test.describe("Projects connected authoring", () => {
     const voices = page.getByLabel("Voices");
     await expect(voices).toBeVisible();
     await expect(voices).toHaveValue("af_heart");
-    await expect(page.getByLabel("Connection profile")).toHaveValue("");
-    await page.getByLabel("Connection profile").selectOption("environment-speaches");
+    await expect(page.getByLabel("Connection profile")).toHaveCount(0);
     await page.getByLabel("Optional model override").fill(modelId);
     await expect(voices).toHaveValue("af_heart");
     await expect(page.locator("strong").filter({ hasText: "Heart — American English — af_heart" })).toBeVisible();
@@ -197,7 +195,7 @@ test.describe("Projects connected authoring", () => {
     await page.getByRole("tab", { name: "Script Editor" }).click();
     await expect(page.getByLabel("Script source")).toHaveValue(longScript);
     await page.getByRole("tab", { name: "Settings" }).click();
-    await expect(page.getByLabel("Connection profile")).toHaveValue("environment-speaches");
+    await expect(page.getByLabel("Connection profile")).toHaveCount(0);
     await expect(page.getByLabel("Optional model override")).toHaveValue(modelId);
     await expect(page.getByLabel("Voices")).toHaveValue("af_sky");
     expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/models"] ?? 0).toBe(2);
@@ -232,22 +230,5 @@ test.describe("Projects connected authoring", () => {
     page.on("dialog", (dialog) => dialog.accept());
     await page.getByRole("button", { name: "Delete" }).click();
     await expect(page.getByText("No projects yet. Create the first study guide.")).toBeVisible();
-  });
-});
-
-test.describe("locked environment settings", () => {
-  test.use({ studyNarratorEnvironment: { STUDYNARRATOR_LOCK_SPEACHES_SETTINGS: "true" } });
-
-  test("keeps the environment profile active and its managed fields disabled", async ({ page, studyNarrator }) => {
-    await continueOffline(page, studyNarrator);
-    await openRoute(page, studyNarrator, "/settings");
-    await expect(page.getByText(/Managed by environment/u)).toBeVisible();
-    await expect(page.getByLabel("Endpoint root or /v1")).toBeDisabled();
-    await expect(page.getByLabel("Active profile")).toBeDisabled();
-
-    await page.getByRole("button", { name: "New saved profile" }).click();
-    await expect(page.getByLabel("Active profile")).toHaveCount(0);
-    await page.getByRole("button", { name: "Environment Speaches" }).click();
-    await expect(page.getByLabel("Active profile")).toHaveValue("environment-speaches");
   });
 });

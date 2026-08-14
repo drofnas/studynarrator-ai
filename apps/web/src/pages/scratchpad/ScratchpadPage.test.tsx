@@ -10,9 +10,8 @@ import { ScratchpadSessionProvider } from "@/features/scratchpad/ScratchpadSessi
 import { ScratchpadPage } from "./ScratchpadPage.js";
 
 const timestamp = "2026-08-12T12:00:00.000Z";
-const profile = {
-  id: "local", name: "Local Speaches", baseUrl: "http://127.0.0.1:8000", suppliedUrlForm: "root" as const, source: "saved" as const,
-  editable: true, credentialEntryAllowed: false, configured: true, apiKeyConfigured: false, defaultModelId: "model", defaultVoiceId: "voice",
+const connection = {
+  baseUrl: "http://127.0.0.1:8000", suppliedUrlForm: "root" as const, configured: true, defaultModelId: "model", defaultVoiceId: "voice",
   timeoutSeconds: 120, retryCount: 2, responseFormat: "wav" as const, lastTestedAt: timestamp, lastSuccessfulTestAt: timestamp,
   lastTestSummary: { schemaVersion: 1 as const, overall: "connected" as const, testedAt: timestamp, httpStatus: 200, stages: [], availableModelIds: ["model"], availableVoiceIds: ["voice"] },
   createdAt: timestamp, updatedAt: timestamp
@@ -27,16 +26,16 @@ const persistence = {
   globalLexicon: { list: vi.fn(async () => globalLexicon), replace: vi.fn() }
 } as unknown as PersistenceClient;
 const connections = {
-  list: vi.fn(async () => [profile]), create: vi.fn(), replace: vi.fn(), delete: vi.fn(), test: vi.fn(), exportDiagnostics: vi.fn(),
-  discoverSpeechCatalog: vi.fn(async (profileId: string) => ({ schemaVersion: 1 as const, profileId, models: [{ modelId: "model", voices: [{ voiceId: "voice", name: "Teacher", language: null, gender: null }] }] })),
-  getSetupState: vi.fn(async () => ({ activeProfileId: "local", activeProfileLocked: false, onboardingCompletedAt: timestamp, client: "web" as const })),
-  setActiveProfile: vi.fn(), completeOnboarding: vi.fn()
+  get: vi.fn(async () => connection), update: vi.fn(), test: vi.fn(), exportDiagnostics: vi.fn(),
+  discoverSpeechCatalog: vi.fn(async () => ({ schemaVersion: 1 as const, models: [{ modelId: "model", voices: [{ voiceId: "voice", name: "Teacher", language: null, gender: null }] }] })),
+  getSetupState: vi.fn(async () => ({ onboardingCompletedAt: timestamp, client: "web" as const })),
+  completeOnboarding: vi.fn()
 };
 const voiceCatalog = { get: vi.fn(async () => ({ schemaVersion: 1 as const, modelId: "model", entries: [{ voiceId: "voice", label: "Teacher — voice", enabled: true, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }] })), replace: vi.fn() };
 
 function previewResult(text: string): ScratchpadPreviewResult {
   return {
-    schemaVersion: 2, id: crypto.randomUUID(), createdAt: timestamp, connectionProfileId: "local", connectionProfileName: "Local Speaches",
+    schemaVersion: 3, id: crypto.randomUUID(), createdAt: timestamp,
     modelId: "model", voiceId: "voice", voiceLabel: "Teacher — voice", speed: 1, originalText: text, readableText: text, transformedText: text.replace("SQL", "sequel"),
     lexiconApplied: true, warnings: [],
     cache: { key: "a".repeat(64), status: "miss", byteLength: 3, createdAt: timestamp, lastUsedAt: timestamp },
@@ -45,15 +44,16 @@ function previewResult(text: string): ScratchpadPreviewResult {
 }
 
 function renderPage(preview = vi.fn(async (input: { text: string }) => previewResult(input.text))) {
-  return render(<MemoryRouter><ConnectionProvider connections={connections as never} voiceCatalog={voiceCatalog as never}><ScratchpadSessionProvider><ScratchpadPage client={{ preview }} persistence={persistence} /></ScratchpadSessionProvider></ConnectionProvider></MemoryRouter>);
+  return render(<MemoryRouter><ConnectionProvider connectionClient={connections as never} voiceCatalog={voiceCatalog as never}><ScratchpadSessionProvider><ScratchpadPage client={{ preview }} persistence={persistence} /></ScratchpadSessionProvider></ConnectionProvider></MemoryRouter>);
 }
 
 beforeEach(() => {
   window.sessionStorage.clear();
-  connections.discoverSpeechCatalog.mockResolvedValue({ schemaVersion: 1 as const, profileId: "local", models: [{ modelId: "model", voices: [{ voiceId: "voice", name: "Teacher", language: null, gender: null }] }] });
+  connections.discoverSpeechCatalog.mockResolvedValue({ schemaVersion: 1 as const, models: [{ modelId: "model", voices: [{ voiceId: "voice", name: "Teacher", language: null, gender: null }] }] });
   voiceCatalog.get.mockResolvedValue({ schemaVersion: 1 as const, modelId: "model", entries: [{ voiceId: "voice", label: "Teacher — voice", enabled: true, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }] });
   vi.stubGlobal("atob", (value: string) => Buffer.from(value, "base64").toString("binary"));
-  vi.stubGlobal("URL", { createObjectURL: vi.fn(() => "blob:scratchpad"), revokeObjectURL: vi.fn() });
+  vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:scratchpad");
+  vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
   vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => undefined);
   vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(function (this: HTMLMediaElement) { fireEvent.play(this); return Promise.resolve(); });
   vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(function (this: HTMLMediaElement) { fireEvent.pause(this); });
@@ -61,12 +61,12 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("Quick Scratchpad", () => {
-  it("defaults from the active profile, previews global transformation, synthesizes, and plays", async () => {
+  it("defaults from the singleton connection, previews global transformation, synthesizes, and plays", async () => {
     const user = userEvent.setup();
     const preview = vi.fn(async (input: { text: string }) => previewResult(input.text));
     const { container } = renderPage(preview);
     expect(await screen.findByRole("heading", { name: "Quick Scratchpad" })).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByLabelText("Connection profile")).toHaveValue("local"));
+    expect(screen.queryByLabelText("Connection profile")).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByLabelText("Model")).toHaveValue("model"));
     await waitFor(() => expect(screen.getByLabelText("Voice")).toHaveValue("voice"));
     expect(screen.getByLabelText("Model")).toBeInstanceOf(HTMLSelectElement);
@@ -84,7 +84,7 @@ describe("Quick Scratchpad", () => {
     await user.click(screen.getByLabelText("Apply global lexicon"));
     await user.click(screen.getByRole("button", { name: "Synthesize passage" }));
     await waitFor(() => expect(preview).toHaveBeenCalledWith(expect.objectContaining({ text: "SQL indexes can improve database reads.", applyGlobalLexicon: true }), expect.any(AbortSignal)));
-    expect(await screen.findByLabelText(/Audio player for Local Speaches/u)).toBeInTheDocument();
+    expect(await screen.findByLabelText(/Audio player for Teacher/u)).toBeInTheDocument();
     expect(screen.queryByText(/Result · cache/u)).not.toBeInTheDocument();
 
     const audio = container.querySelector("audio");

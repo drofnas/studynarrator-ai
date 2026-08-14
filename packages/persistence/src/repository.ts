@@ -6,9 +6,6 @@ import {
   type LexiconEntryAuthoring
 } from "@studynarrator/core";
 import {
-  ConnectionProfileAuthoringSchema,
-  ConnectionProfileCollectionSchema,
-  ConnectionProfilePlaceholderSchema,
   ConnectionTestSummarySchema,
   DATABASE_SCHEMA_VERSION,
   DEFAULT_SYSTEM_PACING,
@@ -24,14 +21,14 @@ import {
   ProjectReplaceInputSchema,
   ProjectSummaryCollectionSchema,
   SystemPacingDefaultsSchema,
+  SpeachesConnectionAuthoringSchema,
+  SpeachesConnectionSchema,
   VoiceCatalogSchema,
   RenderArtifactCollectionSchema,
   RenderArtifactSchema,
   RenderJobCollectionSchema,
   RenderJobSchema,
   RenderSegmentSchema,
-  type ConnectionProfileAuthoring,
-  type ConnectionProfilePlaceholder,
   type ConnectionTestSummary,
   type GlobalLexiconReplaceInput,
   type IgnoredDiagnosticCollection,
@@ -42,6 +39,8 @@ import {
   type ProjectReplaceInput,
   type ProjectSummary,
   type SystemPacingDefaults,
+  type SpeachesConnection,
+  type SpeachesConnectionAuthoring,
   type TransitionPauseConfiguration,
   type TransitionPauseSetting,
   type VoiceCatalog,
@@ -137,8 +136,12 @@ interface MarkerRow { key: string; value: string; created_at: string }
 interface VersionRow { version: string }
 
 export interface ConnectionSetupRecord {
-  activeProfileId: string | null;
   onboardingCompletedAt: string | null;
+}
+
+export interface StoredSpeachesConnection extends SpeachesConnection {
+  /** Internal compatibility identity retained for caches and legacy frozen plans. */
+  id: string;
 }
 
 export interface MarkerEvidence {
@@ -168,18 +171,11 @@ export interface StudyNarratorRepository {
   replaceIgnoredDiagnostics(input: IgnoredDiagnosticCollection): IgnoredDiagnosticCollection;
   listGlobalLexicon(): LexiconEntry[];
   replaceGlobalLexicon(input: GlobalLexiconReplaceInput): LexiconEntry[];
-  listConnectionProfiles(): ConnectionProfilePlaceholder[];
-  getConnectionProfile(profileId: string): ConnectionProfilePlaceholder;
-  createConnectionProfile(input: ConnectionProfileAuthoring): ConnectionProfilePlaceholder;
-  replaceConnectionProfile(profileId: string, input: ConnectionProfileAuthoring): ConnectionProfilePlaceholder;
-  deleteConnectionProfile(profileId: string): void;
-  getConnectionCredentialReference(profileId: string): string | null;
-  setConnectionCredentialReference(profileId: string, reference: string | null): ConnectionProfilePlaceholder;
-  setConnectionSuppliedUrlForm(profileId: string, suppliedUrlForm: "root" | "v1" | "unconfigured"): ConnectionProfilePlaceholder;
-  upsertEnvironmentConnectionProfile(input: ConnectionProfileAuthoring, credentialReference: string | null): ConnectionProfilePlaceholder;
-  recordConnectionTest(profileId: string, summary: ConnectionTestSummary): ConnectionProfilePlaceholder;
+  getSpeachesConnection(): StoredSpeachesConnection;
+  replaceSpeachesConnection(input: SpeachesConnectionAuthoring, suppliedUrlForm: "root" | "v1" | "unconfigured"): StoredSpeachesConnection;
+  recordConnectionTest(summary: ConnectionTestSummary): StoredSpeachesConnection;
+  getProjectConnectionId(projectId: string): string;
   getConnectionSetup(): ConnectionSetupRecord;
-  setActiveConnectionProfile(profileId: string | null): ConnectionSetupRecord;
   completeConnectionOnboarding(): ConnectionSetupRecord;
   getVoiceCatalogOverrides(modelId: string): VoiceCatalog;
   replaceVoiceCatalogOverrides(input: VoiceCatalogAuthoring): VoiceCatalog;
@@ -297,16 +293,12 @@ function lexiconFromRow(row: LexiconRow): LexiconEntry {
   });
 }
 
-function profileFromRow(row: ProfileRow): ConnectionProfilePlaceholder {
-  return ConnectionProfilePlaceholderSchema.parse({
+function connectionFromRow(row: ProfileRow): StoredSpeachesConnection {
+  return {
     id: row.id,
-    name: row.name,
+    ...SpeachesConnectionSchema.parse({
     baseUrl: row.base_url,
-    source: row.source,
-    editable: row.source === "saved",
-    credentialEntryAllowed: false,
     configured: row.base_url !== null && row.default_model_id !== null && row.default_voice_id !== null,
-    apiKeyConfigured: row.api_key_reference !== null,
     defaultModelId: row.default_model_id,
     defaultVoiceId: row.default_voice_id,
     timeoutSeconds: row.timeout_seconds,
@@ -318,7 +310,8 @@ function profileFromRow(row: ProfileRow): ConnectionProfilePlaceholder {
     lastTestSummary: row.last_test_summary_json === null ? null : JSON.parse(row.last_test_summary_json) as unknown,
     createdAt: row.created_at,
     updatedAt: row.updated_at
-  });
+    })
+  };
 }
 
 function lexiconBehaviorMatches(existing: LexiconEntry, authored: LexiconEntryAuthoring): boolean {
@@ -432,7 +425,6 @@ function createRepository(options: {
       description: row.description,
       scriptSource: row.script_source,
       scriptHash: row.script_hash,
-      connectionProfileId: row.connection_profile_id,
       modelId: row.model_id,
       speakerMappings: speakers.map((speaker) => ({
         speakerId: speaker.speaker_id,
@@ -451,18 +443,25 @@ function createRepository(options: {
     });
   };
 
-  const getConnectionProfile = (profileId: string): ConnectionProfilePlaceholder => {
+  const getSpeachesConnection = (): StoredSpeachesConnection => {
     assertOpen();
-    const row = database.prepare("SELECT * FROM connection_profiles WHERE id = ?").get(profileId) as ProfileRow | undefined;
-    if (!row) throw new PersistenceNotFoundError(`Connection profile ${profileId} was not found.`);
-    return profileFromRow(row);
+    const row = database.prepare(`
+      SELECT profile.* FROM connection_profiles profile
+      LEFT JOIN connection_setup setup ON setup.singleton_id = 1
+      ORDER BY CASE WHEN profile.id = setup.active_profile_id THEN 0 ELSE 1 END, profile.ordinal ASC, profile.id ASC
+      LIMIT 1
+    `).get() as ProfileRow | undefined;
+    if (!row) throw new PersistenceNotFoundError("The Speaches connection was not found.");
+    return connectionFromRow(row);
   };
+
+  const getConnectionId = (): string => getSpeachesConnection().id;
 
   const getConnectionSetup = (): ConnectionSetupRecord => {
     assertOpen();
     const row = database.prepare("SELECT active_profile_id, onboarding_completed_at FROM connection_setup WHERE singleton_id = 1")
       .get() as { active_profile_id: string | null; onboarding_completed_at: string | null };
-    return { activeProfileId: row.active_profile_id, onboardingCompletedAt: row.onboarding_completed_at };
+    return { onboardingCompletedAt: row.onboarding_completed_at };
   };
 
   const getVoiceCatalogOverrides = (modelId: string): VoiceCatalog => {
@@ -547,9 +546,9 @@ function createRepository(options: {
             speaker_change_transition_mode, speaker_change_transition_pause_id, speaker_change_transition_duration_ms,
             section_transition_mode, section_transition_pause_id, section_transition_duration_ms,
             created_at, updated_at
-          ) VALUES (?, ?, ?, '', ?, NULL, NULL, ?, ?, ?, ?, ?, NULL, 'none', NULL, NULL, 'none', NULL, NULL, ?, ?)
+          ) VALUES (?, ?, ?, '', ?, ?, NULL, ?, ?, ?, ?, ?, NULL, 'none', NULL, NULL, 'none', NULL, NULL, ?, ?)
         `).run(
-          id, input.name, input.description, scriptHash(""), booleanToSql(pacing.enabled),
+          id, input.name, input.description, scriptHash(""), getConnectionId(), booleanToSql(pacing.enabled),
           DEFAULT_PARAGRAPH_PAUSE_ID, pacing.durationMs, pacing.enabled ? "preset" : "none",
           pacing.enabled ? DEFAULT_PARAGRAPH_PAUSE_ID : null, timestamp, timestamp
         );
@@ -587,7 +586,7 @@ function createRepository(options: {
             section_transition_mode = ?, section_transition_pause_id = ?, section_transition_duration_ms = ?,
             updated_at = ? WHERE id = ?
         `).run(
-          input.name, input.description, input.scriptSource, scriptHash(input.scriptSource), input.connectionProfileId, input.modelId,
+          input.name, input.description, input.scriptSource, scriptHash(input.scriptSource), getConnectionId(), input.modelId,
           booleanToSql(input.transitionPauses.paragraph.mode !== "none"), legacyParagraphPauseId,
           legacyParagraphDuration, ...paragraph, ...speakerChange, ...section, timestamp, projectId
         );
@@ -641,7 +640,7 @@ function createRepository(options: {
             created_at, updated_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
-          duplicateId, input.name, source.description, source.scriptSource, source.scriptHash, source.connectionProfileId, source.modelId,
+          duplicateId, input.name, source.description, source.scriptSource, source.scriptHash, getConnectionId(), source.modelId,
           booleanToSql(source.transitionPauses.paragraph.mode !== "none"), legacyParagraphPauseId,
           legacyParagraphDuration, ...paragraph, ...speakerChange, ...section, timestamp, timestamp
         );
@@ -715,131 +714,50 @@ function createRepository(options: {
       const result = transaction(() => replaceLexicon("global", null, input, options.now().toISOString()));
       return GlobalLexiconEntryCollectionSchema.parse(result);
     },
-    listConnectionProfiles() {
+    getSpeachesConnection,
+    replaceSpeachesConnection(inputValue, suppliedUrlForm) {
       assertOpen();
-      const rows = database.prepare("SELECT * FROM connection_profiles ORDER BY ordinal ASC, id ASC").all() as ProfileRow[];
-      return ConnectionProfileCollectionSchema.parse(rows.map(profileFromRow));
-    },
-    getConnectionProfile,
-    createConnectionProfile(inputValue) {
-      assertOpen();
-      const input = ConnectionProfileAuthoringSchema.parse(inputValue);
-      const id = input.id ?? nextId();
-      if (database.prepare("SELECT id FROM connection_profiles WHERE id = ?").get(id)) throw new PersistenceConflictError(`Connection profile ${id} already exists.`);
-      const timestamp = options.now().toISOString();
-      const ordinal = (database.prepare("SELECT COALESCE(MAX(ordinal), -1) + 1 AS ordinal FROM connection_profiles").get() as { ordinal: number }).ordinal;
+      const input = SpeachesConnectionAuthoringSchema.parse(inputValue);
+      const existing = getSpeachesConnection();
+      const unchanged = existing.baseUrl === input.baseUrl
+        && existing.defaultModelId === input.defaultModelId && existing.defaultVoiceId === input.defaultVoiceId
+        && existing.timeoutSeconds === input.timeoutSeconds && existing.retryCount === input.retryCount
+        && existing.suppliedUrlForm === suppliedUrlForm;
       database.prepare(`
-        INSERT INTO connection_profiles (
-          id, ordinal, name, base_url, default_model_id, default_voice_id,
-          timeout_seconds, retry_count, response_format, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        UPDATE connection_profiles SET name = 'Speaches', base_url = ?, default_model_id = ?, default_voice_id = ?,
+          source = 'saved', api_key_reference = NULL, timeout_seconds = ?, retry_count = ?, response_format = ?,
+          supplied_url_form = ?, updated_at = ? WHERE id = ?
       `).run(
-        id, ordinal, input.name, input.baseUrl, input.defaultModelId, input.defaultVoiceId,
-        input.timeoutSeconds, input.retryCount, input.responseFormat, timestamp, timestamp
+        input.baseUrl, input.defaultModelId, input.defaultVoiceId, input.timeoutSeconds, input.retryCount,
+        input.responseFormat, suppliedUrlForm, unchanged ? existing.updatedAt : options.now().toISOString(), existing.id
       );
-      return profileFromRow(database.prepare("SELECT * FROM connection_profiles WHERE id = ?").get(id) as ProfileRow);
+      return getSpeachesConnection();
     },
-    replaceConnectionProfile(profileIdInput, inputValue) {
-      assertOpen();
-      const input = ConnectionProfileAuthoringSchema.parse(inputValue);
-      const profileId = profileIdInput;
-      if (input.id !== undefined && input.id !== profileId) throw new PersistenceConflictError("Connection profile IDs cannot be changed.");
-      const existing = database.prepare("SELECT * FROM connection_profiles WHERE id = ?").get(profileId) as ProfileRow | undefined;
-      if (!existing) throw new PersistenceNotFoundError(`Connection profile ${profileId} was not found.`);
-      const unchanged = existing.name === input.name && existing.base_url === input.baseUrl
-        && existing.default_model_id === input.defaultModelId && existing.default_voice_id === input.defaultVoiceId
-        && existing.timeout_seconds === input.timeoutSeconds && existing.retry_count === input.retryCount;
-      database.prepare(`
-        UPDATE connection_profiles SET name = ?, base_url = ?, default_model_id = ?, default_voice_id = ?,
-          timeout_seconds = ?, retry_count = ?, response_format = ?, updated_at = ? WHERE id = ?
-      `).run(
-        input.name, input.baseUrl, input.defaultModelId, input.defaultVoiceId,
-        input.timeoutSeconds, input.retryCount, input.responseFormat,
-        unchanged ? existing.updated_at : options.now().toISOString(), profileId
-      );
-      return profileFromRow(database.prepare("SELECT * FROM connection_profiles WHERE id = ?").get(profileId) as ProfileRow);
-    },
-    deleteConnectionProfile(profileId) {
-      assertOpen();
-      const existing = database.prepare("SELECT source FROM connection_profiles WHERE id = ?").get(profileId) as { source: string } | undefined;
-      if (!existing) throw new PersistenceNotFoundError(`Connection profile ${profileId} was not found.`);
-      if (existing.source === "environment") throw new PersistenceConflictError("Environment-managed connection profiles cannot be deleted.");
-      const result = database.prepare("DELETE FROM connection_profiles WHERE id = ?").run(profileId);
-      if (Number(result.changes ?? 0) !== 1) throw new PersistenceNotFoundError(`Connection profile ${profileId} was not found.`);
-    },
-    getConnectionCredentialReference(profileId) {
-      assertOpen();
-      const row = database.prepare("SELECT api_key_reference FROM connection_profiles WHERE id = ?").get(profileId) as { api_key_reference: string | null } | undefined;
-      if (!row) throw new PersistenceNotFoundError(`Connection profile ${profileId} was not found.`);
-      return row.api_key_reference;
-    },
-    setConnectionCredentialReference(profileId, reference) {
-      assertOpen();
-      const result = database.prepare("UPDATE connection_profiles SET api_key_reference = ?, updated_at = ? WHERE id = ?")
-        .run(reference, options.now().toISOString(), profileId);
-      if (Number(result.changes ?? 0) !== 1) throw new PersistenceNotFoundError(`Connection profile ${profileId} was not found.`);
-      return getConnectionProfile(profileId);
-    },
-    setConnectionSuppliedUrlForm(profileId, suppliedUrlForm) {
-      assertOpen();
-      const result = database.prepare("UPDATE connection_profiles SET supplied_url_form = ?, updated_at = ? WHERE id = ?")
-        .run(suppliedUrlForm, options.now().toISOString(), profileId);
-      if (Number(result.changes ?? 0) !== 1) throw new PersistenceNotFoundError(`Connection profile ${profileId} was not found.`);
-      return getConnectionProfile(profileId);
-    },
-    upsertEnvironmentConnectionProfile(inputValue, credentialReference) {
-      assertOpen();
-      const input = ConnectionProfileAuthoringSchema.parse(inputValue);
-      if (!input.id) throw new PersistenceConflictError("Environment profiles require a stable ID.");
-      const existing = database.prepare("SELECT id, created_at FROM connection_profiles WHERE id = ?").get(input.id) as { id: string; created_at: string } | undefined;
-      const timestamp = options.now().toISOString();
-      if (!existing) {
-        const ordinal = (database.prepare("SELECT COALESCE(MAX(ordinal), -1) + 1 AS ordinal FROM connection_profiles").get() as { ordinal: number }).ordinal;
-        database.prepare(`
-          INSERT INTO connection_profiles (
-            id, ordinal, name, base_url, default_model_id, default_voice_id, source, api_key_reference,
-            timeout_seconds, retry_count, response_format, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, 'environment', ?, ?, ?, ?, ?, ?)
-        `).run(
-          input.id, ordinal, input.name, input.baseUrl, input.defaultModelId, input.defaultVoiceId, credentialReference,
-          input.timeoutSeconds, input.retryCount, input.responseFormat, timestamp, timestamp
-        );
-      } else {
-        database.prepare(`
-          UPDATE connection_profiles SET name = ?, base_url = ?, default_model_id = ?, default_voice_id = ?,
-            source = 'environment', api_key_reference = ?, timeout_seconds = ?, retry_count = ?, response_format = ?, updated_at = ?
-          WHERE id = ?
-        `).run(
-          input.name, input.baseUrl, input.defaultModelId, input.defaultVoiceId, credentialReference,
-          input.timeoutSeconds, input.retryCount, input.responseFormat, timestamp, input.id
-        );
-      }
-      return getConnectionProfile(input.id);
-    },
-    recordConnectionTest(profileId, summaryValue) {
+    recordConnectionTest(summaryValue) {
       assertOpen();
       const summary = ConnectionTestSummarySchema.parse(summaryValue);
+      const connection = getSpeachesConnection();
       const result = database.prepare(`
         UPDATE connection_profiles SET last_tested_at = ?, last_successful_test_at = ?,
           last_test_summary_json = ?, updated_at = ? WHERE id = ?
       `).run(
         summary.testedAt,
-        summary.overall === "connected" ? summary.testedAt : getConnectionProfile(profileId).lastSuccessfulTestAt,
+        summary.overall === "connected" ? summary.testedAt : connection.lastSuccessfulTestAt,
         JSON.stringify(summary),
         options.now().toISOString(),
-        profileId
+        connection.id
       );
-      if (Number(result.changes ?? 0) !== 1) throw new PersistenceNotFoundError(`Connection profile ${profileId} was not found.`);
-      return getConnectionProfile(profileId);
+      if (Number(result.changes ?? 0) !== 1) throw new PersistenceNotFoundError("The Speaches connection was not found.");
+      return getSpeachesConnection();
+    },
+    getProjectConnectionId(projectIdInput) {
+      assertOpen();
+      const projectId = ProjectIdSchema.parse(projectIdInput);
+      const row = database.prepare("SELECT connection_profile_id FROM projects WHERE id = ?").get(projectId) as { connection_profile_id: string | null } | undefined;
+      if (!row) throw new PersistenceNotFoundError(`Project ${projectId} was not found.`);
+      return row.connection_profile_id ?? getConnectionId();
     },
     getConnectionSetup,
-    setActiveConnectionProfile(profileId) {
-      assertOpen();
-      if (profileId !== null) getConnectionProfile(profileId);
-      database.prepare("UPDATE connection_setup SET active_profile_id = ?, updated_at = ? WHERE singleton_id = 1")
-        .run(profileId, options.now().toISOString());
-      return getConnectionSetup();
-    },
     completeConnectionOnboarding() {
       assertOpen();
       const timestamp = options.now().toISOString();

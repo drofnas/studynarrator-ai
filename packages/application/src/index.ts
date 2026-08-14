@@ -107,18 +107,17 @@ export {
   type PersistenceRepository
 } from "./persistence.js";
 export {
+  ConnectionCatalogError,
   ConnectionConfigurationError,
-  ConnectionPolicyError,
-  ENVIRONMENT_CREDENTIAL_REFERENCE,
   classifyEndpoint,
-  createConnectionsService,
-  createRoutedCredentialStore,
+  createConnectionService,
   createVoiceCatalogService,
-  reconcileEnvironmentConnectionProfile,
+  type ConnectionCatalogErrorCode,
+  type ConnectionCatalogRunner,
   type ConnectionDiagnosticRunner,
   type ConnectionRepository,
   type ConnectionRuntimeContext,
-  type CredentialStore
+  type StoredSpeachesConnection
 } from "./connections.js";
 export { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
 export {

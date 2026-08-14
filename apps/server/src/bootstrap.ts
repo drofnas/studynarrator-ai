@@ -1,22 +1,20 @@
 import { resolve } from "node:path";
 import Database from "better-sqlite3";
 import {
-  createConnectionsService,
+  BUNDLED_VOICE_CATALOGS,
+  createConnectionService,
   createApplicationSpeechCache,
   createCachedSpeechSynthesis,
-  BUNDLED_VOICE_CATALOGS,
   createPersistenceService,
   createProjectPreviewService,
   createRenderPlanService,
   createRenderService,
-  createRoutedCredentialStore,
   createScratchpadService,
   createScriptGenerationService,
   createSpeechCacheService,
   createSystemService,
   createUnavailablePersistenceService,
   createVoiceCatalogService,
-  reconcileEnvironmentConnectionProfile,
   type DiagnosticsContext,
   type DiagnosticRepository,
   type RenderService,
@@ -45,7 +43,7 @@ export async function createServerServices(environment = process.env) {
   let storageFailure: StorageCheck | undefined;
   let persistence: PersistenceClient;
   let repository: DiagnosticRepository;
-  let connections;
+  let connection;
   let voiceCatalog;
   let scratchpad;
   let projectPreview;
@@ -56,22 +54,18 @@ export async function createServerServices(environment = process.env) {
     const openedRepository = await openStudyNarratorRepository({ Database, databasePath });
     repository = openedRepository;
     persistence = createPersistenceService(openedRepository);
-    const environmentProfile = reconcileEnvironmentConnectionProfile(openedRepository, environment);
     const context = {
       client: "web" as const,
       nodeVersion: process.versions.node,
-      electronVersion: null,
-      activeProfileLocked: environmentProfile.activeProfileLocked
+      electronVersion: null
     };
-    const credentials = createRoutedCredentialStore({ environmentApiKey: environmentProfile.apiKey });
-    connections = createConnectionsService({
+    connection = createConnectionService({
       repository: openedRepository,
-      credentials,
       context
     });
     voiceCatalog = createVoiceCatalogService({ repository: openedRepository, bundledCatalogs: BUNDLED_VOICE_CATALOGS });
-    const speech = createCachedSpeechSynthesis({ repository: openedRepository, credentials, cache });
-    scratchpad = createScratchpadService({ repository: openedRepository, credentials, cache });
+    const speech = createCachedSpeechSynthesis({ repository: openedRepository, cache });
+    scratchpad = createScratchpadService({ repository: openedRepository, cache });
     projectPreview = createProjectPreviewService({ repository: openedRepository, speech });
     const planStore = createRenderPlanStore(resolve(dataDirectory, "render-plans"));
     renderPlans = createRenderPlanService({
@@ -132,7 +126,7 @@ export async function createServerServices(environment = process.env) {
   return {
     service,
     persistence,
-    connections,
+    connection,
     voiceCatalog,
     scratchpad,
     projectPreview,

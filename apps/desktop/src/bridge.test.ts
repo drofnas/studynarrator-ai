@@ -50,10 +50,10 @@ const diagnostics = {
 } as const;
 
 const persistenceStatus = {
-  contractVersion: 4 as const,
+  contractVersion: 5 as const,
   state: "ready" as const,
-  databaseSchemaVersion: 6 as const,
-  targetDatabaseSchemaVersion: 6 as const,
+  databaseSchemaVersion: 7 as const,
+  targetDatabaseSchemaVersion: 7 as const,
   databasePath: "/tmp/studynarrator.sqlite",
   latestBackupPath: null
 };
@@ -66,25 +66,20 @@ const persistence = {
   globalLexicon: { list: vi.fn(async () => []), replace: vi.fn() }
 };
 
-const connections = {
-  list: vi.fn(async () => []),
-  create: vi.fn(),
-  replace: vi.fn(),
-  delete: vi.fn(),
+const connection = {
+  get: vi.fn(),
+  update: vi.fn(),
   test: vi.fn(),
   discoverSpeechCatalog: vi.fn(),
   exportDiagnostics: vi.fn(),
-  getSetupState: vi.fn(async () => ({ activeProfileId: null, activeProfileLocked: false, onboardingCompletedAt: null, client: "electron" as const })),
-  setActiveProfile: vi.fn(),
+  getSetupState: vi.fn(async () => ({ onboardingCompletedAt: null, client: "electron" as const })),
   completeOnboarding: vi.fn()
 };
 const voiceCatalog = { get: vi.fn(), replace: vi.fn() };
 const scratchpadResult = {
-  schemaVersion: 2 as const,
+  schemaVersion: 3 as const,
   id: "00000000-0000-4000-8000-000000000099",
   createdAt: "2026-08-12T12:00:00.000Z",
-  connectionProfileId: "profile",
-  connectionProfileName: "IPC profile",
   modelId: "model",
   voiceId: "voice",
   voiceLabel: "Voice",
@@ -102,15 +97,13 @@ const scratchpadResult = {
 };
 const scratchpad = { preview: vi.fn(async () => scratchpadResult) };
 const projectPreviewResult = {
-  schemaVersion: 1 as const,
+  schemaVersion: 2 as const,
   id: "00000000-0000-4000-8000-000000000098",
   createdAt: "2026-08-12T12:00:00.000Z",
   projectId: "00000000-0000-4000-8000-000000000001",
   mode: "segment" as const,
   nodeOrdinal: 1,
   sourceRange: { start: { line: 1, column: 1 }, end: { line: 1, column: 8 } },
-  connectionProfileId: "profile",
-  connectionProfileName: "IPC profile",
   modelId: "model",
   speakerId: "narrator" as const,
   voiceId: "voice",
@@ -207,18 +200,23 @@ describe("Electron boundary", () => {
   it("exposes only the validated diagnostics and persistence operations", async () => {
     const invoke = vi.fn(async (channel: string) => {
       if (channel === SYSTEM_DIAGNOSTICS_CHANNEL) return diagnostics;
-      if (channel === PERSISTENCE_CHANNELS.projectsList || channel === CONNECTION_CHANNELS.list) return [];
+      if (channel === PERSISTENCE_CHANNELS.projectsList) return [];
+      if (channel === CONNECTION_CHANNELS.get) return {
+        baseUrl: null, suppliedUrlForm: "unconfigured", configured: false, defaultModelId: null, defaultVoiceId: null,
+        timeoutSeconds: 120, retryCount: 2, responseFormat: "wav", lastTestedAt: null, lastSuccessfulTestAt: null,
+        lastTestSummary: null, createdAt: "2026-08-12T12:00:00.000Z", updatedAt: "2026-08-12T12:00:00.000Z"
+      };
       return persistenceStatus;
     });
     const bridge = createPreloadBridge(invoke);
-    expect(Object.keys(bridge)).toEqual(["system", "persistence", "connections", "voiceCatalog", "scratchpad", "projectPreview", "speechCache", "renderPlans", "renders", "scriptGeneration"]);
+    expect(Object.keys(bridge)).toEqual(["system", "persistence", "connection", "voiceCatalog", "scratchpad", "projectPreview", "speechCache", "renderPlans", "renders", "scriptGeneration"]);
     expect(Object.keys(bridge.system)).toEqual(["diagnostics"]);
     await expect(bridge.system.diagnostics()).resolves.toEqual(diagnostics);
     expect(invoke).toHaveBeenCalledWith(SYSTEM_DIAGNOSTICS_CHANNEL);
     await expect(bridge.persistence.projects.list()).resolves.toEqual([]);
     expect(invoke).toHaveBeenCalledWith(PERSISTENCE_CHANNELS.projectsList);
-    await expect(bridge.connections.list()).resolves.toEqual([]);
-    expect(invoke).toHaveBeenCalledWith(CONNECTION_CHANNELS.list);
+    await expect(bridge.connection.get()).resolves.toMatchObject({ configured: false });
+    expect(invoke).toHaveBeenCalledWith(CONNECTION_CHANNELS.get);
     expect(bridge.renders.renderAudioSource(renderJob.id)).toBe(`studynarrator-media://render/${renderJob.id}`);
     expect(bridge.renders.segmentAudioSource(renderJob.id, 3)).toBe(`studynarrator-media://segment/${renderJob.id}/3`);
     expect(() => bridge.renders.renderAudioSource("../outside")).toThrow();
@@ -243,7 +241,7 @@ describe("Electron boundary", () => {
     };
     registerDiagnosticsHandler(ipcMain, service as never, {} as never);
     registerPersistenceHandlers(ipcMain, persistence as never);
-    registerConnectionHandlers(ipcMain, connections, voiceCatalog as never);
+    registerConnectionHandlers(ipcMain, connection as never, voiceCatalog as never);
     registerScratchpadHandlers(ipcMain, scratchpad);
     registerProjectPreviewHandlers(ipcMain, projectPreview);
     registerSpeechCacheHandlers(ipcMain, speechCache);
@@ -256,20 +254,19 @@ describe("Electron boundary", () => {
     await expect(handlers.get(PERSISTENCE_CHANNELS.projectsList)?.()).resolves.toEqual([]);
     await expect(handlers.get(PERSISTENCE_CHANNELS.projectsCreate)?.(undefined, { name: "", secret: "must-not-leak" }))
       .rejects.toThrow("The request does not match the persistence contract.");
-    await expect(handlers.get(CONNECTION_CHANNELS.create)?.(undefined, { profile: {}, credential: { action: "replace", apiKey: "test-secret-must-not-appear" } }))
+    await expect(handlers.get(CONNECTION_CHANNELS.update)?.(undefined, { baseUrl: "http://127.0.0.1:8000", apiKey: "test-secret-must-not-appear" }))
       .rejects.toThrow("The request does not match the connection contract.");
   });
 
   it("invokes every public IPC contract with schema-valid input and output", async () => {
     const timestamp = "2026-08-12T12:00:00.000Z";
     const project = {
-      contractVersion: 4 as const,
+      contractVersion: 5 as const,
       id: "00000000-0000-4000-8000-000000000001",
       name: "IPC project",
       description: "",
       scriptSource: "",
       scriptHash: "a".repeat(64),
-      connectionProfileId: null,
       modelId: null,
       speakerMappings: [],
       pausePresets: [{ pauseId: "pause_medium", durationMs: 750, description: "Paragraph" }],
@@ -293,16 +290,10 @@ describe("Electron boundary", () => {
       availableModelIds: ["model"],
       availableVoiceIds: ["voice"]
     };
-    const profile = {
-      id: "profile",
-      name: "IPC profile",
+    const storedConnection = {
       baseUrl: "http://127.0.0.1:8000",
       suppliedUrlForm: "root" as const,
-      source: "saved" as const,
-      editable: true,
-      credentialEntryAllowed: true,
       configured: true,
-      apiKeyConfigured: false,
       defaultModelId: "model",
       defaultVoiceId: "voice",
       timeoutSeconds: 120,
@@ -314,9 +305,9 @@ describe("Electron boundary", () => {
       createdAt: timestamp,
       updatedAt: timestamp
     };
-    const setup = { activeProfileId: "profile", activeProfileLocked: false, onboardingCompletedAt: timestamp, client: "electron" as const };
+    const setup = { onboardingCompletedAt: timestamp, client: "electron" as const };
     const catalog = { schemaVersion: 1 as const, modelId: "model", entries: [] };
-    const speechCatalog = { schemaVersion: 1 as const, profileId: "profile", models: [{ modelId: "model", voices: [{ voiceId: "voice", name: "Voice", language: null, gender: null }] }] };
+    const speechCatalog = { schemaVersion: 1 as const, models: [{ modelId: "model", voices: [{ voiceId: "voice", name: "Voice", language: null, gender: null }] }] };
     persistence.projects.list.mockResolvedValue([{
       id: project.id,
       name: project.name,
@@ -333,20 +324,17 @@ describe("Electron boundary", () => {
     persistence.settings.updatePacing.mockResolvedValue({ enabled: false, durationMs: 900 });
     persistence.preferences.replaceIgnoredDiagnostics.mockResolvedValue([]);
     persistence.globalLexicon.replace.mockResolvedValue([]);
-    connections.list.mockResolvedValue([profile] as never);
-    connections.create.mockResolvedValue(profile);
-    connections.replace.mockResolvedValue(profile);
-    connections.delete.mockResolvedValue(undefined);
-    connections.test.mockResolvedValue(summary as never);
-    connections.discoverSpeechCatalog.mockResolvedValue(speechCatalog);
-    connections.exportDiagnostics.mockResolvedValue({
+    connection.get.mockResolvedValue(storedConnection as never);
+    connection.update.mockResolvedValue(storedConnection as never);
+    connection.test.mockResolvedValue(summary as never);
+    connection.discoverSpeechCatalog.mockResolvedValue(speechCatalog);
+    connection.exportDiagnostics.mockResolvedValue({
       schemaVersion: 1, applicationVersion: "0.1.0", runtimeVersions: { node: "26.7.0", electron: "43.3.0" },
-      profileId: "profile", profileSource: "saved", endpointClass: "loopback", suppliedUrlForm: "root",
-      modelId: "model", voiceId: "voice", apiKeyConfigured: false,
+      endpointClass: "loopback", suppliedUrlForm: "root", modelId: "model", voiceId: "voice",
       requestCounts: { health: 1, models: 1, voices: 1, speech: 1 }, result: summary
     } as never);
-    connections.setActiveProfile.mockResolvedValue(setup);
-    connections.completeOnboarding.mockResolvedValue(setup);
+    connection.getSetupState.mockResolvedValue(setup as never);
+    connection.completeOnboarding.mockResolvedValue(setup);
     voiceCatalog.get.mockResolvedValue(catalog);
     voiceCatalog.replace.mockResolvedValue(catalog);
 
@@ -355,15 +343,15 @@ describe("Electron boundary", () => {
     const service = { health: vi.fn(), runtime: vi.fn(), diagnostics: vi.fn(async () => diagnostics), close: vi.fn() };
     registerDiagnosticsHandler(ipcMain, service as never, {} as never);
     registerPersistenceHandlers(ipcMain, persistence as never);
-    registerConnectionHandlers(ipcMain, connections as never, voiceCatalog as never);
+    registerConnectionHandlers(ipcMain, connection as never, voiceCatalog as never);
     registerScratchpadHandlers(ipcMain, scratchpad);
     registerProjectPreviewHandlers(ipcMain, projectPreview);
     registerSpeechCacheHandlers(ipcMain, speechCache);
     registerRenderPlanHandlers(ipcMain, renderPlans);
     registerRenderHandlers(ipcMain, renders as never, saveDialog);
     registerScriptGenerationHandlers(ipcMain, scriptGeneration, saveDialog);
-    const projectReplace = { name: project.name, description: "", scriptSource: "", connectionProfileId: null, modelId: null, speakerMappings: [], pausePresets: project.pausePresets, transitionPauses: project.transitionPauses, lexiconEntries: [] };
-    const mutation = { profile: { id: "profile", name: "IPC profile", baseUrl: "http://127.0.0.1:8000", defaultModelId: "model", defaultVoiceId: "voice" }, credential: { action: "keep" } };
+    const projectReplace = { name: project.name, description: "", scriptSource: "", modelId: null, speakerMappings: [], pausePresets: project.pausePresets, transitionPauses: project.transitionPauses, lexiconEntries: [] };
+    const connectionInput = { baseUrl: "http://127.0.0.1:8000", defaultModelId: "model", defaultVoiceId: "voice" };
     const inputs: Record<string, unknown> = {
       [PERSISTENCE_CHANNELS.projectsCreate]: { name: "IPC project" },
       [PERSISTENCE_CHANNELS.projectsGet]: { projectId: project.id },
@@ -373,16 +361,11 @@ describe("Electron boundary", () => {
       [PERSISTENCE_CHANNELS.pacingUpdate]: { enabled: false, durationMs: 900 },
       [PERSISTENCE_CHANNELS.ignoredReplace]: [],
       [PERSISTENCE_CHANNELS.globalLexiconReplace]: [],
-      [CONNECTION_CHANNELS.create]: mutation,
-      [CONNECTION_CHANNELS.replace]: { profileId: "profile", mutation },
-      [CONNECTION_CHANNELS.delete]: { profileId: "profile" },
-      [CONNECTION_CHANNELS.test]: { profileId: "profile" },
-      [CONNECTION_CHANNELS.speechCatalogDiscover]: { profileId: "profile" },
-      [CONNECTION_CHANNELS.exportDiagnostics]: { profileId: "profile" },
-      [CONNECTION_CHANNELS.setupSetActive]: { profileId: "profile" },
+      [CONNECTION_CHANNELS.update]: connectionInput,
+      [CONNECTION_CHANNELS.speechCatalogDiscover]: { baseUrl: "http://127.0.0.1:8000" },
       [CONNECTION_CHANNELS.voiceCatalogGet]: { modelId: "model" },
       [CONNECTION_CHANNELS.voiceCatalogReplace]: catalog,
-      [SCRATCHPAD_CHANNELS.preview]: { connectionProfileId: "profile", modelId: "model", voiceId: "voice", speed: 1, text: "Speech.", applyGlobalLexicon: false },
+      [SCRATCHPAD_CHANNELS.preview]: { modelId: "model", voiceId: "voice", speed: 1, text: "Speech.", applyGlobalLexicon: false },
       [PROJECT_PREVIEW_CHANNELS.preview]: { projectId: project.id, preview: { mode: "segment", nodeOrdinal: 1 } },
       [SPEECH_CACHE_CHANNELS.clearProject]: { projectId: project.id },
       [SPEECH_CACHE_CHANNELS.clearEntry]: { cacheKey: "a".repeat(64) },

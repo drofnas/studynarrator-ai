@@ -1,22 +1,20 @@
 import { resolve } from "node:path";
 import Database from "better-sqlite3";
 import {
-  createConnectionsService,
   BUNDLED_VOICE_CATALOGS,
+  createConnectionService,
   createApplicationSpeechCache,
   createCachedSpeechSynthesis,
   createPersistenceService,
   createProjectPreviewService,
   createRenderPlanService,
   createRenderService,
-  createRoutedCredentialStore,
   createScratchpadService,
   createScriptGenerationService,
   createSpeechCacheService,
   createSystemService,
   createUnavailablePersistenceService,
   createVoiceCatalogService,
-  reconcileEnvironmentConnectionProfile,
   type DiagnosticsContext,
   type DiagnosticRepository,
   type RenderService,
@@ -45,28 +43,23 @@ export async function createDesktopServices(options: {
   let storageFailure: StorageCheck | undefined;
   let persistence: PersistenceClient;
   let repository: DiagnosticRepository;
-  let connections;
+  let connection;
   let voiceCatalog;
   let scratchpad;
   let projectPreview;
   let renderPlans;
   let renders: RenderService | undefined;
   let scriptGeneration;
-  let credentialVault: ElectronCredentialVault | undefined;
   const cache = createApplicationSpeechCache(dataDirectory);
   const speechCache = createSpeechCacheService(cache);
   try {
     const openedRepository = await openStudyNarratorRepository({ Database, databasePath });
     repository = openedRepository;
     persistence = createPersistenceService(openedRepository);
-    const environmentProfile = reconcileEnvironmentConnectionProfile(openedRepository, environment);
     if (options.safeStorage) {
-      credentialVault = new ElectronCredentialVault(options.safeStorage, dataDirectory);
-      const references = new Set(openedRepository.listConnectionProfiles()
-        .map((profile) => openedRepository.getConnectionCredentialReference(profile.id))
-        .filter((reference): reference is string => reference?.startsWith("safe-storage:") === true));
+      const credentialVault = new ElectronCredentialVault(options.safeStorage, dataDirectory);
       try {
-        await credentialVault.cleanup(references);
+        await credentialVault.cleanup(new Set());
       } catch (error) {
         if (!(error instanceof CredentialEncryptionUnavailableError)) throw error;
       }
@@ -74,18 +67,15 @@ export async function createDesktopServices(options: {
     const context = {
       client: "electron" as const,
       nodeVersion: process.versions.node,
-      electronVersion: process.versions.electron ?? null,
-      activeProfileLocked: environmentProfile.activeProfileLocked
+      electronVersion: process.versions.electron ?? null
     };
-    const credentials = createRoutedCredentialStore({ environmentApiKey: environmentProfile.apiKey, vault: credentialVault });
-    connections = createConnectionsService({
+    connection = createConnectionService({
       repository: openedRepository,
-      credentials,
       context
     });
     voiceCatalog = createVoiceCatalogService({ repository: openedRepository, bundledCatalogs: BUNDLED_VOICE_CATALOGS });
-    const speech = createCachedSpeechSynthesis({ repository: openedRepository, credentials, cache });
-    scratchpad = createScratchpadService({ repository: openedRepository, credentials, cache });
+    const speech = createCachedSpeechSynthesis({ repository: openedRepository, cache });
+    scratchpad = createScratchpadService({ repository: openedRepository, cache });
     projectPreview = createProjectPreviewService({ repository: openedRepository, speech });
     const planStore = createRenderPlanStore(resolve(dataDirectory, "render-plans"));
     renderPlans = createRenderPlanService({
@@ -144,8 +134,8 @@ export async function createDesktopServices(options: {
     sourceRevision: environment.STUDYNARRATOR_SOURCE_REVISION?.trim() || "development"
   };
   return {
-    service, persistence, connections, voiceCatalog, scratchpad, projectPreview, renderPlans, renders, scriptGeneration,
-    speechCache, credentialVault, context,
+    service, persistence, connection, voiceCatalog, scratchpad, projectPreview, renderPlans, renders, scriptGeneration,
+    speechCache, context,
     dispose: async () => { await renders?.close(); repository.close(); }
   };
 }

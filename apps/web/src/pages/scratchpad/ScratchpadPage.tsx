@@ -25,7 +25,6 @@ function message(error: unknown): string {
 export function ScratchpadPage({ client, persistence }: { client: ScratchpadClient; persistence: PersistenceClient }) {
   const connections = useConnections();
   const session = useScratchpadSession();
-  const [profileId, setProfileId] = useState("");
   const [modelId, setModelId] = useState("");
   const [voiceId, setVoiceId] = useState("");
   const [speed, setSpeed] = useState(1);
@@ -43,13 +42,6 @@ export function ScratchpadPage({ client, persistence }: { client: ScratchpadClie
   }, [persistence]);
 
   useEffect(() => {
-    if (profileId || connections.loading) return;
-    const initial = connections.activeProfile ?? connections.profiles.find(({ configured }) => configured) ?? connections.profiles[0];
-    if (!initial) return;
-    setProfileId(initial.id);
-  }, [connections.activeProfile, connections.loading, connections.profiles, profileId]);
-
-  useEffect(() => {
     let current = true;
     if (!modelId) { setCatalog(null); setCatalogState("idle"); return; }
     setCatalog(null);
@@ -63,9 +55,10 @@ export function ScratchpadPage({ client, persistence }: { client: ScratchpadClie
   }, [connections, modelId]);
 
   useEffect(() => {
-    if (!profileId) return;
-    void connections.loadSpeechCatalog(profileId).catch(() => undefined);
-  }, [connections.loadSpeechCatalog, profileId]);
+    const connection = connections.connection;
+    if (!connection?.baseUrl || connections.catalog.status !== "idle") return;
+    void connections.discover({ baseUrl: connection.baseUrl, timeoutSeconds: connection.timeoutSeconds, retryCount: connection.retryCount }).catch(() => undefined);
+  }, [connections]);
 
   useEffect(() => {
     try {
@@ -76,9 +69,9 @@ export function ScratchpadPage({ client, persistence }: { client: ScratchpadClie
 
   useEffect(() => () => controllerRef.current?.abort(), []);
 
-  const profile = connections.profiles.find(({ id }) => id === profileId) ?? null;
-  const speechCatalogState = profileId ? connections.speechCatalog(profileId) : null;
-  const modelOptions = speechCatalogState?.status === "ready" ? speechCatalogState.catalog.models : [];
+  const connection = connections.connection;
+  const speechCatalogState = connections.catalog;
+  const modelOptions = speechCatalogState.status === "ready" ? speechCatalogState.catalog.models : [];
   const speechModel = modelOptions.find((item) => item.modelId === modelId);
   const voiceOptions = useMemo(() => {
     if (!catalog || catalogState !== "ready" || !speechModel) return [];
@@ -90,20 +83,20 @@ export function ScratchpadPage({ client, persistence }: { client: ScratchpadClie
     const available = new Set(modelOptions.map((item) => item.modelId));
     setModelId((current) => {
       if (available.has(current)) return current;
-      if (profile?.defaultModelId && available.has(profile.defaultModelId)) return profile.defaultModelId;
+      if (connection?.defaultModelId && available.has(connection.defaultModelId)) return connection.defaultModelId;
       return modelOptions[0]?.modelId ?? "";
     });
-  }, [modelOptions, profile?.defaultModelId, speechCatalogState?.status]);
+  }, [connection?.defaultModelId, modelOptions, speechCatalogState.status]);
 
   useEffect(() => {
     if (catalogState !== "ready" || !speechModel) return;
     const available = new Set(voiceOptions.map((item) => item.voiceId));
     setVoiceId((current) => {
       if (available.has(current)) return current;
-      if (profile?.defaultVoiceId && available.has(profile.defaultVoiceId)) return profile.defaultVoiceId;
+      if (connection?.defaultVoiceId && available.has(connection.defaultVoiceId)) return connection.defaultVoiceId;
       return voiceOptions[0]?.voiceId ?? "";
     });
-  }, [catalogState, profile?.defaultVoiceId, speechModel, voiceOptions]);
+  }, [catalogState, connection?.defaultVoiceId, speechModel, voiceOptions]);
   const projection = useMemo(() => {
     if (!text.trim()) return { result: null, error: "" };
     try {
@@ -113,13 +106,7 @@ export function ScratchpadPage({ client, persistence }: { client: ScratchpadClie
     }
   }, [applyGlobalLexicon, globalLexicon, text]);
   const validSpeed = Number.isFinite(speed) && speed > 0 && speed <= 4;
-  const ready = Boolean(profile?.baseUrl && modelId.trim() && voiceId.trim() && text.trim() && validSpeed && projection.result);
-
-  const chooseProfile = (nextId: string) => {
-    setProfileId(nextId);
-    setModelId("");
-    setVoiceId("");
-  };
+  const ready = Boolean(connection?.baseUrl && modelId.trim() && voiceId.trim() && text.trim() && validSpeed && projection.result);
 
   const synthesize = async () => {
     if (!ready) return;
@@ -129,7 +116,7 @@ export function ScratchpadPage({ client, persistence }: { client: ScratchpadClie
     setBusy(true);
     setError("");
     try {
-      const result = await client.preview({ connectionProfileId: profileId, modelId, voiceId, speed, text, applyGlobalLexicon }, controller.signal);
+      const result = await client.preview({ modelId, voiceId, speed, text, applyGlobalLexicon }, controller.signal);
       if (!controller.signal.aborted) session.replace(result);
     } catch (reason) {
       if (!controller.signal.aborted) setError(message(reason));
@@ -142,18 +129,17 @@ export function ScratchpadPage({ client, persistence }: { client: ScratchpadClie
     <div className={styles.page}>
       <header className={styles.pageHeader}>
         <div><p className={styles.kicker}>One passage · one request</p><h2>Quick Scratchpad</h2><p>Test a voice or pronunciation without touching a project.</p></div>
-        <div className={styles.connectionState} data-state={connections.shellState}><span>Active signal</span><strong>{profile?.name ?? "No profile selected"}</strong><code>{connections.shellState}</code></div>
+        <div className={styles.connectionState} data-state={connections.shellState}><span>Active signal</span><strong>{connection?.baseUrl ? new URL(connection.baseUrl).host : "Not configured"}</strong><code>{connections.shellState}</code></div>
       </header>
 
       <section className={styles.controls} aria-label="Scratchpad synthesis controls">
         <div className={styles.setupHeading}><span className={styles.step}>Signal path</span><h3>Voice setup</h3></div>
         <div className={styles.setupGrid}>
-          <label htmlFor="scratchpad-profile">Connection profile<select id="scratchpad-profile" value={profileId} onChange={(event) => chooseProfile(event.target.value)}><option value="">Choose a profile</option>{connections.profiles.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
           <label htmlFor="scratchpad-model">Model<select id="scratchpad-model" value={modelId} disabled={speechCatalogState?.status !== "ready" || modelOptions.length === 0} onChange={(event) => { setModelId(event.target.value); setVoiceId(""); }}><option value="">Choose a model</option>{modelOptions.map((item) => <option key={item.modelId} value={item.modelId}>{item.modelId}</option>)}</select></label>
           <label htmlFor="scratchpad-voice">Voice<select id="scratchpad-voice" value={voiceId} disabled={catalogState !== "ready" || voiceOptions.length === 0} onChange={(event) => setVoiceId(event.target.value)}><option value="">Choose a voice</option>{voiceOptions.map((item) => <option key={item.voiceId} value={item.voiceId}>{item.label}</option>)}</select></label>
           <label htmlFor="scratchpad-speed">Speed<input id="scratchpad-speed" type="number" min="0.01" max="4" step="0.05" value={speed} onChange={(event) => setSpeed(Number(event.target.value))} /></label>
         </div>
-        {!profile?.baseUrl && profileId ? <p className={styles.fieldError}>This profile needs a Speaches URL before synthesis.</p> : null}
+        {!connection?.baseUrl ? <p className={styles.fieldError}>Configure the Speaches server in Settings before synthesis.</p> : null}
         {speechCatalogState?.status === "loading" ? <p className={styles.catalogNotice}>Loading available models…</p> : null}
         {speechCatalogState?.status === "failed" ? <p className={styles.fieldError}>{speechCatalogState.error}</p> : null}
         {speechCatalogState?.status === "ready" && modelOptions.length === 0 ? <p className={styles.fieldError}>This connection did not report any speech models.</p> : null}
@@ -175,7 +161,7 @@ export function ScratchpadPage({ client, persistence }: { client: ScratchpadClie
           <div className={styles.synthesisBar}><div><span className={styles.step}>Audible proof</span><strong>{busy ? "Generating a validated WAV…" : "Ready for one fresh synthesis request"}</strong></div><button type="button" onClick={() => void synthesize()} disabled={!ready || busy}>{busy ? "Synthesizing…" : error ? "Retry synthesis" : "Synthesize passage"}</button></div>
           {error ? <ErrorNotice title="Synthesis did not complete">{error} Your passage and selections are ready to retry.</ErrorNotice> : null}
 
-          {session.active ? <SharedAudioPlayer label={`${session.active.result.connectionProfileName} · ${session.active.result.voiceLabel} · ${session.active.result.voiceId}`} src={session.active.audioUrl} /> : null}
+          {session.active ? <SharedAudioPlayer label={`${session.active.result.voiceLabel} · ${session.active.result.voiceId}`} src={session.active.audioUrl} /> : null}
       </main>
     </div>
   );

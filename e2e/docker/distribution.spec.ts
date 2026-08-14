@@ -2,6 +2,7 @@ import { expect, test, type APIRequestContext, type Page } from "@playwright/tes
 
 const secret = process.env.STUDYNARRATOR_DOCKER_TEST_SECRET ?? "docker-verification-secret-never-exposed";
 const fakeSpeachesUrl = process.env.STUDYNARRATOR_FAKE_SPEACHES_URL;
+const fakeSpeachesAppUrl = process.env.STUDYNARRATOR_FAKE_SPEACHES_APP_URL;
 
 async function jsonRequest(request: APIRequestContext, method: "get" | "post" | "put", path: string, data?: unknown): Promise<unknown> {
   const response = await request[method](path, data === undefined ? undefined : { data });
@@ -43,10 +44,32 @@ test("Docker Web remains authorable offline and renders after Speaches reconnect
   const runtime = await jsonRequest(request, "get", "/api/runtime") as Record<string, unknown>;
   expect(runtime).toMatchObject({ schemaVersion: 4, distribution: "docker-web" });
   expect(runtime.sourceRevision).toBe(process.env.STUDYNARRATOR_EXPECTED_SOURCE_REVISION);
+
+  const initialConnection = await jsonRequest(request, "get", "/api/connection") as Record<string, unknown>;
+  expect(initialConnection).toMatchObject({ baseUrl: null, configured: false });
+  expect(fakeSpeachesAppUrl, "STUDYNARRATOR_FAKE_SPEACHES_APP_URL is required.").toBeTruthy();
+  await setFakeScenario(request, "healthy");
+  const catalog = await jsonRequest(request, "post", "/api/connection/speech-catalog", {
+    baseUrl: fakeSpeachesAppUrl,
+    timeoutSeconds: 2,
+    retryCount: 0
+  }) as { models: Array<{ modelId: string; voices: Array<{ voiceId: string }> }> };
+  expect(catalog.models[0]?.modelId).toBe("speaches-ai/Kokoro-82M-v1.0-ONNX");
+  expect(catalog.models[0]?.voices[0]?.voiceId).toBe("af_heart");
+  await jsonRequest(request, "put", "/api/connection", {
+    baseUrl: fakeSpeachesAppUrl,
+    defaultModelId: catalog.models[0]?.modelId,
+    defaultVoiceId: catalog.models[0]?.voices[0]?.voiceId,
+    timeoutSeconds: 2,
+    retryCount: 0,
+    responseFormat: "wav"
+  });
+  const initialTest = await jsonRequest(request, "post", "/api/connection/test") as Record<string, unknown>;
+  expect(initialTest.overall).toBe("connected");
   await jsonRequest(request, "post", "/api/setup/complete");
 
   await setFakeScenario(request, "timeout");
-  const offline = await jsonRequest(request, "post", "/api/connections/environment-speaches/test") as Record<string, unknown>;
+  const offline = await jsonRequest(request, "post", "/api/connection/test") as Record<string, unknown>;
   expect(offline.overall).toBe("disconnected");
 
   const name = `Docker ${browserName} persistence`;
@@ -60,14 +83,13 @@ test("Docker Web remains authorable offline and renders after Speaches reconnect
   await expect(page.getByLabel("Project name").last()).toHaveValue(name);
 
   await setFakeScenario(request, "healthy");
-  const connected = await jsonRequest(request, "post", "/api/connections/environment-speaches/test") as Record<string, unknown>;
+  const connected = await jsonRequest(request, "post", "/api/connection/test") as Record<string, unknown>;
   expect(connected.overall).toBe("connected");
 
   await jsonRequest(request, "put", `/api/projects/${created.id}`, {
     name,
     description: "Created offline and rendered after reconnecting without a container restart.",
     scriptSource: `[speaker_teacher] Deterministic Docker render from ${browserName}.`,
-    connectionProfileId: "environment-speaches",
     modelId: "speaches-ai/Kokoro-82M-v1.0-ONNX",
     speakerMappings: [{
       speakerId: "teacher",
@@ -97,8 +119,8 @@ test("Docker Web remains authorable offline and renders after Speaches reconnect
   await expect(page.getByText(/Phase: complete/u)).toBeVisible();
 
   const diagnostics = await jsonRequest(request, "get", "/api/diagnostics");
-  const connectionDiagnostics = await jsonRequest(request, "get", "/api/connections/environment-speaches/diagnostics");
-  const connections = await jsonRequest(request, "get", "/api/connections");
-  expect(JSON.stringify({ runtime, diagnostics, connectionDiagnostics, connections })).not.toContain(secret);
+  const connectionDiagnostics = await jsonRequest(request, "get", "/api/connection/diagnostics");
+  const connection = await jsonRequest(request, "get", "/api/connection");
+  expect(JSON.stringify({ runtime, diagnostics, connectionDiagnostics, connection })).not.toContain(secret);
   await assertBrowserStorageRedacted(page);
 });

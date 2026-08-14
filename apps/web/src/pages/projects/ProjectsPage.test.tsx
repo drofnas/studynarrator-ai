@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { Link, MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseScript, resolveParagraphPauses, transformScript } from "@studynarrator/core";
-import type { ConnectionProfile, IgnoredDiagnosticCollection, PersistenceClient, ProjectDetail, ProjectPreviewResult, ProjectReplaceInput, ProjectPreviewClient, RenderClient, RenderPlan, RenderPlanClient, RenderPlanSummary, SpeechCacheClient, SpeechCatalog, VoiceCatalog } from "@studynarrator/shared-types";
+import type { IgnoredDiagnosticCollection, PersistenceClient, ProjectDetail, ProjectPreviewResult, ProjectReplaceInput, ProjectPreviewClient, RenderClient, RenderPlan, RenderPlanClient, RenderPlanSummary, SpeachesConnection, SpeechCacheClient, SpeechCatalog, VoiceCatalog } from "@studynarrator/shared-types";
 import type { ScriptAnalyzer } from "@/workers/parser/parserClient.js";
 import type { ScriptAnalysisInput } from "@/workers/parser/parserWorkerProtocol.js";
 import { GLOBAL_VOICE_CATALOG_MODEL_ID } from "@/features/projects/projectAuthoring.js";
@@ -13,13 +13,12 @@ import { ProjectsPage } from "./ProjectsPage.js";
 import { ConnectionProvider } from "@/features/connections/ConnectionProvider.js";
 
 const project: ProjectDetail = {
-  contractVersion: 4,
+  contractVersion: 5,
   id: "00000000-0000-4000-8000-000000000001",
   name: "Authoring study",
   description: "Offline fixture",
   scriptSource: "[speaker_teacher] SQL.\n[pause_short]\nContinue.",
   scriptHash: "a".repeat(64),
-  connectionProfileId: null,
   modelId: null,
   speakerMappings: [{ speakerId: "teacher", displayName: "Teacher", voiceId: "voice_teacher", speed: 1, gainDb: 0, roleDescription: "", sampleText: "" }],
   pausePresets: [
@@ -43,15 +42,13 @@ const globalCatalog: VoiceCatalog = { schemaVersion: 1, modelId: GLOBAL_VOICE_CA
 function projectPreviewResult(mode: "segment" | "pronunciation" = "segment"): ProjectPreviewResult {
   const timestamp = "2026-08-12T12:00:00.000Z";
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: "00000000-0000-4000-8000-000000000002",
     createdAt: timestamp,
     projectId: project.id,
     mode,
     nodeOrdinal: mode === "segment" ? 1 : null,
     sourceRange: mode === "segment" ? { start: { line: 1, column: 1 }, end: { line: 1, column: 23 } } : null,
-    connectionProfileId: "local",
-    connectionProfileName: "Local Speaches",
     modelId: "model",
     speakerId: "teacher",
     voiceId: "voice_teacher",
@@ -142,30 +139,33 @@ function fixture(sourceProject = project) {
 }
 
 function renderPage(client: PersistenceClient, analyze: ScriptAnalyzer["analyze"], options: {
-  profiles?: ConnectionProfile[];
+  connection?: SpeachesConnection | null;
   catalog?: VoiceCatalog;
   speechCatalog?: SpeechCatalog;
-  discovery?: (profileId: string) => Promise<SpeechCatalog>;
+  discovery?: () => Promise<SpeechCatalog>;
   previewClient?: ProjectPreviewClient;
   cacheClient?: SpeechCacheClient;
   renderPlanClient?: RenderPlanClient;
   renderClient?: RenderClient;
   path?: string;
 } = {}) {
-  const profiles = options.profiles ?? [];
+  const connection = options.connection ?? {
+    baseUrl: null, suppliedUrlForm: "unconfigured" as const, configured: false, defaultModelId: null, defaultVoiceId: null,
+    timeoutSeconds: 120, retryCount: 2, responseFormat: "wav" as const, lastTestedAt: null, lastSuccessfulTestAt: null,
+    lastTestSummary: null, createdAt: "2026-08-12T12:00:00.000Z", updatedAt: "2026-08-12T12:00:00.000Z"
+  };
   const discoveredCatalog = options.speechCatalog ?? {
     schemaVersion: 1 as const,
-    profileId: profiles[0]?.id ?? "profile",
-    models: profiles.flatMap((profile) => profile.defaultModelId ? [{
-      modelId: profile.defaultModelId,
+    models: connection.defaultModelId ? [{
+      modelId: connection.defaultModelId,
       voices: (options.catalog?.entries ?? []).map((entry) => ({ voiceId: entry.voiceId, name: entry.label, language: entry.language, gender: null }))
-    }] : [])
+    }] : []
   };
   const connections = {
-    list: vi.fn(async () => profiles), create: vi.fn(), replace: vi.fn(), delete: vi.fn(), test: vi.fn(), exportDiagnostics: vi.fn(),
-    discoverSpeechCatalog: vi.fn(options.discovery ?? (async (profileId: string) => ({ ...discoveredCatalog, profileId }))),
-    getSetupState: vi.fn(async () => ({ activeProfileId: profiles[0]?.id ?? null, activeProfileLocked: false, onboardingCompletedAt: "2026-08-12T12:00:00.000Z", client: "web" as const })),
-    setActiveProfile: vi.fn(), completeOnboarding: vi.fn()
+    get: vi.fn(async () => connection), update: vi.fn(), test: vi.fn(), exportDiagnostics: vi.fn(),
+    discoverSpeechCatalog: vi.fn(options.discovery ?? (async () => discoveredCatalog)),
+    getSetupState: vi.fn(async () => ({ onboardingCompletedAt: "2026-08-12T12:00:00.000Z", client: "web" as const })),
+    completeOnboarding: vi.fn()
   };
   const voiceCatalog = { get: vi.fn(async (modelId: string) => options.catalog ?? ({ schemaVersion: 1 as const, modelId, entries: [] })), replace: vi.fn() };
   const previewClient = options.previewClient ?? { preview: vi.fn() } as unknown as ProjectPreviewClient;
@@ -176,7 +176,7 @@ function renderPage(client: PersistenceClient, analyze: ScriptAnalyzer["analyze"
   } as unknown as SpeechCacheClient;
   const renderPlanClient = options.renderPlanClient ?? { create: vi.fn(), list: vi.fn(async () => []), get: vi.fn() } as unknown as RenderPlanClient;
   const page = <ProjectsPage client={client} analyzer={{ analyze }} previewClient={previewClient} cacheClient={cacheClient} renderPlanClient={renderPlanClient} {...(options.renderClient ? { renderClient: options.renderClient } : {})} />;
-  return { ...render(<ConnectionProvider connections={connections} voiceCatalog={voiceCatalog}><MemoryRouter initialEntries={[options.path ?? `/projects/${project.id}`]}><Link to="/settings">Settings test link</Link><Routes><Route path="/projects" element={page} /><Route path="/projects/:projectId" element={page} /><Route path="/settings" element={<p>Settings destination</p>} /></Routes></MemoryRouter></ConnectionProvider>), connections, voiceCatalog, previewClient, cacheClient, renderPlanClient };
+  return { ...render(<ConnectionProvider connectionClient={connections} voiceCatalog={voiceCatalog}><MemoryRouter initialEntries={[options.path ?? `/projects/${project.id}`]}><Link to="/settings">Settings test link</Link><Routes><Route path="/projects" element={page} /><Route path="/projects/:projectId" element={page} /><Route path="/settings" element={<p>Settings destination</p>} /></Routes></MemoryRouter></ConnectionProvider>), connections, voiceCatalog, previewClient, cacheClient, renderPlanClient };
 }
 
 function deferred<T>() {
@@ -251,32 +251,30 @@ describe("Projects workbench", () => {
     expect(replaceGlobalLexicon).not.toHaveBeenCalled();
   });
 
-  it("selects a managed profile/model and maps searchable friendly voices with raw IDs", async () => {
+  it("uses the singleton model and maps searchable friendly voices with raw IDs", async () => {
     const { client, analyze, replace } = fixture();
     const summary = {
       schemaVersion: 1 as const, overall: "connected" as const, testedAt: "2026-08-12T12:00:00.000Z", httpStatus: 200,
       stages: ["url", "dns", "tcp", "http", "authentication", "model", "voice", "audio"].map((stage) => ({ stage: stage as "url", status: "pass" as const, code: `${stage}-pass`, message: "Passed.", durationMs: 1 })),
       availableModelIds: ["speaches-ai/Kokoro-82M-v1.0-ONNX"], availableVoiceIds: ["af_heart"]
     };
-    const profile: ConnectionProfile = {
-      id: "local", name: "Local Speaches", baseUrl: "http://127.0.0.1:8000", suppliedUrlForm: "root", source: "saved", editable: true,
-      credentialEntryAllowed: false, configured: true, apiKeyConfigured: false, defaultModelId: "speaches-ai/Kokoro-82M-v1.0-ONNX", defaultVoiceId: "af_heart",
+    const connection: SpeachesConnection = {
+      baseUrl: "http://127.0.0.1:8000", suppliedUrlForm: "root", configured: true, defaultModelId: "speaches-ai/Kokoro-82M-v1.0-ONNX", defaultVoiceId: "af_heart",
       timeoutSeconds: 120, retryCount: 2, responseFormat: "wav", lastTestedAt: summary.testedAt, lastSuccessfulTestAt: summary.testedAt,
-      lastTestSummary: summary as ConnectionProfile["lastTestSummary"], createdAt: summary.testedAt, updatedAt: summary.testedAt
+      lastTestSummary: summary as SpeachesConnection["lastTestSummary"], createdAt: summary.testedAt, updatedAt: summary.testedAt
     };
-    const catalog: VoiceCatalog = { schemaVersion: 1, modelId: profile.defaultModelId!, entries: [
+    const catalog: VoiceCatalog = { schemaVersion: 1, modelId: connection.defaultModelId!, entries: [
       { voiceId: "af_heart", label: "Heart — American English — af_heart", enabled: true, language: "American English", locale: "en-US", accent: "American", category: null, style: null, sampleText: null },
       { voiceId: "af_sky", label: "Sky — American English — af_sky", enabled: true, language: "American English", locale: "en-US", accent: "American", category: null, style: null, sampleText: null }
     ] };
-    renderPage(client, analyze, { profiles: [profile], catalog });
+    renderPage(client, analyze, { connection, catalog });
     await openProjectTab("Settings");
-    await userEvent.selectOptions(await screen.findByLabelText("Connection profile"), profile.id);
+    expect(screen.queryByLabelText("Connection profile")).not.toBeInTheDocument();
     await waitFor(() => expect(analyze).toHaveBeenCalled());
     expect((await screen.findAllByText("Heart — American English — af_heart")).length).toBeGreaterThan(0);
     expect(await screen.findByLabelText("Voices")).toHaveValue("af_heart");
     expect(await screen.findByText("available")).toBeInTheDocument();
     await waitFor(() => expect(replace).toHaveBeenCalledWith(project.id, expect.objectContaining({
-      connectionProfileId: profile.id,
       modelId: null,
       speakerMappings: [expect.objectContaining({ speakerId: "teacher", voiceId: "af_heart" })]
     })));
@@ -285,20 +283,19 @@ describe("Projects workbench", () => {
   });
 
   it("filters voices by model from one session discovery and appends unknown supported voices", async () => {
-    const profile: ConnectionProfile = {
-      id: "local", name: "Local Speaches", baseUrl: "http://127.0.0.1:8000", suppliedUrlForm: "root", source: "saved", editable: true,
-      credentialEntryAllowed: false, configured: true, apiKeyConfigured: false, defaultModelId: "model-a", defaultVoiceId: "voice-a",
+    const connection: SpeachesConnection = {
+      baseUrl: "http://127.0.0.1:8000", suppliedUrlForm: "root", configured: true, defaultModelId: "model-a", defaultVoiceId: "voice-a",
       timeoutSeconds: 120, retryCount: 2, responseFormat: "wav", lastTestedAt: null, lastSuccessfulTestAt: null, lastTestSummary: null,
       createdAt: "2026-08-12T12:00:00.000Z", updatedAt: "2026-08-12T12:00:00.000Z"
     };
-    const connected = { ...project, connectionProfileId: profile.id, modelId: "model-a", speakerMappings: [{ ...project.speakerMappings[0]!, voiceId: "voice-a" }] };
+    const connected = { ...project, modelId: "model-a", speakerMappings: [{ ...project.speakerMappings[0]!, voiceId: "voice-a" }] };
     const { client, analyze, replace } = fixture(connected);
     const catalog: VoiceCatalog = { schemaVersion: 1, modelId: "model-a", entries: [
       { voiceId: "voice-a", label: "Catalog A", enabled: true, language: null, locale: null, accent: null, category: null, style: null, sampleText: null },
       { voiceId: "voice-b", label: "Catalog B", enabled: true, language: null, locale: null, accent: null, category: null, style: null, sampleText: null },
       { voiceId: "voice-disabled", label: "Disabled", enabled: false, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }
     ] };
-    const speechCatalog: SpeechCatalog = { schemaVersion: 1, profileId: profile.id, models: [
+    const speechCatalog: SpeechCatalog = { schemaVersion: 1, models: [
       { modelId: "model-a", voices: [
         { voiceId: "voice-a", name: "Server A", language: null, gender: null },
         { voiceId: "voice-new", name: "New server voice", language: "English", gender: null },
@@ -306,7 +303,7 @@ describe("Projects workbench", () => {
       ] },
       { modelId: "model-b", voices: [{ voiceId: "voice-b", name: "Server B", language: null, gender: null }] }
     ] };
-    const { connections } = renderPage(client, analyze, { profiles: [profile], catalog, speechCatalog });
+    const { connections } = renderPage(client, analyze, { connection, catalog, speechCatalog });
     await openProjectTab("Settings");
 
     expect(await screen.findByLabelText("Voices")).toHaveValue("voice-a");
@@ -327,23 +324,22 @@ describe("Projects workbench", () => {
   });
 
   it("preserves the saved voice on discovery failure and retries without a synthesis request", async () => {
-    const profile: ConnectionProfile = {
-      id: "local", name: "Local Speaches", baseUrl: "http://127.0.0.1:8000", suppliedUrlForm: "root", source: "saved", editable: true,
-      credentialEntryAllowed: false, configured: true, apiKeyConfigured: false, defaultModelId: "model-a", defaultVoiceId: "voice-a",
+    const connection: SpeachesConnection = {
+      baseUrl: "http://127.0.0.1:8000", suppliedUrlForm: "root", configured: true, defaultModelId: "model-a", defaultVoiceId: "voice-a",
       timeoutSeconds: 120, retryCount: 2, responseFormat: "wav", lastTestedAt: null, lastSuccessfulTestAt: null, lastTestSummary: null,
       createdAt: "2026-08-12T12:00:00.000Z", updatedAt: "2026-08-12T12:00:00.000Z"
     };
-    const connected = { ...project, connectionProfileId: profile.id, modelId: "model-a", speakerMappings: [{ ...project.speakerMappings[0]!, voiceId: "voice-a" }] };
+    const connected = { ...project, modelId: "model-a", speakerMappings: [{ ...project.speakerMappings[0]!, voiceId: "voice-a" }] };
     const { client, analyze, replace } = fixture(connected);
     const catalog: VoiceCatalog = { schemaVersion: 1, modelId: "model-a", entries: [
       { voiceId: "voice-a", label: "Catalog A", enabled: true, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }
     ] };
-    const speechCatalog: SpeechCatalog = { schemaVersion: 1, profileId: profile.id, models: [{ modelId: "model-a", voices: [{ voiceId: "voice-a", name: "Voice A", language: null, gender: null }] }] };
+    const speechCatalog: SpeechCatalog = { schemaVersion: 1, models: [{ modelId: "model-a", voices: [{ voiceId: "voice-a", name: "Voice A", language: null, gender: null }] }] };
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     const discovery = vi.fn()
       .mockRejectedValueOnce(new Error("Supported voices are temporarily unavailable."))
       .mockResolvedValue(speechCatalog);
-    const { connections } = renderPage(client, analyze, { profiles: [profile], catalog, speechCatalog, discovery });
+    const { connections } = renderPage(client, analyze, { connection, catalog, speechCatalog, discovery });
     await openProjectTab("Settings");
 
     expect(await screen.findByLabelText("Voices")).toBeDisabled();
@@ -369,7 +365,6 @@ describe("Projects workbench", () => {
     expect(screen.getByRole("option", { name: "Sky — American English — af_sky" })).toBeInTheDocument();
     expect(voiceCatalog.get).toHaveBeenCalledWith(GLOBAL_VOICE_CATALOG_MODEL_ID);
     await waitFor(() => expect(replace).toHaveBeenCalledWith(project.id, expect.objectContaining({
-      connectionProfileId: null,
       modelId: null,
       speakerMappings: [expect.objectContaining({ speakerId: "teacher", voiceId: "af_heart" })]
     })));
@@ -540,11 +535,10 @@ describe("Projects workbench", () => {
     vi.stubGlobal("URL", { createObjectURL: vi.fn(() => "blob:project-preview"), revokeObjectURL: vi.fn() });
     vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => undefined);
     vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => undefined);
-    const connectedProject = { ...project, connectionProfileId: "local", modelId: "model" };
+    const connectedProject = { ...project, modelId: "model" };
     const { client, analyze, replace } = fixture(connectedProject);
-    const profile: ConnectionProfile = {
-      id: "local", name: "Local Speaches", baseUrl: "http://127.0.0.1:8000", suppliedUrlForm: "root", source: "saved", editable: true,
-      credentialEntryAllowed: false, configured: true, apiKeyConfigured: false, defaultModelId: "model", defaultVoiceId: "voice_teacher",
+    const connection: SpeachesConnection = {
+      baseUrl: "http://127.0.0.1:8000", suppliedUrlForm: "root", configured: true, defaultModelId: "model", defaultVoiceId: "voice_teacher",
       timeoutSeconds: 120, retryCount: 0, responseFormat: "wav", lastTestedAt: null, lastSuccessfulTestAt: null, lastTestSummary: null,
       createdAt: project.createdAt, updatedAt: project.updatedAt
     };
@@ -556,8 +550,8 @@ describe("Projects workbench", () => {
     const clearEntry = vi.fn(async () => ({ contractVersion: 1 as const, entriesRemoved: 1, bytesFreed: 3 }));
     const cacheClient = { status: vi.fn(), clearAll: vi.fn(), clearProject, clearEntry } as unknown as SpeechCacheClient;
     renderPage(client, analyze, {
-      profiles: [profile], catalog,
-      speechCatalog: { schemaVersion: 1, profileId: profile.id, models: [{ modelId: "model", voices: [{ voiceId: "voice_teacher", name: "Teacher Voice", language: null, gender: null }] }] },
+      connection, catalog,
+      speechCatalog: { schemaVersion: 1, models: [{ modelId: "model", voices: [{ voiceId: "voice_teacher", name: "Teacher Voice", language: null, gender: null }] }] },
       previewClient: { preview } as unknown as ProjectPreviewClient,
       cacheClient
     });

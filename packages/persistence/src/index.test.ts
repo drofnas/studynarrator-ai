@@ -214,7 +214,6 @@ describe("StudyNarratorRepository", () => {
       name: created.name,
       description: created.description,
       scriptSource: source,
-      connectionProfileId: null,
       speakerMappings: [{
         speakerId: "narrator", displayName: "Narrator", voiceId: null, speed: 1,
         gainDb: 0, roleDescription: "", sampleText: "Preview"
@@ -274,7 +273,6 @@ describe("StudyNarratorRepository", () => {
       name: source.name,
       description: source.description,
       scriptSource: "[speaker_teacher] SQL",
-      connectionProfileId: null,
       speakerMappings: [{ speakerId: "teacher", displayName: "Teacher", voiceId: "voice_teacher", speed: 1, gainDb: 0, roleDescription: "Guide", sampleText: "SQL" }],
       pausePresets: source.pausePresets,
       transitionPauses: source.transitionPauses,
@@ -288,7 +286,6 @@ describe("StudyNarratorRepository", () => {
       description: configured.description,
       scriptSource: configured.scriptSource,
       scriptHash: configured.scriptHash,
-      connectionProfileId: configured.connectionProfileId,
       speakerMappings: configured.speakerMappings,
       pausePresets: configured.pausePresets,
       transitionPauses: configured.transitionPauses
@@ -301,24 +298,25 @@ describe("StudyNarratorRepository", () => {
     repository.close();
   });
 
-  it("keeps installation data when deleting a project and nulls deleted profile references", async () => {
+  it("keeps installation data and the singleton connection when deleting a project", async () => {
     const repository = await openStudyNarratorRepository({
       Database: DatabaseAdapter,
       databasePath: await temporaryDatabase("studynarrator-boundaries-"),
-      idFactory: ids(profileId, projectId, lexiconId)
+      idFactory: ids(projectId, lexiconId)
     });
-    const profile = repository.createConnectionProfile({ id: profileId, name: "Placeholder", baseUrl: "http://127.0.0.1:8000", defaultModelId: null, defaultVoiceId: null });
+    repository.replaceSpeachesConnection({
+      baseUrl: "http://127.0.0.1:8000", defaultModelId: "model", defaultVoiceId: "voice"
+    }, "root");
     const project = repository.createProject({ name: "Owned" });
     repository.replaceGlobalLexicon([{ id: lexiconId, scope: "global", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel" }]);
     repository.replaceProject(project.id, {
-      name: project.name, description: "", scriptSource: "SQL", connectionProfileId: profile.id,
+      name: project.name, description: "", scriptSource: "SQL",
       speakerMappings: [], pausePresets: project.pausePresets, transitionPauses: project.transitionPauses, lexiconEntries: []
     });
-    repository.deleteConnectionProfile(profile.id);
-    expect(repository.getProject(project.id).connectionProfileId).toBeNull();
     repository.deleteProject(project.id);
     expect(repository.listProjects()).toEqual([]);
     expect(repository.listGlobalLexicon()).toHaveLength(1);
+    expect(repository.getSpeachesConnection()).toMatchObject({ baseUrl: "http://127.0.0.1:8000", configured: true });
     repository.close();
   });
 
@@ -335,7 +333,7 @@ describe("StudyNarratorRepository", () => {
     expect(repository.getIgnoredDiagnostics().map((item) => item.code)).toEqual(["SECOND", "FIRST"]);
     const project = repository.createProject({ name: "Atomic" });
     expect(() => repository.replaceProject(project.id, {
-      name: "Changed", description: "", scriptSource: "lost", connectionProfileId: null,
+      name: "Changed", description: "", scriptSource: "lost",
       speakerMappings: [], pausePresets: project.pausePresets,
       transitionPauses: { ...project.transitionPauses, paragraph: { mode: "preset", pauseId: "pause_missing" } }, lexiconEntries: []
     })).toThrow();
@@ -343,29 +341,22 @@ describe("StudyNarratorRepository", () => {
     repository.close();
   });
 
-  it("persists safe connection state and voice overrides without exposing credential values", async () => {
+  it("persists the singleton connection and voice overrides", async () => {
     const repository = await openStudyNarratorRepository({
       Database: DatabaseAdapter,
       databasePath: await temporaryDatabase("studynarrator-connections-"),
       now: () => new Date("2026-08-12T12:00:00.000Z"),
-      idFactory: ids(profileId)
     });
-    const profile = repository.createConnectionProfile({
-      id: profileId,
-      name: "LAN Speaches",
+    const connection = repository.replaceSpeachesConnection({
       baseUrl: "http://127.0.0.1:18080",
       defaultModelId: "speaches-ai/Kokoro-82M-v1.0-ONNX",
       defaultVoiceId: "af_heart"
-    });
-    expect(profile).toMatchObject({ timeoutSeconds: 120, retryCount: 2, apiKeyConfigured: false, source: "saved" });
-    repository.setConnectionCredentialReference(profile.id, "vault:opaque-reference");
-    expect(repository.getConnectionProfile(profile.id).apiKeyConfigured).toBe(true);
-    expect(JSON.stringify(repository.getConnectionProfile(profile.id))).not.toContain("opaque-reference");
+    }, "root");
+    expect(connection).toMatchObject({ timeoutSeconds: 120, retryCount: 2, configured: true });
+    expect(JSON.stringify(connection)).not.toContain("apiKey");
 
-    repository.setActiveConnectionProfile(profile.id);
     repository.completeConnectionOnboarding();
     expect(repository.getConnectionSetup()).toEqual({
-      activeProfileId: profile.id,
       onboardingCompletedAt: "2026-08-12T12:00:00.000Z"
     });
 

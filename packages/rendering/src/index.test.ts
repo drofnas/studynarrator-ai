@@ -172,13 +172,12 @@ describe("render plan silence and storage", () => {
       schemaVersion: PROJECT_SNAPSHOT_SCHEMA_VERSION,
       capturedAt: timestamp,
       project: {
-        contractVersion: 4,
+        contractVersion: 5,
         id: projectId,
         name: "Frozen plan",
         description: "",
         scriptSource: "[pause_medium]",
         scriptHash: "a".repeat(64),
-        connectionProfileId: "profile",
         modelId: "model",
         speakerMappings: [],
         pausePresets: [{ pauseId: "pause_medium", durationMs, description: "Paragraph" }],
@@ -189,7 +188,7 @@ describe("render plan silence and storage", () => {
       },
       globalLexiconEntries: [],
       ignoredDiagnostics: [],
-      connection: { profileId: "profile", profileName: "Fixture", profileSource: "saved", modelId: "model", serverIdentityHash: "b".repeat(64) },
+      connection: { modelId: "model", serverIdentityHash: "b".repeat(64) },
       versions: { scriptGrammar: 1, cirSchema: 1, lexiconTransform: 1, pacing: 1, speechCacheSchema: 1, speechNormalization: 1, speechChunking: 1, speechAdapter: 1 }
     });
     const plan = withRenderPlanHash({

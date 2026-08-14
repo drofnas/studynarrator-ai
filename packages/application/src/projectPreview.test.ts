@@ -7,19 +7,17 @@ import { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
 const timestamp = "2026-08-13T12:00:00.000Z";
 const projectId = "00000000-0000-4000-8000-000000000001";
 const profile = {
-  id: "local", name: "Local Speaches", baseUrl: "http://127.0.0.1:8000", suppliedUrlForm: "root" as const,
-  source: "saved" as const, editable: true, credentialEntryAllowed: false, configured: true, apiKeyConfigured: false,
+  id: "local", baseUrl: "http://127.0.0.1:8000", suppliedUrlForm: "root" as const, configured: true,
   defaultModelId: "model", defaultVoiceId: "voice-default", timeoutSeconds: 12, retryCount: 0, responseFormat: "wav" as const,
   lastTestedAt: null, lastSuccessfulTestAt: null, lastTestSummary: null, createdAt: timestamp, updatedAt: timestamp
 };
 const project = {
-  contractVersion: 4 as const,
+  contractVersion: 5 as const,
   id: projectId,
   name: "Preview project",
   description: "",
   scriptSource: "[speaker_teacher] SQL indexes.\n\n[pause_short]\n\nSecond line.",
   scriptHash: "a".repeat(64),
-  connectionProfileId: profile.id,
   modelId: "model",
   speakerMappings: [{ speakerId: "teacher", displayName: "Teacher", voiceId: "voice-teacher", speed: 1.2, gainDb: 3, roleDescription: "", sampleText: "" }],
   pausePresets: [{ pauseId: "pause_medium", durationMs: 750, description: "Paragraph" }, { pauseId: "pause_short", durationMs: 300, description: "Short" }],
@@ -36,8 +34,7 @@ function repository(): ProjectPreviewRepository {
   return {
     getProject: vi.fn(() => project),
     listGlobalLexicon: vi.fn(() => []),
-    getConnectionProfile: vi.fn(() => profile),
-    getConnectionCredentialReference: vi.fn(() => null),
+    getSpeachesConnection: vi.fn(() => profile),
     getVoiceCatalogOverrides: vi.fn(() => ({
       schemaVersion: 1, modelId: "model", entries: [{
         voiceId: "voice-teacher", label: "Teacher Voice", enabled: true, language: null, locale: null,
@@ -91,7 +88,7 @@ describe("project preview service", () => {
     });
     const result = await service.preview(projectId, { mode: "segment", nodeOrdinal: 1 });
     expect(speech.synthesize).toHaveBeenCalledWith(expect.objectContaining({
-      connectionProfileId: profile.id, modelId: "model", voiceId: "voice-teacher", speed: 1.2,
+      modelId: "model", voiceId: "voice-teacher", speed: 1.2,
       text: "sequel indexes.", usage: { projectId }
     }));
     expect(result).toMatchObject({

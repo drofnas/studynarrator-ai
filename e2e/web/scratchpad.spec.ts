@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
-import { continueOffline, expect, openRoute, test } from "../support/studyNarratorTest.js";
+import { configureConnection, expect, openRoute, test } from "../support/studyNarratorTest.js";
 
 const original = "SQL indexes can improve database reads.";
 const transformed = "sequel indexes can improve database reads.";
 
 test.describe("Quick Scratchpad", () => {
   test("transforms, synthesizes, recovers from failures, and never mutates projects", async ({ page, request, studyNarrator }) => {
-    await continueOffline(page, studyNarrator);
+    await configureConnection(page, studyNarrator);
 
     const createdResponse = await request.post(`${studyNarrator.baseUrl}/api/projects`, {
       data: { name: "Scratchpad boundary project", description: "Must remain unchanged." }
@@ -36,7 +36,7 @@ test.describe("Quick Scratchpad", () => {
 
     await openRoute(page, studyNarrator, "/scratchpad");
     await expect(page.getByRole("heading", { name: "Quick Scratchpad" })).toBeVisible();
-    await expect(page.getByLabel("Connection profile")).toHaveValue(/.+/u);
+    await expect(page.getByLabel("Connection profile")).toHaveCount(0);
     await expect(page.getByLabel("Model")).toHaveValue("speaches-ai/Kokoro-82M-v1.0-ONNX");
     await expect(page.getByLabel("Voice")).toHaveValue("af_heart");
     await expect(page.getByText("Recent results")).toHaveCount(0);

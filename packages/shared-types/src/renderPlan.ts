@@ -8,7 +8,8 @@ import {
   ProjectIdSchema
 } from "./persistence.js";
 
-export const PROJECT_SNAPSHOT_SCHEMA_VERSION = 1;
+export const PROJECT_SNAPSHOT_SCHEMA_VERSION = 2;
+export const LEGACY_PROJECT_SNAPSHOT_SCHEMA_VERSION = 1;
 export const RENDER_PLAN_SCHEMA_VERSION = 1;
 export const RENDER_PLAN_CHANNELS = Object.freeze({
   create: "renderPlans.create",
@@ -21,31 +22,55 @@ export const RenderPlanIdSchema = z.uuid();
 export const RenderPlanIdInputSchema = z.object({ planId: RenderPlanIdSchema }).strict();
 export const RenderPlanProjectInputSchema = z.object({ projectId: ProjectIdSchema }).strict();
 
-export const ProjectSnapshotSchema = z.object({
-  schemaVersion: z.literal(PROJECT_SNAPSHOT_SCHEMA_VERSION),
+const SnapshotVersionsSchema = z.object({
+  scriptGrammar: z.literal(SCRIPT_GRAMMAR_VERSION),
+  cirSchema: z.literal(CIR_SCHEMA_VERSION),
+  lexiconTransform: z.literal(LEXICON_TRANSFORM_VERSION),
+  pacing: z.literal(PARAGRAPH_PACING_VERSION),
+  speechCacheSchema: z.number().int().positive(),
+  speechNormalization: z.number().int().positive(),
+  speechChunking: z.number().int().positive(),
+  speechAdapter: z.number().int().positive()
+}).strict();
+
+const SnapshotBaseShape = {
   snapshotHash: HashSchema,
   capturedAt: z.iso.datetime({ offset: true }),
-  project: ProjectDetailSchema,
   globalLexiconEntries: GlobalLexiconEntryCollectionSchema,
   ignoredDiagnostics: IgnoredDiagnosticCollectionSchema,
+  versions: SnapshotVersionsSchema
+} as const;
+
+export const SingularProjectSnapshotSchema = z.object({
+  schemaVersion: z.literal(PROJECT_SNAPSHOT_SCHEMA_VERSION),
+  ...SnapshotBaseShape,
+  project: ProjectDetailSchema,
+  connection: z.object({
+    modelId: z.string().min(1),
+    serverIdentityHash: HashSchema
+  }).strict()
+}).strict();
+
+const LegacyProjectDetailSchema = z.object({
+  ...ProjectDetailSchema.shape,
+  contractVersion: z.literal(4),
+  connectionProfileId: DurableIdSchema.nullable()
+}).strict();
+
+export const LegacyProjectSnapshotSchema = z.object({
+  schemaVersion: z.literal(LEGACY_PROJECT_SNAPSHOT_SCHEMA_VERSION),
+  ...SnapshotBaseShape,
+  project: LegacyProjectDetailSchema,
   connection: z.object({
     profileId: DurableIdSchema,
     profileName: z.string().min(1),
     profileSource: z.enum(["saved", "environment"]),
     modelId: z.string().min(1),
     serverIdentityHash: HashSchema
-  }).strict(),
-  versions: z.object({
-    scriptGrammar: z.literal(SCRIPT_GRAMMAR_VERSION),
-    cirSchema: z.literal(CIR_SCHEMA_VERSION),
-    lexiconTransform: z.literal(LEXICON_TRANSFORM_VERSION),
-    pacing: z.literal(PARAGRAPH_PACING_VERSION),
-    speechCacheSchema: z.number().int().positive(),
-    speechNormalization: z.number().int().positive(),
-    speechChunking: z.number().int().positive(),
-    speechAdapter: z.number().int().positive()
   }).strict()
 }).strict();
+
+export const ProjectSnapshotSchema = z.union([SingularProjectSnapshotSchema, LegacyProjectSnapshotSchema]);
 export type ProjectSnapshot = z.infer<typeof ProjectSnapshotSchema>;
 
 const RenderEntryBaseSchema = z.object({

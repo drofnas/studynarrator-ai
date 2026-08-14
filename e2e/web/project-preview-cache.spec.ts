@@ -1,6 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { continueOffline, expect, openRoute, test } from "../support/studyNarratorTest.js";
+import { configureConnection, expect, openRoute, test } from "../support/studyNarratorTest.js";
 
 const modelId = "speaches-ai/Kokoro-82M-v1.0-ONNX";
 const originalScript = "[speaker_teacher] Cache this exact sentence.";
@@ -8,7 +8,7 @@ const changedScript = "[speaker_teacher] Cache this changed sentence.";
 
 test.describe("project preview cache", () => {
   test("accounts for keys, cross-workflow reuse, corruption replacement, and every cleanup scope", async ({ page, request, studyNarrator }) => {
-    await continueOffline(page, studyNarrator);
+    await configureConnection(page, studyNarrator);
     const createdResponse = await request.post(`${studyNarrator.baseUrl}/api/projects`, { data: { name: "Preview cache fixture" } });
     expect(createdResponse.status()).toBe(201);
     const created = await createdResponse.json() as {
@@ -22,7 +22,6 @@ test.describe("project preview cache", () => {
       name: created.name,
       description: "Isolated Playwright request-accounting fixture.",
       scriptSource: originalScript,
-      connectionProfileId: "environment-speaches",
       modelId,
       speakerMappings: [{ speakerId: "teacher", displayName: "Teacher", voiceId: "af_heart", speed: 1, gainDb: 0, roleDescription: "", sampleText: "" }],
       pausePresets: created.pausePresets,

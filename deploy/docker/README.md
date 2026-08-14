@@ -7,10 +7,9 @@ This package runs StudyNarrator only. It does not install, start, update, or oth
 Requirements: Docker Engine or Docker Desktop with Docker Compose.
 
 1. Copy `.env.example` to `.env`.
-2. Set `SPEACHES_BASE_URL` for the separately installed Speaches server.
-3. Leave `SPEACHES_API_KEY` empty when the server does not require one; otherwise protect the `.env` file as a credential.
-4. Run `docker compose up --build -d`.
-5. Open <http://127.0.0.1:8080> and use **Runtime** and **Settings** to check the installation.
+2. Run `docker compose up --build -d`.
+3. Open <http://127.0.0.1:8080> and enter the separately installed Speaches address during onboarding.
+4. Load the catalog, review the selected model and default voice, then choose **Save and Test**.
 
 The supplied Compose package binds to loopback by default. Change `STUDYNARRATOR_BIND_ADDRESS` only when browser access from another device is intentional and the surrounding network is trusted.
 
@@ -49,7 +48,7 @@ The default named volume inherits the image's non-root ownership. For a bind mou
 
 The image contains Node.js, the compiled StudyNarrator Web/server application, FFmpeg, CA certificates, the Apache-2.0 `LICENSE`, and `ACKNOWLEDGMENTS.md`. It runs as UID/GID 10001, drops Linux capabilities, prevents privilege escalation, uses a read-only root filesystem, and writes persistent application state only under `/data`.
 
-The Speaches API key remains in the Node.js process environment. It must never be copied into browser storage, projects, manifests, diagnostics exports, or normal logs.
+StudyNarrator supports unauthenticated Speaches servers. Connection settings are stored in the application data volume and are not supplied through Compose environment variables.
 
 ## Release verification
 

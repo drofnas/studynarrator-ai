@@ -60,18 +60,13 @@ export const test = base.extend<{
       ...studyNarratorEnvironment,
       INIT_CWD: repositoryRoot,
       STUDYNARRATOR_DATA_DIR: dataDirectory,
-      SPEACHES_BASE_URL: fakeSpeaches.baseUrl,
-      SPEACHES_MODEL_ID: "speaches-ai/Kokoro-82M-v1.0-ONNX",
-      SPEACHES_VOICE_ID: "af_heart",
-      SPEACHES_TIMEOUT_SECONDS: "2",
-      SPEACHES_RETRY_COUNT: "0"
     };
     const services = await createServerServices(environment);
     const application = createExpressApp({
       service: services.service,
       persistence: services.persistence,
       context: services.context,
-      ...(services.connections === undefined ? {} : { connections: services.connections }),
+      ...(services.connection === undefined ? {} : { connection: services.connection }),
       ...(services.voiceCatalog === undefined ? {} : { voiceCatalog: services.voiceCatalog }),
       ...(services.scratchpad === undefined ? {} : { scratchpad: services.scratchpad }),
       ...(services.projectPreview === undefined ? {} : { projectPreview: services.projectPreview }),
@@ -112,6 +107,38 @@ export async function continueOffline(page: Page, application: StudyNarratorTest
   if (await onboarding.isVisible()) {
     await page.getByRole("button", { name: "Continue offline" }).click();
   }
+  await expect(projects).toBeVisible();
+}
+
+export async function configureConnection(page: Page, application: StudyNarratorTestApplication): Promise<void> {
+  await openRoute(page, application, "/projects");
+  const onboarding = page.getByRole("heading", { name: "Connect the voice workshop" });
+  const projects = page.getByRole("heading", { name: "Projects", exact: true });
+  await expect(onboarding.or(projects)).toBeVisible();
+  if (await onboarding.isVisible()) {
+    await page.getByLabel("Speaches address").fill(application.fakeSpeaches.baseUrl);
+    await page.getByRole("button", { name: "Load catalog" }).click();
+    await expect(page.getByLabel("Model")).toHaveValue("speaches-ai/Kokoro-82M-v1.0-ONNX");
+    await expect(page.getByLabel("Default Voice")).toHaveValue("af_heart");
+    await page.getByRole("button", { name: "Save and Test" }).click();
+  }
+  await expect(projects).toBeVisible();
+  await page.evaluate(async () => {
+    const response = await fetch("/api/connection", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        baseUrl: (await (await fetch("/api/connection")).json() as { baseUrl: string }).baseUrl,
+        defaultModelId: "speaches-ai/Kokoro-82M-v1.0-ONNX",
+        defaultVoiceId: "af_heart",
+        timeoutSeconds: 2,
+        retryCount: 0,
+        responseFormat: "wav"
+      })
+    });
+    if (!response.ok) throw new Error(`Could not tune the acceptance connection: ${String(response.status)}.`);
+  });
+  await page.reload();
   await expect(projects).toBeVisible();
 }
 

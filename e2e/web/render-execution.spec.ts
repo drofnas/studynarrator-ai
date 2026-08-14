@@ -1,17 +1,16 @@
 import { unlink } from "node:fs/promises";
 import { join } from "node:path";
-import { continueOffline, expect, openRoute, test } from "../support/studyNarratorTest.js";
+import { configureConnection, expect, openRoute, test } from "../support/studyNarratorTest.js";
 
 test.describe("render execution", () => {
   test("renders a frozen plan, publishes the complete bundle, and restores completion after reload", async ({ page, request, studyNarrator }) => {
-    await continueOffline(page, studyNarrator);
+    await configureConnection(page, studyNarrator);
     const createdResponse = await request.post(`${studyNarrator.baseUrl}/api/projects`, { data: { name: "Render acceptance" } });
     const created = await createdResponse.json() as { id: string; name: string; pausePresets: unknown[]; transitionPauses: unknown };
     await request.put(`${studyNarrator.baseUrl}/api/projects/${created.id}`, { data: {
       name: created.name,
       description: "End-to-end render fixture.",
       scriptSource: "[section: Opening]\n[speaker_teacher] SQL renders this sentence.\n[pause_medium]\n[speaker_teacher] Finish this render.",
-      connectionProfileId: "environment-speaches",
       modelId: "speaches-ai/Kokoro-82M-v1.0-ONNX",
       speakerMappings: [{ speakerId: "teacher", displayName: "Teacher", voiceId: "af_heart", speed: 1, gainDb: 0, roleDescription: "", sampleText: "" }],
       pausePresets: created.pausePresets,
@@ -94,11 +93,11 @@ test.describe("render execution", () => {
   });
 
   test("reports synthesis failure, retries from cache-safe state, and cancels an active request", async ({ page, request, studyNarrator }) => {
-    await continueOffline(page, studyNarrator);
+    await configureConnection(page, studyNarrator);
     const created = await (await request.post(`${studyNarrator.baseUrl}/api/projects`, { data: { name: "Render recovery" } })).json() as { id: string; name: string; pausePresets: unknown[]; transitionPauses: unknown };
     await request.put(`${studyNarrator.baseUrl}/api/projects/${created.id}`, { data: {
       name: created.name, description: "Failure fixture.", scriptSource: "[speaker_teacher] Recover this render.",
-      connectionProfileId: "environment-speaches", modelId: "speaches-ai/Kokoro-82M-v1.0-ONNX",
+      modelId: "speaches-ai/Kokoro-82M-v1.0-ONNX",
       speakerMappings: [{ speakerId: "teacher", displayName: "Teacher", voiceId: "af_heart", speed: 1, gainDb: 0, roleDescription: "", sampleText: "" }],
       pausePresets: created.pausePresets, transitionPauses: created.transitionPauses, lexiconEntries: []
     } });

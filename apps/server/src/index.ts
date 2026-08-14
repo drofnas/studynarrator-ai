@@ -6,12 +6,12 @@ import { resolveServerRuntimeConfiguration } from "./runtimeConfig.js";
 
 const configuration = resolveServerRuntimeConfiguration();
 const runtime = await createServerServices();
-const { service, persistence, connections, voiceCatalog, scratchpad, projectPreview, renderPlans, renders, scriptGeneration, speechCache, context } = runtime;
+const { service, persistence, connection, voiceCatalog, scratchpad, projectPreview, renderPlans, renders, scriptGeneration, speechCache, context } = runtime;
 const application = createExpressApp({
   service,
   persistence,
   context,
-  ...(connections === undefined ? {} : { connections }),
+  ...(connection === undefined ? {} : { connection }),
   ...(voiceCatalog === undefined ? {} : { voiceCatalog }),
   ...(scratchpad === undefined ? {} : { scratchpad }),
   ...(projectPreview === undefined ? {} : { projectPreview }),

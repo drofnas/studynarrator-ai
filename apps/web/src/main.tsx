@@ -4,7 +4,7 @@ import { HashRouter } from "react-router";
 import { App } from "@/app/App.js";
 import { resolveSystemClient } from "@/services/system/systemClient.js";
 import { resolvePersistenceClient } from "@/services/persistence/persistenceClient.js";
-import { resolveConnectionsClient, resolveVoiceCatalogClient } from "@/services/connections/connectionsClient.js";
+import { resolveConnectionClient, resolveVoiceCatalogClient } from "@/services/connections/connectionsClient.js";
 import { createScriptAnalysisWorkerClient } from "@/workers/parser/parserClient.js";
 import { resolveScratchpadClient } from "@/services/scratchpad/scratchpadClient.js";
 import { resolveProjectPreviewClient, resolveSpeechCacheClient } from "@/services/preview/previewClient.js";
@@ -18,7 +18,7 @@ if (!root) throw new Error("StudyNarrator root element is missing");
 createRoot(root).render(
   <StrictMode>
     <HashRouter>
-      <App analyzer={createScriptAnalysisWorkerClient()} client={resolveSystemClient()} persistence={resolvePersistenceClient()} connections={resolveConnectionsClient()} voiceCatalog={resolveVoiceCatalogClient()} scratchpad={resolveScratchpadClient()} projectPreview={resolveProjectPreviewClient()} speechCache={resolveSpeechCacheClient()} renderPlans={resolveRenderPlanClient()} renders={resolveRenderClient()} scriptGeneration={resolveScriptGenerationClient()} />
+      <App analyzer={createScriptAnalysisWorkerClient()} client={resolveSystemClient()} persistence={resolvePersistenceClient()} connection={resolveConnectionClient()} voiceCatalog={resolveVoiceCatalogClient()} scratchpad={resolveScratchpadClient()} projectPreview={resolveProjectPreviewClient()} speechCache={resolveSpeechCacheClient()} renderPlans={resolveRenderPlanClient()} renders={resolveRenderClient()} scriptGeneration={resolveScriptGenerationClient()} />
     </HashRouter>
   </StrictMode>
 );
