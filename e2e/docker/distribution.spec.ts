@@ -46,27 +46,33 @@ test("Docker Web remains authorable offline and renders after Speaches reconnect
   expect(runtime.sourceRevision).toBe(process.env.STUDYNARRATOR_EXPECTED_SOURCE_REVISION);
 
   const initialConnection = await jsonRequest(request, "get", "/api/connection") as Record<string, unknown>;
-  expect(initialConnection).toMatchObject({ baseUrl: null, configured: false });
   expect(fakeSpeachesAppUrl, "STUDYNARRATOR_FAKE_SPEACHES_APP_URL is required.").toBeTruthy();
   await setFakeScenario(request, "healthy");
-  const catalog = await jsonRequest(request, "post", "/api/connection/speech-catalog", {
-    baseUrl: fakeSpeachesAppUrl,
-    timeoutSeconds: 2,
-    retryCount: 0
-  }) as { models: Array<{ modelId: string; voices: Array<{ voiceId: string }> }> };
-  expect(catalog.models[0]?.modelId).toBe("speaches-ai/Kokoro-82M-v1.0-ONNX");
-  expect(catalog.models[0]?.voices[0]?.voiceId).toBe("af_heart");
-  await jsonRequest(request, "put", "/api/connection", {
-    baseUrl: fakeSpeachesAppUrl,
-    defaultModelId: catalog.models[0]?.modelId,
-    defaultVoiceId: catalog.models[0]?.voices[0]?.voiceId,
-    timeoutSeconds: 2,
-    retryCount: 0,
-    responseFormat: "wav"
-  });
+
+  if (browserName === "chromium") {
+    expect(initialConnection).toMatchObject({ baseUrl: null, configured: false });
+    const catalog = await jsonRequest(request, "post", "/api/connection/speech-catalog", {
+      baseUrl: fakeSpeachesAppUrl,
+      timeoutSeconds: 2,
+      retryCount: 0
+    }) as { models: Array<{ modelId: string; voices: Array<{ voiceId: string }> }> };
+    expect(catalog.models[0]?.modelId).toBe("speaches-ai/Kokoro-82M-v1.0-ONNX");
+    expect(catalog.models[0]?.voices[0]?.voiceId).toBe("af_heart");
+    await jsonRequest(request, "put", "/api/connection", {
+      baseUrl: fakeSpeachesAppUrl,
+      defaultModelId: catalog.models[0]?.modelId,
+      defaultVoiceId: catalog.models[0]?.voices[0]?.voiceId,
+      timeoutSeconds: 2,
+      retryCount: 0,
+      responseFormat: "wav"
+    });
+    await jsonRequest(request, "post", "/api/setup/complete");
+  } else {
+    expect(initialConnection).toMatchObject({ baseUrl: fakeSpeachesAppUrl, configured: true });
+  }
+
   const initialTest = await jsonRequest(request, "post", "/api/connection/test") as Record<string, unknown>;
   expect(initialTest.overall).toBe("connected");
-  await jsonRequest(request, "post", "/api/setup/complete");
 
   await setFakeScenario(request, "timeout");
   const offline = await jsonRequest(request, "post", "/api/connection/test") as Record<string, unknown>;
