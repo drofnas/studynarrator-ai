@@ -2,19 +2,21 @@ import { describe, expect, it } from "vitest";
 import { SystemDiagnosticsSchema } from "./index.js";
 
 const validDiagnostics = {
-  schemaVersion: 3,
+  schemaVersion: 4,
   overall: "pass",
   client: "web",
   transport: "rest",
   runtime: {
-    schemaVersion: 3,
+    schemaVersion: 4,
     applicationVersion: "0.1.0",
     runtimeName: "node",
     runtimeVersion: "26.7.0",
     electronVersion: null,
     platform: "darwin",
     architecture: "arm64",
-    dataDirectory: "/tmp/studynarrator"
+    dataDirectory: "/tmp/studynarrator",
+    distribution: "development-web",
+    sourceRevision: "test-revision"
   },
   checks: {
     sharedCore: { status: "pass", marker: "study-narrator-core" },
@@ -54,7 +56,8 @@ describe("SystemDiagnosticsSchema", () => {
         runtimeName: "electron",
         runtimeVersion: "24.18.1",
         electronVersion: "43.3.0",
-        dataDirectory: "/tmp/studynarrator-desktop"
+        dataDirectory: "/tmp/studynarrator-desktop",
+        distribution: "electron"
       },
       checks: {
         ...validDiagnostics.checks,

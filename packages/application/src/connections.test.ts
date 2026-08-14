@@ -280,6 +280,31 @@ describe("connections service", () => {
     expect(repository.setup.activeProfileId).toBe("environment-speaches");
   });
 
+  it("prefers the documented voice and timeout environment names while retaining compatibility aliases", () => {
+    const repository = new MemoryRepository();
+    reconcileEnvironmentConnectionProfile(repository, {
+      SPEACHES_BASE_URL: "https://speech.example.test",
+      SPEACHES_DEFAULT_VOICE: "documented-voice",
+      SPEACHES_VOICE_ID: "legacy-voice",
+      SPEACHES_REQUEST_TIMEOUT_SECONDS: "45",
+      SPEACHES_TIMEOUT_SECONDS: "90"
+    });
+    expect(repository.getConnectionProfile("environment-speaches")).toMatchObject({
+      defaultVoiceId: "documented-voice",
+      timeoutSeconds: 45
+    });
+
+    reconcileEnvironmentConnectionProfile(repository, {
+      SPEACHES_BASE_URL: "https://speech.example.test",
+      SPEACHES_VOICE_ID: "legacy-voice",
+      SPEACHES_TIMEOUT_SECONDS: "90"
+    });
+    expect(repository.getConnectionProfile("environment-speaches")).toMatchObject({
+      defaultVoiceId: "legacy-voice",
+      timeoutSeconds: 90
+    });
+  });
+
   it("retains an unconfigured environment profile when variables disappear", () => {
     const repository = new MemoryRepository();
     reconcileEnvironmentConnectionProfile(repository, { SPEACHES_BASE_URL: "http://127.0.0.1:8000" });

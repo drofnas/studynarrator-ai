@@ -26,6 +26,7 @@ import { MigrationFailureError, openStudyNarratorRepository } from "@studynarrat
 import { DATABASE_SCHEMA_VERSION, PERSISTENCE_CONTRACT_VERSION, type PersistenceClient } from "@studynarrator/shared-types";
 import { createFfmpegProbe } from "@studynarrator/runtime";
 import { createRenderPlanStore } from "@studynarrator/rendering";
+import { resolveServerRuntimeConfiguration } from "./runtimeConfig.js";
 
 const repositoryRoot = resolve(import.meta.dirname, "../../..");
 
@@ -36,6 +37,7 @@ export function resolveServerDataDirectory(environment = process.env): string {
 }
 
 export async function createServerServices(environment = process.env) {
+  const runtimeConfiguration = resolveServerRuntimeConfiguration(environment, repositoryRoot);
   const dataDirectory = resolveServerDataDirectory(environment);
   const databasePath = resolve(dataDirectory, "studynarrator.sqlite");
   const cache = createApplicationSpeechCache(dataDirectory);
@@ -117,13 +119,15 @@ export async function createServerServices(environment = process.env) {
   });
   const context: DiagnosticsContext = {
     client: "web",
+    distribution: runtimeConfiguration.distribution,
     transport: "rest",
     runtimeName: "node",
     runtimeVersion: process.versions.node,
     electronVersion: null,
     platform: process.platform,
     architecture: process.arch,
-    dataDirectory
+    dataDirectory,
+    sourceRevision: runtimeConfiguration.sourceRevision
   };
   return {
     service,

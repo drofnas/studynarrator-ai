@@ -33,7 +33,7 @@ export function DiagnosticsStatusRail({ diagnostics, loading }: DiagnosticsStatu
       <div className={styles.row}><span>Storage write/read</span><StatusValue status={storageStatus}>{loading ? "CHECKING" : statusLabel(storageStatus)}</StatusValue></div>
       <div className={styles.row}><span>FFmpeg</span><StatusValue status={ffmpegStatus}>{loading ? "CHECKING" : statusLabel(ffmpegStatus)}</StatusValue></div>
       <div className={`${styles.row} ${styles.metadataRow}`}><span>Transport</span><strong>{diagnostics?.transport.toUpperCase() ?? "—"}</strong></div>
-      <div className={`${styles.row} ${styles.metadataRow}`}><span>Client</span><strong>{diagnostics ? (diagnostics.client === "web" ? "Web" : "Electron") : "—"}</strong></div>
+      <div className={`${styles.row} ${styles.metadataRow}`}><span>Client</span><strong>{diagnostics ? ({ "development-web": "Web", "docker-web": "Docker Web", electron: "Electron" }[diagnostics.runtime.distribution]) : "—"}</strong></div>
     </div>
   );
 }

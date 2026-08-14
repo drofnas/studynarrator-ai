@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -30,18 +30,20 @@ import {
   SpeechCatalogSchema,
   SystemDiagnosticsSchema
 } from "@studynarrator/shared-types";
-import { createExpressApp } from "./app.js";
+import { attachStaticWebApplication, createExpressApp } from "./app.js";
 import { REST_API_MANIFEST } from "./apiManifest.js";
 
 const context: DiagnosticsContext = {
   client: "web",
+  distribution: "development-web",
   transport: "rest",
   runtimeName: "node",
   runtimeVersion: "26.7.0",
   electronVersion: null,
   platform: "darwin",
   architecture: "arm64",
-  dataDirectory: "/tmp/studynarrator"
+  dataDirectory: "/tmp/studynarrator",
+  sourceRevision: "test-revision"
 };
 
 const openServers = new Set<Server>();
@@ -222,7 +224,7 @@ describe("Express diagnostics API", () => {
   it("sanitizes an invalid boundary result", async () => {
     const service = {
       health: () => ({ status: "ok", applicationVersion: "0.1.0" } as const),
-      runtime: () => ({ ...context, schemaVersion: 3, applicationVersion: "0.1.0" } as never),
+      runtime: () => ({ ...context, schemaVersion: 4, applicationVersion: "0.1.0" } as never),
       diagnostics: async () => ({ secret: "must-not-leak" } as never),
       close: () => undefined
     };
@@ -234,6 +236,24 @@ describe("Express diagnostics API", () => {
       }
     });
     expect(JSON.stringify(response.body)).not.toContain("must-not-leak");
+  });
+});
+
+describe("production Web application", () => {
+  it("serves assets and SPA routes without turning unknown API routes into HTML", async () => {
+    const { service } = await fixture();
+    const distributionDirectory = mkdtempSync(join(tmpdir(), "studynarrator-web-dist-"));
+    writeFileSync(join(distributionDirectory, "index.html"), "<!doctype html><title>StudyNarrator production</title>");
+    writeFileSync(join(distributionDirectory, "application.js"), "export const ready = true;");
+    const application = createExpressApp({ service, context });
+    attachStaticWebApplication(application, distributionDirectory);
+    const server = await listen(application);
+
+    const entry = await request(server).get("/projects/example").expect(200);
+    expect(entry.text).toContain("StudyNarrator production");
+    expect(entry.headers["cache-control"]).toBe("no-cache");
+    expect((await request(server).get("/application.js").expect(200)).headers["cache-control"]).toBe("public, max-age=31536000, immutable");
+    await request(server).get("/api/not-a-route").expect(404);
   });
 });
 

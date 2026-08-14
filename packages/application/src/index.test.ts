@@ -3,13 +3,15 @@ import { APPLICATION_SERVICE_MANIFEST, createSystemService, type DiagnosticsCont
 
 const context: DiagnosticsContext = {
   client: "web",
+  distribution: "development-web",
   transport: "rest",
   runtimeName: "node",
   runtimeVersion: "26.7.0",
   electronVersion: null,
   platform: "darwin",
   architecture: "arm64",
-  dataDirectory: "/tmp/studynarrator"
+  dataDirectory: "/tmp/studynarrator",
+  sourceRevision: "test-revision"
 };
 
 const storagePass = {
@@ -41,6 +43,7 @@ describe("createSystemService", () => {
       overall: "pass",
       client: "web",
       transport: "rest",
+      runtime: { distribution: "development-web", sourceRevision: "test-revision" },
       checks: { storage: { status: "pass" }, ffmpeg: { status: "pass" } }
     });
     service.close();

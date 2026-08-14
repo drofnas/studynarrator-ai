@@ -9,19 +9,21 @@ import { DiagnosticsPage } from "./DiagnosticsPage.js";
 afterEach(cleanup);
 
 const passingDiagnostics: SystemDiagnostics = {
-  schemaVersion: 3,
+  schemaVersion: 4,
   overall: "pass",
   client: "web",
   transport: "rest",
   runtime: {
-    schemaVersion: 3,
+    schemaVersion: 4,
     applicationVersion: "0.1.0",
     runtimeName: "node",
     runtimeVersion: "26.7.0",
     electronVersion: null,
     platform: "darwin",
     architecture: "arm64",
-    dataDirectory: "/tmp/studynarrator/web"
+    dataDirectory: "/tmp/studynarrator/web",
+    distribution: "development-web",
+    sourceRevision: "test-revision"
   },
   checks: {
     sharedCore: { status: "pass", marker: "study-narrator-core" },
@@ -65,7 +67,8 @@ describe("system diagnostics screen", () => {
     expect(screen.getByText("Web")).toBeInTheDocument();
     expect(screen.getAllByText("PASS")).toHaveLength(3);
     expect(screen.getByText(/Schema 6 · verified/u)).toBeInTheDocument();
-    expect(screen.getByText(/diagnostics schema 3/u)).toBeInTheDocument();
+    expect(screen.getByText(/diagnostics schema 4/u)).toBeInTheDocument();
+    expect(screen.getByText("test-revision")).toBeInTheDocument();
   });
 
   it("renders Electron/IPC metadata from the same contract", async () => {
@@ -77,7 +80,8 @@ describe("system diagnostics screen", () => {
       runtime: {
         ...passingDiagnostics.runtime,
         runtimeName: "electron",
-        electronVersion: "43.3.0"
+        electronVersion: "43.3.0",
+        distribution: "electron"
       }
     }) }} />);
     await user.click(screen.getByRole("button", { name: "Run self-test" }));
