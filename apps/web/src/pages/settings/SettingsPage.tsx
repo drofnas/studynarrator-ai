@@ -472,7 +472,7 @@ export function SettingsPage({ client, cacheClient, scratchpadClient }: { client
             <span aria-hidden="true">→</span>
             <label>Spoken Text<input disabled={lexiconAdding} value={entry.spokenText} onChange={(event) => updateGlobalLexiconEntry(id, { spokenText: event.target.value })} onBlur={() => { pendingLexiconRowsRef.current.add(id); flushGlobalLexicon(); }} /></label>
             <label className={styles.enabledCheck}><input type="checkbox" disabled={lexiconAdding} checked={entry.enabled !== false} onChange={(event) => updateGlobalLexiconEntry(id, { enabled: event.target.checked }, true)} />Enabled</label>
-            <span className={styles.lexiconSaveState} data-state={rowState} aria-live="polite">{rowState === "saving" ? "Saving…" : rowState === "saved" ? "Saved" : rowState === "error" ? "Not saved — edit or blur to retry" : ""}</span>
+            {rowState === "error" ? <span className={styles.lexiconSaveState} data-state="error" role="alert">Not saved — edit or blur to retry</span> : null}
             <button type="button" className={styles.danger} disabled={lexiconAdding} onClick={() => void deleteGlobalLexiconEntry(id)}>Delete</button>
           </article>;
         })}</div>

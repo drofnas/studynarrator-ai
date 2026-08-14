@@ -135,9 +135,9 @@ describe("System Settings", () => {
     expect(replace).toHaveBeenLastCalledWith(expect.arrayContaining([expect.objectContaining({ displayText: "CLI", spokenText: "C L I", entryType: "exactTerm", caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: "" })]));
 
     fireEvent.change(screen.getByDisplayValue("S Q L"), { target: { value: "ess cue ell" } });
-    expect(screen.getByText("Saving…")).toBeInTheDocument();
+    expect(screen.queryByText("Saving…")).not.toBeInTheDocument();
     await waitFor(() => expect(replace).toHaveBeenLastCalledWith(expect.arrayContaining([expect.objectContaining({ id: "global-sql", spokenText: "ess cue ell" })])), { timeout: 1_500 });
-    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    expect(screen.queryByText("Saved")).not.toBeInTheDocument();
 
     await userEvent.click(screen.getAllByRole("checkbox", { name: "Enabled" })[0]!);
     await waitFor(() => expect(replace).toHaveBeenLastCalledWith(expect.arrayContaining([expect.objectContaining({ id: "global-sql", enabled: false })])));
@@ -172,7 +172,9 @@ describe("System Settings", () => {
     expect(await screen.findByText("Not saved — edit or blur to retry")).toBeInTheDocument();
     expect(screen.getByDisplayValue("new pronunciation")).toBeInTheDocument();
     fireEvent.blur(screen.getByDisplayValue("new pronunciation"));
-    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    await waitFor(() => expect(replace).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText("Not saved — edit or blur to retry")).not.toBeInTheDocument();
+    expect(screen.queryByText("Saved")).not.toBeInTheDocument();
   });
 
   it("normalizes and saves new-project pacing without touching projects", async () => {

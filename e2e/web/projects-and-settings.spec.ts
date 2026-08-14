@@ -148,10 +148,14 @@ test.describe("Settings and connection diagnostics", () => {
     await expect(lexicon.getByRole("article", { name: "Global lexicon entry CLI" })).toBeVisible();
 
     const entry = lexicon.getByRole("article", { name: "Global lexicon entry CLI" });
+    const textAutosave = page.waitForResponse((response) => response.url().endsWith("/api/lexicon/global") && response.request().method() === "PUT" && response.ok());
     await entry.getByLabel("Spoken Text").fill("command line interface");
-    await expect(entry.getByText("Saved")).toBeVisible();
+    await textAutosave;
+    await expect(entry.getByText(/Saving…|Saved/u)).toHaveCount(0);
+    const enablementAutosave = page.waitForResponse((response) => response.url().endsWith("/api/lexicon/global") && response.request().method() === "PUT" && response.ok());
     await entry.getByRole("checkbox", { name: "Enabled" }).uncheck();
-    await expect(entry.getByText("Saved")).toBeVisible();
+    await enablementAutosave;
+    await expect(entry.getByText(/Saving…|Saved/u)).toHaveCount(0);
     await page.reload();
     await expect(entry.getByLabel("Spoken Text")).toHaveValue("command line interface");
     await expect(entry.getByRole("checkbox", { name: "Enabled" })).not.toBeChecked();
