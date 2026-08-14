@@ -87,7 +87,7 @@ describe("connection onboarding", () => {
     renderApp(connections, "/onboarding");
     const buttons = await screen.findAllByRole("button", { name: "Test Connection" });
     fireEvent.click(buttons.at(-1)!);
-    expect(screen.getByRole("link", { name: "Testing" })).toHaveAttribute("data-state", "testing");
+    expect(screen.getByRole("link", { name: /^Testing connection\./u })).toHaveAttribute("data-state", "testing");
     await act(async () => finish(summary));
   });
 });
