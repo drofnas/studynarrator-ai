@@ -103,17 +103,16 @@ export {
 } from "./authoring.js";
 export {
   SCRIPT_GENERATION_SCHEMA_VERSION,
-  SCRIPT_GENERATION_SOURCE_MAX_CHARACTERS,
-  ScriptGenerationBriefSchema,
-  ScriptGenerationConfigurationSchema,
+  ScriptGenerationContextSchema,
   ScriptGenerationLexiconSchema,
   ScriptGenerationPauseSchema,
   ScriptGenerationSpeakerSchema,
+  ScriptPromptKindSchema,
   buildExternalLlmPrompt,
   buildSkillPackageFiles,
   type GeneratedTextFile,
-  type ScriptGenerationBrief,
-  type ScriptGenerationConfiguration,
+  type ScriptGenerationContext,
   type ScriptGenerationPause,
-  type ScriptGenerationSpeaker
+  type ScriptGenerationSpeaker,
+  type ScriptPromptKind
 } from "./scriptGeneration.js";

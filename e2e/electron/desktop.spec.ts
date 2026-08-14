@@ -163,7 +163,7 @@ test.describe("Electron acceptance", () => {
     await expect.poll(async () => (await stat(segmentDestination)).size).toBeGreaterThan(0);
   });
 
-  test("saves prompt and reusable skill artifacts through native typed IPC without TTS", async ({ electronStudyNarrator, studyNarrator }) => {
+  test("saves creation, update, and reusable prompt-kit artifacts through native typed IPC without TTS", async ({ electronStudyNarrator, studyNarrator }) => {
     const { page, application, dataDirectory } = electronStudyNarrator;
     await continueElectronOffline(page);
     studyNarrator.fakeSpeaches.reset();
@@ -173,28 +173,35 @@ test.describe("Electron acceptance", () => {
     await page.getByLabel("Script source").fill(`[speaker_narrator] ${source}`);
     await page.getByRole("button", { name: "Save now" }).click();
     await expect(page.getByText("All changes saved.")).toBeVisible();
-    await page.getByRole("button", { name: "Build external-LLM prompt" }).click();
-    await expect(page.getByRole("heading", { name: "Instruction workbench" })).toBeVisible();
-    await expect(page.getByLabel("Source material")).toHaveValue(`[speaker_narrator] ${source}`);
-    await page.getByRole("button", { name: "Assemble prompt" }).click();
-    await expect(page.getByLabel("Generated prompt preview")).toContainText(source);
+    await page.getByRole("button", { name: "Open script prompt kit" }).click();
+    await expect(page.getByRole("heading", { name: "Script prompt kit" })).toBeVisible();
+    const creationPreview = page.getByLabel("Create a script prompt preview");
+    await expect(creationPreview).toContainText("KNOWLEDGE TO GATHER AND TEACH");
+    await expect(creationPreview).not.toContainText(source);
 
-    const promptDestination = resolve(dataDirectory, "desktop-prompt.md");
+    const creationDestination = resolve(dataDirectory, "desktop-creation-prompt.md");
+    const updateDestination = resolve(dataDirectory, "desktop-update-prompt.md");
     const skillDestination = resolve(dataDirectory, "desktop-skill.zip");
     await application.evaluate(({ dialog }: ElectronEvaluationApi, destinations) => {
       dialog.showSaveDialog = ({ defaultPath }) => Promise.resolve({
         canceled: false,
-        filePath: defaultPath.endsWith(".zip") ? destinations.skill : destinations.prompt
+        filePath: defaultPath.endsWith(".zip") ? destinations.skill : defaultPath.includes("update") ? destinations.update : destinations.creation
       });
-    }, { prompt: promptDestination, skill: skillDestination });
-    await page.getByRole("button", { name: "Save prompt" }).click();
-    await expect.poll(async () => (await stat(promptDestination)).size).toBeGreaterThan(0);
-    await page.getByRole("button", { name: "Save skill package" }).click();
+    }, { creation: creationDestination, update: updateDestination, skill: skillDestination });
+    await page.getByRole("button", { name: "Save creation prompt" }).click();
+    await expect.poll(async () => (await stat(creationDestination)).size).toBeGreaterThan(0);
+    await page.getByRole("button", { name: /Update a script/u }).click();
+    await expect(page.getByLabel("Update a script prompt preview")).toContainText("SCRIPT AND CHANGE REQUEST");
+    await page.getByRole("button", { name: "Save update prompt" }).click();
+    await expect.poll(async () => (await stat(updateDestination)).size).toBeGreaterThan(0);
+    await page.getByRole("button", { name: "Save both prompts as a kit" }).click();
     await expect.poll(async () => (await stat(skillDestination)).size).toBeGreaterThan(0);
 
-    expect(await readFile(promptDestination, "utf8")).toContain(source);
+    expect(await readFile(creationDestination, "utf8")).toContain("KNOWLEDGE TO GATHER AND TEACH");
+    expect(await readFile(updateDestination, "utf8")).toContain("SCRIPT AND CHANGE REQUEST");
+    expect(await readFile(updateDestination, "utf8")).not.toContain(source);
     const files = unzipSync(await readFile(skillDestination));
-    expect(Object.keys(files).sort()).toEqual(["LEXICON_ALIASES.md", "SCRIPT_FORMAT.md", "SKILL.md", "examples/single-narrator.txt"]);
+    expect(Object.keys(files).sort()).toEqual(["CREATION_PROMPT.md", "LEXICON_ALIASES.md", "SCRIPT_FORMAT.md", "SKILL.md", "UPDATE_PROMPT.md", "examples/single-narrator.txt"]);
     expect(Object.values(files).map((bytes) => strFromU8(bytes)).join("\n")).not.toContain(source);
     expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/speech"] ?? 0).toBe(0);
   });

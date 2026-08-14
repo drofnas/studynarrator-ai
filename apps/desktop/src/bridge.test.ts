@@ -194,12 +194,7 @@ const renders = {
   close: vi.fn()
 };
 const saveDialog = { showSaveDialog: vi.fn(async () => ({ canceled: true })) };
-const generatedBrief = {
-  schemaVersion: 1 as const, purpose: "Teach caching.", targetAudience: "Engineers", detailLevel: "balanced" as const,
-  sectionMode: "required" as const, codeHandling: "explain" as const, additionalGuidance: "", sourceMaterial: "Source.",
-  speakers: [{ speakerId: "teacher", roleDescription: "Explains clearly." }], pauses: []
-};
-const promptDocument = { fileName: "prompt.md", mimeType: "text/markdown; charset=utf-8" as const, content: "Prompt", checksum: "a".repeat(64) };
+const promptDocument = { kind: "creation" as const, fileName: "prompt.md", mimeType: "text/markdown; charset=utf-8" as const, content: "Prompt", checksum: "a".repeat(64) };
 const scriptGeneration = {
   previewPrompt: vi.fn(async () => promptDocument),
   resolvePromptExport: vi.fn(async () => ({ fileName: "prompt.md", mimeType: "text/markdown; charset=utf-8" as const, bytes: Uint8Array.from([1]), checksum: "a".repeat(64) })),
@@ -402,9 +397,9 @@ describe("Electron boundary", () => {
       [RENDER_CHANNELS.segments]: { renderId: renderJob.id },
       [RENDER_CHANNELS.waveform]: { renderId: renderJob.id },
       [RENDER_CHANNELS.exportSegment]: { renderId: renderJob.id, ordinal: 1 },
-      [SCRIPT_GENERATION_CHANNELS.previewPrompt]: { projectId: project.id, brief: generatedBrief },
-      [SCRIPT_GENERATION_CHANNELS.exportPrompt]: { projectId: project.id, brief: generatedBrief },
-      [SCRIPT_GENERATION_CHANNELS.exportSkillPackage]: { projectId: project.id, configuration: (({ sourceMaterial: _sourceMaterial, ...configuration }) => { void _sourceMaterial; return configuration; })(generatedBrief) }
+      [SCRIPT_GENERATION_CHANNELS.previewPrompt]: { projectId: project.id, kind: "creation" },
+      [SCRIPT_GENERATION_CHANNELS.exportPrompt]: { projectId: project.id, kind: "update" },
+      [SCRIPT_GENERATION_CHANNELS.exportSkillPackage]: { projectId: project.id }
     };
     const invoked = new Set<string>();
     for (const channel of PUBLIC_IPC_CHANNEL_MANIFEST) {

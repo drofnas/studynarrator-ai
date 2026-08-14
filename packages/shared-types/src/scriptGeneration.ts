@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SCRIPT_GENERATION_SCHEMA_VERSION, ScriptGenerationBriefSchema, ScriptGenerationConfigurationSchema } from "@studynarrator/core";
+import { SCRIPT_GENERATION_SCHEMA_VERSION, ScriptGenerationContextSchema, ScriptPromptKindSchema } from "@studynarrator/core";
 import { ProjectIdSchema } from "./persistence.js";
 
 export const SCRIPT_GENERATION_CHANNELS = Object.freeze({
@@ -9,6 +9,7 @@ export const SCRIPT_GENERATION_CHANNELS = Object.freeze({
 } as const);
 
 export const PromptDocumentSchema = z.object({
+  kind: ScriptPromptKindSchema,
   fileName: z.string().min(1).max(255),
   mimeType: z.literal("text/markdown; charset=utf-8"),
   content: z.string().min(1),
@@ -24,19 +25,19 @@ export type FileExportResult = z.infer<typeof FileExportResultSchema>;
 
 export const ScriptGenerationPromptRequestSchema = z.object({
   projectId: ProjectIdSchema,
-  brief: ScriptGenerationBriefSchema
+  kind: ScriptPromptKindSchema
 }).strict();
 
-export const ScriptGenerationSkillRequestSchema = z.object({
-  projectId: ProjectIdSchema,
-  configuration: ScriptGenerationConfigurationSchema
-}).strict();
+export const ScriptGenerationPromptInputSchema = z.object({ kind: ScriptPromptKindSchema }).strict();
+
+export const ScriptGenerationSkillRequestSchema = z.object({ projectId: ProjectIdSchema }).strict();
+export const ScriptGenerationSkillInputSchema = z.object({}).strict();
 
 export interface ScriptGenerationClient {
-  previewPrompt(projectId: string, brief: z.infer<typeof ScriptGenerationBriefSchema>): Promise<PromptDocument>;
-  exportPrompt(projectId: string, brief: z.infer<typeof ScriptGenerationBriefSchema>): Promise<FileExportResult>;
-  exportSkillPackage(projectId: string, configuration: z.infer<typeof ScriptGenerationConfigurationSchema>): Promise<FileExportResult>;
+  previewPrompt(projectId: string, kind: z.infer<typeof ScriptPromptKindSchema>): Promise<PromptDocument>;
+  exportPrompt(projectId: string, kind: z.infer<typeof ScriptPromptKindSchema>): Promise<FileExportResult>;
+  exportSkillPackage(projectId: string): Promise<FileExportResult>;
 }
 
-export { SCRIPT_GENERATION_SCHEMA_VERSION, ScriptGenerationBriefSchema, ScriptGenerationConfigurationSchema };
-export type { ScriptGenerationBrief, ScriptGenerationConfiguration, ScriptGenerationPause, ScriptGenerationSpeaker } from "@studynarrator/core";
+export { SCRIPT_GENERATION_SCHEMA_VERSION, ScriptGenerationContextSchema, ScriptPromptKindSchema };
+export type { ScriptGenerationContext, ScriptGenerationPause, ScriptGenerationSpeaker, ScriptPromptKind } from "@studynarrator/core";

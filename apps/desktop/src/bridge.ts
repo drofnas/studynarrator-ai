@@ -144,14 +144,14 @@ export function createPreloadBridge(invoke: (channel: string, input?: unknown) =
     async exportSegment(renderId, ordinal) { return RenderArtifactExportResultSchema.parse(await invoke(RENDER_CHANNELS.exportSegment, { renderId, ordinal })); }
   };
   const scriptGeneration: ScriptGenerationClient = {
-    async previewPrompt(projectId, brief) {
-      return PromptDocumentSchema.parse(await invoke(SCRIPT_GENERATION_CHANNELS.previewPrompt, { projectId, brief }));
+    async previewPrompt(projectId, kind) {
+      return PromptDocumentSchema.parse(await invoke(SCRIPT_GENERATION_CHANNELS.previewPrompt, { projectId, kind }));
     },
-    async exportPrompt(projectId, brief) {
-      return FileExportResultSchema.parse(await invoke(SCRIPT_GENERATION_CHANNELS.exportPrompt, { projectId, brief }));
+    async exportPrompt(projectId, kind) {
+      return FileExportResultSchema.parse(await invoke(SCRIPT_GENERATION_CHANNELS.exportPrompt, { projectId, kind }));
     },
-    async exportSkillPackage(projectId, configuration) {
-      return FileExportResultSchema.parse(await invoke(SCRIPT_GENERATION_CHANNELS.exportSkillPackage, { projectId, configuration }));
+    async exportSkillPackage(projectId) {
+      return FileExportResultSchema.parse(await invoke(SCRIPT_GENERATION_CHANNELS.exportSkillPackage, { projectId }));
     }
   };
   return Object.freeze({

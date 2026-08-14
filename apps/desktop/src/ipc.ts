@@ -370,20 +370,20 @@ export function registerScriptGenerationHandlers(
     });
   };
   handle(SCRIPT_GENERATION_CHANNELS.previewPrompt, async (input) => {
-    const { projectId, brief } = ScriptGenerationPromptRequestSchema.parse(input);
-    return PromptDocumentSchema.parse(await generation.previewPrompt(projectId, brief));
+    const { projectId, kind } = ScriptGenerationPromptRequestSchema.parse(input);
+    return PromptDocumentSchema.parse(await generation.previewPrompt(projectId, kind));
   });
   handle(SCRIPT_GENERATION_CHANNELS.exportPrompt, async (input) => {
-    const { projectId, brief } = ScriptGenerationPromptRequestSchema.parse(input);
-    const file = await generation.resolvePromptExport(projectId, brief);
+    const { projectId, kind } = ScriptGenerationPromptRequestSchema.parse(input);
+    const file = await generation.resolvePromptExport(projectId, kind);
     const destination = await dialog.showSaveDialog({ defaultPath: file.fileName });
     if (destination.canceled || !destination.filePath) return FileExportResultSchema.parse({ disposition: "canceled", fileName: file.fileName });
     await writeFile(destination.filePath, file.bytes);
     return FileExportResultSchema.parse({ disposition: "saved", fileName: file.fileName });
   });
   handle(SCRIPT_GENERATION_CHANNELS.exportSkillPackage, async (input) => {
-    const { projectId, configuration } = ScriptGenerationSkillRequestSchema.parse(input);
-    const file = await generation.resolveSkillPackage(projectId, configuration);
+    const { projectId } = ScriptGenerationSkillRequestSchema.parse(input);
+    const file = await generation.resolveSkillPackage(projectId);
     const destination = await dialog.showSaveDialog({ defaultPath: file.fileName });
     if (destination.canceled || !destination.filePath) return FileExportResultSchema.parse({ disposition: "canceled", fileName: file.fileName });
     await writeFile(destination.filePath, file.bytes);

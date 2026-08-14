@@ -1,8 +1,10 @@
 import { z } from "zod";
 import { LexiconEntrySchema, PauseIdSchema, SpeakerIdSchema, type LexiconEntry } from "./schemas.js";
 
-export const SCRIPT_GENERATION_SCHEMA_VERSION = 1;
-export const SCRIPT_GENERATION_SOURCE_MAX_CHARACTERS = 5_000_000;
+export const SCRIPT_GENERATION_SCHEMA_VERSION = 2;
+
+export const ScriptPromptKindSchema = z.enum(["creation", "update"]);
+export type ScriptPromptKind = z.infer<typeof ScriptPromptKindSchema>;
 
 export const ScriptGenerationSpeakerSchema = z.object({
   speakerId: SpeakerIdSchema,
@@ -16,43 +18,25 @@ export const ScriptGenerationPauseSchema = z.object({
 }).strict();
 export type ScriptGenerationPause = z.infer<typeof ScriptGenerationPauseSchema>;
 
-function uniqueIds(
-  values: readonly { id: string }[],
-  context: z.RefinementCtx,
-  path: "speakers" | "pauses"
-): void {
-  const seen = new Set<string>();
-  values.forEach(({ id }, index) => {
-    if (seen.has(id)) context.addIssue({ code: "custom", message: `Duplicate ${path === "speakers" ? "speaker" : "pause"} ID: ${id}.`, path: [path, index] });
-    seen.add(id);
-  });
-}
-
-const ScriptGenerationConfigurationBaseSchema = z.object({
+const ScriptGenerationContextBaseSchema = z.object({
   schemaVersion: z.literal(SCRIPT_GENERATION_SCHEMA_VERSION),
-  purpose: z.string().trim().min(1).max(5_000),
-  targetAudience: z.string().trim().min(1).max(5_000),
-  detailLevel: z.enum(["concise", "balanced", "comprehensive"]),
-  sectionMode: z.enum(["required", "optional", "omit"]),
-  codeHandling: z.enum(["explain", "spell", "omit"]),
-  additionalGuidance: z.string().max(10_000),
+  projectName: z.string().trim().min(1).max(200),
   speakers: z.array(ScriptGenerationSpeakerSchema).min(1).max(20),
   pauses: z.array(ScriptGenerationPauseSchema).max(50)
 }).strict();
-
-export const ScriptGenerationConfigurationSchema = ScriptGenerationConfigurationBaseSchema.superRefine((configuration, context) => {
-  uniqueIds(configuration.speakers.map((speaker) => ({ id: speaker.speakerId })), context, "speakers");
-  uniqueIds(configuration.pauses.map((pause) => ({ id: pause.pauseId })), context, "pauses");
+export const ScriptGenerationContextSchema = ScriptGenerationContextBaseSchema.superRefine((value, refinement) => {
+  const speakerIds = new Set<string>();
+  value.speakers.forEach(({ speakerId }, index) => {
+    if (speakerIds.has(speakerId)) refinement.addIssue({ code: "custom", message: `Duplicate speaker ID: ${speakerId}.`, path: ["speakers", index] });
+    speakerIds.add(speakerId);
+  });
+  const pauseIds = new Set<string>();
+  value.pauses.forEach(({ pauseId }, index) => {
+    if (pauseIds.has(pauseId)) refinement.addIssue({ code: "custom", message: `Duplicate pause ID: ${pauseId}.`, path: ["pauses", index] });
+    pauseIds.add(pauseId);
+  });
 });
-export type ScriptGenerationConfiguration = z.infer<typeof ScriptGenerationConfigurationSchema>;
-
-export const ScriptGenerationBriefSchema = ScriptGenerationConfigurationBaseSchema.extend({
-  sourceMaterial: z.string().trim().min(1).max(SCRIPT_GENERATION_SOURCE_MAX_CHARACTERS)
-}).strict().superRefine((brief, context) => {
-  uniqueIds(brief.speakers.map((speaker) => ({ id: speaker.speakerId })), context, "speakers");
-  uniqueIds(brief.pauses.map((pause) => ({ id: pause.pauseId })), context, "pauses");
-});
-export type ScriptGenerationBrief = z.infer<typeof ScriptGenerationBriefSchema>;
+export type ScriptGenerationContext = z.infer<typeof ScriptGenerationContextSchema>;
 
 export const ScriptGenerationLexiconSchema = z.array(LexiconEntrySchema).max(20_000);
 
@@ -92,144 +76,137 @@ function aliasSections(entriesInput: readonly LexiconEntry[]): { senses: string[
   return { senses, automatic };
 }
 
-function sectionGuidance(mode: ScriptGenerationConfiguration["sectionMode"]): string {
-  if (mode === "required") return "Use a section directive on its own line before every major subject.";
-  if (mode === "omit") return "Do not emit section directives.";
-  return "Use section directives on their own lines when they materially improve navigation.";
+function formatReference(context: ScriptGenerationContext, entriesInput: readonly LexiconEntry[]): string[] {
+  const aliases = aliasSections(entriesInput);
+  return [
+    "SCRIPT FORMAT AND LEXICON",
+    "",
+    "Speaker directives",
+    "- Start a spoken turn with [speaker_<id>]. The selected speaker remains active until another speaker directive appears.",
+    "- Use only these configured speaker directives:",
+    ...context.speakers.map(({ speakerId, roleDescription }) => `  - [speaker_${speakerId}]: ${oneLine(roleDescription)}`),
+    "",
+    "Pause directives",
+    "- Put a pause command on its own line between spoken passages.",
+    ...(context.pauses.length > 0
+      ? ["- Use only these configured pause commands:", ...context.pauses.map(({ pauseId, description }) => `  - [${pauseId}]: ${oneLine(description)}`)]
+      : ["- This project has no configured pause commands; do not invent one."]),
+    "",
+    "Section directives",
+    "- Use [section: Descriptive title] on its own line to mark a major topic.",
+    "",
+    "Pronunciation lexicon",
+    "- Preserve the written display text. StudyNarrator applies configured pronunciations during narration.",
+    ...(aliases.senses.length > 0 ? ["- Named pronunciation senses:", ...aliases.senses.map((item) => `  ${item}`)] : ["- No named pronunciation senses are configured."]),
+    ...(aliases.automatic.length > 0 ? ["- Automatic pronunciation replacements:", ...aliases.automatic.map((item) => `  ${item}`)] : ["- No automatic pronunciation replacements are configured."]),
+    "- If a word or name may need a new pronunciation entry, annotate it as {{display text|new_sense_id}}.",
+    "- Make new_sense_id a short lowercase identifier with letters, numbers, underscores, or hyphens.",
+    "- Do not invent a spoken pronunciation. StudyNarrator will detect the new sense during import so the user can review and add it to the lexicon."
+  ];
 }
 
-function codeGuidance(mode: ScriptGenerationConfiguration["codeHandling"]): string {
-  if (mode === "omit") return "Omit source code unless its behavior must be summarized for technical accuracy.";
-  if (mode === "spell") return "Read important code and symbols aloud in unambiguous spoken words; do not emit fenced code blocks.";
-  return "Explain what code does in speakable prose. Include exact code only when the source explicitly requires it to be read aloud.";
-}
-
-function example(configuration: ScriptGenerationConfiguration, twoSpeakers: boolean): string {
-  const first = configuration.speakers[0]!;
-  const second = configuration.speakers[1];
-  const pause = configuration.pauses[0];
-  const lines = configuration.sectionMode === "omit" ? [] : ["[section: Caching]", ""];
-  lines.push(`[speaker_${first.speakerId}] A cache keeps a reusable result close to where it is needed.`);
+function example(context: ScriptGenerationContext, twoSpeakers: boolean): string {
+  const first = context.speakers[0]!;
+  const second = context.speakers[1];
+  const pause = context.pauses[0];
+  const lines = ["[section: Core idea]", "", `[speaker_${first.speakerId}] Explain the first important idea in clear spoken language.`];
   if (pause) lines.push(`[${pause.pauseId}]`);
   if (twoSpeakers && second) {
-    lines.push(`[speaker_${second.speakerId}] What happens when the original data changes?`);
+    lines.push(`[speaker_${second.speakerId}] Ask a useful question that exposes a likely misunderstanding.`);
     if (pause) lines.push(`[${pause.pauseId}]`);
-    lines.push(`[speaker_${first.speakerId}] The application needs an invalidation strategy so it does not serve stale data.`);
-  } else {
-    lines.push(`[speaker_${first.speakerId}] When the original data changes, the application needs an invalidation strategy.`);
+    lines.push(`[speaker_${first.speakerId}] Resolve the misunderstanding without adding unsupported facts.`);
   }
+  lines.push(`[speaker_${first.speakerId}] A term needing review can be marked as {{Example Name|example_name}}.`);
   return `${lines.join("\n")}\n`;
 }
 
-function contractSections(configuration: ScriptGenerationConfiguration, entries: readonly LexiconEntry[]): string[] {
-  const aliases = aliasSections(entries);
+function creationPrompt(context: ScriptGenerationContext, entries: readonly LexiconEntry[]): string {
   return [
+    "# StudyNarrator script creation instructions",
+    "",
+    "Use these standing instructions together with my topic, learning goals, and source requirements below. Create a brand-new StudyNarrator script from that material.",
+    "",
+    "KNOWLEDGE TO GATHER AND TEACH",
+    "[REPLACE THIS BLOCK WITH THE TOPIC, QUESTIONS TO ANSWER, LEARNING GOALS, AUDIENCE, DETAIL LEVEL, TRUSTED SOURCES, AND ANY FACTS OR CONSTRAINTS THE SCRIPT MUST INCLUDE.]",
+    "",
+    "AUTHORING GOALS",
+    "- Build a coherent lesson, not a list of disconnected facts.",
+    "- Explain prerequisite ideas before dependent ideas.",
+    "- Use questions, corrections, comparisons, and recaps only when they improve learning.",
+    "- Keep spoken turns natural and reasonably short.",
+    "- Convert useful tables, code, and visual material into clear spoken explanations.",
+    "- Preserve names, numbers, warnings, constraints, and technical distinctions from supplied sources.",
+    "- Do not invent facts, citations, or pronunciations.",
+    "",
+    ...formatReference(context, entries),
+    "",
     "OUTPUT CONTRACT",
-    "- Output only the raw script.",
-    "- Do not wrap the output in a Markdown code fence.",
-    "- Do not add commentary outside the script.",
-    "- Use only the directives and IDs listed below.",
-    "- Speaker tags may appear between spoken phrases and remain active until the next speaker tag.",
-    "- Pause directives may appear between spoken phrases.",
-    "- Preserve names, numbers, constraints, warnings, and technical distinctions from the source.",
-    "- Do not invent facts or pronunciations.",
+    "- Return only the complete raw StudyNarrator script.",
+    "- Do not wrap the script in a Markdown code fence.",
+    "- Do not add notes or commentary outside the script.",
     "",
-    "ALLOWED SPEAKERS",
-    ...configuration.speakers.map(({ speakerId, roleDescription }) => `- [speaker_${speakerId}]: ${oneLine(roleDescription)}`),
+    "VALID FORMAT EXAMPLE",
+    example(context, context.speakers.length > 1).trimEnd(),
+    ""
+  ].join("\n");
+}
+
+function updatePrompt(context: ScriptGenerationContext, entries: readonly LexiconEntry[]): string {
+  return [
+    "# StudyNarrator script update instructions",
     "",
-    "ALLOWED PAUSES",
-    ...(configuration.pauses.length > 0
-      ? configuration.pauses.map(({ pauseId, description }) => `- [${pauseId}]: ${oneLine(description)}`)
-      : ["- No pause directives are allowed."]),
+    "Update my existing StudyNarrator script according to the change request I provide. Preserve correct content and formatting that the request does not need to change.",
     "",
-    "SECTION FORMAT",
-    sectionGuidance(configuration.sectionMode),
-    ...(configuration.sectionMode === "omit" ? [] : ["Use: [section: Descriptive section title]"]),
+    "SCRIPT AND CHANGE REQUEST",
+    "[PASTE THE CURRENT SCRIPT AND DESCRIBE THE CHANGES TO MAKE HERE.]",
     "",
-    "AMBIGUOUS PRONUNCIATION FORMAT",
-    "Use {{display text|sense}} only for a supplied named sense.",
-    ...(aliases.senses.length > 0 ? aliases.senses : ["- No named pronunciation senses are configured."]),
+    "UPDATE RULES",
+    "- Return the complete revised script, not a patch or a summary.",
+    "- Preserve existing speaker, pause, section, and pronunciation directives unless the requested change requires an edit.",
+    "- Keep all unchanged facts, names, numbers, warnings, and technical distinctions intact.",
+    "- Do not invent facts, citations, or pronunciations.",
     "",
-    "AUTOMATIC PRONUNCIATION RULES",
-    "StudyNarrator applies these after generation; preserve the written display text:",
-    ...(aliases.automatic.length > 0 ? aliases.automatic : ["- No automatic pronunciation replacements are configured."])
-  ];
+    ...formatReference(context, entries),
+    "",
+    "OUTPUT CONTRACT",
+    "- Return only the complete raw StudyNarrator script.",
+    "- Do not wrap the script in a Markdown code fence.",
+    "- Do not add notes or commentary outside the script.",
+    ""
+  ].join("\n");
 }
 
 export function buildExternalLlmPrompt(input: {
-  brief: ScriptGenerationBrief;
+  kind: ScriptPromptKind;
+  context: ScriptGenerationContext;
   lexiconEntries: readonly LexiconEntry[];
 }): string {
-  const brief = ScriptGenerationBriefSchema.parse(input.brief);
-  const { sourceMaterial: _sourceMaterial, ...configurationInput } = brief;
-  void _sourceMaterial;
-  const configuration = ScriptGenerationConfigurationSchema.parse(configurationInput);
-  const sections = [
-    "You are converting source material into a spoken script for a deterministic text-to-speech application.",
-    "",
-    "GOAL",
-    oneLine(brief.purpose),
-    `Audience: ${oneLine(brief.targetAudience)}`,
-    `Detail level: ${brief.detailLevel}.`,
-    "The script may use multiple speakers to make the material clearer, but it must not add unsupported facts.",
-    "",
-    ...contractSections(configuration, input.lexiconEntries),
-    "",
-    "CODE HANDLING",
-    codeGuidance(brief.codeHandling),
-    "",
-    "SCRIPTING GUIDANCE",
-    "- Keep spoken turns reasonably short and natural.",
-    "- Do not alternate speakers unless a question, misconception, or recap improves understanding.",
-    "- Convert useful tables and dense visual material into spoken prose.",
-    "- Do not read decorative Markdown characters aloud.",
-    ...(brief.additionalGuidance.trim() ? [oneLine(brief.additionalGuidance)] : []),
-    "",
-    "VALID EXAMPLE",
-    example(configuration, configuration.speakers.length > 1).trimEnd(),
-    "",
-    "SOURCE MATERIAL",
-    brief.sourceMaterial.trim(),
-    ""
-  ];
-  return sections.join("\n");
+  const kind = ScriptPromptKindSchema.parse(input.kind);
+  const context = ScriptGenerationContextSchema.parse(input.context);
+  return kind === "creation" ? creationPrompt(context, input.lexiconEntries) : updatePrompt(context, input.lexiconEntries);
 }
 
 export function buildSkillPackageFiles(input: {
-  configuration: ScriptGenerationConfiguration;
+  context: ScriptGenerationContext;
   lexiconEntries: readonly LexiconEntry[];
 }): GeneratedTextFile[] {
-  const configuration = ScriptGenerationConfigurationSchema.parse(input.configuration);
-  const contract = contractSections(configuration, input.lexiconEntries).join("\n");
+  const context = ScriptGenerationContextSchema.parse(input.context);
   const aliases = aliasSections(input.lexiconEntries);
+  const format = formatReference(context, input.lexiconEntries).join("\n");
   const files: GeneratedTextFile[] = [
     {
       path: "SKILL.md",
       content: [
         "# StudyNarrator Script Authoring",
         "",
-        "Use this skill when converting supplied source material into a deterministic StudyNarrator script.",
-        "",
-        `Purpose: ${oneLine(configuration.purpose)}`,
-        `Audience: ${oneLine(configuration.targetAudience)}`,
-        `Detail level: ${configuration.detailLevel}.`,
-        "",
-        "## Workflow",
-        "",
-        "1. Read the source material without adding unsupported facts.",
-        "2. Follow SCRIPT_FORMAT.md and use only its configured speaker and pause IDs.",
-        "3. Apply LEXICON_ALIASES.md when pronunciation guidance is relevant.",
-        "4. Return only the raw script, without a code fence or commentary.",
-        "",
-        `Code handling: ${codeGuidance(configuration.codeHandling)}`,
-        ...(configuration.additionalGuidance.trim() ? ["", `Additional guidance: ${oneLine(configuration.additionalGuidance)}`] : []),
+        "Use CREATION_PROMPT.md when starting a script and UPDATE_PROMPT.md when revising an existing script.",
+        "Follow SCRIPT_FORMAT.md, preserve supplied facts, and return only the raw script.",
         ""
       ].join("\n")
     },
-    {
-      path: "SCRIPT_FORMAT.md",
-      content: `# Script Format\n\n${contract}\n`
-    },
+    { path: "CREATION_PROMPT.md", content: creationPrompt(context, input.lexiconEntries) },
+    { path: "UPDATE_PROMPT.md", content: updatePrompt(context, input.lexiconEntries) },
+    { path: "SCRIPT_FORMAT.md", content: `# Script Format\n\n${format}\n` },
     {
       path: "LEXICON_ALIASES.md",
       content: [
@@ -242,11 +219,15 @@ export function buildSkillPackageFiles(input: {
         "## Automatic replacements",
         "",
         ...(aliases.automatic.length > 0 ? aliases.automatic : ["No automatic pronunciation replacements are configured."]),
+        "",
+        "## New candidates",
+        "",
+        "Mark a pronunciation candidate as {{display text|new_sense_id}}. StudyNarrator will detect it during import for user review.",
         ""
       ].join("\n")
     },
-    { path: "examples/single-narrator.txt", content: example(configuration, false) }
+    { path: "examples/single-narrator.txt", content: example(context, false) }
   ];
-  if (configuration.speakers.length > 1) files.push({ path: "examples/two-speaker-study-guide.txt", content: example(configuration, true) });
+  if (context.speakers.length > 1) files.push({ path: "examples/two-speaker-study-guide.txt", content: example(context, true) });
   return files;
 }

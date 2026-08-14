@@ -461,16 +461,9 @@ describe("REST API operation manifest", () => {
     ProjectPreviewResultSchema.parse((await call("POST", `/api/projects/${created.id}/preview`, 200, {
       mode: "segment", nodeOrdinal: 1
     })).body as unknown);
-    const generationBrief = {
-      schemaVersion: 1, purpose: "Explain the manifest.", targetAudience: "Engineers", detailLevel: "balanced",
-      sectionMode: "required", codeHandling: "explain", additionalGuidance: "", sourceMaterial: "Manifest source.",
-      speakers: [{ speakerId: "narrator", roleDescription: "Explains clearly." }], pauses: []
-    };
-    await call("POST", `/api/projects/${created.id}/prompt-preview`, 200, generationBrief);
-    await call("POST", `/api/projects/${created.id}/prompt-export`, 200, generationBrief);
-    const { sourceMaterial: _sourceMaterial, ...generationConfiguration } = generationBrief;
-    void _sourceMaterial;
-    await call("POST", `/api/projects/${created.id}/skill-export`, 200, generationConfiguration);
+    await call("POST", `/api/projects/${created.id}/prompt-preview`, 200, { kind: "creation" });
+    await call("POST", `/api/projects/${created.id}/prompt-export`, 200, { kind: "update" });
+    await call("POST", `/api/projects/${created.id}/skill-export`, 200, {});
     const renderPlan = RenderPlanSchema.parse((await call("POST", `/api/projects/${created.id}/render-plans`, 201)).body as unknown);
     RenderPlanSummaryCollectionSchema.parse((await call("GET", `/api/projects/${created.id}/render-plans`, 200)).body as unknown);
     RenderPlanSchema.parse((await call("GET", `/api/render-plans/${renderPlan.id}`, 200)).body as unknown);
@@ -520,7 +513,7 @@ describe("REST API operation manifest", () => {
       request(app).post("/api/projects/not-a-uuid/preview").send({ mode: "segment", nodeOrdinal: 1 }).expect(400),
       request(app).post("/api/projects/00000000-0000-4000-8000-000000000001/preview").send({ mode: "pronunciation", text: "" }).expect(400),
       request(app).post("/api/projects/not-a-uuid/prompt-preview").send({}).expect(400),
-      request(app).post("/api/projects/00000000-0000-4000-8000-000000000001/prompt-export").send({ sourceMaterial: secret }).expect(400),
+      request(app).post("/api/projects/00000000-0000-4000-8000-000000000001/prompt-export").send({ kind: "invalid", sourceMaterial: secret }).expect(400),
       request(app).post("/api/projects/00000000-0000-4000-8000-000000000001/skill-export").send({ sourceMaterial: secret }).expect(400),
       request(app).post("/api/projects/not-a-uuid/render-plans").expect(400),
       request(app).get("/api/projects/not-a-uuid/render-plans").expect(400),

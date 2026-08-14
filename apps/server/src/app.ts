@@ -33,8 +33,8 @@ import {
   RenderHistorySegmentCollectionSchema,
   RenderSegmentInputSchema,
   RenderWaveformSchema,
-  ScriptGenerationBriefSchema,
-  ScriptGenerationConfigurationSchema,
+  ScriptGenerationPromptInputSchema,
+  ScriptGenerationSkillInputSchema,
   RedactedConnectionDiagnosticsSchema,
   ScratchpadPreviewInputSchema,
   ScratchpadPreviewResultSchema,
@@ -377,17 +377,20 @@ export function createExpressApp(options: {
     };
     app.post("/api/projects/:projectId/prompt-preview", async (request, response, next) => {
       try {
-        response.json(await options.scriptGeneration!.previewPrompt(ProjectIdSchema.parse(request.params.projectId), ScriptGenerationBriefSchema.parse(request.body)));
+        const input = ScriptGenerationPromptInputSchema.parse(request.body);
+        response.json(await options.scriptGeneration!.previewPrompt(ProjectIdSchema.parse(request.params.projectId), input.kind));
       } catch (error) { next(error); }
     });
     app.post("/api/projects/:projectId/prompt-export", async (request, response, next) => {
       try {
-        sendGeneratedFile(response, await options.scriptGeneration!.resolvePromptExport(ProjectIdSchema.parse(request.params.projectId), ScriptGenerationBriefSchema.parse(request.body)));
+        const input = ScriptGenerationPromptInputSchema.parse(request.body);
+        sendGeneratedFile(response, await options.scriptGeneration!.resolvePromptExport(ProjectIdSchema.parse(request.params.projectId), input.kind));
       } catch (error) { next(error); }
     });
     app.post("/api/projects/:projectId/skill-export", async (request, response, next) => {
       try {
-        sendGeneratedFile(response, await options.scriptGeneration!.resolveSkillPackage(ProjectIdSchema.parse(request.params.projectId), ScriptGenerationConfigurationSchema.parse(request.body)));
+        ScriptGenerationSkillInputSchema.parse(request.body);
+        sendGeneratedFile(response, await options.scriptGeneration!.resolveSkillPackage(ProjectIdSchema.parse(request.params.projectId)));
       } catch (error) { next(error); }
     });
   }

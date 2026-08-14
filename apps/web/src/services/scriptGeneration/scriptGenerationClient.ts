@@ -3,8 +3,7 @@ import {
   FileExportResultSchema,
   PromptDocumentSchema,
   ProjectIdSchema,
-  ScriptGenerationBriefSchema,
-  ScriptGenerationConfigurationSchema,
+  ScriptPromptKindSchema,
   type ScriptGenerationClient,
   type StudyNarratorBridge
 } from "@studynarrator/shared-types";
@@ -36,27 +35,26 @@ async function download(response: Response, fallback: string) {
 
 export function createRestScriptGenerationClient(fetchInput: typeof fetch = fetch): ScriptGenerationClient {
   return {
-    async previewPrompt(projectIdInput, briefInput) {
+    async previewPrompt(projectIdInput, kindInput) {
       const projectId = ProjectIdSchema.parse(projectIdInput);
-      const brief = ScriptGenerationBriefSchema.parse(briefInput);
+      const kind = ScriptPromptKindSchema.parse(kindInput);
       const response = await fetchInput(`/api/projects/${encodeURIComponent(projectId)}/prompt-preview`, {
-        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(brief)
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind })
       });
       if (!response.ok) throw await failure(response);
       return PromptDocumentSchema.parse(await response.json() as unknown);
     },
-    async exportPrompt(projectIdInput, briefInput) {
+    async exportPrompt(projectIdInput, kindInput) {
       const projectId = ProjectIdSchema.parse(projectIdInput);
-      const brief = ScriptGenerationBriefSchema.parse(briefInput);
+      const kind = ScriptPromptKindSchema.parse(kindInput);
       return await download(await fetchInput(`/api/projects/${encodeURIComponent(projectId)}/prompt-export`, {
-        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(brief)
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind })
       }), "study-narrator-prompt.md");
     },
-    async exportSkillPackage(projectIdInput, configurationInput) {
+    async exportSkillPackage(projectIdInput) {
       const projectId = ProjectIdSchema.parse(projectIdInput);
-      const configuration = ScriptGenerationConfigurationSchema.parse(configurationInput);
       return await download(await fetchInput(`/api/projects/${encodeURIComponent(projectId)}/skill-export`, {
-        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(configuration)
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({})
       }), "study-narrator-script-skill.zip");
     }
   };
