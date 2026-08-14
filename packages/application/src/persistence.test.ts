@@ -4,7 +4,7 @@ import { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
 import { createPersistenceService, createUnavailablePersistenceService, PersistenceUnavailableError } from "./persistence.js";
 
 const project = {
-  contractVersion: 5 as const,
+  contractVersion: 6 as const,
   id: "00000000-0000-4000-8000-000000000001",
   name: "Persisted study",
   description: "",
@@ -22,10 +22,10 @@ const project = {
 function repository() {
   return {
     status: vi.fn(() => ({
-      contractVersion: 5 as const,
+      contractVersion: 6 as const,
       state: "ready" as const,
-      databaseSchemaVersion: 7 as const,
-      targetDatabaseSchemaVersion: 7 as const,
+      databaseSchemaVersion: 8 as const,
+      targetDatabaseSchemaVersion: 8 as const,
       databasePath: "/tmp/studynarrator.sqlite",
       latestBackupPath: null
     })),
@@ -116,10 +116,10 @@ describe("persistence application service", () => {
 
   it("keeps status available while rejecting degraded persistence operations", async () => {
     const service = createUnavailablePersistenceService({
-      contractVersion: 5,
+      contractVersion: 6,
       state: "unavailable",
       databaseSchemaVersion: 1,
-      targetDatabaseSchemaVersion: 7,
+      targetDatabaseSchemaVersion: 8,
       databasePath: "/tmp/studynarrator.sqlite",
       latestBackupPath: "/tmp/backups/recovery.sqlite",
       code: "MIGRATION_FAILED",

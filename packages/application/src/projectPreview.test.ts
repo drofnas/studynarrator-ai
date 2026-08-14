@@ -12,7 +12,7 @@ const profile = {
   lastTestedAt: null, lastSuccessfulTestAt: null, lastTestSummary: null, createdAt: timestamp, updatedAt: timestamp
 };
 const project = {
-  contractVersion: 5 as const,
+  contractVersion: 6 as const,
   id: projectId,
   name: "Preview project",
   description: "",

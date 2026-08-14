@@ -42,7 +42,19 @@ describe("persistence contracts", () => {
     })).toThrow(/project scope/iu);
     expect(() => GlobalLexiconReplaceInputSchema.parse([
       { scope: "project", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel" }
-    ])).toThrow(/global scope/iu);
+    ])).toThrow();
+    expect(GlobalLexiconReplaceInputSchema.parse([
+      { scope: "global", displayText: " SQL ", spokenText: " S Q L " }
+    ])).toEqual([{
+      scope: "global", entryType: "exactTerm", displayText: "SQL", spokenText: "S Q L",
+      caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: ""
+    }]);
+    expect(() => GlobalLexiconReplaceInputSchema.parse([
+      { scope: "global", entryType: "namedSense", displayText: "resume", senseId: "cv", spokenText: "résumé" }
+    ])).toThrow();
+    expect(() => GlobalLexiconReplaceInputSchema.parse([
+      { scope: "global", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel", caseSensitive: true }
+    ])).toThrow();
   });
 
   it("bounds pacing values and excludes credential-shaped connection fields", () => {

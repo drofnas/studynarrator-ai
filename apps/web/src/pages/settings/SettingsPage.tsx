@@ -14,7 +14,7 @@ import { authoringLexicon } from "@/features/projects/projectAuthoring.js";
 import styles from "./SettingsPage.module.css";
 
 const EMPTY_CONNECTION = { baseUrl: "", defaultModelId: "", defaultVoiceId: "", timeoutSeconds: 120, retryCount: 2 };
-const EMPTY_GLOBAL_LEXICON: LexiconEntryAuthoring = { scope: "global", entryType: "exactTerm", displayText: "", spokenText: "", caseSensitive: true, wholeWord: true, priority: 0, enabled: true, notes: "" };
+const EMPTY_GLOBAL_LEXICON: LexiconEntryAuthoring = { scope: "global", entryType: "exactTerm", displayText: "", spokenText: "", caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: "" };
 
 function connectionDraft(connection: SpeachesConnection | null) {
   return connection ? {
@@ -163,7 +163,18 @@ export function SettingsPage({ client, cacheClient }: { client: PersistenceClien
 
   const replaceGlobalLexicon = async (entries: LexiconEntryAuthoring[], success: string) => {
     try {
-      setGlobalLexicon(authoringLexicon(await client.globalLexicon.replace(entries.map((entry) => ({ ...entry, scope: "global" })))));
+      setGlobalLexicon(authoringLexicon(await client.globalLexicon.replace(entries.map((entry) => ({
+        ...(entry.id ? { id: entry.id } : {}),
+        scope: "global",
+        entryType: "exactTerm",
+        displayText: entry.displayText,
+        spokenText: entry.spokenText,
+        caseSensitive: false,
+        wholeWord: true,
+        priority: 0,
+        enabled: entry.enabled,
+        notes: ""
+      })))));
       setStatus(success);
       setError("");
       return true;

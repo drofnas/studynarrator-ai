@@ -45,21 +45,34 @@ describe("database migrations", () => {
       { version: 4, name: "project-transition-pauses" },
       { version: 5, name: "render-execution" },
       { version: 6, name: "render-review-media" },
-      { version: 7, name: "single-speaches-connection" }
+      { version: 7, name: "single-speaches-connection" },
+      { version: 8, name: "simplified-global-lexicon" }
     ]);
   });
 
-  it("creates schema version 7 and reruns without duplicate migrations or backups", async () => {
+  it("creates schema version 8 with ordered starter pronunciations and reruns without reseeding", async () => {
     const databasePath = await temporaryDatabase("studynarrator-migration-fresh-");
     const first = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-12T12:00:00.000Z") });
-    expect(first.appliedVersions).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(first.appliedVersions).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
     expect(first.backupPath).toBeNull();
+    expect(first.database.prepare("SELECT display_text, spoken_text, enabled FROM lexicon_entries WHERE scope = 'global' ORDER BY ordinal").all()).toEqual([
+      { display_text: "API", spoken_text: "A P I", enabled: 1 },
+      { display_text: "URL", spoken_text: "U R L", enabled: 1 },
+      { display_text: "HTTP", spoken_text: "H T T P", enabled: 1 },
+      { display_text: "HTTPS", spoken_text: "H T T P S", enabled: 1 },
+      { display_text: "JSON", spoken_text: "jay son", enabled: 1 },
+      { display_text: "SQL", spoken_text: "S Q L", enabled: 1 },
+      { display_text: "PostgreSQL", spoken_text: "post gres Q L", enabled: 1 },
+      { display_text: "GitHub", spoken_text: "git hub", enabled: 1 }
+    ]);
+    first.database.prepare("DELETE FROM lexicon_entries WHERE scope = 'global'").run();
     first.database.close();
 
     const second = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-13T12:00:00.000Z") });
     expect(second.appliedVersions).toEqual([]);
     expect(second.backupPath).toBeNull();
-    expect(second.database.prepare("SELECT count(*) AS count FROM schema_migrations").get()).toEqual({ count: 7 });
+    expect(second.database.prepare("SELECT count(*) AS count FROM schema_migrations").get()).toEqual({ count: 8 });
+    expect(second.database.prepare("SELECT count(*) AS count FROM lexicon_entries WHERE scope = 'global'").get()).toEqual({ count: 0 });
     second.database.close();
   });
 
@@ -70,8 +83,8 @@ describe("database migrations", () => {
     old.close();
 
     const upgraded = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-12T12:00:00.000Z") });
-    expect(upgraded.appliedVersions).toEqual([2, 3, 4, 5, 6, 7]);
-    expect(upgraded.backupPath).toContain("-v1-to-v7-");
+    expect(upgraded.appliedVersions).toEqual([2, 3, 4, 5, 6, 7, 8]);
+    expect(upgraded.backupPath).toContain("-v1-to-v8-");
     expect((await stat(upgraded.backupPath!)).mode & 0o777).toBe(0o600);
     expect(upgraded.database.prepare("SELECT value FROM diagnostic_kv WHERE key = 'fixture'").get()).toEqual({ value: "preserved" });
     const backup = new Database(upgraded.backupPath!, { readonly: true });
@@ -98,8 +111,8 @@ describe("database migrations", () => {
     previous.database.close();
 
     const upgraded = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-13T12:00:00.000Z") });
-    expect(upgraded.appliedVersions).toEqual([3, 4, 5, 6, 7]);
-    expect(upgraded.backupPath).toContain("-v2-to-v7-");
+    expect(upgraded.appliedVersions).toEqual([3, 4, 5, 6, 7, 8]);
+    expect(upgraded.backupPath).toContain("-v2-to-v8-");
     expect(upgraded.database.prepare("SELECT name, model_id, paragraph_transition_mode, paragraph_transition_pause_id FROM projects WHERE id = ?").get(projectId))
       .toEqual({ name: "V2 project", model_id: null, paragraph_transition_mode: "preset", paragraph_transition_pause_id: "pause_medium" });
     upgraded.database.close();
@@ -132,7 +145,7 @@ describe("database migrations", () => {
     legacy.database.close();
 
     const upgraded = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-13T12:00:00.000Z") });
-    expect(upgraded.appliedVersions).toEqual([7]);
+    expect(upgraded.appliedVersions).toEqual([7, 8]);
     expect(upgraded.database.prepare("SELECT id, name, source, api_key_reference FROM connection_profiles").all()).toEqual([
       { id: "active-environment", name: "Speaches", source: "saved", api_key_reference: null }
     ]);
@@ -140,6 +153,54 @@ describe("database migrations", () => {
       .toEqual({ active_profile_id: "active-environment", onboarding_completed_at: "2026-08-12T12:00:00.000Z" });
     expect(upgraded.database.prepare("SELECT connection_profile_id FROM projects WHERE id = ?").get(projectId))
       .toEqual({ connection_profile_id: "active-environment" });
+    upgraded.database.close();
+  });
+
+  it("normalizes legacy global rules, disables later duplicates, and leaves project rules unchanged", async () => {
+    const databasePath = await temporaryDatabase("studynarrator-migration-global-lexicon-");
+    const legacy = await migrateDatabase({
+      Database: DatabaseAdapter,
+      databasePath,
+      migrations: STUDYNARRATOR_MIGRATIONS.slice(0, 7),
+      now: () => new Date("2026-08-12T12:00:00.000Z")
+    });
+    legacy.database.prepare(`
+      INSERT INTO projects (
+        id, config_version, name, description, script_source, script_hash, connection_profile_id,
+        paragraph_pause_enabled, paragraph_pause_id, paragraph_pause_duration_ms,
+        paragraph_transition_mode, paragraph_transition_pause_id,
+        speaker_change_transition_mode, speaker_change_transition_pause_id, speaker_change_transition_duration_ms,
+        section_transition_mode, section_transition_pause_id, section_transition_duration_ms,
+        created_at, updated_at
+      ) VALUES (?, 1, 'Lexicon migration', '', '', ?, 'speaches', 1, 'pause_medium', 750,
+        'preset', 'pause_medium', 'none', NULL, NULL, 'none', NULL, NULL, ?, ?)
+    `).run(projectId, "a".repeat(64), "2026-08-12T12:00:00.000Z", "2026-08-12T12:00:00.000Z");
+    const insert = legacy.database.prepare(`
+      INSERT INTO lexicon_entries (
+        id, scope, project_id, ordinal, entry_type, display_text, sense_id, spoken_text,
+        case_sensitive, whole_word, priority, enabled, notes, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const createdAt = "2026-08-12T12:00:00.000Z";
+    insert.run("legacy-global-first", "global", null, 0, "namedSense", "Resume", "cv", "rez oo may", 1, 0, 20, 1, "advanced", createdAt, createdAt);
+    insert.run("legacy-global-duplicate", "global", null, 1, "exactPhrase", "resume", null, "ree zoom", 1, 0, 10, 1, "duplicate", createdAt, createdAt);
+    insert.run("legacy-project", "project", projectId, 0, "namedSense", "resume", "process", "ree zoom", 1, 0, 10, 1, "project stays advanced", createdAt, createdAt);
+    legacy.database.close();
+
+    const upgraded = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-13T12:00:00.000Z") });
+    expect(upgraded.appliedVersions).toEqual([8]);
+    expect(upgraded.backupPath).toContain("-v7-to-v8-");
+    expect(upgraded.database.prepare(`
+      SELECT id, entry_type, sense_id, case_sensitive, whole_word, priority, enabled, notes
+      FROM lexicon_entries WHERE scope = 'global' ORDER BY ordinal
+    `).all()).toEqual([
+      { id: "legacy-global-first", entry_type: "exactTerm", sense_id: null, case_sensitive: 0, whole_word: 1, priority: 0, enabled: 1, notes: "" },
+      { id: "legacy-global-duplicate", entry_type: "exactTerm", sense_id: null, case_sensitive: 0, whole_word: 1, priority: 0, enabled: 0, notes: "" }
+    ]);
+    expect(upgraded.database.prepare(`
+      SELECT entry_type, sense_id, case_sensitive, whole_word, priority, enabled, notes
+      FROM lexicon_entries WHERE id = 'legacy-project'
+    `).get()).toEqual({ entry_type: "namedSense", sense_id: "process", case_sensitive: 1, whole_word: 0, priority: 10, enabled: 1, notes: "project stays advanced" });
     upgraded.database.close();
   });
 

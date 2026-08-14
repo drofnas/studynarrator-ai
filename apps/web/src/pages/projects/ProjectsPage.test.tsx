@@ -13,7 +13,7 @@ import { ProjectsPage } from "./ProjectsPage.js";
 import { ConnectionProvider } from "@/features/connections/ConnectionProvider.js";
 
 const project: ProjectDetail = {
-  contractVersion: 5,
+  contractVersion: 6,
   id: "00000000-0000-4000-8000-000000000001",
   name: "Authoring study",
   description: "Offline fixture",

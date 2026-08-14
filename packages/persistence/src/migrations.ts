@@ -1,6 +1,6 @@
 import { chmod, mkdir, readdir, stat } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
-import { DATABASE_SCHEMA_VERSION } from "@studynarrator/shared-types";
+import { DATABASE_SCHEMA_VERSION, DEFAULT_GLOBAL_LEXICON } from "@studynarrator/shared-types";
 import { MigrationFailureError } from "./errors.js";
 
 export interface StatementLike {
@@ -305,6 +305,47 @@ const MIGRATION_7_SQL = `
   DROP TABLE migration_7_connection_winner;
 `;
 
+interface MigrationGlobalLexiconRow {
+  id: string;
+  ordinal: number;
+  display_text: string;
+  enabled: number;
+}
+
+function migrateSimplifiedGlobalLexicon(database: DatabaseLike): void {
+  const rows = database.prepare(`
+    SELECT id, ordinal, display_text, enabled
+    FROM lexicon_entries
+    WHERE scope = 'global'
+    ORDER BY ordinal ASC, id ASC
+  `).all() as MigrationGlobalLexiconRow[];
+  const duplicateKeys = new Set<string>();
+  const update = database.prepare(`
+    UPDATE lexicon_entries
+    SET entry_type = 'exactTerm', sense_id = NULL, case_sensitive = 0,
+        whole_word = 1, priority = 0, enabled = ?, notes = ''
+    WHERE id = ? AND scope = 'global'
+  `);
+  for (const row of rows) {
+    const key = row.display_text.trim().toLocaleLowerCase("en-US");
+    const duplicate = duplicateKeys.has(key);
+    duplicateKeys.add(key);
+    update.run(duplicate ? 0 : row.enabled, row.id);
+  }
+
+  if (rows.length !== 0) return;
+  const timestamp = new Date().toISOString();
+  const insert = database.prepare(`
+    INSERT INTO lexicon_entries (
+      id, scope, project_id, ordinal, entry_type, display_text, sense_id, spoken_text,
+      case_sensitive, whole_word, priority, enabled, notes, created_at, updated_at
+    ) VALUES (?, 'global', NULL, ?, 'exactTerm', ?, NULL, ?, 0, 1, 0, 1, '', ?, ?)
+  `);
+  DEFAULT_GLOBAL_LEXICON.forEach((entry, ordinal) => {
+    insert.run(entry.id, ordinal, entry.displayText, entry.spokenText, timestamp, timestamp);
+  });
+}
+
 export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
   { version: 1, name: "runtime-diagnostics", up: (database) => { database.exec(MIGRATION_1_SQL); } },
   {
@@ -348,6 +389,11 @@ export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
     up: (database) => {
       database.exec(MIGRATION_7_SQL);
     }
+  },
+  {
+    version: 8,
+    name: "simplified-global-lexicon",
+    up: migrateSimplifiedGlobalLexicon
   }
 ]);
 

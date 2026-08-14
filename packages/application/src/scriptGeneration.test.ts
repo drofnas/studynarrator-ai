@@ -6,7 +6,7 @@ import { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
 
 const timestamp = "2026-08-14T00:00:00.000Z";
 const project: ProjectDetail = {
-  contractVersion: 5,
+  contractVersion: 6,
   id: "00000000-0000-4000-8000-000000000001",
   name: "Résumé / unsafe project",
   description: "",

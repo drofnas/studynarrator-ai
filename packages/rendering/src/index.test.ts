@@ -172,7 +172,7 @@ describe("render plan silence and storage", () => {
       schemaVersion: PROJECT_SNAPSHOT_SCHEMA_VERSION,
       capturedAt: timestamp,
       project: {
-        contractVersion: 5,
+        contractVersion: 6,
         id: projectId,
         name: "Frozen plan",
         description: "",

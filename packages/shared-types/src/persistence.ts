@@ -9,8 +9,8 @@ import {
 } from "@studynarrator/core";
 import { z } from "zod";
 
-export const DATABASE_SCHEMA_VERSION = 7;
-export const PERSISTENCE_CONTRACT_VERSION = 5;
+export const DATABASE_SCHEMA_VERSION = 8;
+export const PERSISTENCE_CONTRACT_VERSION = 6;
 export const PERSISTENCE_CHANNELS = Object.freeze({
   status: "persistence.status",
   projectsList: "projects.list",
@@ -80,11 +80,18 @@ const ProjectLexiconAuthoringSchema = LexiconEntryAuthoringSchema.superRefine((e
   }
 });
 
-const GlobalLexiconAuthoringSchema = LexiconEntryAuthoringSchema.superRefine((entry, context) => {
-  if (entry.scope !== "global") {
-    context.addIssue({ code: "custom", message: "Global lexicon entries must use global scope.", path: ["scope"] });
-  }
-});
+const GlobalLexiconAuthoringSchema = z.object({
+  id: z.string().min(1).optional(),
+  scope: z.literal("global"),
+  entryType: z.literal("exactTerm").default("exactTerm"),
+  displayText: z.string().trim().min(1),
+  spokenText: z.string().trim().min(1),
+  caseSensitive: z.literal(false).default(false),
+  wholeWord: z.literal(true).default(true),
+  priority: z.literal(0).default(0),
+  enabled: z.boolean().default(true),
+  notes: z.literal("").default("")
+}).strict();
 
 export const SpeakerMappingCollectionSchema = z.array(SpeakerMappingSchema).superRefine((items, context) => {
   const seen = new Set<string>();
@@ -126,6 +133,12 @@ const ProjectLexiconEntrySchema = LexiconEntrySchema.superRefine((entry, context
 });
 const GlobalLexiconEntrySchema = LexiconEntrySchema.superRefine((entry, context) => {
   if (entry.scope !== "global") context.addIssue({ code: "custom", message: "Global lexicon entries must use global scope.", path: ["scope"] });
+  if (entry.entryType !== "exactTerm") context.addIssue({ code: "custom", message: "Global lexicon entries must use exact-term matching.", path: ["entryType"] });
+  if (entry.senseId !== undefined) context.addIssue({ code: "custom", message: "Global lexicon entries cannot define a sense ID.", path: ["senseId"] });
+  if (entry.caseSensitive) context.addIssue({ code: "custom", message: "Global lexicon entries must be case insensitive.", path: ["caseSensitive"] });
+  if (!entry.wholeWord) context.addIssue({ code: "custom", message: "Global lexicon entries must match whole words.", path: ["wholeWord"] });
+  if (entry.priority !== 0) context.addIssue({ code: "custom", message: "Global lexicon entries use fixed priority.", path: ["priority"] });
+  if (entry.notes !== "") context.addIssue({ code: "custom", message: "Global lexicon entries do not store notes.", path: ["notes"] });
 });
 
 export const ProjectCreateInputSchema = z.object({
@@ -196,6 +209,17 @@ export const ProjectSummaryCollectionSchema = z.array(ProjectSummarySchema);
 export const GlobalLexiconEntryCollectionSchema = z.array(GlobalLexiconEntrySchema);
 export const GlobalLexiconReplaceInputSchema = GlobalLexiconAuthoringCollectionSchema;
 export type GlobalLexiconReplaceInput = z.input<typeof GlobalLexiconReplaceInputSchema>;
+
+export const DEFAULT_GLOBAL_LEXICON = Object.freeze([
+  { id: "10000000-0000-4000-8000-000000000001", scope: "global", entryType: "exactTerm", displayText: "API", spokenText: "A P I", caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: "" },
+  { id: "10000000-0000-4000-8000-000000000002", scope: "global", entryType: "exactTerm", displayText: "URL", spokenText: "U R L", caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: "" },
+  { id: "10000000-0000-4000-8000-000000000003", scope: "global", entryType: "exactTerm", displayText: "HTTP", spokenText: "H T T P", caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: "" },
+  { id: "10000000-0000-4000-8000-000000000004", scope: "global", entryType: "exactTerm", displayText: "HTTPS", spokenText: "H T T P S", caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: "" },
+  { id: "10000000-0000-4000-8000-000000000005", scope: "global", entryType: "exactTerm", displayText: "JSON", spokenText: "jay son", caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: "" },
+  { id: "10000000-0000-4000-8000-000000000006", scope: "global", entryType: "exactTerm", displayText: "SQL", spokenText: "S Q L", caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: "" },
+  { id: "10000000-0000-4000-8000-000000000007", scope: "global", entryType: "exactTerm", displayText: "PostgreSQL", spokenText: "post gres Q L", caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: "" },
+  { id: "10000000-0000-4000-8000-000000000008", scope: "global", entryType: "exactTerm", displayText: "GitHub", spokenText: "git hub", caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: "" }
+]) satisfies Readonly<GlobalLexiconReplaceInput>;
 
 export const IgnoredDiagnosticCollectionSchema = z.array(IgnoredDiagnosticSchema).superRefine((items, context) => {
   const seen = new Set<string>();
