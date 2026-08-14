@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -49,6 +49,9 @@ function renderPage(preview = vi.fn(async (input: { text: string }) => previewRe
 }
 
 beforeEach(() => {
+  window.sessionStorage.clear();
+  connections.discoverSpeechCatalog.mockResolvedValue({ schemaVersion: 1 as const, profileId: "local", models: [{ modelId: "model", voices: [{ voiceId: "voice", name: "Teacher", language: null, gender: null }] }] });
+  voiceCatalog.get.mockResolvedValue({ schemaVersion: 1 as const, modelId: "model", entries: [{ voiceId: "voice", label: "Teacher — voice", enabled: true, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }] });
   vi.stubGlobal("atob", (value: string) => Buffer.from(value, "base64").toString("binary"));
   vi.stubGlobal("URL", { createObjectURL: vi.fn(() => "blob:scratchpad"), revokeObjectURL: vi.fn() });
   vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => undefined);
@@ -64,22 +67,25 @@ describe("Quick Scratchpad", () => {
     const { container } = renderPage(preview);
     expect(await screen.findByRole("heading", { name: "Quick Scratchpad" })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByLabelText("Connection profile")).toHaveValue("local"));
-    expect(screen.getByLabelText("Model ID")).toHaveValue("model");
-    expect(screen.getByLabelText("Voice catalog or manual ID")).toHaveValue("voice");
+    await waitFor(() => expect(screen.getByLabelText("Model")).toHaveValue("model"));
+    await waitFor(() => expect(screen.getByLabelText("Voice")).toHaveValue("voice"));
+    expect(screen.getByLabelText("Model")).toBeInstanceOf(HTMLSelectElement);
+    expect(screen.getByLabelText("Voice")).toBeInstanceOf(HTMLSelectElement);
+    expect(screen.getByRole("option", { name: "Teacher — voice" })).toHaveValue("voice");
     expect(screen.getByLabelText("Speed")).toHaveAttribute("max", "4");
     expect(screen.getByLabelText("Passage")).toHaveAttribute("maxlength", "1200");
+    expect(screen.getByRole("heading", { name: "Voice setup" }).compareDocumentPosition(screen.getByRole("heading", { name: "Short passage" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByText("Recent results")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sent to Speaches")).not.toBeInTheDocument();
+    expect(screen.queryByText("No audio loaded")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Synthesize passage" })).toBeDisabled();
     await user.type(screen.getByLabelText("Passage"), "SQL indexes can improve database reads.");
-    expect(screen.getAllByText("SQL indexes can improve database reads.", { selector: "p" })).toHaveLength(2);
+    expect(window.sessionStorage.getItem("studynarrator.scratchpad.lastPassage")).toBe("SQL indexes can improve database reads.");
     await user.click(screen.getByLabelText("Apply global lexicon"));
-    expect(screen.getByText("sequel indexes can improve database reads.", { selector: "p" })).toBeInTheDocument();
-    expect(screen.getByText("Original").parentElement).toHaveTextContent("SQL indexes can improve database reads.");
     await user.click(screen.getByRole("button", { name: "Synthesize passage" }));
     await waitFor(() => expect(preview).toHaveBeenCalledWith(expect.objectContaining({ text: "SQL indexes can improve database reads.", applyGlobalLexicon: true }), expect.any(AbortSignal)));
     expect(await screen.findByLabelText(/Audio player for Local Speaches/u)).toBeInTheDocument();
-    const resultDetail = screen.getByText(/Result · cache miss/u).closest("section");
-    expect(resultDetail).not.toBeNull();
-    expect(within(resultDetail!).getByText("Teacher — voice", { selector: "strong" })).toBeInTheDocument();
+    expect(screen.queryByText(/Result · cache/u)).not.toBeInTheDocument();
 
     const audio = container.querySelector("audio");
     expect(audio).not.toBeNull();
@@ -91,20 +97,37 @@ describe("Quick Scratchpad", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Playback complete");
   });
 
-  it("preserves every control after failure and retries without appending a failed result", async () => {
+  it("restores the last passage from session storage after a reload", async () => {
+    window.sessionStorage.setItem("studynarrator.scratchpad.lastPassage", "Remember this short passage.");
+    renderPage();
+    expect(await screen.findByLabelText("Passage")).toHaveValue("Remember this short passage.");
+  });
+
+  it("disables catalog selections and explains discovery failures", async () => {
+    connections.discoverSpeechCatalog.mockRejectedValue(new Error("Model discovery is unavailable."));
+    renderPage();
+    expect(await screen.findByText("Model discovery is unavailable.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Model")).toBeDisabled();
+    expect(screen.getByLabelText("Voice")).toBeDisabled();
+  });
+
+  it("preserves every control and the last player after a failed replacement, then retries", async () => {
     const user = userEvent.setup();
     const preview = vi.fn()
+      .mockImplementationOnce(async (input: { text: string }) => previewResult(input.text))
       .mockRejectedValueOnce(new Error("Speaches rejected the selected voice."))
       .mockImplementationOnce(async (input: { text: string }) => previewResult(input.text));
     renderPage(preview);
-    await waitFor(() => expect(screen.getByLabelText("Connection profile")).toHaveValue("local"));
+    await waitFor(() => expect(screen.getByLabelText("Voice")).toHaveValue("voice"));
     await user.type(screen.getByLabelText("Passage"), "Keep this passage.");
+    await user.click(screen.getByRole("button", { name: "Synthesize passage" }));
+    const player = await screen.findByLabelText(/Audio player/u);
     await user.click(screen.getByRole("button", { name: "Synthesize passage" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Speaches rejected the selected voice.");
     expect(screen.getByLabelText("Passage")).toHaveValue("Keep this passage.");
-    expect(screen.getByText("Up to five successful tests remain here until reload or restart.")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Audio player/u)).toBe(player);
     await user.click(screen.getByRole("button", { name: "Retry synthesis" }));
     expect(await screen.findByLabelText(/Audio player/u)).toBeInTheDocument();
-    expect(preview).toHaveBeenCalledTimes(2);
+    expect(preview).toHaveBeenCalledTimes(3);
   });
 });

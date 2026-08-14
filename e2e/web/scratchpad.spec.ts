@@ -37,14 +37,20 @@ test.describe("Quick Scratchpad", () => {
     await openRoute(page, studyNarrator, "/scratchpad");
     await expect(page.getByRole("heading", { name: "Quick Scratchpad" })).toBeVisible();
     await expect(page.getByLabel("Connection profile")).toHaveValue(/.+/u);
-    await expect(page.getByLabel("Model ID")).toHaveValue("speaches-ai/Kokoro-82M-v1.0-ONNX");
-    await expect(page.getByLabel("Voice catalog or manual ID")).toHaveValue("af_heart");
+    await expect(page.getByLabel("Model")).toHaveValue("speaches-ai/Kokoro-82M-v1.0-ONNX");
+    await expect(page.getByLabel("Voice")).toHaveValue("af_heart");
+    await expect(page.getByText("Recent results")).toHaveCount(0);
+    await expect(page.getByText("Sent to Speaches")).toHaveCount(0);
+    await expect(page.getByText("No audio loaded")).toHaveCount(0);
+    await expect(page.getByLabel(/Audio player/u)).toHaveCount(0);
     await page.getByLabel("Speed").fill("1.25");
     await page.getByLabel("Passage").fill(original);
+    await page.reload();
+    await expect(page.getByLabel("Passage")).toHaveValue(original);
+    await expect(page.getByLabel("Model")).toHaveValue("speaches-ai/Kokoro-82M-v1.0-ONNX");
+    await expect(page.getByLabel("Voice")).toHaveValue("af_heart");
+    await page.getByLabel("Speed").fill("1.25");
     await page.getByLabel("Apply global lexicon").check();
-    const preview = page.getByLabel("Scratchpad text preview");
-    await expect(preview.getByText("Original").locator("..")).toContainText(original);
-    await expect(preview.getByText("Sent to Speaches").locator("..")).toContainText(transformed);
 
     await page.getByRole("button", { name: "Synthesize passage" }).click();
     const player = page.getByLabel(/Audio player for/u);
@@ -65,33 +71,39 @@ test.describe("Quick Scratchpad", () => {
     });
     expect(JSON.stringify(studyNarrator.fakeSpeaches.getState())).not.toContain(original);
 
-    await page.getByLabel("Voice catalog or manual ID").fill("af_sky");
+    await page.getByLabel("Voice").selectOption("af_sky");
     await page.getByRole("button", { name: "Synthesize passage" }).click();
     await expect.poll(() => successfulRequests().length).toBe(2);
     expect(successfulRequests()[1]).toMatchObject({ voice: "af_sky", speed: 1.25 });
+    await expect(page.getByLabel(/Audio player/u)).toHaveCount(1);
+    const cacheAfterReplacement = await request.get(`${studyNarrator.baseUrl}/api/speech-cache`);
+    expect(cacheAfterReplacement.ok()).toBe(true);
+    expect(await cacheAfterReplacement.json()).toMatchObject({ entryCount: 1 });
 
-    const historyResults = page.getByLabel("Scratchpad session history").getByRole("button").filter({ hasNotText: "Clear" });
-    await expect(historyResults).toHaveCount(2);
     studyNarrator.fakeSpeaches.setScenario("rejected-voice");
-    await page.getByLabel("Voice catalog or manual ID").fill("rejected_voice");
+    await page.getByLabel("Passage").fill("A distinct rejected passage.");
     await page.getByRole("button", { name: "Synthesize passage" }).click();
     await expect(page.getByRole("alert")).toContainText("rejected the selected model or voice");
-    await expect(page.getByLabel("Passage")).toHaveValue(original);
-    await expect(page.getByLabel("Voice catalog or manual ID")).toHaveValue("rejected_voice");
-    await expect(historyResults).toHaveCount(2);
+    await expect(page.getByLabel("Passage")).toHaveValue("A distinct rejected passage.");
+    await expect(page.getByLabel(/Audio player/u)).toHaveCount(1);
     studyNarrator.fakeSpeaches.setScenario("healthy");
     await page.getByRole("button", { name: "Retry synthesis" }).click();
-    await expect(historyResults).toHaveCount(3);
+    await expect.poll(() => successfulRequests().length).toBe(3);
+    await expect(page.getByLabel(/Audio player/u)).toHaveCount(1);
 
     studyNarrator.fakeSpeaches.setScenario("timeout");
     await page.getByLabel("Passage").fill("A distinct timeout passage.");
     await page.getByRole("button", { name: "Synthesize passage" }).click();
     await expect(page.getByRole("alert")).toContainText("service is unavailable", { timeout: 5_000 });
     await expect(page.getByLabel("Passage")).toHaveValue("A distinct timeout passage.");
-    await expect(historyResults).toHaveCount(3);
+    await expect(page.getByLabel(/Audio player/u)).toHaveCount(1);
     studyNarrator.fakeSpeaches.setScenario("healthy");
     await page.getByRole("button", { name: "Retry synthesis" }).click();
-    await expect(historyResults).toHaveCount(4);
+    await expect.poll(() => successfulRequests().length).toBe(4);
+    await expect(page.getByLabel(/Audio player/u)).toHaveCount(1);
+    const finalCache = await request.get(`${studyNarrator.baseUrl}/api/speech-cache`);
+    expect(finalCache.ok()).toBe(true);
+    expect(await finalCache.json()).toMatchObject({ entryCount: 1 });
 
     const afterResponse = await request.get(`${studyNarrator.baseUrl}/api/projects/${created.id}`);
     expect(afterResponse.ok()).toBe(true);

@@ -7,11 +7,8 @@ export interface ScratchpadSessionResult {
 }
 
 interface ScratchpadSession {
-  results: ScratchpadSessionResult[];
   active: ScratchpadSessionResult | null;
-  add(result: ScratchpadPreviewResult): void;
-  select(id: string): void;
-  clear(): void;
+  replace(result: ScratchpadPreviewResult): void;
 }
 
 const Context = createContext<ScratchpadSession | null>(null);
@@ -24,40 +21,26 @@ function audioUrl(result: ScratchpadPreviewResult): string {
 }
 
 export function ScratchpadSessionProvider({ children }: { children: ReactNode }) {
-  const [results, setResults] = useState<ScratchpadSessionResult[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const resultsRef = useRef(results);
-  resultsRef.current = results;
+  const [active, setActive] = useState<ScratchpadSessionResult | null>(null);
+  const activeRef = useRef(active);
+  activeRef.current = active;
 
   useEffect(() => () => {
-    for (const item of resultsRef.current) URL.revokeObjectURL(item.audioUrl);
+    if (activeRef.current) URL.revokeObjectURL(activeRef.current.audioUrl);
   }, []);
 
-  const add = useCallback((result: ScratchpadPreviewResult) => {
+  const replace = useCallback((result: ScratchpadPreviewResult) => {
     const next = { result, audioUrl: audioUrl(result) };
-    setResults((current) => {
-      const retained = [next, ...current].slice(0, 5);
-      for (const removed of [next, ...current].slice(5)) URL.revokeObjectURL(removed.audioUrl);
-      return retained;
+    setActive((current) => {
+      if (current) URL.revokeObjectURL(current.audioUrl);
+      return next;
     });
-    setActiveId(result.id);
-  }, []);
-
-  const clear = useCallback(() => {
-    setResults((current) => {
-      for (const item of current) URL.revokeObjectURL(item.audioUrl);
-      return [];
-    });
-    setActiveId(null);
   }, []);
 
   const value = useMemo<ScratchpadSession>(() => ({
-    results,
-    active: results.find(({ result }) => result.id === activeId) ?? results[0] ?? null,
-    add,
-    select: setActiveId,
-    clear
-  }), [activeId, add, clear, results]);
+    active,
+    replace
+  }), [active, replace]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 

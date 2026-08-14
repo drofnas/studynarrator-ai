@@ -56,7 +56,15 @@ test.describe("Electron acceptance", () => {
     studyNarrator.fakeSpeaches.reset();
     await page.getByRole("link", { name: "Quick Scratchpad" }).click();
     await expect(page.getByRole("heading", { name: "Quick Scratchpad" })).toBeVisible();
+    await expect(page.getByLabel("Model")).toHaveValue("speaches-ai/Kokoro-82M-v1.0-ONNX");
+    await expect(page.getByLabel("Voice")).toHaveValue("af_heart");
+    await expect(page.getByText("Recent results")).toHaveCount(0);
+    await expect(page.getByText("Sent to Speaches")).toHaveCount(0);
+    await expect(page.getByText("No audio loaded")).toHaveCount(0);
     await page.getByLabel("Passage").fill("SQL indexes can improve database reads.");
+    await page.getByRole("link", { name: "Projects" }).click();
+    await page.getByRole("link", { name: "Quick Scratchpad" }).click();
+    await expect(page.getByLabel("Passage")).toHaveValue("SQL indexes can improve database reads.");
     await page.getByRole("button", { name: "Synthesize passage" }).click();
     const player = page.getByLabel(/Audio player for/u);
     await expect(player).toBeVisible();
@@ -65,6 +73,10 @@ test.describe("Electron acceptance", () => {
     await expect(player.getByRole("status")).toHaveText("Playing");
     await expect(player.getByRole("status")).toHaveText("Playback complete", { timeout: 5_000 });
     expect(studyNarrator.fakeSpeaches.getState().requests.filter(({ path }) => path === "/v1/audio/speech")).toHaveLength(1);
+    await page.getByLabel("Voice").selectOption("af_sky");
+    await page.getByRole("button", { name: "Synthesize passage" }).click();
+    await expect(page.getByLabel(/Audio player for/u)).toHaveCount(1);
+    expect(studyNarrator.fakeSpeaches.getState().requests.filter(({ path }) => path === "/v1/audio/speech")).toHaveLength(2);
 
     await page.getByRole("link", { name: "Projects" }).click();
     await createProject(page, "Desktop model voices");
@@ -75,7 +87,7 @@ test.describe("Electron acceptance", () => {
     await expect(page.getByLabel("Voices")).toHaveValue(FAKE_SPEACHES_SECONDARY_VOICE_ID);
     await page.getByRole("button", { name: "Save now" }).click();
     await expect(page.getByText("All changes saved.")).toBeVisible();
-    expect(studyNarrator.fakeSpeaches.getState().requests.filter(({ path }) => path === "/v1/audio/speech")).toHaveLength(1);
+    expect(studyNarrator.fakeSpeaches.getState().requests.filter(({ path }) => path === "/v1/audio/speech")).toHaveLength(2);
 
     await page.getByRole("link", { name: "Settings", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
