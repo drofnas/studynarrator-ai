@@ -45,21 +45,22 @@ describe("database migrations", () => {
       { version: 3, name: "speaches-connections" },
       { version: 4, name: "project-transition-pauses" },
       { version: 5, name: "render-execution" },
-      { version: 6, name: "render-review-media" }
+      { version: 6, name: "render-review-media" },
+      { version: 7, name: "single-speaches-connection" }
     ]);
   });
 
-  it("creates schema version 6 and reruns without duplicate migrations or backups", async () => {
+  it("creates schema version 7 and reruns without duplicate migrations or backups", async () => {
     const databasePath = await temporaryDatabase("studynarrator-migration-fresh-");
     const first = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-12T12:00:00.000Z") });
-    expect(first.appliedVersions).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(first.appliedVersions).toEqual([1, 2, 3, 4, 5, 6, 7]);
     expect(first.backupPath).toBeNull();
     first.database.close();
 
     const second = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-13T12:00:00.000Z") });
     expect(second.appliedVersions).toEqual([]);
     expect(second.backupPath).toBeNull();
-    expect(second.database.prepare("SELECT count(*) AS count FROM schema_migrations").get()).toEqual({ count: 6 });
+    expect(second.database.prepare("SELECT count(*) AS count FROM schema_migrations").get()).toEqual({ count: 7 });
     second.database.close();
   });
 
@@ -70,8 +71,8 @@ describe("database migrations", () => {
     old.close();
 
     const upgraded = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-12T12:00:00.000Z") });
-    expect(upgraded.appliedVersions).toEqual([2, 3, 4, 5, 6]);
-    expect(upgraded.backupPath).toContain("-v1-to-v6-");
+    expect(upgraded.appliedVersions).toEqual([2, 3, 4, 5, 6, 7]);
+    expect(upgraded.backupPath).toContain("-v1-to-v7-");
     expect((await stat(upgraded.backupPath!)).mode & 0o777).toBe(0o600);
     expect(upgraded.database.prepare("SELECT value FROM diagnostic_kv WHERE key = 'fixture'").get()).toEqual({ value: "preserved" });
     const backup = new Database(upgraded.backupPath!, { readonly: true });
@@ -98,10 +99,48 @@ describe("database migrations", () => {
     previous.database.close();
 
     const upgraded = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-13T12:00:00.000Z") });
-    expect(upgraded.appliedVersions).toEqual([3, 4, 5, 6]);
-    expect(upgraded.backupPath).toContain("-v2-to-v6-");
+    expect(upgraded.appliedVersions).toEqual([3, 4, 5, 6, 7]);
+    expect(upgraded.backupPath).toContain("-v2-to-v7-");
     expect(upgraded.database.prepare("SELECT name, model_id, paragraph_transition_mode, paragraph_transition_pause_id FROM projects WHERE id = ?").get(projectId))
       .toEqual({ name: "V2 project", model_id: null, paragraph_transition_mode: "preset", paragraph_transition_pause_id: "pause_medium" });
+    upgraded.database.close();
+  });
+
+  it("collapses legacy profiles to the configured active connection and remaps projects", async () => {
+    const databasePath = await temporaryDatabase("studynarrator-migration-single-connection-");
+    const legacy = await migrateDatabase({
+      Database: DatabaseAdapter,
+      databasePath,
+      migrations: STUDYNARRATOR_MIGRATIONS.slice(0, 6),
+      now: () => new Date("2026-08-12T12:00:00.000Z")
+    });
+    const insertProfile = legacy.database.prepare(`
+      INSERT INTO connection_profiles (
+        id, ordinal, name, base_url, default_model_id, default_voice_id, source,
+        api_key_reference, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    insertProfile.run("saved-first", 0, "Saved first", "http://127.0.0.1:8001", "model-a", "voice-a", "saved", "safe-storage:saved-first", "2026-08-12T12:00:00.000Z", "2026-08-12T12:00:00.000Z");
+    insertProfile.run("active-environment", 1, "Environment Speaches", "http://127.0.0.1:8002", "model-b", "voice-b", "environment", "environment:SPEACHES_API_KEY", "2026-08-12T12:00:00.000Z", "2026-08-12T12:00:00.000Z");
+    legacy.database.prepare("INSERT INTO connection_setup (singleton_id, active_profile_id, onboarding_completed_at, updated_at) VALUES (1, ?, ?, ?)")
+      .run("active-environment", "2026-08-12T12:00:00.000Z", "2026-08-12T12:00:00.000Z");
+    legacy.database.prepare(`
+      INSERT INTO projects (
+        id, config_version, name, description, script_source, script_hash, connection_profile_id,
+        paragraph_pause_enabled, paragraph_pause_id, paragraph_pause_duration_ms, created_at, updated_at
+      ) VALUES (?, 1, 'Legacy project', '', 'SQL', ?, ?, 1, 'pause_medium', 750, ?, ?)
+    `).run(projectId, "a".repeat(64), "saved-first", "2026-08-12T12:00:00.000Z", "2026-08-12T12:00:00.000Z");
+    legacy.database.close();
+
+    const upgraded = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-13T12:00:00.000Z") });
+    expect(upgraded.appliedVersions).toEqual([7]);
+    expect(upgraded.database.prepare("SELECT id, name, source, api_key_reference FROM connection_profiles").all()).toEqual([
+      { id: "active-environment", name: "Speaches", source: "saved", api_key_reference: null }
+    ]);
+    expect(upgraded.database.prepare("SELECT active_profile_id, onboarding_completed_at FROM connection_setup WHERE singleton_id = 1").get())
+      .toEqual({ active_profile_id: "active-environment", onboarding_completed_at: "2026-08-12T12:00:00.000Z" });
+    expect(upgraded.database.prepare("SELECT connection_profile_id FROM projects WHERE id = ?").get(projectId))
+      .toEqual({ connection_profile_id: "active-environment" });
     upgraded.database.close();
   });
 

@@ -15,7 +15,7 @@ import {
   type ConnectionProfile
 } from "./connections.js";
 
-export const DATABASE_SCHEMA_VERSION = 6;
+export const DATABASE_SCHEMA_VERSION = 7;
 export const PERSISTENCE_CONTRACT_VERSION = 4;
 export const PERSISTENCE_CHANNELS = Object.freeze({
   status: "persistence.status",

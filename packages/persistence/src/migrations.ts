@@ -237,6 +237,74 @@ const MIGRATION_6_SQL = `
   ALTER TABLE render_segments ADD COLUMN audio_checksum TEXT CHECK (audio_checksum IS NULL OR length(audio_checksum) = 64);
 `;
 
+const MIGRATION_7_SQL = `
+  INSERT OR IGNORE INTO connection_setup (singleton_id, active_profile_id, onboarding_completed_at, updated_at)
+  VALUES (1, NULL, NULL, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+
+  CREATE TEMP TABLE migration_7_connection_winner (
+    id TEXT PRIMARY KEY
+  );
+
+  INSERT INTO migration_7_connection_winner (id)
+  SELECT profile.id
+  FROM connection_profiles AS profile
+  LEFT JOIN connection_setup AS setup ON setup.singleton_id = 1
+  ORDER BY
+    CASE
+      WHEN profile.id = setup.active_profile_id
+        AND profile.base_url IS NOT NULL
+        AND profile.default_model_id IS NOT NULL
+        AND profile.default_voice_id IS NOT NULL THEN 0
+      WHEN profile.source = 'saved'
+        AND profile.base_url IS NOT NULL
+        AND profile.default_model_id IS NOT NULL
+        AND profile.default_voice_id IS NOT NULL THEN 1
+      WHEN profile.base_url IS NOT NULL
+        AND profile.default_model_id IS NOT NULL
+        AND profile.default_voice_id IS NOT NULL THEN 2
+      WHEN profile.id = setup.active_profile_id THEN 3
+      WHEN profile.source = 'saved' THEN 4
+      ELSE 5
+    END,
+    profile.ordinal ASC,
+    profile.id ASC
+  LIMIT 1;
+
+  INSERT INTO connection_profiles (
+    id, ordinal, name, base_url, default_model_id, default_voice_id, source,
+    api_key_reference, timeout_seconds, retry_count, response_format,
+    supplied_url_form, last_tested_at, last_successful_test_at,
+    last_test_summary_json, created_at, updated_at
+  )
+  SELECT
+    'speaches', 0, 'Speaches', NULL, NULL, NULL, 'saved', NULL, 120, 2, 'wav',
+    'unconfigured', NULL, NULL, NULL,
+    strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+    strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+  WHERE NOT EXISTS (SELECT 1 FROM migration_7_connection_winner);
+
+  INSERT OR IGNORE INTO migration_7_connection_winner (id)
+  SELECT 'speaches';
+
+  UPDATE connection_profiles
+  SET name = 'Speaches', source = 'saved', api_key_reference = NULL,
+      updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+  WHERE id = (SELECT id FROM migration_7_connection_winner LIMIT 1);
+
+  UPDATE projects
+  SET connection_profile_id = (SELECT id FROM migration_7_connection_winner LIMIT 1);
+
+  UPDATE connection_setup
+  SET active_profile_id = (SELECT id FROM migration_7_connection_winner LIMIT 1),
+      updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+  WHERE singleton_id = 1;
+
+  DELETE FROM connection_profiles
+  WHERE id != (SELECT id FROM migration_7_connection_winner LIMIT 1);
+
+  DROP TABLE migration_7_connection_winner;
+`;
+
 export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
   { version: 1, name: "runtime-diagnostics", up: (database) => { database.exec(MIGRATION_1_SQL); } },
   {
@@ -272,6 +340,13 @@ export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
     name: "render-review-media",
     up: (database) => {
       database.exec(MIGRATION_6_SQL);
+    }
+  },
+  {
+    version: 7,
+    name: "single-speaches-connection",
+    up: (database) => {
+      database.exec(MIGRATION_7_SQL);
     }
   }
 ]);
