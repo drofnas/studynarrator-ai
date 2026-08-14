@@ -25,6 +25,7 @@ const entries: VoiceCatalogEntry[] = groups.flatMap((group) => group.ids.map((vo
   voiceId,
   label: `${friendlyName(voiceId)} — ${group.language} — ${voiceId}`,
   enabled: true,
+  favorite: false,
   language: group.language,
   locale: group.locale,
   accent: group.language === "American English" ? "American" : group.language === "British English" ? "British" : null,

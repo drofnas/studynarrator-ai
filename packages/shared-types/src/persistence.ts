@@ -9,8 +9,8 @@ import {
 } from "@studynarrator/core";
 import { z } from "zod";
 
-export const DATABASE_SCHEMA_VERSION = 8;
-export const PERSISTENCE_CONTRACT_VERSION = 6;
+export const DATABASE_SCHEMA_VERSION = 9;
+export const PERSISTENCE_CONTRACT_VERSION = 7;
 export const PERSISTENCE_CHANNELS = Object.freeze({
   status: "persistence.status",
   projectsList: "projects.list",

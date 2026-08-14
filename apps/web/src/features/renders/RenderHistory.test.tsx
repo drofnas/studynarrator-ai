@@ -72,7 +72,7 @@ describe("RenderHistory", () => {
       return <RenderHistory jobs={[job]} expandedJob={expanded} client={client} onExpand={setExpanded}
         onCancel={vi.fn()} onRetry={vi.fn()} onRerender={onRerender} onSourceLine={onSourceLine}
         onNotice={onNotice} onError={vi.fn()} voiceCatalog={{ schemaVersion: 1, modelId: "frozen-model", entries: [{
-          voiceId: "voice_teacher", label: "Teacher Voice", enabled: true, language: null, locale: null,
+          voiceId: "voice_teacher", label: "Teacher Voice", enabled: true, favorite: false, language: null, locale: null,
           accent: null, category: null, style: null, sampleText: null
         }] }} />;
     }

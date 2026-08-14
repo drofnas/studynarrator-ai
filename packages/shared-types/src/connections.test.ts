@@ -66,7 +66,7 @@ describe("connection contracts", () => {
       schemaVersion: 1,
       modelId: "speaches-ai/Kokoro-82M-v1.0-ONNX",
       entries: [{ voiceId: "af_heart", label: "Heart", enabled: true }]
-    }).entries[0]).toMatchObject({ voiceId: "af_heart", language: null });
+    }).entries[0]).toMatchObject({ voiceId: "af_heart", favorite: false, language: null });
     expect(() => VoiceCatalogSchema.parse({
       schemaVersion: 1,
       modelId: "model",

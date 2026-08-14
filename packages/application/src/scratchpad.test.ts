@@ -32,7 +32,7 @@ function repository(): ScratchpadRepository {
     replaceSpeachesConnection: vi.fn(), recordConnectionTest: vi.fn(), getConnectionSetup: vi.fn(), completeConnectionOnboarding: vi.fn(),
     getVoiceCatalogOverrides: vi.fn(() => ({
       schemaVersion: 1, modelId: "model", entries: [{
-        voiceId: "voice", label: "Friendly Voice", enabled: true, language: null, locale: null,
+        voiceId: "voice", label: "Friendly Voice", enabled: true, favorite: false, language: null, locale: null,
         accent: null, category: null, style: null, sampleText: null
       }]
     })), replaceVoiceCatalogOverrides: vi.fn()

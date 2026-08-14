@@ -151,7 +151,7 @@ export interface SpeachesConnectionClient {
 export const VoiceCatalogModelInputSchema = z.object({ modelId: z.string().trim().min(1).max(500) }).strict();
 
 export const VoiceCatalogEntrySchema = z.object({
-  voiceId: z.string().trim().min(1).max(500), label: z.string().trim().min(1).max(200), enabled: z.boolean().default(true),
+  voiceId: z.string().trim().min(1).max(500), label: z.string().trim().min(1).max(200), enabled: z.boolean().default(true), favorite: z.boolean().default(false),
   language: z.string().trim().min(1).max(100).nullable().default(null), locale: z.string().trim().min(1).max(50).nullable().default(null),
   accent: z.string().trim().min(1).max(100).nullable().default(null), category: z.string().trim().min(1).max(100).nullable().default(null),
   style: z.string().trim().min(1).max(200).nullable().default(null), sampleText: z.string().max(2_000).nullable().default(null)

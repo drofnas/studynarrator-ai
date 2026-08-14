@@ -50,10 +50,10 @@ const diagnostics = {
 } as const;
 
 const persistenceStatus = {
-  contractVersion: 6 as const,
+  contractVersion: 7 as const,
   state: "ready" as const,
-  databaseSchemaVersion: 8 as const,
-  targetDatabaseSchemaVersion: 8 as const,
+  databaseSchemaVersion: 9 as const,
+  targetDatabaseSchemaVersion: 9 as const,
   databasePath: "/tmp/studynarrator.sqlite",
   latestBackupPath: null
 };
@@ -261,7 +261,7 @@ describe("Electron boundary", () => {
   it("invokes every public IPC contract with schema-valid input and output", async () => {
     const timestamp = "2026-08-12T12:00:00.000Z";
     const project = {
-      contractVersion: 6 as const,
+      contractVersion: 7 as const,
       id: "00000000-0000-4000-8000-000000000001",
       name: "IPC project",
       description: "",

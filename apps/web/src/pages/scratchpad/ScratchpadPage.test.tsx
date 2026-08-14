@@ -31,7 +31,7 @@ const connections = {
   getSetupState: vi.fn(async () => ({ onboardingCompletedAt: timestamp, client: "web" as const })),
   completeOnboarding: vi.fn()
 };
-const voiceCatalog = { get: vi.fn(async () => ({ schemaVersion: 1 as const, modelId: "model", entries: [{ voiceId: "voice", label: "Teacher — voice", enabled: true, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }] })), replace: vi.fn() };
+const voiceCatalog = { get: vi.fn(async () => ({ schemaVersion: 1 as const, modelId: "model", entries: [{ voiceId: "voice", label: "Teacher — voice", enabled: true, favorite: false, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }] })), replace: vi.fn() };
 
 function previewResult(text: string): ScratchpadPreviewResult {
   return {
@@ -50,7 +50,7 @@ function renderPage(preview = vi.fn(async (input: { text: string }) => previewRe
 beforeEach(() => {
   window.sessionStorage.clear();
   connections.discoverSpeechCatalog.mockResolvedValue({ schemaVersion: 1 as const, models: [{ modelId: "model", voices: [{ voiceId: "voice", name: "Teacher", language: null, gender: null }] }] });
-  voiceCatalog.get.mockResolvedValue({ schemaVersion: 1 as const, modelId: "model", entries: [{ voiceId: "voice", label: "Teacher — voice", enabled: true, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }] });
+  voiceCatalog.get.mockResolvedValue({ schemaVersion: 1 as const, modelId: "model", entries: [{ voiceId: "voice", label: "Teacher — voice", enabled: true, favorite: false, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }] });
   vi.stubGlobal("atob", (value: string) => Buffer.from(value, "base64").toString("binary"));
   vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:scratchpad");
   vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);

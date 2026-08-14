@@ -170,6 +170,11 @@ const MIGRATION_3_SQL = `
   );
 `;
 
+const MIGRATION_9_SQL = `
+  ALTER TABLE voice_catalog_overrides
+  ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0 CHECK (favorite IN (0, 1));
+`;
+
 const MIGRATION_4_SQL = `
   ALTER TABLE projects ADD COLUMN paragraph_transition_mode TEXT NOT NULL DEFAULT 'preset' CHECK (paragraph_transition_mode IN ('none', 'preset', 'duration'));
   ALTER TABLE projects ADD COLUMN paragraph_transition_pause_id TEXT;
@@ -394,6 +399,13 @@ export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
     version: 8,
     name: "simplified-global-lexicon",
     up: migrateSimplifiedGlobalLexicon
+  },
+  {
+    version: 9,
+    name: "voice-catalog-favorites",
+    up: (database) => {
+      database.exec(MIGRATION_9_SQL);
+    }
   }
 ]);
 

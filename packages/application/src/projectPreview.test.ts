@@ -12,7 +12,7 @@ const profile = {
   lastTestedAt: null, lastSuccessfulTestAt: null, lastTestSummary: null, createdAt: timestamp, updatedAt: timestamp
 };
 const project = {
-  contractVersion: 6 as const,
+  contractVersion: 7 as const,
   id: projectId,
   name: "Preview project",
   description: "",
@@ -37,7 +37,7 @@ function repository(): ProjectPreviewRepository {
     getSpeachesConnection: vi.fn(() => profile),
     getVoiceCatalogOverrides: vi.fn(() => ({
       schemaVersion: 1, modelId: "model", entries: [{
-        voiceId: "voice-teacher", label: "Teacher Voice", enabled: true, language: null, locale: null,
+        voiceId: "voice-teacher", label: "Teacher Voice", enabled: true, favorite: false, language: null, locale: null,
         accent: null, category: null, style: null, sampleText: null
       }]
     }))

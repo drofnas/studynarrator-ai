@@ -31,6 +31,7 @@ export function supportedProjectVoices(
       voiceId: voice.voiceId,
       label: voice.name && voice.name !== voice.voiceId ? `${voice.name} — ${voice.voiceId}` : voice.voiceId,
       enabled: true,
+      favorite: false,
       language: voice.language,
       locale: null,
       accent: null,

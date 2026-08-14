@@ -19,7 +19,7 @@ const profile = {
 
 function project(): ProjectDetail {
   return {
-    contractVersion: 6,
+    contractVersion: 7,
     id: projectId,
     name: "Render plan fixture",
     description: "",

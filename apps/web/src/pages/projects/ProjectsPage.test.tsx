@@ -13,7 +13,7 @@ import { ProjectsPage } from "./ProjectsPage.js";
 import { ConnectionProvider } from "@/features/connections/ConnectionProvider.js";
 
 const project: ProjectDetail = {
-  contractVersion: 6,
+  contractVersion: 7,
   id: "00000000-0000-4000-8000-000000000001",
   name: "Authoring study",
   description: "Offline fixture",
@@ -35,8 +35,8 @@ const project: ProjectDetail = {
 };
 
 const globalCatalog: VoiceCatalog = { schemaVersion: 1, modelId: GLOBAL_VOICE_CATALOG_MODEL_ID, entries: [
-  { voiceId: "af_heart", label: "Heart — American English — af_heart", enabled: true, language: "American English", locale: "en-US", accent: "American", category: null, style: null, sampleText: null },
-  { voiceId: "af_sky", label: "Sky — American English — af_sky", enabled: true, language: "American English", locale: "en-US", accent: "American", category: null, style: null, sampleText: null }
+  { voiceId: "af_heart", label: "Heart — American English — af_heart", enabled: true, favorite: false, language: "American English", locale: "en-US", accent: "American", category: null, style: null, sampleText: null },
+  { voiceId: "af_sky", label: "Sky — American English — af_sky", enabled: true, favorite: false, language: "American English", locale: "en-US", accent: "American", category: null, style: null, sampleText: null }
 ] };
 
 function projectPreviewResult(mode: "segment" | "pronunciation" = "segment"): ProjectPreviewResult {
@@ -264,8 +264,8 @@ describe("Projects workbench", () => {
       lastTestSummary: summary as SpeachesConnection["lastTestSummary"], createdAt: summary.testedAt, updatedAt: summary.testedAt
     };
     const catalog: VoiceCatalog = { schemaVersion: 1, modelId: connection.defaultModelId!, entries: [
-      { voiceId: "af_heart", label: "Heart — American English — af_heart", enabled: true, language: "American English", locale: "en-US", accent: "American", category: null, style: null, sampleText: null },
-      { voiceId: "af_sky", label: "Sky — American English — af_sky", enabled: true, language: "American English", locale: "en-US", accent: "American", category: null, style: null, sampleText: null }
+      { voiceId: "af_heart", label: "Heart — American English — af_heart", enabled: true, favorite: false, language: "American English", locale: "en-US", accent: "American", category: null, style: null, sampleText: null },
+      { voiceId: "af_sky", label: "Sky — American English — af_sky", enabled: true, favorite: false, language: "American English", locale: "en-US", accent: "American", category: null, style: null, sampleText: null }
     ] };
     renderPage(client, analyze, { connection, catalog });
     await openProjectTab("Settings");
@@ -291,9 +291,9 @@ describe("Projects workbench", () => {
     const connected = { ...project, modelId: "model-a", speakerMappings: [{ ...project.speakerMappings[0]!, voiceId: "voice-a" }] };
     const { client, analyze, replace } = fixture(connected);
     const catalog: VoiceCatalog = { schemaVersion: 1, modelId: "model-a", entries: [
-      { voiceId: "voice-a", label: "Catalog A", enabled: true, language: null, locale: null, accent: null, category: null, style: null, sampleText: null },
-      { voiceId: "voice-b", label: "Catalog B", enabled: true, language: null, locale: null, accent: null, category: null, style: null, sampleText: null },
-      { voiceId: "voice-disabled", label: "Disabled", enabled: false, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }
+      { voiceId: "voice-a", label: "Catalog A", enabled: true, favorite: false, language: null, locale: null, accent: null, category: null, style: null, sampleText: null },
+      { voiceId: "voice-b", label: "Catalog B", enabled: true, favorite: false, language: null, locale: null, accent: null, category: null, style: null, sampleText: null },
+      { voiceId: "voice-disabled", label: "Disabled", enabled: false, favorite: false, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }
     ] };
     const speechCatalog: SpeechCatalog = { schemaVersion: 1, models: [
       { modelId: "model-a", voices: [
@@ -332,7 +332,7 @@ describe("Projects workbench", () => {
     const connected = { ...project, modelId: "model-a", speakerMappings: [{ ...project.speakerMappings[0]!, voiceId: "voice-a" }] };
     const { client, analyze, replace } = fixture(connected);
     const catalog: VoiceCatalog = { schemaVersion: 1, modelId: "model-a", entries: [
-      { voiceId: "voice-a", label: "Catalog A", enabled: true, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }
+      { voiceId: "voice-a", label: "Catalog A", enabled: true, favorite: false, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }
     ] };
     const speechCatalog: SpeechCatalog = { schemaVersion: 1, models: [{ modelId: "model-a", voices: [{ voiceId: "voice-a", name: "Voice A", language: null, gender: null }] }] };
     const fetchSpy = vi.spyOn(globalThis, "fetch");
@@ -543,7 +543,7 @@ describe("Projects workbench", () => {
       createdAt: project.createdAt, updatedAt: project.updatedAt
     };
     const catalog: VoiceCatalog = { schemaVersion: 1, modelId: "model", entries: [{
-      voiceId: "voice_teacher", label: "Teacher Voice", enabled: true, language: null, locale: null, accent: null, category: null, style: null, sampleText: null
+      voiceId: "voice_teacher", label: "Teacher Voice", enabled: true, favorite: false, language: null, locale: null, accent: null, category: null, style: null, sampleText: null
     }] };
     const preview = vi.fn(async (_projectId: string, input: { mode: "segment" | "pronunciation" }) => projectPreviewResult(input.mode));
     const clearProject = vi.fn(async () => ({ contractVersion: 1 as const, entriesRemoved: 2, bytesFreed: 6 }));

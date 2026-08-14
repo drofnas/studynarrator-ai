@@ -195,8 +195,8 @@ describe("System Settings", () => {
   it("uses an editable singleton, preserves server ordering, and auditions disabled voices without a player", async () => {
     const localVoiceCatalog = {
       get: vi.fn(async (modelId: string) => ({ schemaVersion: 1 as const, modelId, entries: [
-        { voiceId: "voice-b1", label: "First voice", enabled: true, language: "English", locale: "en-US", accent: null, category: null, style: null, sampleText: null },
-        { voiceId: "voice-b2", label: "Disabled locally", enabled: false, language: "English", locale: "en-US", accent: null, category: null, style: null, sampleText: null }
+        { voiceId: "voice-b1", label: "First voice", enabled: true, favorite: false, language: "English", locale: "en-US", accent: null, category: null, style: null, sampleText: null },
+        { voiceId: "voice-b2", label: "Disabled locally", enabled: false, favorite: false, language: "English", locale: "en-US", accent: null, category: null, style: null, sampleText: null }
       ] })),
       replace: vi.fn()
     };
@@ -238,7 +238,7 @@ describe("System Settings", () => {
 
   it("returns an audition button to normal and reports decoding failures", async () => {
     audioContext.decodeAudioData.mockRejectedValue(new Error("Unsupported WAV data"));
-    const localVoiceCatalog = { get: vi.fn(async (modelId: string) => ({ schemaVersion: 1 as const, modelId, entries: [{ voiceId: "voice-b2", label: "Second voice", enabled: true, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }] })), replace: vi.fn() };
+    const localVoiceCatalog = { get: vi.fn(async (modelId: string) => ({ schemaVersion: 1 as const, modelId, entries: [{ voiceId: "voice-b2", label: "Second voice", enabled: true, favorite: false, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }] })), replace: vi.fn() };
     const client = { settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() }, globalLexicon: { list: vi.fn(async () => []), replace: vi.fn(async (entries: GlobalLexiconReplaceInput) => entries) } } as unknown as PersistenceClient;
     render(<ConnectionProvider connectionClient={connectionClient()} voiceCatalog={localVoiceCatalog}><SettingsPage client={client} cacheClient={cacheClient} scratchpadClient={scratchpadClient} /></ConnectionProvider>);
     await userEvent.click(await screen.findByRole("button", { name: "Test Second voice" }));
@@ -252,7 +252,7 @@ describe("System Settings", () => {
       pendingSignal = signal;
       return new Promise((_resolve, reject) => signal?.addEventListener("abort", () => reject(new DOMException("Cancelled", "AbortError"))));
     });
-    const localVoiceCatalog = { get: vi.fn(async (modelId: string) => ({ schemaVersion: 1 as const, modelId, entries: [{ voiceId: "voice-b2", label: "Second voice", enabled: true, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }] })), replace: vi.fn() };
+    const localVoiceCatalog = { get: vi.fn(async (modelId: string) => ({ schemaVersion: 1 as const, modelId, entries: [{ voiceId: "voice-b2", label: "Second voice", enabled: true, favorite: false, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }] })), replace: vi.fn() };
     const client = { settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() }, globalLexicon: { list: vi.fn(async () => []), replace: vi.fn(async (entries: GlobalLexiconReplaceInput) => entries) } } as unknown as PersistenceClient;
     const view = render(<ConnectionProvider connectionClient={connectionClient()} voiceCatalog={localVoiceCatalog}><SettingsPage client={client} cacheClient={cacheClient} scratchpadClient={{ preview }} /></ConnectionProvider>);
     const button = await screen.findByRole("button", { name: "Test Second voice" });

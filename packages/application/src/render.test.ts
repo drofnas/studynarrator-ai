@@ -48,7 +48,7 @@ async function fixture(options: { legacyProfileId?: string } = {}) {
   const baseUrl = "http://127.0.0.1:8765";
   const timestamp = "2026-08-13T12:00:00.000Z";
   const project = {
-    contractVersion: 6 as const, id: projectId, name: "Render fixture", description: "", scriptSource: "narrator: Render me.",
+    contractVersion: 7 as const, id: projectId, name: "Render fixture", description: "", scriptSource: "narrator: Render me.",
     scriptHash: sha("narrator: Render me."), modelId: "model",
     speakerMappings: [{ speakerId: "narrator", displayName: "Narrator", voiceId: "voice", speed: 1, gainDb: 0, roleDescription: "", sampleText: "" }],
     pausePresets: [], transitionPauses: { paragraph: { mode: "none" as const }, speakerChange: { mode: "none" as const }, section: { mode: "none" as const } },

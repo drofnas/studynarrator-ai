@@ -467,10 +467,10 @@ function createRepository(options: {
   const getVoiceCatalogOverrides = (modelId: string): VoiceCatalog => {
     assertOpen();
     const rows = database.prepare(`
-      SELECT voice_id, label, enabled, language, locale, accent, category, style, sample_text
+      SELECT voice_id, label, enabled, favorite, language, locale, accent, category, style, sample_text
       FROM voice_catalog_overrides WHERE model_id = ? ORDER BY ordinal ASC, voice_id ASC
     `).all(modelId) as Array<{
-      voice_id: string; label: string; enabled: number; language: string | null; locale: string | null;
+      voice_id: string; label: string; enabled: number; favorite: number; language: string | null; locale: string | null;
       accent: string | null; category: string | null; style: string | null; sample_text: string | null;
     }>;
     return VoiceCatalogSchema.parse({
@@ -480,6 +480,7 @@ function createRepository(options: {
         voiceId: row.voice_id,
         label: row.label,
         enabled: booleanFromSql(row.enabled),
+        favorite: booleanFromSql(row.favorite),
         language: row.language,
         locale: row.locale,
         accent: row.accent,
@@ -773,11 +774,11 @@ function createRepository(options: {
         database.prepare("DELETE FROM voice_catalog_overrides WHERE model_id = ?").run(input.modelId);
         const insert = database.prepare(`
           INSERT INTO voice_catalog_overrides (
-            model_id, voice_id, ordinal, label, enabled, language, locale, accent, category, style, sample_text
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            model_id, voice_id, ordinal, label, enabled, favorite, language, locale, accent, category, style, sample_text
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
         input.entries.forEach((entry, ordinal) => insert.run(
-          input.modelId, entry.voiceId, ordinal, entry.label, booleanToSql(entry.enabled), entry.language,
+          input.modelId, entry.voiceId, ordinal, entry.label, booleanToSql(entry.enabled), booleanToSql(entry.favorite), entry.language,
           entry.locale, entry.accent, entry.category, entry.style, entry.sampleText
         ));
       });

@@ -31,7 +31,7 @@ const passingDiagnostics: SystemDiagnostics = {
       status: "pass",
       driver: "better-sqlite3",
       sqliteVersion: "3.50.0",
-      migrationVersion: 8,
+      migrationVersion: 9,
       databasePath: "/tmp/studynarrator/web/studynarrator.sqlite",
       latestBackupPath: null,
       markerKey: "runtime.storage-self-test",

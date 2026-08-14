@@ -90,6 +90,7 @@ class MemoryRepository implements ConnectionRepository {
       voiceId: entry.voiceId,
       label: entry.label,
       enabled: entry.enabled ?? true,
+      favorite: entry.favorite ?? false,
       language: entry.language ?? null,
       locale: entry.locale ?? null,
       accent: entry.accent ?? null,
@@ -129,8 +130,8 @@ describe("connection service", () => {
     await expect(connection.completeOnboarding()).resolves.toMatchObject({ onboardingCompletedAt: timestamp, client: "electron" });
 
     const catalog = createVoiceCatalogService({ repository, bundledCatalogs: new Map() });
-    await catalog.replace({ schemaVersion: 1, modelId: "model", entries: [{ voiceId: "voice", label: "Voice", enabled: false, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }] });
-    await expect(catalog.get("model")).resolves.toMatchObject({ entries: [{ voiceId: "voice", enabled: false }] });
+    await catalog.replace({ schemaVersion: 1, modelId: "model", entries: [{ voiceId: "voice", label: "Voice", enabled: false, favorite: true, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }] });
+    await expect(catalog.get("model")).resolves.toMatchObject({ entries: [{ voiceId: "voice", enabled: false, favorite: true }] });
   });
 
   it("discovers a draft without persisting it and preserves response order", async () => {

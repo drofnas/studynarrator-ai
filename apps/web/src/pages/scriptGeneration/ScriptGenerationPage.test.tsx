@@ -8,7 +8,7 @@ import type { PersistenceClient, ProjectDetail, ScriptGenerationClient } from "@
 import { ScriptGenerationPage } from "./ScriptGenerationPage.js";
 
 const project: ProjectDetail = {
-  contractVersion: 6,
+  contractVersion: 7,
   id: "00000000-0000-4000-8000-000000000001",
   name: "Caching guide",
   description: "Explain cache invalidation.",
