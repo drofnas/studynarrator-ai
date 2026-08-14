@@ -1,5 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 import { resolve } from "node:path";
+import { strFromU8, unzipSync } from "fflate";
 import type { StudyNarratorBridge } from "@studynarrator/shared-types";
 import { FAKE_SPEACHES_SECONDARY_MODEL_ID, FAKE_SPEACHES_SECONDARY_VOICE_ID } from "@studynarrator/fake-speaches";
 import { continueElectronOffline, expect, test } from "../support/electronTest.js";
@@ -33,7 +34,7 @@ test.describe("Electron acceptance", () => {
       };
     });
     expect(bridgeShape).toEqual({
-      bridge: ["connections", "persistence", "projectPreview", "renderPlans", "renders", "scratchpad", "speechCache", "system", "voiceCatalog"],
+      bridge: ["connections", "persistence", "projectPreview", "renderPlans", "renders", "scratchpad", "scriptGeneration", "speechCache", "system", "voiceCatalog"],
       hasRequire: false,
       hasProcess: false,
       frozen: true
@@ -160,6 +161,42 @@ test.describe("Electron acceptance", () => {
     }, segmentDestination);
     await segmentRow.getByRole("button", { name: "Save segment" }).click();
     await expect.poll(async () => (await stat(segmentDestination)).size).toBeGreaterThan(0);
+  });
+
+  test("saves prompt and reusable skill artifacts through native typed IPC without TTS", async ({ electronStudyNarrator, studyNarrator }) => {
+    const { page, application, dataDirectory } = electronStudyNarrator;
+    await continueElectronOffline(page);
+    studyNarrator.fakeSpeaches.reset();
+    const source = "DESKTOP-SESSION-SOURCE: Explain deterministic local exports.";
+    await page.getByLabel("Project name").fill("Desktop script package");
+    await page.getByRole("button", { name: "Create project" }).click();
+    await page.getByLabel("Script source").fill(`[speaker_narrator] ${source}`);
+    await page.getByRole("button", { name: "Save now" }).click();
+    await expect(page.getByText("All changes saved.")).toBeVisible();
+    await page.getByRole("button", { name: "Build external-LLM prompt" }).click();
+    await expect(page.getByRole("heading", { name: "Instruction workbench" })).toBeVisible();
+    await expect(page.getByLabel("Source material")).toHaveValue(`[speaker_narrator] ${source}`);
+    await page.getByRole("button", { name: "Assemble prompt" }).click();
+    await expect(page.getByLabel("Generated prompt preview")).toContainText(source);
+
+    const promptDestination = resolve(dataDirectory, "desktop-prompt.md");
+    const skillDestination = resolve(dataDirectory, "desktop-skill.zip");
+    await application.evaluate(({ dialog }: ElectronEvaluationApi, destinations) => {
+      dialog.showSaveDialog = ({ defaultPath }) => Promise.resolve({
+        canceled: false,
+        filePath: defaultPath.endsWith(".zip") ? destinations.skill : destinations.prompt
+      });
+    }, { prompt: promptDestination, skill: skillDestination });
+    await page.getByRole("button", { name: "Save prompt" }).click();
+    await expect.poll(async () => (await stat(promptDestination)).size).toBeGreaterThan(0);
+    await page.getByRole("button", { name: "Save skill package" }).click();
+    await expect.poll(async () => (await stat(skillDestination)).size).toBeGreaterThan(0);
+
+    expect(await readFile(promptDestination, "utf8")).toContain(source);
+    const files = unzipSync(await readFile(skillDestination));
+    expect(Object.keys(files).sort()).toEqual(["LEXICON_ALIASES.md", "SCRIPT_FORMAT.md", "SKILL.md", "examples/single-narrator.txt"]);
+    expect(Object.values(files).map((bytes) => strFromU8(bytes)).join("\n")).not.toContain(source);
+    expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/speech"] ?? 0).toBe(0);
   });
 
   test("clears one-shot credential input and never stores plaintext", async ({ electronStudyNarrator, studyNarrator }) => {

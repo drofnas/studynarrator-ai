@@ -8,11 +8,13 @@ export const ScriptGenerationSpeakerSchema = z.object({
   speakerId: SpeakerIdSchema,
   roleDescription: z.string().trim().min(1).max(5_000)
 }).strict();
+export type ScriptGenerationSpeaker = z.infer<typeof ScriptGenerationSpeakerSchema>;
 
 export const ScriptGenerationPauseSchema = z.object({
   pauseId: PauseIdSchema,
   description: z.string().trim().min(1).max(500)
 }).strict();
+export type ScriptGenerationPause = z.infer<typeof ScriptGenerationPauseSchema>;
 
 function uniqueIds(
   values: readonly { id: string }[],

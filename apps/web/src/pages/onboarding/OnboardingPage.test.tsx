@@ -49,7 +49,7 @@ function renderApp(connections: ConnectionsClient, route = "/projects") {
     status: vi.fn(async () => ({ contractVersion: 1 as const, entryCount: 0, totalBytes: 0, lastUsedAt: null, sessionHits: 0, sessionMisses: 0, sessionWrites: 0, sessionCorruptMisses: 0, inFlight: 0 })),
     clearAll: vi.fn(), clearProject: vi.fn(), clearEntry: vi.fn()
   };
-  return render(<MemoryRouter initialEntries={[route]}><App analyzer={{ analyze: vi.fn() }} client={{ diagnostics: vi.fn() }} persistence={persistence} connections={connections} voiceCatalog={voiceCatalog} scratchpad={{ preview: vi.fn() }} projectPreview={{ preview: vi.fn() }} speechCache={speechCache} renderPlans={{ create: vi.fn(), list: vi.fn(async () => []), get: vi.fn() }} /></MemoryRouter>);
+  return render(<MemoryRouter initialEntries={[route]}><App analyzer={{ analyze: vi.fn() }} client={{ diagnostics: vi.fn() }} persistence={persistence} connections={connections} voiceCatalog={voiceCatalog} scratchpad={{ preview: vi.fn() }} projectPreview={{ preview: vi.fn() }} speechCache={speechCache} renderPlans={{ create: vi.fn(), list: vi.fn(async () => []), get: vi.fn() }} scriptGeneration={{ previewPrompt: vi.fn(), exportPrompt: vi.fn(), exportSkillPackage: vi.fn() }} /></MemoryRouter>);
 }
 
 describe("connection onboarding", () => {

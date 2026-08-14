@@ -113,5 +113,7 @@ export {
   buildSkillPackageFiles,
   type GeneratedTextFile,
   type ScriptGenerationBrief,
-  type ScriptGenerationConfiguration
+  type ScriptGenerationConfiguration,
+  type ScriptGenerationPause,
+  type ScriptGenerationSpeaker
 } from "./scriptGeneration.js";

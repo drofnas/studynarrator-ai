@@ -28,13 +28,14 @@ const unusedSpeechCache = {
   status: vi.fn(async () => ({ contractVersion: 1 as const, entryCount: 0, totalBytes: 0, lastUsedAt: null, sessionHits: 0, sessionMisses: 0, sessionWrites: 0, sessionCorruptMisses: 0, inFlight: 0 })),
   clearAll: vi.fn(), clearProject: vi.fn(), clearEntry: vi.fn()
 };
+const unusedScriptGeneration = { previewPrompt: vi.fn(), exportPrompt: vi.fn(), exportSkillPackage: vi.fn() };
 
 afterEach(cleanup);
 
 function renderApp(route: string, client: SystemClient = { diagnostics: vi.fn() }, connections = unusedConnections) {
   return render(
     <MemoryRouter initialEntries={[route]}>
-      <App analyzer={unusedAnalyzer} client={client} persistence={unusedPersistence} connections={connections} voiceCatalog={unusedVoiceCatalog} scratchpad={unusedScratchpad} projectPreview={unusedProjectPreview} speechCache={unusedSpeechCache} renderPlans={{ create: vi.fn(), list: vi.fn(async () => []), get: vi.fn() }} />
+      <App analyzer={unusedAnalyzer} client={client} persistence={unusedPersistence} connections={connections} voiceCatalog={unusedVoiceCatalog} scratchpad={unusedScratchpad} projectPreview={unusedProjectPreview} speechCache={unusedSpeechCache} renderPlans={{ create: vi.fn(), list: vi.fn(async () => []), get: vi.fn() }} scriptGeneration={unusedScriptGeneration} />
     </MemoryRouter>
   );
 }

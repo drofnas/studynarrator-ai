@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ScriptGenerationBriefSchema, ScriptGenerationConfigurationSchema } from "@studynarrator/core";
+import { SCRIPT_GENERATION_SCHEMA_VERSION, ScriptGenerationBriefSchema, ScriptGenerationConfigurationSchema } from "@studynarrator/core";
 import { ProjectIdSchema } from "./persistence.js";
 
 export const SCRIPT_GENERATION_CHANNELS = Object.freeze({
@@ -38,5 +38,5 @@ export interface ScriptGenerationClient {
   exportSkillPackage(projectId: string, configuration: z.infer<typeof ScriptGenerationConfigurationSchema>): Promise<FileExportResult>;
 }
 
-export { ScriptGenerationBriefSchema, ScriptGenerationConfigurationSchema };
-export type { ScriptGenerationBrief, ScriptGenerationConfiguration } from "@studynarrator/core";
+export { SCRIPT_GENERATION_SCHEMA_VERSION, ScriptGenerationBriefSchema, ScriptGenerationConfigurationSchema };
+export type { ScriptGenerationBrief, ScriptGenerationConfiguration, ScriptGenerationPause, ScriptGenerationSpeaker } from "@studynarrator/core";
