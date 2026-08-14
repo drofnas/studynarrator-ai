@@ -77,6 +77,7 @@ export const test = base.extend<{
       ...(services.projectPreview === undefined ? {} : { projectPreview: services.projectPreview }),
       ...(services.renderPlans === undefined ? {} : { renderPlans: services.renderPlans }),
       ...(services.renders === undefined ? {} : { renders: services.renders }),
+      ...(services.scriptGeneration === undefined ? {} : { scriptGeneration: services.scriptGeneration }),
       speechCache: services.speechCache
     });
     attachStaticWebApplication(application, webDistribution);

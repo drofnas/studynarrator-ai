@@ -81,8 +81,8 @@ export const test = studyNarratorTest.extend<{ electronStudyNarrator: ElectronSt
 export async function continueElectronOffline(page: Page): Promise<void> {
   const onboarding = page.getByRole("heading", { name: "Connect the voice workshop" });
   const projects = page.getByRole("heading", { name: "Projects", exact: true });
-  await expect(onboarding.or(projects)).toBeVisible();
-  if (await onboarding.isVisible()) await page.getByRole("button", { name: "Continue offline" }).click();
+  await expect(onboarding).toBeVisible();
+  await page.getByRole("button", { name: "Continue offline" }).click();
   await expect(projects).toBeVisible();
 }
 

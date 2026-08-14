@@ -101,3 +101,18 @@ export {
   type PauseDurationParseResult,
   type ReconciledAuthoringConfiguration
 } from "./authoring.js";
+export {
+  SCRIPT_GENERATION_SCHEMA_VERSION,
+  ScriptGenerationContextSchema,
+  ScriptGenerationLexiconSchema,
+  ScriptGenerationPauseSchema,
+  ScriptGenerationSpeakerSchema,
+  ScriptPromptKindSchema,
+  buildExternalLlmPrompt,
+  buildSkillPackageFiles,
+  type GeneratedTextFile,
+  type ScriptGenerationContext,
+  type ScriptGenerationPause,
+  type ScriptGenerationSpeaker,
+  type ScriptPromptKind
+} from "./scriptGeneration.js";

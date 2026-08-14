@@ -10,6 +10,7 @@
     "@studynarrator/core": "0.1.0",
     "@studynarrator/rendering": "0.1.0",
     "@studynarrator/shared-types": "0.1.0",
-    "@studynarrator/speaches-adapter": "0.1.0"
+    "@studynarrator/speaches-adapter": "0.1.0",
+    "fflate": "^0.8.2"
   }
 }

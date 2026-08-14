@@ -6,6 +6,7 @@ import {
   RENDER_PLAN_CHANNELS,
   RENDER_CHANNELS,
   SCRATCHPAD_CHANNELS,
+  SCRIPT_GENERATION_CHANNELS,
   SPEECH_CACHE_CHANNELS,
   SYSTEM_DIAGNOSTICS_CHANNEL
 } from "@studynarrator/shared-types";
@@ -19,6 +20,7 @@ import {
   registerRenderPlanHandlers,
   registerRenderHandlers,
   registerScratchpadHandlers,
+  registerScriptGenerationHandlers,
   registerSpeechCacheHandlers
 } from "./ipc.js";
 import { isApprovedExternalUrl, SECURE_WEB_PREFERENCES } from "./security.js";
@@ -192,6 +194,12 @@ const renders = {
   close: vi.fn()
 };
 const saveDialog = { showSaveDialog: vi.fn(async () => ({ canceled: true })) };
+const promptDocument = { kind: "creation" as const, fileName: "prompt.md", mimeType: "text/markdown; charset=utf-8" as const, content: "Prompt", checksum: "a".repeat(64) };
+const scriptGeneration = {
+  previewPrompt: vi.fn(async () => promptDocument),
+  resolvePromptExport: vi.fn(async () => ({ fileName: "prompt.md", mimeType: "text/markdown; charset=utf-8" as const, bytes: Uint8Array.from([1]), checksum: "a".repeat(64) })),
+  resolveSkillPackage: vi.fn(async () => ({ fileName: "skill.zip", mimeType: "application/zip" as const, bytes: Uint8Array.from([1]), checksum: "b".repeat(64) }))
+};
 
 describe("Electron boundary", () => {
   it("exposes only the validated diagnostics and persistence operations", async () => {
@@ -201,7 +209,7 @@ describe("Electron boundary", () => {
       return persistenceStatus;
     });
     const bridge = createPreloadBridge(invoke);
-    expect(Object.keys(bridge)).toEqual(["system", "persistence", "connections", "voiceCatalog", "scratchpad", "projectPreview", "speechCache", "renderPlans", "renders"]);
+    expect(Object.keys(bridge)).toEqual(["system", "persistence", "connections", "voiceCatalog", "scratchpad", "projectPreview", "speechCache", "renderPlans", "renders", "scriptGeneration"]);
     expect(Object.keys(bridge.system)).toEqual(["diagnostics"]);
     await expect(bridge.system.diagnostics()).resolves.toEqual(diagnostics);
     expect(invoke).toHaveBeenCalledWith(SYSTEM_DIAGNOSTICS_CHANNEL);
@@ -239,6 +247,7 @@ describe("Electron boundary", () => {
     registerSpeechCacheHandlers(ipcMain, speechCache);
     registerRenderPlanHandlers(ipcMain, renderPlans);
     registerRenderHandlers(ipcMain, renders as never, saveDialog);
+    registerScriptGenerationHandlers(ipcMain, scriptGeneration, saveDialog);
     expect([...handlers.keys()]).toEqual(PUBLIC_IPC_CHANNEL_MANIFEST);
     expect([...handlers.keys()]).not.toContain("persistence.execute");
     await expect(handlers.get(SYSTEM_DIAGNOSTICS_CHANNEL)?.()).resolves.toEqual(diagnostics);
@@ -350,6 +359,7 @@ describe("Electron boundary", () => {
     registerSpeechCacheHandlers(ipcMain, speechCache);
     registerRenderPlanHandlers(ipcMain, renderPlans);
     registerRenderHandlers(ipcMain, renders as never, saveDialog);
+    registerScriptGenerationHandlers(ipcMain, scriptGeneration, saveDialog);
     const projectReplace = { name: project.name, description: "", scriptSource: "", connectionProfileId: null, modelId: null, speakerMappings: [], pausePresets: project.pausePresets, transitionPauses: project.transitionPauses, lexiconEntries: [] };
     const mutation = { profile: { id: "profile", name: "IPC profile", baseUrl: "http://127.0.0.1:8000", defaultModelId: "model", defaultVoiceId: "voice" }, credential: { action: "keep" } };
     const inputs: Record<string, unknown> = {
@@ -386,7 +396,10 @@ describe("Electron boundary", () => {
       [RENDER_CHANNELS.exportArtifact]: { artifactId: renderArtifact.id },
       [RENDER_CHANNELS.segments]: { renderId: renderJob.id },
       [RENDER_CHANNELS.waveform]: { renderId: renderJob.id },
-      [RENDER_CHANNELS.exportSegment]: { renderId: renderJob.id, ordinal: 1 }
+      [RENDER_CHANNELS.exportSegment]: { renderId: renderJob.id, ordinal: 1 },
+      [SCRIPT_GENERATION_CHANNELS.previewPrompt]: { projectId: null, kind: "creation" },
+      [SCRIPT_GENERATION_CHANNELS.exportPrompt]: { projectId: null, kind: "update" },
+      [SCRIPT_GENERATION_CHANNELS.exportSkillPackage]: { projectId: null }
     };
     const invoked = new Set<string>();
     for (const channel of PUBLIC_IPC_CHANNEL_MANIFEST) {

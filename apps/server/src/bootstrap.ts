@@ -11,6 +11,7 @@ import {
   createRenderService,
   createRoutedCredentialStore,
   createScratchpadService,
+  createScriptGenerationService,
   createSpeechCacheService,
   createSystemService,
   createUnavailablePersistenceService,
@@ -48,6 +49,7 @@ export async function createServerServices(environment = process.env) {
   let projectPreview;
   let renderPlans;
   let renders: RenderService | undefined;
+  let scriptGeneration;
   try {
     const openedRepository = await openStudyNarratorRepository({ Database, databasePath });
     repository = openedRepository;
@@ -75,6 +77,7 @@ export async function createServerServices(environment = process.env) {
       cache,
       store: planStore
     });
+    scriptGeneration = createScriptGenerationService({ repository: openedRepository });
     renders = await createRenderService({
       repository: openedRepository,
       plans: planStore,
@@ -131,6 +134,7 @@ export async function createServerServices(environment = process.env) {
     projectPreview,
     renderPlans,
     renders,
+    scriptGeneration,
     speechCache,
     context,
     dispose: async () => {

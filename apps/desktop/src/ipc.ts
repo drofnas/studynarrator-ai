@@ -1,4 +1,4 @@
-import { copyFile } from "node:fs/promises";
+import { copyFile, writeFile } from "node:fs/promises";
 import {
   ActiveConnectionProfileInputSchema,
   CONNECTION_CHANNELS,
@@ -46,6 +46,11 @@ import {
   SystemPacingDefaultsSchema,
   RedactedConnectionDiagnosticsSchema,
   SCRATCHPAD_CHANNELS,
+  SCRIPT_GENERATION_CHANNELS,
+  ScriptGenerationPromptRequestSchema,
+  ScriptGenerationSkillRequestSchema,
+  PromptDocumentSchema,
+  FileExportResultSchema,
   ScratchpadPreviewInputSchema,
   ScratchpadPreviewResultSchema,
   SpeechCatalogSchema,
@@ -64,7 +69,7 @@ import {
   type SpeechCacheClient,
   type VoiceCatalogClient
 } from "@studynarrator/shared-types";
-import type { DiagnosticsContext, RenderService, SystemService } from "@studynarrator/application";
+import type { DiagnosticsContext, RenderService, ScriptGenerationService, SystemService } from "@studynarrator/application";
 
 export const PUBLIC_IPC_CHANNEL_MANIFEST = Object.freeze([
   SYSTEM_DIAGNOSTICS_CHANNEL,
@@ -74,7 +79,8 @@ export const PUBLIC_IPC_CHANNEL_MANIFEST = Object.freeze([
   ...Object.values(PROJECT_PREVIEW_CHANNELS),
   ...Object.values(SPEECH_CACHE_CHANNELS),
   ...Object.values(RENDER_PLAN_CHANNELS),
-  ...Object.values(RENDER_CHANNELS)
+  ...Object.values(RENDER_CHANNELS),
+  ...Object.values(SCRIPT_GENERATION_CHANNELS)
 ]);
 
 interface IpcMainLike {
@@ -346,5 +352,41 @@ export function registerRenderHandlers(
     if (destination.canceled || !destination.filePath) return RenderArtifactExportResultSchema.parse({ disposition: "canceled", fileName: media.fileName });
     await copyFile(media.path, destination.filePath);
     return RenderArtifactExportResultSchema.parse({ disposition: "saved", fileName: media.fileName });
+  });
+}
+
+export function registerScriptGenerationHandlers(
+  ipcMain: IpcMainLike,
+  generation: ScriptGenerationService,
+  dialog: { showSaveDialog(options: { defaultPath: string }): Promise<{ canceled: boolean; filePath?: string }> }
+) {
+  const handle = (channel: string, listener: (input: unknown) => Promise<unknown>) => {
+    ipcMain.removeHandler(channel);
+    ipcMain.handle(channel, async (_event, input) => {
+      try { return await listener(input); }
+      catch {
+        throw new Error("StudyNarrator could not complete the script generation operation.");
+      }
+    });
+  };
+  handle(SCRIPT_GENERATION_CHANNELS.previewPrompt, async (input) => {
+    const { projectId, kind } = ScriptGenerationPromptRequestSchema.parse(input);
+    return PromptDocumentSchema.parse(await generation.previewPrompt(projectId, kind));
+  });
+  handle(SCRIPT_GENERATION_CHANNELS.exportPrompt, async (input) => {
+    const { projectId, kind } = ScriptGenerationPromptRequestSchema.parse(input);
+    const file = await generation.resolvePromptExport(projectId, kind);
+    const destination = await dialog.showSaveDialog({ defaultPath: file.fileName });
+    if (destination.canceled || !destination.filePath) return FileExportResultSchema.parse({ disposition: "canceled", fileName: file.fileName });
+    await writeFile(destination.filePath, file.bytes);
+    return FileExportResultSchema.parse({ disposition: "saved", fileName: file.fileName });
+  });
+  handle(SCRIPT_GENERATION_CHANNELS.exportSkillPackage, async (input) => {
+    const { projectId } = ScriptGenerationSkillRequestSchema.parse(input);
+    const file = await generation.resolveSkillPackage(projectId);
+    const destination = await dialog.showSaveDialog({ defaultPath: file.fileName });
+    if (destination.canceled || !destination.filePath) return FileExportResultSchema.parse({ disposition: "canceled", fileName: file.fileName });
+    await writeFile(destination.filePath, file.bytes);
+    return FileExportResultSchema.parse({ disposition: "saved", fileName: file.fileName });
   });
 }

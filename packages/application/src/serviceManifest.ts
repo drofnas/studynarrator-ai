@@ -46,5 +46,8 @@ export const APPLICATION_SERVICE_MANIFEST = Object.freeze([
   "renders.exportArtifact",
   "renders.segments",
   "renders.waveform",
-  "renders.exportSegment"
+  "renders.exportSegment",
+  "scriptGeneration.previewPrompt",
+  "scriptGeneration.exportPrompt",
+  "scriptGeneration.exportSkillPackage"
 ]);
