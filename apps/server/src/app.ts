@@ -33,6 +33,8 @@ import {
   RenderHistorySegmentCollectionSchema,
   RenderSegmentInputSchema,
   RenderWaveformSchema,
+  ScriptGenerationBriefSchema,
+  ScriptGenerationConfigurationSchema,
   RedactedConnectionDiagnosticsSchema,
   ScratchpadPreviewInputSchema,
   ScratchpadPreviewResultSchema,
@@ -53,7 +55,7 @@ import {
   type SystemDiagnostics,
   type VoiceCatalogClient
 } from "@studynarrator/shared-types";
-import { parseRenderMediaRange, type DiagnosticsContext, type RenderService, type ResolvedRenderMedia, type SystemService } from "@studynarrator/application";
+import { parseRenderMediaRange, type DiagnosticsContext, type RenderService, type ResolvedRenderMedia, type ScriptGenerationService, type SystemService } from "@studynarrator/application";
 
 function streamRenderMedia(
   request: Request,
@@ -100,6 +102,7 @@ export function createExpressApp(options: {
   renderPlans?: RenderPlanClient;
   renders?: RenderService;
   speechCache?: SpeechCacheClient;
+  scriptGeneration?: ScriptGenerationService;
 }): Express {
   const app = express();
   app.disable("x-powered-by");
@@ -364,6 +367,31 @@ export function createExpressApp(options: {
     });
   }
 
+  if (options.scriptGeneration) {
+    const sendGeneratedFile = (response: Response, file: Awaited<ReturnType<ScriptGenerationService["resolvePromptExport"]>>) => {
+      response.setHeader("cache-control", "private, no-store");
+      response.setHeader("content-type", file.mimeType);
+      response.setHeader("content-disposition", `attachment; filename="${file.fileName.replace(/["\\\r\n]/gu, "_")}"`);
+      response.setHeader("content-length", String(file.bytes.byteLength));
+      response.send(Buffer.from(file.bytes));
+    };
+    app.post("/api/projects/:projectId/prompt-preview", async (request, response, next) => {
+      try {
+        response.json(await options.scriptGeneration!.previewPrompt(ProjectIdSchema.parse(request.params.projectId), ScriptGenerationBriefSchema.parse(request.body)));
+      } catch (error) { next(error); }
+    });
+    app.post("/api/projects/:projectId/prompt-export", async (request, response, next) => {
+      try {
+        sendGeneratedFile(response, await options.scriptGeneration!.resolvePromptExport(ProjectIdSchema.parse(request.params.projectId), ScriptGenerationBriefSchema.parse(request.body)));
+      } catch (error) { next(error); }
+    });
+    app.post("/api/projects/:projectId/skill-export", async (request, response, next) => {
+      try {
+        sendGeneratedFile(response, await options.scriptGeneration!.resolveSkillPackage(ProjectIdSchema.parse(request.params.projectId), ScriptGenerationConfigurationSchema.parse(request.body)));
+      } catch (error) { next(error); }
+    });
+  }
+
   if (options.speechCache) {
     app.get("/api/speech-cache", async (_request, response, next) => {
       try { response.json(SpeechCacheStatusSchema.parse(await options.speechCache!.status())); } catch (error) { next(error); }
@@ -472,6 +500,10 @@ export function createExpressApp(options: {
       status = 404;
       code = "RENDER_MEDIA_UNAVAILABLE";
       message = "The requested render audio is unavailable.";
+    } else if (typeof errorRecord?.code === "string" && errorRecord.code.startsWith("SCRIPT_GENERATION_")) {
+      code = errorRecord.code;
+      status = errorRecord.code === "SCRIPT_GENERATION_NOT_FOUND" ? 404 : 500;
+      message = typeof errorRecord.message === "string" ? errorRecord.message : "StudyNarrator could not generate the requested export.";
     }
     response.status(status).json(BoundaryErrorSchema.parse({
       error: {

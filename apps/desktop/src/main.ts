@@ -9,6 +9,7 @@ import {
   registerRenderPlanHandlers,
   registerRenderHandlers,
   registerScratchpadHandlers,
+  registerScriptGenerationHandlers,
   registerSpeechCacheHandlers
 } from "./ipc.js";
 import { isApprovedExternalUrl, SECURE_WEB_PREFERENCES } from "./security.js";
@@ -63,6 +64,7 @@ void app.whenReady().then(async () => {
   if (runtime.projectPreview) registerProjectPreviewHandlers(ipcMain, runtime.projectPreview);
   if (runtime.renderPlans) registerRenderPlanHandlers(ipcMain, runtime.renderPlans);
   if (runtime.renders) registerRenderHandlers(ipcMain, runtime.renders, dialog);
+  if (runtime.scriptGeneration) registerScriptGenerationHandlers(ipcMain, runtime.scriptGeneration, dialog);
   if (runtime.renders) protocol.handle("studynarrator-media", createRenderMediaProtocolHandler(runtime.renders));
   registerSpeechCacheHandlers(ipcMain, runtime.speechCache);
   await createWindow();

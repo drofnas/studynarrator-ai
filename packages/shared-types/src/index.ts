@@ -5,6 +5,7 @@ import type { ProjectPreviewClient, SpeechCacheClient } from "./preview.js";
 import type { RenderPlanClient } from "./renderPlan.js";
 import type { RenderClient } from "./render.js";
 import type { ScratchpadClient } from "./scratchpad.js";
+import type { ScriptGenerationClient } from "./scriptGeneration.js";
 
 export const APPLICATION_VERSION = "0.1.0";
 export const DIAGNOSTICS_SCHEMA_VERSION = 3;
@@ -106,6 +107,7 @@ export interface StudyNarratorBridge {
   speechCache: SpeechCacheClient;
   renderPlans: RenderPlanClient;
   renders: RenderClient;
+  scriptGeneration: ScriptGenerationClient;
 }
 
 export * from "./connections.js";
@@ -114,3 +116,4 @@ export * from "./preview.js";
 export * from "./scratchpad.js";
 export * from "./renderPlan.js";
 export * from "./render.js";
+export * from "./scriptGeneration.js";

@@ -147,6 +147,14 @@ export {
 } from "./render.js";
 export { parseRenderMediaRange, type RenderMediaRange, type ResolvedRenderMedia } from "./renderMedia.js";
 export {
+  ScriptGenerationServiceError,
+  createScriptGenerationService,
+  type ResolvedGeneratedFile,
+  type ScriptGenerationRepository,
+  type ScriptGenerationService,
+  type ScriptGenerationServiceErrorCode
+} from "./scriptGeneration.js";
+export {
   ScratchpadServiceError,
   createScratchpadService,
   type ScratchpadRepository,

@@ -11,6 +11,7 @@ import {
   createRenderService,
   createRoutedCredentialStore,
   createScratchpadService,
+  createScriptGenerationService,
   createSpeechCacheService,
   createSystemService,
   createUnavailablePersistenceService,
@@ -50,6 +51,7 @@ export async function createDesktopServices(options: {
   let projectPreview;
   let renderPlans;
   let renders: RenderService | undefined;
+  let scriptGeneration;
   let credentialVault: ElectronCredentialVault | undefined;
   const cache = createApplicationSpeechCache(dataDirectory);
   const speechCache = createSpeechCacheService(cache);
@@ -91,6 +93,7 @@ export async function createDesktopServices(options: {
       cache,
       store: planStore
     });
+    scriptGeneration = createScriptGenerationService({ repository: openedRepository });
     renders = await createRenderService({
       repository: openedRepository,
       plans: planStore,
@@ -139,7 +142,7 @@ export async function createDesktopServices(options: {
     dataDirectory
   };
   return {
-    service, persistence, connections, voiceCatalog, scratchpad, projectPreview, renderPlans, renders,
+    service, persistence, connections, voiceCatalog, scratchpad, projectPreview, renderPlans, renders, scriptGeneration,
     speechCache, credentialVault, context,
     dispose: async () => { await renders?.close(); repository.close(); }
   };

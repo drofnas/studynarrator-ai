@@ -9,6 +9,7 @@ import {
   createConnectionsService,
   createPersistenceService,
   createRoutedCredentialStore,
+  createScriptGenerationService,
   createSystemService,
   createUnavailablePersistenceService,
   createVoiceCatalogService,
@@ -84,6 +85,7 @@ async function fixture() {
     discoverCatalog: async ({ profileId }) => ({ schemaVersion: 1, profileId, models: [{ modelId: "model", voices: [{ voiceId: "voice", name: "Voice", language: null, gender: null }] }] })
   });
   const voiceCatalog = createVoiceCatalogService({ repository, bundledCatalogs: new Map() });
+  const scriptGeneration = createScriptGenerationService({ repository });
   const scratchpad = {
     preview: async (input: { connectionProfileId: string; modelId: string; voiceId: string; speed: number; text: string; applyGlobalLexicon: boolean }) => ({
       schemaVersion: 2 as const,
@@ -197,8 +199,8 @@ async function fixture() {
   };
   openServices.add(service);
   return {
-    service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache, renderPlans, renders,
-    app: await listen(createExpressApp({ service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache, renderPlans, renders, context }))
+    service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache, renderPlans, renders, scriptGeneration,
+    app: await listen(createExpressApp({ service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache, renderPlans, renders, scriptGeneration, context }))
   };
 }
 
@@ -378,8 +380,8 @@ interface ExpressRouteLayer {
 
 describe("REST API operation manifest", () => {
   it("matches every registered method and path exactly", async () => {
-    const { service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache, renderPlans, renders } = await fixture();
-    const application = createExpressApp({ service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache, renderPlans, renders, context });
+    const { service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache, renderPlans, renders, scriptGeneration } = await fixture();
+    const application = createExpressApp({ service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache, renderPlans, renders, scriptGeneration, context });
     const layers = (application as unknown as { router: { stack: ExpressRouteLayer[] } }).router.stack;
     const registered = layers.flatMap((layer) => layer.route
       ? Object.entries(layer.route.methods)
@@ -388,10 +390,10 @@ describe("REST API operation manifest", () => {
       : []);
     const declared = REST_API_MANIFEST.map(({ method, path }) => `${method} ${path}`);
     expect(registered.sort()).toEqual([...declared].sort());
-    expect(new Set(declared).size).toBe(49);
+    expect(new Set(declared).size).toBe(52);
   });
 
-  it("exercises a successful schema-valid response for all 49 operations", async () => {
+  it("exercises a successful schema-valid response for all 52 operations", async () => {
     const { app } = await fixture();
     const covered = new Set<string>();
     const call = async (method: string, path: string, expected: number, body?: string | object) => {
@@ -459,6 +461,16 @@ describe("REST API operation manifest", () => {
     ProjectPreviewResultSchema.parse((await call("POST", `/api/projects/${created.id}/preview`, 200, {
       mode: "segment", nodeOrdinal: 1
     })).body as unknown);
+    const generationBrief = {
+      schemaVersion: 1, purpose: "Explain the manifest.", targetAudience: "Engineers", detailLevel: "balanced",
+      sectionMode: "required", codeHandling: "explain", additionalGuidance: "", sourceMaterial: "Manifest source.",
+      speakers: [{ speakerId: "narrator", roleDescription: "Explains clearly." }], pauses: []
+    };
+    await call("POST", `/api/projects/${created.id}/prompt-preview`, 200, generationBrief);
+    await call("POST", `/api/projects/${created.id}/prompt-export`, 200, generationBrief);
+    const { sourceMaterial: _sourceMaterial, ...generationConfiguration } = generationBrief;
+    void _sourceMaterial;
+    await call("POST", `/api/projects/${created.id}/skill-export`, 200, generationConfiguration);
     const renderPlan = RenderPlanSchema.parse((await call("POST", `/api/projects/${created.id}/render-plans`, 201)).body as unknown);
     RenderPlanSummaryCollectionSchema.parse((await call("GET", `/api/projects/${created.id}/render-plans`, 200)).body as unknown);
     RenderPlanSchema.parse((await call("GET", `/api/render-plans/${renderPlan.id}`, 200)).body as unknown);
@@ -507,6 +519,9 @@ describe("REST API operation manifest", () => {
       request(app).post("/api/scratchpad/preview").send({ connectionProfileId: "x", text: secret }).expect(400),
       request(app).post("/api/projects/not-a-uuid/preview").send({ mode: "segment", nodeOrdinal: 1 }).expect(400),
       request(app).post("/api/projects/00000000-0000-4000-8000-000000000001/preview").send({ mode: "pronunciation", text: "" }).expect(400),
+      request(app).post("/api/projects/not-a-uuid/prompt-preview").send({}).expect(400),
+      request(app).post("/api/projects/00000000-0000-4000-8000-000000000001/prompt-export").send({ sourceMaterial: secret }).expect(400),
+      request(app).post("/api/projects/00000000-0000-4000-8000-000000000001/skill-export").send({ sourceMaterial: secret }).expect(400),
       request(app).post("/api/projects/not-a-uuid/render-plans").expect(400),
       request(app).get("/api/projects/not-a-uuid/render-plans").expect(400),
       request(app).get("/api/render-plans/not-a-uuid").expect(400),
