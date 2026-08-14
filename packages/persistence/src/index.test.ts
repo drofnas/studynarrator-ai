@@ -17,7 +17,6 @@ const DatabaseAdapter = Database as unknown as DatabaseConstructor;
 const projectId = "00000000-0000-4000-8000-000000000001";
 const secondProjectId = "00000000-0000-4000-8000-000000000002";
 const lexiconId = "00000000-0000-4000-8000-000000000003";
-const profileId = "00000000-0000-4000-8000-000000000004";
 const duplicateProjectId = "00000000-0000-4000-8000-000000000005";
 const duplicateLexiconId = "00000000-0000-4000-8000-000000000006";
 const legacySchemaSql = `

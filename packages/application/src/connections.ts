@@ -93,7 +93,8 @@ function normalizeAuthoring(inputValue: SpeachesConnectionAuthoring) {
 }
 
 function publicConnection(connection: StoredSpeachesConnection): SpeachesConnection {
-  const { id: _id, ...value } = connection;
+  const { id, ...value } = connection;
+  void id;
   return value;
 }
 

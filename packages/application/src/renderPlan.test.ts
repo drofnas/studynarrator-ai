@@ -85,10 +85,10 @@ describe("render plan application service", () => {
     });
     const plan = await service.create(projectId);
     const frozen = await store.load(planId);
-    expect(frozen.snapshot).toMatchObject({
-      schemaVersion: 2,
-      connection: { modelId: "model", serverIdentityHash: expect.stringMatching(/^[a-f0-9]{64}$/u) }
-    });
+    expect(frozen.snapshot.schemaVersion).toBe(2);
+    if (frozen.snapshot.schemaVersion !== 2) throw new Error("Expected a singular connection snapshot.");
+    expect(frozen.snapshot.connection.modelId).toBe("model");
+    expect(frozen.snapshot.connection.serverIdentityHash).toMatch(/^[a-f0-9]{64}$/u);
     expect(frozen.snapshot.connection).not.toHaveProperty("profileId");
     expect(plan.entries.map((entry) => entry.type === "pause" ? `${entry.type}:${entry.reason}:${String(entry.durationMs)}` : entry.type)).toEqual([
       "section", "speech", "pause:speakerChange:500", "speech", "section", "pause:section:1500", "speech",

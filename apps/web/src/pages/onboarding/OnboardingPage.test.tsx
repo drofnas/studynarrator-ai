@@ -28,11 +28,20 @@ const voiceCatalog = { get: vi.fn(async (modelId: string) => ({ schemaVersion: 1
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
-function client(): SpeachesConnectionClient {
+function client() {
   let onboardingCompletedAt: string | null = null;
   return {
     get: vi.fn(async () => emptyConnection),
-    update: vi.fn(async (input) => ({ ...emptyConnection, ...input, suppliedUrlForm: "root" as const, configured: true, baseUrl: input.baseUrl ?? null })),
+    update: vi.fn<SpeachesConnectionClient["update"]>(async (input) => ({
+      ...emptyConnection,
+      ...input,
+      timeoutSeconds: input.timeoutSeconds ?? emptyConnection.timeoutSeconds,
+      retryCount: input.retryCount ?? emptyConnection.retryCount,
+      responseFormat: input.responseFormat ?? emptyConnection.responseFormat,
+      suppliedUrlForm: "root" as const,
+      configured: true,
+      baseUrl: input.baseUrl ?? null
+    })),
     test: vi.fn(async () => connectedSummary),
     discoverSpeechCatalog: vi.fn(async () => ({
       schemaVersion: 1 as const,
@@ -47,7 +56,7 @@ function client(): SpeachesConnectionClient {
       onboardingCompletedAt = timestamp;
       return { onboardingCompletedAt, client: "web" as const };
     })
-  };
+  } satisfies SpeachesConnectionClient;
 }
 
 function renderApp(connection: SpeachesConnectionClient, route = "/projects") {

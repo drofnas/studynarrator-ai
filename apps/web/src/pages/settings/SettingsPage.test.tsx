@@ -3,7 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { GlobalLexiconReplaceInput, PersistenceClient } from "@studynarrator/shared-types";
+import type { GlobalLexiconReplaceInput, PersistenceClient, SpeachesConnectionClient } from "@studynarrator/shared-types";
 import { SettingsPage } from "./SettingsPage.js";
 import { ConnectionProvider } from "@/features/connections/ConnectionProvider.js";
 
@@ -21,10 +21,16 @@ const savedConnection = {
   responseFormat: "wav" as const, lastTestedAt: null, lastSuccessfulTestAt: null, lastTestSummary: null,
   createdAt: timestamp, updatedAt: timestamp
 };
-function connectionClient(overrides = {}) {
+function connectionClient(overrides: Partial<SpeachesConnectionClient> = {}): SpeachesConnectionClient {
   return {
     get: vi.fn(async () => savedConnection),
-    update: vi.fn(async (input) => ({ ...savedConnection, ...input })),
+    update: vi.fn<SpeachesConnectionClient["update"]>(async (input) => ({
+      ...savedConnection,
+      ...input,
+      timeoutSeconds: input.timeoutSeconds ?? savedConnection.timeoutSeconds,
+      retryCount: input.retryCount ?? savedConnection.retryCount,
+      responseFormat: input.responseFormat ?? savedConnection.responseFormat
+    })),
     test: vi.fn(), exportDiagnostics: vi.fn(),
     discoverSpeechCatalog: vi.fn(async () => ({ schemaVersion: 1 as const, models: [
       { modelId: "model-b", voices: [
