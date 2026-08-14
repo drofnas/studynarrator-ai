@@ -22,6 +22,7 @@ export interface PresentedVoiceGroup {
 }
 
 const collator = new Intl.Collator("en-US", { numeric: true, sensitivity: "base" });
+const PREFERRED_VOICE_LOCALE = "en-US";
 
 function localeCode(value: string | null | undefined): string | null {
   if (!value || !/^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$/iu.test(value)) return null;
@@ -32,6 +33,13 @@ function localeCode(value: string | null | undefined): string | null {
 function localFriendlyName(entry: VoiceCatalogEntry | undefined): string | null {
   const firstSegment = entry?.label.split(/\s+—\s+/u)[0]?.trim();
   return firstSegment || null;
+}
+
+function serverFriendlyName(voice: SpeechCatalogVoice | undefined): string | null {
+  if (!voice) return null;
+  const name = voice.name?.trim();
+  if (!name || collator.compare(name, voice.voiceId) === 0) return null;
+  return name;
 }
 
 function compareVoices(left: PresentedVoice, right: PresentedVoice): number {
@@ -50,7 +58,7 @@ export function presentVoices(
   return voiceIds.map((voiceId) => {
     const serverVoice = serverById.get(voiceId);
     const catalogEntry = catalogById.get(voiceId);
-    const friendlyName = serverVoice?.name?.trim() || localFriendlyName(catalogEntry) || voiceId;
+    const friendlyName = serverFriendlyName(serverVoice) || localFriendlyName(catalogEntry) || voiceId;
     const locale = catalogEntry?.locale ?? localeCode(serverVoice?.language) ?? null;
     const normalizedCatalogEntry: VoiceCatalogEntry = catalogEntry ?? {
       voiceId,
@@ -101,6 +109,9 @@ export function groupPresentedVoices(voices: readonly PresentedVoice[]): Present
     localeGroups.set(voice.localeLabel, group);
   }
   const localeLabels = [...localeGroups.keys()].sort((left, right) => {
+    if (left === right) return 0;
+    if (left === PREFERRED_VOICE_LOCALE) return -1;
+    if (right === PREFERRED_VOICE_LOCALE) return 1;
     if (left === UNAVAILABLE_VOICE_LOCALE) return 1;
     if (right === UNAVAILABLE_VOICE_LOCALE) return -1;
     return collator.compare(left, right);

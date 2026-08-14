@@ -197,8 +197,8 @@ describe("System Settings", () => {
   it("uses an editable singleton, preserves server ordering, and auditions disabled voices without a player", async () => {
     const localVoiceCatalog = {
       get: vi.fn(async (modelId: string) => ({ schemaVersion: 1 as const, modelId, entries: [
-        { voiceId: "voice-b1", label: "First voice", enabled: true, favorite: false, language: "English", locale: "en-US", accent: null, category: null, style: null, sampleText: null },
-        { voiceId: "voice-b2", label: "Disabled locally", enabled: false, favorite: false, language: "English", locale: "en-US", accent: null, category: null, style: null, sampleText: null }
+        { voiceId: "voice-b1", label: "First — English — voice-b1", enabled: true, favorite: false, language: "English", locale: "en-US", accent: null, category: null, style: null, sampleText: null },
+        { voiceId: "voice-b2", label: "Second — English — voice-b2", enabled: false, favorite: false, language: "English", locale: "en-US", accent: null, category: null, style: null, sampleText: null }
       ] })),
       replace: vi.fn()
     };
@@ -214,7 +214,15 @@ describe("System Settings", () => {
       settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() },
       globalLexicon: { list: vi.fn(async () => []), replace: vi.fn(async (entries: GlobalLexiconReplaceInput) => entries) }
     } as unknown as PersistenceClient;
-    render(<ConnectionProvider connectionClient={connectionClient()} voiceCatalog={localVoiceCatalog}><SettingsPage client={client} cacheClient={cacheClient} scratchpadClient={{ preview }} /></ConnectionProvider>);
+    const idNamedConnection = connectionClient({
+      discoverSpeechCatalog: vi.fn(async () => ({ schemaVersion: 1 as const, models: [
+        { modelId: "model-b", voices: [
+          { voiceId: "voice-b2", name: "VOICE-B2", language: null, gender: null },
+          { voiceId: "voice-b1", name: "voice-b1", language: null, gender: null }
+        ] }
+      ] }))
+    });
+    render(<ConnectionProvider connectionClient={idNamedConnection} voiceCatalog={localVoiceCatalog}><SettingsPage client={client} cacheClient={cacheClient} scratchpadClient={{ preview }} /></ConnectionProvider>);
     expect(await screen.findByLabelText("Address")).toBeEnabled();
     expect(screen.queryByText(/Environment Speaches|Active profile|API key/u)).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByLabelText("Model")).toHaveValue("model-b"));
@@ -260,6 +268,7 @@ describe("System Settings", () => {
     expect(screen.getByLabelText("en-GB voices")).toHaveTextContent("Local Only");
     expect(screen.getByLabelText("en-US voices")).toHaveTextContent("First");
     expect(screen.getByRole("button", { name: "Remove Second from favorites" })).toBeEnabled();
+    expect([...document.querySelectorAll("section[aria-label$=' voices']")].map((element) => element.getAttribute("aria-label"))).toEqual(["Favorites voices", "en-US voices", "en-GB voices"]);
 
     fireEvent.change(screen.getByLabelText("Search voice catalog"), { target: { value: "en-US" } });
     expect(screen.queryByLabelText("en-GB voices")).not.toBeInTheDocument();

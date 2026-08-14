@@ -25,8 +25,9 @@ const persistence = {
   preferences: { getIgnoredDiagnostics: vi.fn(async () => []), replaceIgnoredDiagnostics: vi.fn() }
 } as unknown as PersistenceClient;
 const voiceCatalog = { get: vi.fn(async (modelId: string) => ({ schemaVersion: 1 as const, modelId, entries: modelId === "model-z" ? [
-  { voiceId: "voice-z", label: "Catalog First", enabled: true, favorite: false, language: "English", locale: "en-US", accent: null, category: null, style: null, sampleText: null },
-  { voiceId: "voice-y", label: "Catalog Favorite", enabled: true, favorite: true, language: "English", locale: "en-GB", accent: null, category: null, style: null, sampleText: null }
+  { voiceId: "voice-z", label: "First Voice — English — voice-z", enabled: true, favorite: false, language: "English", locale: "en-US", accent: null, category: null, style: null, sampleText: null },
+  { voiceId: "voice-y", label: "Favorite Voice — English — voice-y", enabled: true, favorite: true, language: "English", locale: "en-GB", accent: null, category: null, style: null, sampleText: null },
+  { voiceId: "voice-x", label: "British Voice — English — voice-x", enabled: true, favorite: false, language: "English", locale: "en-GB", accent: null, category: null, style: null, sampleText: null }
 ] : [
   { voiceId: "voice-a", label: "Catalog Other", enabled: true, favorite: false, language: "French", locale: "fr-FR", accent: null, category: null, style: null, sampleText: null }
 ] })), replace: vi.fn() };
@@ -51,7 +52,7 @@ function client() {
     discoverSpeechCatalog: vi.fn(async () => ({
       schemaVersion: 1 as const,
       models: [
-        { modelId: "model-z", voices: [{ voiceId: "voice-z", name: "First Voice", language: null, gender: null }, { voiceId: "voice-y", name: null, language: null, gender: null }] },
+        { modelId: "model-z", voices: [{ voiceId: "voice-z", name: "VOICE-Z", language: null, gender: null }, { voiceId: "voice-y", name: "voice-y", language: null, gender: null }, { voiceId: "voice-x", name: "voice-x", language: null, gender: null }] },
         { modelId: "model-a", voices: [{ voiceId: "voice-a", name: "Other Voice", language: null, gender: null }] }
       ]
     })),
@@ -84,8 +85,9 @@ describe("connection onboarding", () => {
     expect(await screen.findByLabelText("Model")).toHaveValue("model-z");
     expect(screen.getByLabelText("Default Voice")).toHaveValue("voice-z");
     expect(await screen.findByRole("option", { name: "First Voice (voice-z | en-US)" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Catalog Favorite (voice-y | en-GB)" })).toBeInTheDocument();
-    expect([...screen.getByLabelText("Default Voice").querySelectorAll("optgroup")].map(({ label }) => label)).toEqual(["Favorites", "en-US"]);
+    expect(screen.getByRole("option", { name: "Favorite Voice (voice-y | en-GB)" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "British Voice (voice-x | en-GB)" })).toBeInTheDocument();
+    expect([...screen.getByLabelText("Default Voice").querySelectorAll("optgroup")].map(({ label }) => label)).toEqual(["Favorites", "en-US", "en-GB"]);
     expect(connection.update).not.toHaveBeenCalled();
 
     await userEvent.selectOptions(screen.getByLabelText("Model"), "model-a");

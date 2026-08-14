@@ -91,6 +91,18 @@ test.describe("Settings and connection diagnostics", () => {
   });
 
   test("groups, favorites, and auditions catalog voices while persisting settings", async ({ page, studyNarrator }) => {
+    await page.route("**/api/connection/speech-catalog", async (route) => {
+      const response = await route.fetch();
+      const catalog = await response.json() as { models: Array<{ voices: Array<{ voiceId: string; name: string | null }> }> };
+      await route.fulfill({ response, json: {
+        ...catalog,
+        models: catalog.models.map((model) => ({ ...model, voices: model.voices.map((voice) => ({ ...voice, name: voice.voiceId.toUpperCase() })) }))
+      } });
+    });
+    await page.getByRole("button", { name: "Refresh catalog" }).click();
+    await expect(page.getByRole("option", { name: "Heart (af_heart | en-US)" })).toBeAttached();
+    await expect(page.getByRole("article").filter({ hasText: "af_heart" }).getByText("Heart", { exact: true })).toBeVisible();
+    await expect.poll(() => page.locator("section[aria-label$=' voices']").evaluateAll((groups) => groups.slice(0, 2).map((group) => group.getAttribute("aria-label")))).toEqual(["en-US voices", "en-GB voices"]);
     await openRoute(page, studyNarrator, "/settings");
     await page.getByLabel("Search voice catalog").fill("en-US");
     await expect(page.getByLabel("en-US voices")).toBeVisible();
@@ -101,6 +113,7 @@ test.describe("Settings and connection diagnostics", () => {
     await expect(page.getByLabel("Favorites voices")).toContainText("Heart");
     await expect(page.getByRole("button", { name: "Remove Heart from favorites" })).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByLabel("Default Voice").locator('optgroup[label="Favorites"]')).toBeAttached();
+    await expect.poll(() => page.getByLabel("Default Voice").locator("optgroup").evaluateAll((groups) => groups.map((group) => group.getAttribute("label")))).toEqual(["Favorites", "en-US"]);
     const script = "A precise browser voice audition.";
     await page.getByLabel("Voice test script").fill(script);
     studyNarrator.fakeSpeaches.reset();
