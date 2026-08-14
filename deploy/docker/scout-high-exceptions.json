@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "exceptions": [
+    {
+      "id": "CVE-2026-67215",
+      "package": "pkg:deb/debian/cjson@",
+      "reason": "Unfixed Debian cJSON finding inherited only through the FFmpeg runtime package; StudyNarrator does not expose cJSON parsing and requires FFmpeg for deterministic audio assembly.",
+      "expiresAt": "2026-11-13"
+    },
+    {
+      "id": "CVE-2026-67216",
+      "package": "pkg:deb/debian/cjson@",
+      "reason": "Unfixed Debian cJSON finding inherited only through the FFmpeg runtime package; StudyNarrator does not expose cJSON parsing and requires FFmpeg for deterministic audio assembly.",
+      "expiresAt": "2026-11-13"
+    }
+  ]
+}

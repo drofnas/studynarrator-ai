@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-ARG NODE_IMAGE=node:26.7.0-bookworm-slim
+ARG NODE_IMAGE=node:26.7.0-trixie-slim
 
 FROM ${NODE_IMAGE} AS build
 WORKDIR /workspace
@@ -46,6 +46,9 @@ LABEL org.opencontainers.image.title="StudyNarrator" \
 RUN apt-get update \
   && apt-get install --yes --no-install-recommends ca-certificates ffmpeg tini \
   && rm -rf /var/lib/apt/lists/* \
+  && dpkg --remove --force-depends --force-remove-essential perl-base \
+  && rm -rf /usr/local/lib/node_modules/npm \
+  && rm -f /usr/local/bin/npm /usr/local/bin/npx \
   && groupadd --system --gid 10001 studynarrator \
   && useradd --system --uid 10001 --gid 10001 --home-dir /nonexistent --shell /usr/sbin/nologin studynarrator \
   && install --directory --owner=10001 --group=10001 --mode=0750 /data /app/apps/server/node_modules

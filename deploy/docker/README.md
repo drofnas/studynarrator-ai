@@ -50,3 +50,9 @@ The default named volume inherits the image's non-root ownership. For a bind mou
 The image contains Node.js, the compiled StudyNarrator Web/server application, FFmpeg, CA certificates, the Apache-2.0 `LICENSE`, and `ACKNOWLEDGMENTS.md`. It runs as UID/GID 10001, drops Linux capabilities, prevents privilege escalation, uses a read-only root filesystem, and writes persistent application state only under `/data`.
 
 The Speaches API key remains in the Node.js process environment. It must never be copied into browser storage, projects, manifests, diagnostics exports, or normal logs.
+
+## Release verification
+
+Run `npm run verify:docker` under Node 26.7.0 before distributing an image. The verifier requires Docker Engine/Desktop, Docker Compose, Docker Scout, and Playwright's Chromium and Firefox binaries. It builds from the repository context, exercises a disposable one-service Compose project, verifies offline recovery and volume persistence in both browsers, and removes its test volume on completion.
+
+The verifier writes a CycloneDX image inventory and Docker Scout SARIF report under `.tmp/verify-docker/`. Critical findings always fail. A high finding with an available fix also fails; an unfixed high must match the package, CVE, rationale, and future expiry in `scout-high-exceptions.json`. That exception file is intentionally limited to FFmpeg's current Debian cJSON dependency and must be removed when Debian publishes a fixed package.

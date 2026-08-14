@@ -28,6 +28,11 @@ async function diagnose(baseUrl: string, timeoutSeconds = 2) {
 }
 
 describe("fake Speaches diagnostic scenarios", () => {
+  it("can bind on all interfaces for Docker host-gateway acceptance", async () => {
+    current = await startFakeSpeachesServer({ host: "0.0.0.0" });
+    expect((await fetch(`${current.baseUrl}/__control/state`)).status).toBe(200);
+  });
+
   it("reports disjoint model-scoped voice lists", async () => {
     current = await startFakeSpeachesServer();
     const catalog = await discoverSpeachesSpeechCatalog({

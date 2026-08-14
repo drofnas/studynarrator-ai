@@ -4,5 +4,5 @@
     "outDir": "dist/types-tooling",
     "rootDir": "."
   },
-  "include": ["vitest.config.ts", "vitest.api.config.ts", "playwright.config.ts"]
+  "include": ["vitest.config.ts", "vitest.api.config.ts", "playwright.config.ts", "playwright.docker.config.ts"]
 }

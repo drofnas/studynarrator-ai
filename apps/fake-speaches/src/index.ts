@@ -94,7 +94,7 @@ function scenarioFrom(value: unknown): FakeSpeachesScenario | null {
     : null;
 }
 
-export async function startFakeSpeachesServer(options: { port?: number; scenario?: FakeSpeachesScenario } = {}): Promise<FakeSpeachesServer> {
+export async function startFakeSpeachesServer(options: { host?: string; port?: number; scenario?: FakeSpeachesScenario } = {}): Promise<FakeSpeachesServer> {
   let scenario: FakeSpeachesScenario = options.scenario ?? "healthy";
   const counters: Record<string, number> = {};
   const requests: FakeSpeachesRequestLog[] = [];
@@ -245,7 +245,7 @@ export async function startFakeSpeachesServer(options: { port?: number; scenario
   });
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
-    server.listen(options.port ?? 0, "127.0.0.1", resolve);
+    server.listen(options.port ?? 0, options.host ?? "127.0.0.1", resolve);
   });
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("The fake server did not obtain a loopback port.");
