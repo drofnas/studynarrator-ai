@@ -69,7 +69,8 @@ describe("project preview service", () => {
       })),
       clearAll: vi.fn(async () => ({ entriesRemoved: 0, bytesFreed: 0 })),
       clearProject: vi.fn(async () => ({ entriesRemoved: 0, bytesFreed: 0 })),
-      clearEntry: vi.fn(async () => ({ entriesRemoved: 0, bytesFreed: 0 }))
+      clearEntry: vi.fn(async () => ({ entriesRemoved: 0, bytesFreed: 0 })),
+      retainScratchpad: vi.fn(async () => ({ entriesRemoved: 0, bytesFreed: 0 }))
     } as never);
     expect(Object.keys(preview).map((key) => `projectPreview.${key}`)).toEqual(
       APPLICATION_SERVICE_MANIFEST.filter((path) => path.startsWith("projectPreview."))

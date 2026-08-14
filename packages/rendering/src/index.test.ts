@@ -128,6 +128,22 @@ describe("content-addressed speech cache", () => {
     await expect(cache.status()).resolves.toMatchObject({ entryCount: 0, totalBytes: 0 });
   });
 
+  it("retains one Scratchpad entry without deleting audio shared with projects", async () => {
+    const { cache, rootDirectory } = await fixture();
+    const oldScratchpad = await cache.getOrCreate(input, { scratchpad: true }, async () => Uint8Array.from([82, 1]));
+    const sharedInput = { ...input, text: "shared" };
+    const shared = await cache.getOrCreate(sharedInput, { scratchpad: true }, async () => Uint8Array.from([82, 2, 3]));
+    await cache.getOrCreate(sharedInput, { projectId: "project-a" }, async () => Uint8Array.from([82, 2, 3]));
+    const newest = await cache.getOrCreate({ ...input, text: "newest" }, { scratchpad: true }, async () => Uint8Array.from([82, 3, 4, 5]));
+
+    await expect(cache.retainScratchpad(newest.key)).resolves.toEqual({ entriesRemoved: 1, bytesFreed: 2 });
+    await expect(cache.inspect(input)).resolves.toMatchObject({ status: "miss", key: oldScratchpad.key });
+    await expect(cache.inspect(sharedInput)).resolves.toMatchObject({ status: "hit", key: shared.key });
+    await expect(cache.status()).resolves.toMatchObject({ entryCount: 2, totalBytes: 7 });
+    const sharedMetadata = JSON.parse(await readFile(join(rootDirectory, shared.key.slice(0, 2), `${shared.key}.json`), "utf8")) as { projectIds: string[]; scratchpadUsed: boolean };
+    expect(sharedMetadata).toMatchObject({ projectIds: ["project-a"], scratchpadUsed: false });
+  });
+
   it("treats a symlinked cache entry as a safe miss and replaces only the link", async () => {
     const { cache, rootDirectory } = await fixture();
     const key = createSpeechCacheKey(input);

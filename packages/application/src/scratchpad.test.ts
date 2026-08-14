@@ -47,8 +47,9 @@ function repository(): ScratchpadRepository {
   } as unknown as ScratchpadRepository;
 }
 
-function speechCache(): SpeechCache {
-  return {
+function speechCache() {
+  const retainScratchpad = vi.fn(async () => ({ entriesRemoved: 0, bytesFreed: 0 }));
+  const cache: SpeechCache = {
     async getOrCreate(input, _usage, synthesize, signal) {
       const bytes = await synthesize(input.text, signal ?? new AbortController().signal);
       return {
@@ -67,8 +68,10 @@ function speechCache(): SpeechCache {
     async status() { return { entryCount: 0, totalBytes: 0, lastUsedAt: null, sessionHits: 0, sessionMisses: 0, sessionWrites: 0, sessionCorruptMisses: 0, inFlight: 0 }; },
     async clearAll() { return { entriesRemoved: 0, bytesFreed: 0 }; },
     async clearProject() { return { entriesRemoved: 0, bytesFreed: 0 }; },
-    async clearEntry() { return { entriesRemoved: 0, bytesFreed: 0 }; }
+    async clearEntry() { return { entriesRemoved: 0, bytesFreed: 0 }; },
+    retainScratchpad
   };
+  return Object.assign(cache, { retainScratchpad });
 }
 
 describe("scratchpad service", () => {
@@ -86,10 +89,11 @@ describe("scratchpad service", () => {
   it("reads privileged configuration, transforms text, and creates a portable validated result", async () => {
     const store = repository();
     const synthesize = vi.fn(async () => ({ bytes: new Uint8Array([1, 2, 3]), mimeType: "audio/wav" as const, attempts: 1 }));
+    const cache = speechCache();
     const service = createScratchpadService({
       repository: store,
       credentials: { replacementAllowed: false, read: vi.fn(async () => "test-secret-must-not-appear"), write: vi.fn(), delete: vi.fn() },
-      cache: speechCache(),
+      cache,
       synthesize,
       createId: () => "00000000-0000-4000-8000-000000000001",
       now: () => new Date(timestamp)
@@ -109,6 +113,7 @@ describe("scratchpad service", () => {
       schemaVersion: 2, originalText: "SQL indexes.", transformedText: "sequel indexes.",
       voiceLabel: "Friendly Voice", cache: { status: "miss" }, audio: { base64: "AQID", byteLength: 3 }
     });
+    expect(cache.retainScratchpad).toHaveBeenCalledWith("a".repeat(64));
     expect(JSON.stringify(result)).not.toContain("test-secret-must-not-appear");
     expect((store.recordConnectionTest as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(0);
     expect((store.replaceConnectionProfile as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(0);

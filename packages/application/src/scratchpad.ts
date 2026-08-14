@@ -85,6 +85,7 @@ export function createScratchpadService(dependencies: {
           usage: { scratchpad: true },
           ...(signal === undefined ? {} : { signal })
         });
+        await dependencies.cache.retainScratchpad(synthesized.key);
         const voiceLabel = dependencies.repository.getVoiceCatalogOverrides(input.modelId).entries
           .find((entry) => entry.voiceId === input.voiceId)?.label
           ?? BUNDLED_VOICE_CATALOGS.get(input.modelId)?.entries.find((entry) => entry.voiceId === input.voiceId)?.label
