@@ -78,7 +78,7 @@ test.describe("project preview cache", () => {
     await openRoute(page, studyNarrator, "/scratchpad");
     await page.getByLabel("Passage").fill("Cache this exact sentence.");
     await page.getByRole("button", { name: "Synthesize passage" }).click();
-    await expect(page.getByText(/Result · cache hit/u)).toBeVisible();
+    await expect(page.getByLabel(/Audio player for/u)).toBeVisible();
     expect(speechRequests()).toHaveLength(2);
 
     await openRoute(page, studyNarrator, `/projects/${created.id}?tab=settings`);
