@@ -1,7 +1,7 @@
 import { continueOffline, expect, openRoute, test } from "../support/studyNarratorTest.js";
 
 test.describe("shell, onboarding, and runtime routes", () => {
-  test("completes first-run offline setup once and can reopen onboarding", async ({ page, studyNarrator }) => {
+  test("completes first-run offline setup once and opens connection settings from the monitor", async ({ page, studyNarrator }) => {
     await openRoute(page, studyNarrator, "/projects");
 
     await expect(page.getByRole("heading", { name: "Connect the voice workshop" })).toBeVisible();
@@ -12,8 +12,8 @@ test.describe("shell, onboarding, and runtime routes", () => {
 
     await page.reload();
     await expect(page.getByRole("heading", { name: "Projects", exact: true })).toBeVisible();
-    await page.getByRole("link", { name: "Disconnected" }).click();
-    await expect(page.getByRole("heading", { name: "Connect the voice workshop" })).toBeVisible();
+    await page.getByRole("link", { name: /^Disconnected\./u }).click();
+    await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
   });
 
   test("creates and tests a healthy profile from onboarding", async ({ page, studyNarrator }) => {
@@ -23,7 +23,7 @@ test.describe("shell, onboarding, and runtime routes", () => {
     await page.getByRole("button", { name: "Create + Test Connection" }).click();
 
     await expect(page.getByRole("heading", { name: "Projects", exact: true })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Connected" })).toBeVisible();
+    await expect(page.getByRole("link", { name: /^Connected\./u })).toBeVisible();
     const paths = studyNarrator.fakeSpeaches.getState().requests.map(({ path }) => path);
     expect(paths).toContain("/health");
     expect(paths).toContain("/v1/models");
@@ -35,7 +35,8 @@ test.describe("shell, onboarding, and runtime routes", () => {
     await continueOffline(page, studyNarrator);
     const navigation = page.getByRole("navigation", { name: "StudyNarrator tools" });
 
-    await navigation.getByRole("link", { name: "Script prompt kit" }).click();
+    await expect(navigation.getByRole("link").allTextContents()).resolves.toEqual(["Prompt Kit", "Projects", "Quick Scratchpad", "Settings", "System diagnostics"]);
+    await navigation.getByRole("link", { name: "Prompt Kit" }).click();
     await expect(page.getByRole("heading", { name: "Script prompt kit" })).toBeVisible();
     await navigation.getByRole("link", { name: "Quick Scratchpad" }).click();
     await expect(page.getByRole("heading", { name: "Quick Scratchpad" })).toBeVisible();
@@ -58,16 +59,22 @@ test.describe("shell, onboarding, and runtime routes", () => {
     await page.reload();
     await expect(page.getByRole("heading", { name: "Projects", exact: true })).toBeVisible();
 
+    const menu = page.getByRole("button", { name: "Open navigation" });
+    await menu.click();
+    await expect(page.getByRole("button", { name: "Close navigation" })).toBeFocused();
     await page.keyboard.press("Tab");
-    await expect(page.getByRole("link", { name: "Projects" })).toBeFocused();
-    await page.keyboard.press("Tab");
-    await expect(page.getByRole("link", { name: "Script prompt kit" })).toBeFocused();
-    await page.keyboard.press("Tab");
-    await expect(page.getByRole("link", { name: "Quick Scratchpad" })).toBeFocused();
-    await page.keyboard.press("Tab");
-    await expect(page.getByRole("link", { name: "Settings" })).toBeFocused();
-    await page.keyboard.press("Enter");
+    await expect(page.getByRole("link", { name: "Prompt Kit" })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(menu).toBeFocused();
+
+    await menu.click();
+    await page.getByRole("link", { name: "Settings" }).click();
     await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+    await expect(menu).toHaveAttribute("aria-expanded", "false");
+
+    await menu.click();
+    await page.locator("[data-navigation-backdrop]").click({ position: { x: 360, y: 100 } });
+    await expect(menu).toBeFocused();
 
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(1);

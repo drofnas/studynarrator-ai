@@ -36,7 +36,7 @@ test.describe("Settings and connection diagnostics", () => {
     await expect(page.getByText("Connection test: connected.")).toBeVisible();
     expect(studyNarrator.fakeSpeaches.getState().requests.every(({ path }) => !path.includes("/v1/v1"))).toBe(true);
     await expect(page.getByRole("heading", { name: "connected" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Connected" })).toBeVisible();
+    await expect(page.getByRole("link", { name: /^Connected\./u })).toBeVisible();
 
     const scenarios: ReadonlyArray<[FakeSpeachesScenario, string]> = [
       ["unauthorized", "authenticationRequired"],

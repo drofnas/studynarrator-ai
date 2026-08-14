@@ -167,7 +167,7 @@ test.describe("Electron acceptance", () => {
     const { page, application, dataDirectory } = electronStudyNarrator;
     await continueElectronOffline(page);
     studyNarrator.fakeSpeaches.reset();
-    await page.getByRole("link", { name: "Script prompt kit" }).click();
+    await page.getByRole("link", { name: "Prompt Kit" }).click();
     await expect(page.getByRole("heading", { name: "Script prompt kit" })).toBeVisible();
     const creationPreview = page.getByLabel("Create a script prompt preview");
     await expect(creationPreview).toContainText("KNOWLEDGE TO GATHER AND TEACH");

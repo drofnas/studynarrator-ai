@@ -4,7 +4,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ConnectionTestOverall, PersistenceClient, SystemClient } from "@studynarrator/shared-types";
+import type { ConnectionsClient, ConnectionTestOverall, PersistenceClient, SystemClient } from "@studynarrator/shared-types";
 import { App } from "./App.js";
 
 const unusedAnalyzer = { analyze: vi.fn() };
@@ -38,7 +38,7 @@ const unusedScriptGeneration = { previewPrompt: unusedPromptPreview, exportPromp
 
 afterEach(cleanup);
 
-function renderApp(route: string, client: SystemClient = { diagnostics: vi.fn() }, connections = unusedConnections) {
+function renderApp(route: string, client: SystemClient = { diagnostics: vi.fn() }, connections: ConnectionsClient = unusedConnections) {
   return render(
     <MemoryRouter initialEntries={[route]}>
       <App analyzer={unusedAnalyzer} client={client} persistence={unusedPersistence} connections={connections} voiceCatalog={unusedVoiceCatalog} scratchpad={unusedScratchpad} projectPreview={unusedProjectPreview} speechCache={unusedSpeechCache} renderPlans={{ create: vi.fn(), list: vi.fn(async () => []), get: vi.fn() }} scriptGeneration={unusedScriptGeneration} />
@@ -51,7 +51,9 @@ describe("application routing", () => {
     const diagnostics = vi.fn();
     renderApp(route, { diagnostics });
     expect(await screen.findByRole("heading", { name: "Projects" })).toBeInTheDocument();
-    expect(within(screen.getByRole("navigation")).getByRole("link", { name: "Projects" })).toHaveAttribute("aria-current", "page");
+    const navigation = within(screen.getByRole("navigation"));
+    expect(navigation.getAllByRole("link").map((link) => link.textContent)).toEqual(["Prompt Kit", "Projects", "Quick Scratchpad", "Settings", "System diagnostics"]);
+    expect(navigation.getByRole("link", { name: "Projects" })).toHaveAttribute("aria-current", "page");
     expect(diagnostics).not.toHaveBeenCalled();
   });
 
@@ -75,11 +77,27 @@ describe("application routing", () => {
   it("reaches the project-free script prompt kit through primary navigation", async () => {
     const user = userEvent.setup();
     renderApp("/projects");
-    await user.click(screen.getByRole("link", { name: "Script prompt kit" }));
+    await user.click(screen.getByRole("link", { name: "Prompt Kit" }));
     expect(await screen.findByRole("heading", { name: "Script prompt kit" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Script prompt kit" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Prompt Kit" })).toHaveAttribute("aria-current", "page");
     expect(unusedProjectGet).not.toHaveBeenCalled();
     expect(unusedPromptPreview).toHaveBeenCalledWith(null, "creation");
+  });
+
+  it("keeps Prompt Kit active in a project-specific prompt workflow", () => {
+    renderApp("/projects/project-id/script-generation");
+    expect(screen.getByRole("link", { name: "Prompt Kit" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Projects" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("uses the connection monitor to finish incomplete onboarding", async () => {
+    const connections = {
+      ...unusedConnections,
+      getSetupState: vi.fn(async () => ({ activeProfileId: null, activeProfileLocked: false, onboardingCompletedAt: null, client: "web" as const }))
+    };
+    renderApp("/onboarding", { diagnostics: vi.fn() }, connections);
+    const monitor = await screen.findByRole("link", { name: "Configuration error. No active profile. Finish setup." });
+    expect(monitor).toHaveAttribute("href", "/onboarding");
   });
 
   it.each(["/script-lab", "/persistence-lab"])("redirects removed review route %s to Projects", async (route) => {
@@ -111,6 +129,8 @@ describe("application routing", () => {
       getSetupState: vi.fn(async () => ({ activeProfileId: profile.id, activeProfileLocked: false, onboardingCompletedAt: testedAt, client: "web" as const }))
     };
     renderApp("/projects", { diagnostics: vi.fn() }, connections as never);
-    expect(await screen.findByRole("link", { name: label })).toHaveAttribute("data-state", overall);
+    const monitor = await screen.findByRole("link", { name: new RegExp(`^${label}\\. Local\\. Manage connection\\.$`, "u") });
+    expect(monitor).toHaveAttribute("data-state", overall);
+    expect(monitor).toHaveAttribute("href", "/settings");
   });
 });
