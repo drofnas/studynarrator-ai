@@ -51,7 +51,7 @@ function repository(current: { project: ProjectDetail }): RenderPlanRepository {
     getProject: vi.fn(() => current.project),
     listGlobalLexicon: vi.fn(() => [{
       id: "global-sql", scope: "global", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel",
-      caseSensitive: true, wholeWord: true, priority: 0, enabled: true, notes: "", createdAt: timestamp, updatedAt: timestamp
+      caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: "", createdAt: timestamp, updatedAt: timestamp
     }]),
     getIgnoredDiagnostics: vi.fn(() => []),
     getSpeachesConnection: vi.fn(() => profile),

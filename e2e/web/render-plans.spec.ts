@@ -45,7 +45,7 @@ test.describe("Frozen render plans", () => {
     await expect(table).toContainText("automatic · section");
     await expect(table).toContainText("explicit · explicit");
     await expect(table).toContainText("600 ms");
-    await expect(table).toContainText("SQL one.");
+    await expect(table).toContainText("S Q L one.");
     await expect(table).toContainText("miss");
     await expect(page.getByText("Matches current project").first()).toBeVisible();
     expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/speech"] ?? 0).toBe(0);
