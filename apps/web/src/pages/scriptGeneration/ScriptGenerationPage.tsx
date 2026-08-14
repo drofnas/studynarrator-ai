@@ -137,7 +137,6 @@ export function ScriptGenerationPage({ persistence, generation }: {
         <div aria-hidden="true">{selected.toUpperCase()} / MARKDOWN / {document.content.split("\n").length} LINES</div>
         <pre tabIndex={0} aria-label={`${promptLabels[selected].title} prompt preview`}>{document.content}</pre>
       </div>
-      <aside className={styles.privacy}><strong>Your script stays out</strong><p>Neither prompt contains a saved script. The update template gives you a marked place to paste one only when you choose to.</p></aside>
     </main>
   </div>;
 }
