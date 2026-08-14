@@ -61,7 +61,9 @@ test.describe("Settings and connection diagnostics", () => {
     for (const [scenario, expected] of scenarios) {
       studyNarrator.fakeSpeaches.setScenario(scenario);
       await testButton.click();
-      await expect(page.getByText(`Connection test: ${expected}.`)).toBeVisible();
+      await expect(page.getByText(`Connection test: ${expected}.`)).toBeVisible({
+        timeout: scenario === "timeout" ? 20_000 : 10_000
+      });
       await expect(page.getByText("Signal path")).toBeVisible();
       await expect(page.getByRole("heading", { name: expected })).toBeVisible();
     }
