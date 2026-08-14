@@ -8,7 +8,7 @@ import type { ScratchpadClient } from "./scratchpad.js";
 import type { ScriptGenerationClient } from "./scriptGeneration.js";
 
 export const APPLICATION_VERSION = "0.1.0";
-export const DIAGNOSTICS_SCHEMA_VERSION = 3;
+export const DIAGNOSTICS_SCHEMA_VERSION = 4;
 export const SYSTEM_DIAGNOSTICS_CHANNEL = "system.diagnostics";
 
 export const CheckStatusSchema = z.enum(["pass", "fail"]);
@@ -28,7 +28,9 @@ export const RuntimeSchema = z.object({
   electronVersion: z.string().min(1).nullable(),
   platform: z.string().min(1),
   architecture: z.string().min(1),
-  dataDirectory: z.string().min(1)
+  dataDirectory: z.string().min(1),
+  distribution: z.enum(["development-web", "docker-web", "electron"]),
+  sourceRevision: z.string().min(1).max(128)
 }).strict();
 export type RuntimeInfo = z.infer<typeof RuntimeSchema>;
 

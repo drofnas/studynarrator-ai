@@ -12,6 +12,7 @@ export function DiagnosticsEvidence({ diagnostics }: DiagnosticsEvidenceProps) {
       <article><p>Application</p><code>StudyNarrator {diagnostics.runtime.applicationVersion} · diagnostics schema {diagnostics.schemaVersion}</code></article>
       <article><p>Data directory</p><code>{diagnostics.runtime.dataDirectory}</code></article>
       <article><p>Runtime</p><code>{diagnostics.runtime.runtimeName} {diagnostics.runtime.runtimeVersion}{diagnostics.runtime.electronVersion ? ` · Electron ${diagnostics.runtime.electronVersion}` : ""}</code></article>
+      <article><p>Source revision</p><code>{diagnostics.runtime.sourceRevision}</code></article>
       <article><p>Transport</p><code>{diagnostics.client} · {diagnostics.transport}</code></article>
       <article><p>Database</p><code>{storage.status === "pass" ? storage.databasePath : storage.databasePath ?? storage.message}</code></article>
       <article><p>Storage check</p><code>{storage.status === "pass" ? `Schema ${storage.migrationVersion} · verified ${storage.createdAt}` : storage.message}</code></article>

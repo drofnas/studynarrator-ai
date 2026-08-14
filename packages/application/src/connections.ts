@@ -357,6 +357,10 @@ function environmentInteger(value: string | undefined, fallback: number, minimum
   return Number.isInteger(parsed) && parsed >= minimum && parsed <= maximum ? parsed : fallback;
 }
 
+function preferredEnvironmentValue(primary: string | undefined, compatibilityAlias: string | undefined): string | undefined {
+  return primary === undefined ? compatibilityAlias : primary;
+}
+
 export function reconcileEnvironmentConnectionProfile(repository: ConnectionRepository, environment: NodeJS.ProcessEnv): {
   activeProfileLocked: boolean;
   apiKey: string | null;
@@ -376,8 +380,13 @@ export function reconcileEnvironmentConnectionProfile(repository: ConnectionRepo
     name: "Environment Speaches",
     baseUrl,
     defaultModelId: environment.SPEACHES_MODEL_ID?.trim() || DEFAULT_MODEL_ID,
-    defaultVoiceId: environment.SPEACHES_VOICE_ID?.trim() || DEFAULT_VOICE_ID,
-    timeoutSeconds: environmentInteger(environment.SPEACHES_TIMEOUT_SECONDS, 120, 1, 600),
+    defaultVoiceId: preferredEnvironmentValue(environment.SPEACHES_DEFAULT_VOICE, environment.SPEACHES_VOICE_ID)?.trim() || DEFAULT_VOICE_ID,
+    timeoutSeconds: environmentInteger(
+      preferredEnvironmentValue(environment.SPEACHES_REQUEST_TIMEOUT_SECONDS, environment.SPEACHES_TIMEOUT_SECONDS),
+      120,
+      1,
+      600
+    ),
     retryCount: environmentInteger(environment.SPEACHES_RETRY_COUNT, 2, 0, 5),
     responseFormat: "wav"
   }, apiKey ? ENVIRONMENT_CREDENTIAL_REFERENCE : null);

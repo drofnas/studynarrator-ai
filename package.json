@@ -29,7 +29,8 @@
     "test:e2e:electron": "npm run build --workspace @studynarrator/web && npm run build --workspace @studynarrator/desktop && npm run rebuild:native --workspace @studynarrator/desktop && playwright test --project=electron",
     "test:e2e": "npm run build --workspace @studynarrator/web && npm run build --workspace @studynarrator/desktop && npm run rebuild:native --workspace @studynarrator/desktop && playwright test",
     "typecheck": "tsc --build --pretty false",
-    "verify": "node scripts/verify.mjs"
+    "verify": "node scripts/verify.mjs",
+    "verify:docker": "node scripts/verify-docker.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

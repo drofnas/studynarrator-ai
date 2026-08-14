@@ -85,8 +85,18 @@ function streamRenderMedia(
 }
 
 export function attachStaticWebApplication(app: Express, distributionDirectory: string): void {
-  app.use(express.static(distributionDirectory, { index: "index.html" }));
-  app.get("/{*path}", (_request, response) => {
+  app.use(express.static(distributionDirectory, {
+    index: "index.html",
+    setHeaders(response, path) {
+      response.setHeader("cache-control", path.endsWith("index.html") ? "no-cache" : "public, max-age=31536000, immutable");
+    }
+  }));
+  app.get("/{*path}", (request, response, next) => {
+    if (request.path === "/api" || request.path.startsWith("/api/")) {
+      next();
+      return;
+    }
+    response.setHeader("cache-control", "no-cache");
     response.sendFile(resolve(distributionDirectory, "index.html"));
   });
 }

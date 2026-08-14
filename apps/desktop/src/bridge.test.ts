@@ -26,19 +26,21 @@ import {
 import { isApprovedExternalUrl, SECURE_WEB_PREFERENCES } from "./security.js";
 
 const diagnostics = {
-  schemaVersion: 3,
+  schemaVersion: 4,
   overall: "fail",
   client: "electron",
   transport: "ipc",
   runtime: {
-    schemaVersion: 3,
+    schemaVersion: 4,
     applicationVersion: "0.1.0",
     runtimeName: "electron",
     runtimeVersion: "24.0.0",
     electronVersion: "43.3.0",
     platform: "darwin",
     architecture: "arm64",
-    dataDirectory: "/tmp/studynarrator"
+    dataDirectory: "/tmp/studynarrator",
+    distribution: "electron",
+    sourceRevision: "test-revision"
   },
   checks: {
     sharedCore: { status: "pass", marker: "study-narrator-core" },

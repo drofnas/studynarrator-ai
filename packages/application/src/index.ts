@@ -23,6 +23,7 @@ export interface FfmpegProbe {
 
 export interface DiagnosticsContext {
   client: "web" | "electron";
+  distribution: "development-web" | "docker-web" | "electron";
   transport: "rest" | "ipc";
   runtimeName: "node" | "electron";
   runtimeVersion: string;
@@ -30,6 +31,7 @@ export interface DiagnosticsContext {
   platform: string;
   architecture: string;
   dataDirectory: string;
+  sourceRevision: string;
 }
 
 export interface SystemService {
@@ -63,7 +65,9 @@ export function createSystemService(dependencies: {
         electronVersion: context.electronVersion,
         platform: context.platform,
         architecture: context.architecture,
-        dataDirectory: context.dataDirectory
+        dataDirectory: context.dataDirectory,
+        distribution: context.distribution,
+        sourceRevision: context.sourceRevision
       });
     },
     async diagnostics(context) {

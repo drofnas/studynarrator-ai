@@ -133,13 +133,15 @@ export async function createDesktopServices(options: {
   });
   const context: DiagnosticsContext = {
     client: "electron",
+    distribution: "electron",
     transport: "ipc",
     runtimeName: "electron",
     runtimeVersion: process.versions.node,
     electronVersion: process.versions.electron ?? null,
     platform: process.platform,
     architecture: process.arch,
-    dataDirectory
+    dataDirectory,
+    sourceRevision: environment.STUDYNARRATOR_SOURCE_REVISION?.trim() || "development"
   };
   return {
     service, persistence, connections, voiceCatalog, scratchpad, projectPreview, renderPlans, renders, scriptGeneration,

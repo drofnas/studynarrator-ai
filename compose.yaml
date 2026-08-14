@@ -1,0 +1,37 @@
+name: studynarrator
+
+services:
+  study-narrator:
+    image: studynarrator:${STUDYNARRATOR_IMAGE_TAG:-0.1.0}
+    build:
+      context: .
+      args:
+        STUDYNARRATOR_SOURCE_REVISION: ${STUDYNARRATOR_SOURCE_REVISION:-local}
+        STUDYNARRATOR_VERSION: ${STUDYNARRATOR_IMAGE_TAG:-0.1.0}
+    ports:
+      - "${STUDYNARRATOR_BIND_ADDRESS:-127.0.0.1}:${STUDYNARRATOR_HOST_PORT:-8080}:4310"
+    environment:
+      SPEACHES_API_KEY: ${SPEACHES_API_KEY:-}
+      SPEACHES_BASE_URL: ${SPEACHES_BASE_URL:-http://host.docker.internal:8000}
+      SPEACHES_DEFAULT_VOICE: ${SPEACHES_DEFAULT_VOICE:-af_heart}
+      SPEACHES_MODEL_ID: ${SPEACHES_MODEL_ID:-speaches-ai/Kokoro-82M-v1.0-ONNX}
+      SPEACHES_REQUEST_TIMEOUT_SECONDS: ${SPEACHES_REQUEST_TIMEOUT_SECONDS:-120}
+      SPEACHES_RETRY_COUNT: ${SPEACHES_RETRY_COUNT:-2}
+      STUDYNARRATOR_DATA_DIR: /data
+      STUDYNARRATOR_LOCK_SPEACHES_SETTINGS: ${STUDYNARRATOR_LOCK_SPEACHES_SETTINGS:-false}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - studynarrator-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+volumes:
+  studynarrator-data:

@@ -52,5 +52,6 @@ if (serverNativeModule === desktopNativeModule) fail("server and Electron must n
 run("npm", ["run", "smoke", "--workspace", "@studynarrator/server"], { STUDYNARRATOR_DATA_DIR: serverData });
 run("npm", ["run", "smoke", "--workspace", "@studynarrator/desktop"], { STUDYNARRATOR_DATA_DIR: desktopData });
 run("npm", ["run", "smoke", "--workspace", "@studynarrator/server"], { STUDYNARRATOR_DATA_DIR: serverData });
+run("npm", ["run", "verify:docker"]);
 
 process.stdout.write("\nVERIFY: ALL CHECKS PASSED\n");
