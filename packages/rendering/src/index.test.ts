@@ -155,6 +155,31 @@ describe("content-addressed speech cache", () => {
     expect(sharedMetadata).toMatchObject({ projectIds: ["project-a"], scratchpadUsed: false });
   });
 
+  it("releases one project owner, preserves shared audio, and defers in-flight deletion", async () => {
+    const { cache } = await fixture();
+    const shared = await cache.getOrCreate(input, { projectId: "project-a" }, async () => Uint8Array.from([82, 1]));
+    await cache.getOrCreate(input, { projectId: "project-b" }, async () => Uint8Array.from([82, 1]));
+    await expect(cache.releaseProjectEntry!("project-a", shared.key)).resolves.toMatchObject({ deferred: false, entriesRemoved: 0 });
+    await expect(cache.inspect(input)).resolves.toMatchObject({ status: "hit" });
+    await expect(cache.releaseProjectEntry!("project-b", shared.key)).resolves.toMatchObject({ deferred: false, entriesRemoved: 1 });
+    await expect(cache.inspect(input)).resolves.toMatchObject({ status: "miss" });
+
+    const cleanupInput = { ...input, text: "cleanup serialization" };
+    const cleanupEntry = await cache.getOrCreate(cleanupInput, { projectId: "project-a" }, async () => Uint8Array.from([82, 3]));
+    const cleanup = cache.releaseProjectEntry!("project-a", cleanupEntry.key);
+    const inspection = cache.inspect(cleanupInput);
+    await expect(cleanup).resolves.toMatchObject({ deferred: false, entriesRemoved: 1 });
+    await expect(inspection).resolves.toMatchObject({ status: "miss" });
+
+    let finish: ((bytes: Uint8Array) => void) | undefined;
+    const pendingInput = { ...input, text: "still synthesizing" };
+    const pending = cache.getOrCreate(pendingInput, { projectId: "project-a" }, async () => await new Promise<Uint8Array>((resolve) => { finish = resolve; }));
+    while (!finish) await new Promise<void>((resolve) => setImmediate(resolve));
+    await expect(cache.releaseProjectEntry!("project-a", createSpeechCacheKey(pendingInput))).resolves.toMatchObject({ deferred: true, entriesRemoved: 0 });
+    finish(Uint8Array.from([82, 2]));
+    await pending;
+  });
+
   it("treats a symlinked cache entry as a safe miss and replaces only the link", async () => {
     const { cache, rootDirectory } = await fixture();
     const key = createSpeechCacheKey(input);
@@ -177,11 +202,11 @@ describe("render plan silence and storage", () => {
   const planId = "00000000-0000-4000-8000-000000000002";
   const timestamp = "2026-08-13T12:00:00.000Z";
 
-  function bundle(durationMs = 750) {
+  function bundle(durationMs = 750, id = planId, createdAt = timestamp) {
     const silence = createPcmSilence(durationMs);
     const snapshot = withProjectSnapshotHash({
       schemaVersion: PROJECT_SNAPSHOT_SCHEMA_VERSION,
-      capturedAt: timestamp,
+      capturedAt: createdAt,
       project: {
         contractVersion: 1,
         id: projectId,
@@ -205,9 +230,9 @@ describe("render plan silence and storage", () => {
     });
     const plan = withRenderPlanHash({
       schemaVersion: RENDER_PLAN_SCHEMA_VERSION,
-      id: planId,
+      id,
       projectId,
-      createdAt: timestamp,
+      createdAt,
       snapshotHash: snapshot.snapshotHash,
       scriptHash: "a".repeat(64),
       entries: [{
@@ -230,20 +255,57 @@ describe("render plan silence and storage", () => {
     expect(createPcmSilence(0)).toEqual({ bytes: null, asset: null });
   });
 
-  it("writes, lists, and reopens an immutable validated bundle", async () => {
+  it("writes, replaces, lists, and reopens the current validated bundle", async () => {
     const root = await mkdtemp(join(tmpdir(), "studynarrator-render-plan-"));
     const store = createRenderPlanStore(root);
     const { silence, snapshot, plan } = bundle();
     await store.save(snapshot, plan, new Map([[silence.asset!.checksum, silence.bytes!]]));
     await mkdir(join(root, `${planId}.interrupted.tmp`));
     await writeFile(join(root, `${planId}.interrupted.tmp`, "render-plan.json"), "{\"incomplete\":true}");
-    await expect(store.save(snapshot, plan, new Map([[silence.asset!.checksum, silence.bytes!]]))).rejects.toThrow();
+    await expect(store.save(snapshot, plan, new Map([[silence.asset!.checksum, silence.bytes!]]))).resolves.toEqual(plan);
     expect((await readdir(root)).filter((name) => name.endsWith(".tmp"))).toEqual([`${planId}.interrupted.tmp`]);
     await expect(store.list(projectId)).resolves.toEqual([expect.objectContaining({ id: planId, planHash: plan.planHash })]);
     await expect(store.get(planId)).resolves.toEqual(plan);
     const silencePath = join(root, planId, silence.asset!.relativePath);
     const probe = await runFile("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", silencePath]);
     expect(Number(probe.stdout.trim())).toBeCloseTo(0.75, 3);
+  });
+
+  it("keeps job snapshots immutable while the current plan is replaced", async () => {
+    const root = await mkdtemp(join(tmpdir(), "studynarrator-render-job-snapshot-"));
+    const store = createRenderPlanStore(root);
+    const first = bundle(350);
+    await store.save(first.snapshot, first.plan, new Map([[first.silence.asset!.checksum, first.silence.bytes!]]));
+    const firstRenderId = "00000000-0000-4000-8000-000000000010";
+    await store.snapshotJob(firstRenderId, planId);
+
+    const second = bundle(1_500);
+    await store.save(second.snapshot, second.plan, new Map([[second.silence.asset!.checksum, second.silence.bytes!]]));
+    const secondRenderId = "00000000-0000-4000-8000-000000000011";
+    await store.snapshotJob(secondRenderId, planId);
+    const retryRenderId = "00000000-0000-4000-8000-000000000012";
+    await store.cloneJobSnapshot(retryRenderId, firstRenderId);
+
+    await expect(store.loadJob(firstRenderId)).resolves.toMatchObject({ plan: { entries: [{ durationMs: 350 }] } });
+    await expect(store.loadJob(secondRenderId)).resolves.toMatchObject({ plan: { entries: [{ durationMs: 1_500 }] } });
+    await expect(store.loadJob(retryRenderId)).resolves.toMatchObject({ plan: { entries: [{ durationMs: 350 }] } });
+  });
+
+  it("migrates referenced legacy plans to job snapshots before removing superseded bundles", async () => {
+    const root = await mkdtemp(join(tmpdir(), "studynarrator-render-plan-migration-"));
+    const store = createRenderPlanStore(root);
+    const oldPlanId = "00000000-0000-4000-8000-000000000020";
+    const currentPlanId = "00000000-0000-4000-8000-000000000021";
+    const old = bundle(350, oldPlanId, "2026-08-13T12:00:00.000Z");
+    const current = bundle(1_500, currentPlanId, "2026-08-13T13:00:00.000Z");
+    await store.save(old.snapshot, old.plan, new Map([[old.silence.asset!.checksum, old.silence.bytes!]]));
+    await store.save(current.snapshot, current.plan, new Map([[current.silence.asset!.checksum, current.silence.bytes!]]));
+    const renderId = "00000000-0000-4000-8000-000000000022";
+
+    await expect(store.migrateLegacy!([{ id: renderId, projectId, planId: oldPlanId }])).resolves.toEqual({ snapshotsCreated: 1, plansRemoved: 1 });
+    await expect(store.list(projectId)).resolves.toEqual([expect.objectContaining({ id: currentPlanId })]);
+    await expect(store.loadJob(renderId)).resolves.toMatchObject({ plan: { id: oldPlanId, entries: [{ durationMs: 350 }] } });
+    await expect(store.migrateLegacy!([{ id: renderId, projectId, planId: oldPlanId }])).resolves.toEqual({ snapshotsCreated: 0, plansRemoved: 0 });
   });
 
   it("rejects corrupt files, traversal-shaped IDs, and symlinked plan directories", async () => {

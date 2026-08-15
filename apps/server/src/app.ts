@@ -316,6 +316,9 @@ export function createExpressApp(options: {
   }
 
   if (options.renders) {
+    app.post("/api/projects/:projectId/renders", async (request, response, next) => {
+      try { response.status(202).json(RenderJobSchema.parse(await options.renders!.startProject!(ProjectIdSchema.parse(request.params.projectId)))); } catch (error) { next(error); }
+    });
     app.post("/api/render-plans/:planId/renders", async (request, response, next) => {
       try { response.status(202).json(RenderJobSchema.parse(await options.renders!.start(RenderPlanIdSchema.parse(request.params.planId)))); } catch (error) { next(error); }
     });
@@ -338,6 +341,22 @@ export function createExpressApp(options: {
       try {
         const media = await options.renders!.resolveRenderAudio(RenderIdSchema.parse(request.params.renderId));
         streamRenderMedia(request, response, next, media);
+      } catch (error) { next(error); }
+    });
+    app.get("/api/renders/:renderId/download", async (request, response, next) => {
+      try {
+        const media = await options.renders!.resolveRenderAudio(RenderIdSchema.parse(request.params.renderId));
+        streamRenderMedia(request, response, next, media, "attachment");
+      } catch (error) { next(error); }
+    });
+    app.get("/api/renders/:renderId/details", async (request, response, next) => {
+      try {
+        const archive = await options.renders!.resolveDetailsArchive!(RenderIdSchema.parse(request.params.renderId));
+        response.setHeader("cache-control", "private, no-store");
+        response.setHeader("content-type", archive.mimeType);
+        response.setHeader("content-disposition", `attachment; filename="${archive.fileName.replace(/["\\\r\n]/gu, "_")}"`);
+        response.setHeader("content-length", String(archive.bytes.byteLength));
+        response.send(Buffer.from(archive.bytes));
       } catch (error) { next(error); }
     });
     app.get("/api/renders/:renderId/waveform", async (request, response, next) => {

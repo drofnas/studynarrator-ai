@@ -46,7 +46,10 @@ class RenderPlanServiceError extends Error {
 }
 
 export interface RenderPlanRepository extends ConnectionRepository, Pick<PersistenceRepository,
-  "getProject" | "getSystemPacing" | "listGlobalLexicon" | "getIgnoredDiagnostics"> {}
+  "getProject" | "getSystemPacing" | "listGlobalLexicon" | "getIgnoredDiagnostics"> {
+  listSpeechCacheDeletionQueue?(projectId: string): string[];
+  acknowledgeSpeechCacheDeletion?(projectId: string, cacheKey: string): void;
+}
 
 function sha256(value: string): string { return createHash("sha256").update(value).digest("hex"); }
 
@@ -87,19 +90,24 @@ export function createRenderPlanService(dependencies: {
     async create(projectIdInput) {
       try {
         const projectId = ProjectIdSchema.parse(projectIdInput);
+        for (const cacheKey of dependencies.repository.listSpeechCacheDeletionQueue?.(projectId) ?? []) {
+          const released = await dependencies.cache.releaseProjectEntry?.(projectId, cacheKey);
+          if (!released) break;
+          if (!released.deferred) dependencies.repository.acknowledgeSpeechCacheDeletion?.(projectId, cacheKey);
+        }
         const project = dependencies.repository.getProject(projectId);
         const timing = dependencies.repository.getSystemPacing();
         const connection = dependencies.repository.getSpeachesConnection();
         if (!connection.baseUrl) throw new RenderPlanServiceError("RENDER_PLAN_CONFIGURATION", "The Speaches connection needs a server address.");
         const modelId = connection.defaultModelId;
-        if (!modelId) throw new RenderPlanServiceError("RENDER_PLAN_CONFIGURATION", "Choose a speech model before freezing a render plan.");
+        if (!modelId) throw new RenderPlanServiceError("RENDER_PLAN_CONFIGURATION", "Choose a speech model before rendering.");
         const globalLexiconEntries = dependencies.repository.listGlobalLexicon();
         const ignoredDiagnostics = dependencies.repository.getIgnoredDiagnostics();
         const lexiconEntries: LexiconEntry[] = [...globalLexiconEntries, ...project.lexiconEntries];
         const parsed = parseScript({ source: project.scriptSource, ...(ignoredDiagnostics.length > 0 ? { ignoredDiagnostics } : {}) });
         const transformed = transformScript({ parsedScript: parsed, entries: lexiconEntries, ...(ignoredDiagnostics.length > 0 ? { ignoredDiagnostics } : {}) });
         if (parsed.errors.length > 0 || transformed.errors.length > 0 || !transformed.synthesisReady) {
-          throw new RenderPlanServiceError("RENDER_PLAN_INVALID_PROJECT", "Resolve blocking script and pronunciation errors before freezing a render plan.");
+          throw new RenderPlanServiceError("RENDER_PLAN_INVALID_PROJECT", "Resolve blocking script and pronunciation errors before rendering.");
         }
         const capturedAt = now().toISOString();
         const snapshot = withProjectSnapshotHash({
@@ -205,7 +213,8 @@ export function createRenderPlanService(dependencies: {
           boundary = { explicit: false, paragraph: false, section: false };
         }
 
-        const planId = RenderPlanIdSchema.parse(createId());
+        const existing = await dependencies.store.list(projectId);
+        const planId = RenderPlanIdSchema.parse(existing[0]?.id ?? createId());
         const speechEntries = entries.filter((entry) => entry.type === "speech");
         const pauseEntries = entries.filter((entry) => entry.type === "pause");
         const plan: RenderPlan = withRenderPlanHash({

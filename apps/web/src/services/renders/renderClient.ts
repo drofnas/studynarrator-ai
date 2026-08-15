@@ -26,6 +26,9 @@ export function createRestRenderClient(fetchInput: typeof fetch = fetch): Render
     async start(planId) {
       return await read(await fetchInput(`/api/render-plans/${encodeURIComponent(planId)}/renders`, { method: "POST" }), (body) => RenderJobSchema.parse(body));
     },
+    async startProject(projectId) {
+      return await read(await fetchInput(`/api/projects/${encodeURIComponent(projectId)}/renders`, { method: "POST" }), (body) => RenderJobSchema.parse(body));
+    },
     async list(projectId) {
       return await read(await fetchInput(`/api/projects/${encodeURIComponent(projectId)}/renders`), (body) => RenderJobCollectionSchema.parse(body));
     },
@@ -47,6 +50,20 @@ export function createRestRenderClient(fetchInput: typeof fetch = fetch): Render
       anchor.download = "";
       anchor.click();
       return await Promise.resolve({ disposition: "download" as const, fileName: "render artifact" });
+    },
+    exportAudio(renderId) {
+      const anchor = document.createElement("a");
+      anchor.href = `/api/renders/${encodeURIComponent(RenderIdSchema.parse(renderId))}/download`;
+      anchor.download = "";
+      anchor.click();
+      return Promise.resolve({ disposition: "download" as const, fileName: "render audio" });
+    },
+    exportDetails(renderId) {
+      const anchor = document.createElement("a");
+      anchor.href = `/api/renders/${encodeURIComponent(RenderIdSchema.parse(renderId))}/details`;
+      anchor.download = "";
+      anchor.click();
+      return Promise.resolve({ disposition: "download" as const, fileName: "render details" });
     },
     async listSegments(renderId) {
       return await read(await fetchInput(`/api/renders/${encodeURIComponent(RenderIdSchema.parse(renderId))}/segments`), (body) => RenderHistorySegmentCollectionSchema.parse(body));

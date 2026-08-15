@@ -32,17 +32,18 @@ function columns(database: Database.Database, table: string): string[] {
   return (database.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map(({ name }) => name);
 }
 
-describe("v1 database baseline", () => {
-  it("applies one migration, seeds singleton defaults, and reopens idempotently", async () => {
+describe("database baseline", () => {
+  it("applies current migrations, seeds singleton defaults, and reopens idempotently", async () => {
     const databasePath = await temporaryDatabase("studynarrator-v1-baseline-");
     const first = await migrateDatabase({ Database: DatabaseAdapter, databasePath });
     expect(STUDYNARRATOR_MIGRATIONS.map(({ version, name }) => ({ version, name }))).toEqual([
-      { version: 1, name: "v1-baseline" }
+      { version: 1, name: "v1-baseline" },
+      { version: 2, name: "project-speech-cache-lifecycle" }
     ]);
-    expect(first.appliedVersions).toEqual([1]);
-    expect(first.databaseSchemaVersion).toBe(1);
+    expect(first.appliedVersions).toEqual([1, 2]);
+    expect(first.databaseSchemaVersion).toBe(2);
     expect(first.backupPath).toBeNull();
-    expect(first.database.prepare("SELECT version FROM schema_migrations").all()).toEqual([{ version: 1 }]);
+    expect(first.database.prepare("SELECT version FROM schema_migrations").all()).toEqual([{ version: 1 }, { version: 2 }]);
     expect(first.database.prepare("SELECT singleton_id, base_url, supplied_url_form FROM speaches_connection").all()).toEqual([
       { singleton_id: 1, base_url: null, supplied_url_form: "unconfigured" }
     ]);
@@ -68,9 +69,9 @@ describe("v1 database baseline", () => {
       SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name
     `).all() as Array<{ name: string }>).map(({ name }) => name);
     expect(tables).toEqual([
-      "connection_setup", "diagnostic_kv", "ignored_diagnostic_patterns", "lexicon_entries", "projects",
+      "connection_setup", "diagnostic_kv", "ignored_diagnostic_patterns", "lexicon_entries", "project_speech_cache_keys", "projects",
       "render_artifacts", "render_jobs", "render_segments", "schema_migrations", "speaches_connection",
-      "speaker_mappings", "system_pause_presets", "system_timing", "voice_catalog_overrides"
+      "speaker_mappings", "speech_cache_deletion_queue", "system_pause_presets", "system_timing", "voice_catalog_overrides"
     ]);
     expect(columns(migrated.database as Database.Database, "projects")).toEqual([
       "id", "name", "description", "script_source", "script_hash", "created_at", "updated_at"
@@ -106,7 +107,7 @@ describe("v1 database baseline", () => {
     baseline.database.prepare("INSERT INTO diagnostic_kv (key, value, created_at) VALUES ('fixture', 'safe', '2026-08-11T00:00:00.000Z')").run();
     baseline.database.close();
     const failing: Migration = {
-      version: 2,
+      version: 3,
       name: "intentional-test-failure",
       up(database) {
         database.exec("CREATE TABLE must_rollback (id TEXT); INSERT INTO missing_table VALUES (1);");
@@ -115,12 +116,12 @@ describe("v1 database baseline", () => {
 
     let failure: MigrationFailureError | undefined;
     try {
-      await migrateDatabase({ Database: DatabaseAdapter, databasePath, migrations: [STUDYNARRATOR_MIGRATIONS[0]!, failing] });
+      await migrateDatabase({ Database: DatabaseAdapter, databasePath, migrations: [...STUDYNARRATOR_MIGRATIONS, failing] });
     } catch (error) {
       failure = error as MigrationFailureError;
     }
     expect(failure).toBeInstanceOf(MigrationFailureError);
-    expect(failure?.backupPath).toContain("-v1-to-v2-");
+    expect(failure?.backupPath).toContain("-v2-to-v3-");
     expect((await stat(failure!.backupPath!)).mode & 0o777).toBe(0o600);
     expect((await readFile(failure!.backupPath!)).byteLength).toBeGreaterThan(0);
     const inspected = new Database(databasePath, { readonly: true });
@@ -131,6 +132,35 @@ describe("v1 database baseline", () => {
 });
 
 describe("StudyNarratorRepository", () => {
+  it("reconciles project cache keys and reverses queued deletion when a prior key is restored", async () => {
+    const repository = await openStudyNarratorRepository({
+      Database: DatabaseAdapter,
+      databasePath: await temporaryDatabase("studynarrator-cache-reconciliation-"),
+      now: () => new Date("2026-08-12T12:00:00.000Z"),
+      idFactory: ids(projectId)
+    });
+    const created = repository.createProject({ name: "Cache reconciliation" });
+    const replacement = {
+      name: created.name,
+      description: created.description,
+      scriptSource: "[speaker_narrator] Original",
+      speakerMappings: [{ speakerId: "narrator", displayName: "Narrator", voiceId: "voice-a", speed: 1, gainDb: 0, roleDescription: "", sampleText: "Original" }],
+      lexiconEntries: []
+    };
+
+    const originalKey = "a".repeat(64);
+    const editedKey = "b".repeat(64);
+    repository.replaceProject(created.id, replacement, [originalKey]);
+    expect(repository.listSpeechCacheDeletionQueue(created.id)).toEqual([]);
+    repository.replaceProject(created.id, { ...replacement, scriptSource: "[speaker_narrator] Edited" }, [editedKey]);
+    expect(repository.listSpeechCacheDeletionQueue(created.id)).toEqual([originalKey]);
+    repository.replaceProject(created.id, replacement, [originalKey]);
+    expect(repository.listSpeechCacheDeletionQueue(created.id)).toEqual([editedKey]);
+    repository.acknowledgeSpeechCacheDeletion(created.id, editedKey);
+    expect(repository.listSpeechCacheDeletionQueue(created.id)).toEqual([]);
+    repository.close();
+  });
+
   it("persists projects and global timing across reopen cycles", async () => {
     const databasePath = await temporaryDatabase("studynarrator-projects-");
     const first = await openStudyNarratorRepository({
@@ -139,7 +169,7 @@ describe("StudyNarratorRepository", () => {
       now: () => new Date("2026-08-12T12:00:00.000Z"),
       idFactory: ids(projectId, lexiconId)
     });
-    expect(first.status()).toMatchObject({ contractVersion: 1, databaseSchemaVersion: 1 });
+    expect(first.status()).toMatchObject({ contractVersion: 1, databaseSchemaVersion: 2 });
     const created = first.createProject({ name: "Persistence restart proof", description: "Restart proof" });
     const source = "Résumé line\r\n\r\nSQL line 🧠";
     first.replaceProject(created.id, {
@@ -220,7 +250,7 @@ describe("StudyNarratorRepository", () => {
   it("persists marker evidence and durable render state", async () => {
     const databasePath = await temporaryDatabase("studynarrator-render-state-");
     const repository = await openStudyNarratorRepository({ Database: DatabaseAdapter, databasePath, idFactory: ids(projectId) });
-    expect(repository.runMarker()).toMatchObject({ markerKey: "runtime.storage-self-test", migrationVersion: 1 });
+    expect(repository.runMarker()).toMatchObject({ markerKey: "runtime.storage-self-test", migrationVersion: 2 });
     const project = repository.createProject({ name: "Rendered" });
     const timestamp = "2026-08-13T12:00:00.000Z";
     const renderId = "00000000-0000-4000-8000-000000000020";

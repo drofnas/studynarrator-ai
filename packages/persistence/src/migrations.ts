@@ -254,16 +254,32 @@ function applyBaseline(database: DatabaseLike): void {
 }
 
 export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
-  { version: 1, name: "v1-baseline", up: applyBaseline }
+  { version: 1, name: "v1-baseline", up: applyBaseline },
+  { version: 2, name: "project-speech-cache-lifecycle", up(database) {
+    database.exec(`
+      CREATE TABLE project_speech_cache_keys (
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        cache_key TEXT NOT NULL CHECK (length(cache_key) = 64),
+        PRIMARY KEY (project_id, cache_key)
+      );
+      CREATE TABLE speech_cache_deletion_queue (
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        cache_key TEXT NOT NULL CHECK (length(cache_key) = 64),
+        queued_at TEXT NOT NULL,
+        PRIMARY KEY (project_id, cache_key)
+      );
+      CREATE INDEX speech_cache_deletion_project_idx ON speech_cache_deletion_queue(project_id, queued_at);
+    `);
+  } }
 ]);
 
 interface VersionRow { version: number }
 interface NameRow { name: string }
 
 const BASELINE_TABLES = Object.freeze([
-  "connection_setup", "diagnostic_kv", "ignored_diagnostic_patterns", "lexicon_entries", "projects",
+  "connection_setup", "diagnostic_kv", "ignored_diagnostic_patterns", "lexicon_entries", "project_speech_cache_keys", "projects",
   "render_artifacts", "render_jobs", "render_segments", "schema_migrations", "speaches_connection",
-  "speaker_mappings", "system_pause_presets", "system_timing", "voice_catalog_overrides"
+  "speaker_mappings", "speech_cache_deletion_queue", "system_pause_presets", "system_timing", "voice_catalog_overrides"
 ]);
 
 function validateBaselineSchema(database: DatabaseLike): void {

@@ -124,12 +124,15 @@ export function createPreloadBridge(invoke: (channel: string, input?: unknown) =
   };
   const renders: RenderClient = {
     async start(planId) { return RenderJobSchema.parse(await invoke(RENDER_CHANNELS.start, { planId })); },
+    async startProject(projectId) { return RenderJobSchema.parse(await invoke(RENDER_CHANNELS.startProject, { projectId })); },
     async list(projectId) { return RenderJobCollectionSchema.parse(await invoke(RENDER_CHANNELS.list, { projectId })); },
     async get(renderId) { return RenderJobSchema.parse(await invoke(RENDER_CHANNELS.get, { renderId })); },
     async cancel(renderId) { return RenderJobSchema.parse(await invoke(RENDER_CHANNELS.cancel, { renderId })); },
     async retry(renderId) { return RenderJobSchema.parse(await invoke(RENDER_CHANNELS.retry, { renderId })); },
     async listArtifacts(renderId) { return RenderArtifactCollectionSchema.parse(await invoke(RENDER_CHANNELS.artifacts, { renderId })); },
     async exportArtifact(artifactId) { return RenderArtifactExportResultSchema.parse(await invoke(RENDER_CHANNELS.exportArtifact, { artifactId })); },
+    async exportAudio(renderId) { return RenderArtifactExportResultSchema.parse(await invoke(RENDER_CHANNELS.exportAudio, { renderId })); },
+    async exportDetails(renderId) { return RenderArtifactExportResultSchema.parse(await invoke(RENDER_CHANNELS.exportDetails, { renderId })); },
     async listSegments(renderId) { return RenderHistorySegmentCollectionSchema.parse(await invoke(RENDER_CHANNELS.segments, { renderId })); },
     async getWaveform(renderId) { return RenderWaveformSchema.parse(await invoke(RENDER_CHANNELS.waveform, { renderId })); },
     renderAudioSource(renderId) { return `studynarrator-media://render/${RenderIdSchema.parse(renderId)}`; },

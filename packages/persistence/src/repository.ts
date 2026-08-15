@@ -151,7 +151,9 @@ export interface StudyNarratorRepository {
   listProjects(): ProjectSummary[];
   createProject(input: ProjectCreateInput): ProjectDetail;
   getProject(projectId: string): ProjectDetail;
-  replaceProject(projectId: string, input: ProjectReplaceInput): ProjectDetail;
+  replaceProject(projectId: string, input: ProjectReplaceInput, speechCacheKeys?: readonly string[]): ProjectDetail;
+  listSpeechCacheDeletionQueue(projectId: string): string[];
+  acknowledgeSpeechCacheDeletion(projectId: string, cacheKey: string): void;
   duplicateProject(projectId: string, input: ProjectDuplicateInput): ProjectDetail;
   deleteProject(projectId: string): void;
   getSystemPacing(): SystemTimingConfiguration;
@@ -522,7 +524,7 @@ function createRepository(options: {
       return getProject(id);
     },
     getProject,
-    replaceProject(projectIdInput, inputValue) {
+    replaceProject(projectIdInput, inputValue, speechCacheKeys) {
       assertOpen();
       const projectId = ProjectIdSchema.parse(projectIdInput);
       const input = ProjectReplaceInputSchema.parse(inputValue);
@@ -546,10 +548,34 @@ function createRepository(options: {
           speaker.gainDb, speaker.roleDescription, speaker.sampleText
         ));
         replaceLexicon("project", projectId, input.lexiconEntries, timestamp);
+        if (speechCacheKeys !== undefined) {
+          const desired = [...new Set(speechCacheKeys)];
+          if (desired.some((key) => !/^[a-f0-9]{64}$/u.test(key))) throw new Error("Project speech cache key is invalid.");
+          const prior = (database.prepare("SELECT cache_key FROM project_speech_cache_keys WHERE project_id = ?").all(projectId) as Array<{ cache_key: string }>).map(({ cache_key }) => cache_key);
+          const desiredSet = new Set(desired);
+          const queue = database.prepare("INSERT OR IGNORE INTO speech_cache_deletion_queue (project_id, cache_key, queued_at) VALUES (?, ?, ?)");
+          for (const key of prior) if (!desiredSet.has(key)) queue.run(projectId, key, timestamp);
+          database.prepare("DELETE FROM project_speech_cache_keys WHERE project_id = ?").run(projectId);
+          const insertKey = database.prepare("INSERT INTO project_speech_cache_keys (project_id, cache_key) VALUES (?, ?)");
+          for (const key of desired) insertKey.run(projectId, key);
+          const revive = database.prepare("DELETE FROM speech_cache_deletion_queue WHERE project_id = ? AND cache_key = ?");
+          for (const key of desired) revive.run(projectId, key);
+        }
       });
       const updated = getProject(projectId);
       if (updated.createdAt !== prior.createdAt) throw new Error("Project creation timestamp changed unexpectedly.");
       return updated;
+    },
+    listSpeechCacheDeletionQueue(projectIdInput) {
+      assertOpen();
+      const projectId = ProjectIdSchema.parse(projectIdInput);
+      return (database.prepare("SELECT cache_key FROM speech_cache_deletion_queue WHERE project_id = ? ORDER BY queued_at, cache_key").all(projectId) as Array<{ cache_key: string }>).map(({ cache_key }) => cache_key);
+    },
+    acknowledgeSpeechCacheDeletion(projectIdInput, cacheKey) {
+      assertOpen();
+      const projectId = ProjectIdSchema.parse(projectIdInput);
+      if (!/^[a-f0-9]{64}$/u.test(cacheKey)) throw new Error("Speech cache key is invalid.");
+      database.prepare("DELETE FROM speech_cache_deletion_queue WHERE project_id = ? AND cache_key = ?").run(projectId, cacheKey);
     },
     duplicateProject(projectIdInput, inputValue) {
       assertOpen();

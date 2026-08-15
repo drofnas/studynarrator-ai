@@ -5,12 +5,15 @@ import { RenderPlanIdSchema } from "./renderPlan.js";
 export const RENDER_CONTRACT_VERSION = 1;
 export const RENDER_CHANNELS = Object.freeze({
   start: "renders.start",
+  startProject: "renders.startProject",
   list: "renders.list",
   get: "renders.get",
   cancel: "renders.cancel",
   retry: "renders.retry",
   artifacts: "renders.artifacts",
   exportArtifact: "renders.exportArtifact",
+  exportAudio: "renders.exportAudio",
+  exportDetails: "renders.exportDetails",
   segments: "renders.segments",
   waveform: "renders.waveform",
   exportSegment: "renders.exportSegment"
@@ -200,12 +203,15 @@ type RenderArtifactExportResult = z.infer<typeof RenderArtifactExportResultSchem
 
 export interface RenderClient {
   start(planId: string): Promise<RenderJob>;
+  startProject(projectId: string): Promise<RenderJob>;
   list(projectId: string): Promise<RenderJob[]>;
   get(renderId: string): Promise<RenderJob>;
   cancel(renderId: string): Promise<RenderJob>;
   retry(renderId: string): Promise<RenderJob>;
   listArtifacts(renderId: string): Promise<RenderArtifact[]>;
   exportArtifact(artifactId: string): Promise<RenderArtifactExportResult>;
+  exportAudio(renderId: string): Promise<RenderArtifactExportResult>;
+  exportDetails(renderId: string): Promise<RenderArtifactExportResult>;
   listSegments(renderId: string): Promise<RenderHistorySegment[]>;
   getWaveform(renderId: string): Promise<RenderWaveform>;
   renderAudioSource(renderId: string): string;

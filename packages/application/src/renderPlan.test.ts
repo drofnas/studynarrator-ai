@@ -109,11 +109,16 @@ describe("render plan application service", () => {
     expect((speechCache as SpeechCache & { inspectMock: ReturnType<typeof vi.fn> }).inspectMock).toHaveBeenCalledTimes(5);
     expect((await service.list(projectId))[0]).toMatchObject({ id: planId, planHash: plan.planHash });
 
-    current.project = { ...current.project, scriptSource: "Changed after freezing", scriptHash: "c".repeat(64) };
+    current.project = { ...current.project, scriptSource: "[speaker_teacher] Changed after rendering.", scriptHash: "c".repeat(64) };
     current.timing = { ...timing(), transitionPauses: { ...timing().transitionPauses, paragraph: { mode: "none" } } };
     const reopened = await service.get(planId);
     expect(reopened).toEqual(plan);
     expect(reopened.scriptHash).toBe("a".repeat(64));
+    const replaced = await service.create(projectId);
+    expect(replaced).toMatchObject({ id: planId, scriptHash: "c".repeat(64) });
+    expect(replaced.planHash).not.toBe(plan.planHash);
+    await expect(service.list(projectId)).resolves.toEqual([expect.objectContaining({ id: planId, planHash: replaced.planHash })]);
+    await expect(service.get(planId)).resolves.toEqual(replaced);
   });
 
   it("blocks invalid projects without inspecting cache or writing a plan", async () => {

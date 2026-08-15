@@ -120,6 +120,7 @@ export {
   SPEACHES_CACHE_ADAPTER_VERSION,
   createApplicationSpeechCache,
   createCachedSpeechSynthesis,
+  createProjectSpeechCacheKeyPlanner,
   createSpeechCacheService,
   type CachedSpeechSynthesis,
   type CachedSpeechSynthesisRunner

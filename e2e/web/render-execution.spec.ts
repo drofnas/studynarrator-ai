@@ -1,95 +1,59 @@
-import { unlink } from "node:fs/promises";
-import { join } from "node:path";
+import { readFile } from "node:fs/promises";
+import { strFromU8, unzipSync } from "fflate";
 import { configureConnection, expect, openRoute, test } from "../support/studyNarratorTest.js";
 
 test.describe("render execution", () => {
-  test("renders a frozen plan, publishes the complete bundle, and restores completion after reload", async ({ page, request, studyNarrator }) => {
+  test("renders, reuses unchanged edits, downloads MP3 and the exact evidence package, and restores the latest render", async ({ page, request, studyNarrator }) => {
     await configureConnection(page, studyNarrator);
-    const createdResponse = await request.post(`${studyNarrator.baseUrl}/api/projects`, { data: { name: "Render acceptance" } });
-    const created = await createdResponse.json() as { id: string; name: string };
-    await request.put(`${studyNarrator.baseUrl}/api/projects/${created.id}`, { data: {
+    const created = await (await request.post(`${studyNarrator.baseUrl}/api/projects`, { data: { name: "Render acceptance" } })).json() as { id: string; name: string };
+    const projectInput = {
       name: created.name,
       description: "End-to-end render fixture.",
-      scriptSource: "[section: Opening]\n[speaker_teacher] SQL renders this sentence.\n[pause_medium]\n[speaker_teacher] Finish this render.",
+      scriptSource: "[speaker_teacher] Render this sentence.\n\n[speaker_teacher] Keep this sentence.",
       speakerMappings: [{ speakerId: "teacher", displayName: "Teacher", voiceId: "af_heart", speed: 1, gainDb: 0, roleDescription: "", sampleText: "" }],
-      lexiconEntries: [{
-        scope: "project", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel",
-        caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: ""
-      }]
-    } });
+      lexiconEntries: []
+    };
+    await request.put(`${studyNarrator.baseUrl}/api/projects/${created.id}`, { data: projectInput });
     studyNarrator.fakeSpeaches.reset();
 
     await openRoute(page, studyNarrator, `/projects/${created.id}?tab=render`);
-    await expect(page.getByRole("button", { name: "Freeze render plan" })).toBeEnabled();
-    await page.getByRole("button", { name: "Freeze render plan" }).click();
-    await expect(page.getByRole("button", { name: "Render this frozen plan" })).toBeVisible();
-    await page.getByRole("button", { name: "Render this frozen plan" }).click();
-    await expect(page.getByText(/Phase: complete/u)).toBeVisible({ timeout: 20_000 });
-    const history = page.getByLabel("Saved renders");
-    const disclosure = history.getByRole("button", { expanded: true }).first();
-    await expect(disclosure).toBeVisible();
-    await expect(page.getByRole("list", { name: "Render artifacts" }).getByRole("listitem")).toHaveCount(7);
+    await expect(page.getByRole("button", { name: "Render" })).toBeEnabled();
+    await page.getByRole("button", { name: "Render" }).click();
+    await expect(page.getByLabel(/Audio player for Completed project render/u)).toBeVisible({ timeout: 20_000 });
     expect(studyNarrator.fakeSpeaches.getState().requests.filter(({ path, status }) => path === "/v1/audio/speech" && status === 200)).toHaveLength(2);
 
-    await page.getByRole("button", { name: "Play completed render" }).click();
-    const completedPlayer = page.getByLabel(/Audio player for Completed render/u);
-    await expect(completedPlayer.getByRole("button", { name: "Play", exact: true })).toBeEnabled();
-    const seek = completedPlayer.getByLabel("Seek playback");
-    await seek.focus();
-    await seek.press("End");
-    expect(Number(await seek.inputValue())).toBeGreaterThan(0);
-    const waveform = completedPlayer.getByRole("group", { name: "Playback waveform" });
-    await waveform.click({ position: { x: 12, y: 20 } });
-    expect(Number(await seek.inputValue())).toBeLessThan(Number(await seek.getAttribute("max")));
-
-    const segmentRows = page.getByLabel("Ordered segment rows");
-    const firstSpeech = segmentRows.getByRole("article").filter({ has: page.getByRole("button", { name: /Play segment/u }) }).first();
-    await firstSpeech.getByRole("button", { name: /Play segment/u }).click();
-    await expect(page.getByLabel(/Audio player for Teacher · segment/u)).toBeVisible();
-    expect(studyNarrator.fakeSpeaches.getState().requests.filter(({ path, status }) => path === "/v1/audio/speech" && status === 200)).toHaveLength(2);
-
-    await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: studyNarrator.baseUrl });
-    await firstSpeech.getByRole("button", { name: "Copy readable" }).click();
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("SQL renders");
-    await firstSpeech.getByRole("button", { name: "Copy TTS" }).click();
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("sequel renders");
-    const downloadPromise = page.waitForEvent("download");
-    await firstSpeech.getByRole("button", { name: "Download segment" }).click();
-    expect((await downloadPromise).suggestedFilename()).toMatch(/^\d{6}\.wav$/u);
-    await firstSpeech.getByRole("button", { name: /Source line/u }).click();
-    await expect(page.getByLabel("Script source")).toBeFocused();
-    await expect(page.getByRole("tab", { name: "Script Editor" })).toHaveAttribute("aria-selected", "true");
+    await page.getByRole("tab", { name: "Script Editor" }).click();
+    await page.getByLabel("Script source").fill("[speaker_teacher] Render an edited sentence.\n\n[speaker_teacher] Keep this sentence.");
+    await page.getByRole("button", { name: "Save now" }).click();
+    await expect(page.locator('span[data-state="saved"]')).toHaveAttribute("data-state", "saved");
     await page.getByRole("tab", { name: "Render" }).click();
+    await page.getByRole("button", { name: "Render" }).click();
+    await expect(page.getByLabel(/Audio player for Completed project render/u)).toBeVisible({ timeout: 20_000 });
+    expect(studyNarrator.fakeSpeaches.getState().requests.filter(({ path, status }) => path === "/v1/audio/speech" && status === 200)).toHaveLength(3);
 
-    const renders = await request.get(`${studyNarrator.baseUrl}/api/projects/${created.id}/renders`);
-    const [render] = await renders.json() as Array<{ id: string; state: string }>;
-    expect(render?.state).toBe("complete");
-    const artifactsResponse = await request.get(`${studyNarrator.baseUrl}/api/renders/${render!.id}/artifacts`);
-    const artifacts = await artifactsResponse.json() as Array<{ id: string; type: string; fileName: string }>;
-    expect(artifacts.map(({ type }) => type).sort()).toEqual(["checksums", "manifest", "mp3", "originalScript", "projectSnapshot", "readableTranscript", "ttsTranscript"].sort());
-    const checksums = artifacts.find(({ type }) => type === "checksums")!;
-    const checksumDownload = await request.get(`${studyNarrator.baseUrl}/api/render-artifacts/${checksums.id}`);
-    expect(await checksumDownload.text()).toContain("render-acceptance.mp3");
+    const audioDownload = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Download", exact: true }).click();
+    const audio = await audioDownload;
+    expect(audio.suggestedFilename()).toBe("render-acceptance.mp3");
+    expect((await readFile(await audio.path())).subarray(0, 3).toString()).toBe("ID3");
 
+    const detailsDownload = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Download Details" }).click();
+    const details = await detailsDownload;
+    expect(details.suggestedFilename()).toBe("render-acceptance-render-details.zip");
+    const files = unzipSync(await readFile(await details.path()));
+    expect(Object.keys(files).sort()).toEqual(["checksums.txt", "original-script.txt", "project-snapshot.json", "readable-transcript.txt", "render-acceptance.mp3", "render-manifest.json", "tts-transcript.txt"].sort());
+    expect(strFromU8(files["tts-transcript.txt"]!)).toContain("Render an edited sentence");
+    expect(Object.keys(files).some((name) => name.includes("segment") || name.includes("waveform"))).toBe(false);
+
+    const renders = await (await request.get(`${studyNarrator.baseUrl}/api/projects/${created.id}/renders`)).json() as Array<{ id: string }>;
+    expect(renders).toHaveLength(2);
     await page.reload();
-    await expect(page.getByText(/Phase: complete/u)).toBeVisible();
-    await expect(page.getByRole("list", { name: "Render artifacts" }).getByRole("listitem")).toHaveCount(7);
-
-    const segmentResponse = await request.get(`${studyNarrator.baseUrl}/api/renders/${render!.id}/segments`);
-    const reviewSegments = await segmentResponse.json() as Array<{ ordinal: number; type: string }>;
-    const retainedSpeech = reviewSegments.find(({ type }) => type === "speech")!;
-    await unlink(join(studyNarrator.dataDirectory, "renders", render!.id, "segments", `${String(retainedSpeech.ordinal).padStart(6, "0")}.wav`));
-    const reloadedDisclosure = page.getByLabel("Saved renders").getByRole("button", { name: new RegExp(render!.id, "u") });
-    await reloadedDisclosure.click();
-    await reloadedDisclosure.click();
-    await expect(page.getByText(/no retained synthesis media/u)).toBeVisible();
-    await page.getByRole("button", { name: "Rerender this frozen plan" }).click();
-    await expect(page.getByLabel("Saved renders").locator(":scope > article")).toHaveCount(2);
-    await expect(page.getByLabel("Saved renders").locator(":scope > article").first().getByText(/Phase: complete/u)).toBeVisible({ timeout: 20_000 });
-    expect(studyNarrator.fakeSpeaches.getState().requests.filter(({ path, status }) => path === "/v1/audio/speech" && status === 200)).toHaveLength(2);
+    await expect(page.getByLabel(/Audio player for Completed project render/u)).toBeVisible();
+    await expect(page.getByText(renders[1]!.id)).toHaveCount(0);
   });
 
-  test("reports synthesis failure, retries from cache-safe state, and cancels an active request", async ({ page, request, studyNarrator }) => {
+  test("shows a concise failure and retries from the same project action", async ({ page, request, studyNarrator }) => {
     await configureConnection(page, studyNarrator);
     const created = await (await request.post(`${studyNarrator.baseUrl}/api/projects`, { data: { name: "Render recovery" } })).json() as { id: string; name: string };
     await request.put(`${studyNarrator.baseUrl}/api/projects/${created.id}`, { data: {
@@ -98,31 +62,12 @@ test.describe("render execution", () => {
       lexiconEntries: []
     } });
     await openRoute(page, studyNarrator, `/projects/${created.id}?tab=render`);
-    await page.getByRole("button", { name: "Freeze render plan" }).click();
-    await expect(page.getByRole("button", { name: "Render this frozen plan" })).toBeVisible();
-
     studyNarrator.fakeSpeaches.setScenario("rejected-voice");
-    await page.getByRole("button", { name: "Render this frozen plan" }).click();
-    await expect(page.getByText(/Phase: failed/u)).toBeVisible();
-    await expect(page.getByRole("alert").filter({ hasText: "RENDER_SYNTHESIS_FAILED" })).toBeVisible();
+    await page.getByRole("button", { name: "Render" }).click();
+    await expect(page.getByRole("button", { name: "Try again" })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("alert")).toContainText("Speech generation failed");
     studyNarrator.fakeSpeaches.setScenario("healthy");
-    await page.getByRole("button", { name: "Retry render" }).click();
-    await expect(page.getByText(/Phase: complete/u)).toBeVisible({ timeout: 20_000 });
-
-    const connectionResponse = await request.put(`${studyNarrator.baseUrl}/api/connection`, { data: {
-      baseUrl: studyNarrator.fakeSpeaches.baseUrl,
-      defaultModelId: "speaches-ai/Kokoro-82M-v1.0-ONNX",
-      defaultVoiceId: "af_heart",
-      timeoutSeconds: 30,
-      retryCount: 0,
-      responseFormat: "wav"
-    } });
-    expect(connectionResponse.ok()).toBe(true);
-    studyNarrator.fakeSpeaches.setScenario("timeout");
-    await request.delete(`${studyNarrator.baseUrl}/api/speech-cache`);
-    await page.getByRole("button", { name: "Render this frozen plan" }).click();
-    await expect(page.getByText(/Phase: synthesizing/u)).toBeVisible();
-    await page.getByRole("button", { name: "Cancel render" }).dispatchEvent("click");
-    await expect(page.getByText(/Phase: canceled/u)).toBeVisible();
+    await page.getByRole("button", { name: "Try again" }).click();
+    await expect(page.getByRole("button", { name: "Download", exact: true })).toBeVisible({ timeout: 20_000 });
   });
 });

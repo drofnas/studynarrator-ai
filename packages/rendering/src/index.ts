@@ -2,9 +2,10 @@ import { createHash, randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { constants } from "node:fs";
 import { chmod, lstat, mkdir, open, readdir, rename, rm, unlink, writeFile } from "node:fs/promises";
-import { join, resolve, sep } from "node:path";
+import { join, resolve } from "node:path";
 import {
   ProjectSnapshotSchema,
+  RenderIdSchema,
   RenderPlanIdSchema,
   RenderPlanSchema,
   RenderPlanSummaryCollectionSchema,
@@ -97,6 +98,7 @@ export interface SpeechCache {
   clearAll(): Promise<SpeechCacheCleanupResult>;
   clearProject(projectId: string): Promise<SpeechCacheCleanupResult>;
   clearEntry(key: string): Promise<SpeechCacheCleanupResult>;
+  releaseProjectEntry?(projectId: string, key: string): Promise<SpeechCacheCleanupResult & { deferred: boolean }>;
   retainScratchpad(key: string): Promise<SpeechCacheCleanupResult>;
 }
 
@@ -288,6 +290,7 @@ export function createSpeechCache(options: {
   const now = options.now ?? (() => new Date());
   const createId = options.createId ?? randomUUID;
   const flights = new Map<string, Flight>();
+  const cleanups = new Map<string, Promise<void>>();
   const counters: SessionCounters = { hits: 0, misses: 0, writes: 0, corruptMisses: 0 };
 
   const paths = (keyValue: string) => {
@@ -469,6 +472,8 @@ export function createSpeechCache(options: {
     async getOrCreate(input, usage, synthesize, signal) {
       const normalized = normalizeSpeechCacheInput(input);
       const key = createSpeechCacheKey(input);
+      const cleanup = cleanups.get(key);
+      if (cleanup) await cleanup;
       const existing = flights.get(key);
       if (existing) {
         existing.usages.push(usage);
@@ -492,6 +497,8 @@ export function createSpeechCache(options: {
     async inspect(input, signal) {
       const normalized = normalizeSpeechCacheInput(input);
       const key = createSpeechCacheKey(input);
+      const cleanup = cleanups.get(key);
+      if (cleanup) await cleanup;
       const cached = await loadEntry(key, normalized, [], signal, false);
       return { key, status: cached ? "hit" : "miss" };
     },
@@ -551,6 +558,31 @@ export function createSpeechCache(options: {
     },
     async clearEntry(key) {
       return await removeEntry(assertCacheKey(key));
+    },
+    async releaseProjectEntry(projectId, keyValue) {
+      if (!projectId.trim()) throw new Error("Project ID is required for cache cleanup.");
+      const key = assertCacheKey(keyValue);
+      if (flights.has(key) || cleanups.has(key)) return { entriesRemoved: 0, bytesFreed: 0, deferred: true };
+      let finishCleanup = () => undefined;
+      const cleanup = new Promise<void>((resolveCleanup) => { finishCleanup = resolveCleanup; });
+      cleanups.set(key, cleanup);
+      try {
+        const entryPaths = paths(key);
+        if (!(await regularFile(entryPaths.metadata))) return { entriesRemoved: 0, bytesFreed: 0, deferred: false };
+        const metadata = parseMetadata(JSON.parse((await readBoundedFile(entryPaths.metadata, MAX_CACHE_METADATA_BYTES)).toString("utf8")) as unknown);
+        if (!metadata || !metadata.projectIds.includes(projectId)) return { entriesRemoved: 0, bytesFreed: 0, deferred: false };
+        const projectIds = metadata.projectIds.filter((candidate) => candidate !== projectId);
+        if (projectIds.length > 0 || metadata.scratchpadUsed) {
+          await writeMetadata({ ...metadata, projectIds });
+          return { entriesRemoved: 0, bytesFreed: 0, deferred: false };
+        }
+        return { ...(await removeEntry(key)), deferred: false };
+      } catch {
+        return { entriesRemoved: 0, bytesFreed: 0, deferred: false };
+      } finally {
+        cleanups.delete(key);
+        finishCleanup();
+      }
     },
     async retainScratchpad(keyValue) {
       const retainedKey = assertCacheKey(keyValue);
@@ -844,6 +876,10 @@ export interface RenderPlanStore {
   list(projectId: string): Promise<RenderPlanSummary[]>;
   get(planId: string): Promise<RenderPlan>;
   load(planId: string): Promise<{ snapshot: ProjectSnapshot; plan: RenderPlan; silenceAssets: ReadonlyMap<string, Uint8Array> }>;
+  snapshotJob(renderId: string, planId: string): Promise<void>;
+  cloneJobSnapshot(renderId: string, sourceRenderId: string): Promise<void>;
+  loadJob(renderId: string): Promise<{ snapshot: ProjectSnapshot; plan: RenderPlan; silenceAssets: ReadonlyMap<string, Uint8Array> }>;
+  migrateLegacy?(jobs: readonly { id: string; projectId: string; planId: string }[]): Promise<{ snapshotsCreated: number; plansRemoved: number }>;
 }
 
 function verifiedSnapshotHash(snapshot: ProjectSnapshot): boolean {
@@ -889,14 +925,13 @@ export function createRenderPlanStore(rootDirectoryInput: string): RenderPlanSto
     await chmod(rootDirectory, 0o700);
   };
 
-  const readBundle = async (planIdInput: string): Promise<{ snapshot: ProjectSnapshot; plan: RenderPlan }> => {
-    const planId = RenderPlanIdSchema.parse(planIdInput);
-    const directory = join(rootDirectory, planId);
+  const jobsDirectory = join(rootDirectory, ".jobs");
+  const readBundleAt = async (directory: string, expectedPlanId?: string): Promise<{ snapshot: ProjectSnapshot; plan: RenderPlan }> => {
     const details = await lstat(directory);
     if (!details.isDirectory() || details.isSymbolicLink()) throw new Error("Render plan directory is unsafe.");
     const snapshot = ProjectSnapshotSchema.parse(await boundedJson(join(directory, "project-snapshot.json")));
     const plan = RenderPlanSchema.parse(await boundedJson(join(directory, "render-plan.json")));
-    if (plan.id !== planId || snapshot.project.id !== plan.projectId || snapshot.project.scriptHash !== plan.scriptHash || snapshot.snapshotHash !== plan.snapshotHash
+    if ((expectedPlanId !== undefined && plan.id !== expectedPlanId) || snapshot.project.id !== plan.projectId || snapshot.project.scriptHash !== plan.scriptHash || snapshot.snapshotHash !== plan.snapshotHash
       || !verifiedSnapshotHash(snapshot) || !verifiedPlanHash(plan)) throw new Error("Render plan hashes are inconsistent.");
     const silenceDirectory = join(directory, "silence");
     const silenceEntries = plan.entries.filter((entry) => entry.type === "pause" && entry.silence !== null);
@@ -912,6 +947,37 @@ export function createRenderPlanStore(rootDirectoryInput: string): RenderPlanSto
     }
     return { snapshot, plan };
   };
+  const readBundle = async (planIdInput: string) => {
+    const planId = RenderPlanIdSchema.parse(planIdInput);
+    return await readBundleAt(join(rootDirectory, planId), planId);
+  };
+
+  const writeBundle = async (directory: string, snapshot: ProjectSnapshot, plan: RenderPlan, silenceAssets: ReadonlyMap<string, Uint8Array>) => {
+    const parent = resolve(directory, "..");
+    await mkdir(parent, { recursive: true, mode: 0o700 });
+    const temporaryDirectory = join(parent, `${plan.id}.${randomUUID()}.tmp`);
+    const backupDirectory = `${directory}.${randomUUID()}.backup`;
+    let backedUp = false;
+    try {
+      await mkdir(temporaryDirectory, { mode: 0o700 });
+      await mkdir(join(temporaryDirectory, "silence"), { mode: 0o700 });
+      await writeFile(join(temporaryDirectory, "project-snapshot.json"), `${JSON.stringify(snapshot, null, 2)}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
+      await writeFile(join(temporaryDirectory, "render-plan.json"), `${JSON.stringify(plan, null, 2)}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
+      const expected = new Map(plan.entries.flatMap((entry) => entry.type === "pause" && entry.silence ? [[entry.silence.checksum, entry.silence] as const] : []));
+      for (const [checksum, asset] of expected) {
+        const bytes = silenceAssets.get(checksum);
+        if (!bytes || bytes.byteLength !== asset.byteLength || sha256(bytes) !== checksum) throw new Error("Render plan silence bytes do not match the manifest.");
+        await writeFile(join(temporaryDirectory, asset.relativePath), bytes, { mode: 0o600, flag: "wx" });
+      }
+      if (!(await missing(directory))) { await rename(directory, backupDirectory); backedUp = true; }
+      await rename(temporaryDirectory, directory);
+      if (backedUp) await rm(backupDirectory, { recursive: true });
+    } catch (error) {
+      await rm(temporaryDirectory, { recursive: true, force: true }).catch(() => undefined);
+      if (backedUp && await missing(directory)) await rename(backupDirectory, directory).catch(() => undefined);
+      throw error;
+    }
+  };
 
   return {
     async save(snapshotInput, planInput, silenceAssets) {
@@ -922,26 +988,8 @@ export function createRenderPlanStore(rootDirectoryInput: string): RenderPlanSto
         throw new Error("Render plan cannot be saved with inconsistent hashes.");
       }
       await ensureRoot();
-      const finalDirectory = join(rootDirectory, plan.id);
-      const temporaryDirectory = join(rootDirectory, `${plan.id}.${randomUUID()}.tmp`);
-      if (!temporaryDirectory.startsWith(`${rootDirectory}${sep}`)) throw new Error("Render plan temporary path escaped its root.");
-      try {
-        await mkdir(temporaryDirectory, { mode: 0o700 });
-        await mkdir(join(temporaryDirectory, "silence"), { mode: 0o700 });
-        await writeFile(join(temporaryDirectory, "project-snapshot.json"), `${JSON.stringify(snapshot, null, 2)}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
-        await writeFile(join(temporaryDirectory, "render-plan.json"), `${JSON.stringify(plan, null, 2)}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
-        const expected = new Map(plan.entries.flatMap((entry) => entry.type === "pause" && entry.silence ? [[entry.silence.checksum, entry.silence] as const] : []));
-        for (const [checksum, asset] of expected) {
-          const bytes = silenceAssets.get(checksum);
-          if (!bytes || bytes.byteLength !== asset.byteLength || sha256(bytes) !== checksum) throw new Error("Render plan silence bytes do not match the manifest.");
-          await writeFile(join(temporaryDirectory, asset.relativePath), bytes, { mode: 0o600, flag: "wx" });
-        }
-        await rename(temporaryDirectory, finalDirectory);
-        return plan;
-      } catch (error) {
-        await rm(temporaryDirectory, { recursive: true, force: true }).catch(() => undefined);
-        throw error;
-      }
+      await writeBundle(join(rootDirectory, plan.id), snapshot, plan, silenceAssets);
+      return plan;
     },
     async list(projectId) {
       await ensureRoot();
@@ -957,7 +1005,7 @@ export function createRenderPlanStore(rootDirectoryInput: string): RenderPlanSto
         }
       }
       summaries.sort((left, right) => right.createdAt.localeCompare(left.createdAt) || left.id.localeCompare(right.id));
-      return RenderPlanSummaryCollectionSchema.parse(summaries);
+      return RenderPlanSummaryCollectionSchema.parse(summaries.slice(0, 1));
     },
     async get(planId) {
       await ensureRoot();
@@ -973,6 +1021,63 @@ export function createRenderPlanStore(rootDirectoryInput: string): RenderPlanSto
         silenceAssets.set(entry.silence.checksum, await boundedRead(join(directory, entry.silence.relativePath), entry.silence.byteLength));
       }
       return { ...bundle, silenceAssets };
+    },
+    async snapshotJob(renderIdInput, planIdInput) {
+      const renderId = RenderIdSchema.parse(renderIdInput);
+      const loaded = await this.load(RenderPlanIdSchema.parse(planIdInput));
+      await writeBundle(join(jobsDirectory, renderId), loaded.snapshot, loaded.plan, loaded.silenceAssets);
+    },
+    async cloneJobSnapshot(renderIdInput, sourceRenderIdInput) {
+      const renderId = RenderIdSchema.parse(renderIdInput);
+      const loaded = await this.loadJob(RenderIdSchema.parse(sourceRenderIdInput));
+      await writeBundle(join(jobsDirectory, renderId), loaded.snapshot, loaded.plan, loaded.silenceAssets);
+    },
+    async loadJob(renderIdInput) {
+      const renderId = RenderIdSchema.parse(renderIdInput);
+      const bundle = await readBundleAt(join(jobsDirectory, renderId));
+      const directory = join(jobsDirectory, renderId);
+      const silenceAssets = new Map<string, Uint8Array>();
+      for (const entry of bundle.plan.entries) {
+        if (entry.type !== "pause" || !entry.silence || silenceAssets.has(entry.silence.checksum)) continue;
+        silenceAssets.set(entry.silence.checksum, await boundedRead(join(directory, entry.silence.relativePath), entry.silence.byteLength));
+      }
+      return { ...bundle, silenceAssets };
+    },
+    async migrateLegacy(jobs) {
+      await ensureRoot();
+      const bundles: Array<{ directory: string; plan: RenderPlan }> = [];
+      for (const entry of await readdir(rootDirectory, { withFileTypes: true })) {
+        if (!entry.isDirectory() || entry.isSymbolicLink() || !RenderPlanIdSchema.safeParse(entry.name).success) continue;
+        const loaded = await readBundle(entry.name);
+        bundles.push({ directory: join(rootDirectory, entry.name), plan: loaded.plan });
+      }
+
+      let snapshotsCreated = 0;
+      for (const job of jobs) {
+        const renderId = RenderIdSchema.parse(job.id);
+        const planId = RenderPlanIdSchema.parse(job.planId);
+        const snapshotDirectory = join(jobsDirectory, renderId);
+        if (await missing(snapshotDirectory)) {
+          if (!bundles.some(({ plan }) => plan.id === planId && plan.projectId === job.projectId)) {
+            throw new Error(`Legacy render plan ${planId} is unavailable for render ${renderId}.`);
+          }
+          await this.snapshotJob(renderId, planId);
+          snapshotsCreated += 1;
+        }
+        const snapshot = await this.loadJob(renderId);
+        if (snapshot.plan.id !== planId || snapshot.plan.projectId !== job.projectId) {
+          throw new Error(`Legacy render snapshot ${renderId} does not match its job.`);
+        }
+      }
+
+      const newestByProject = new Map<string, RenderPlan>();
+      for (const { plan } of bundles) {
+        const current = newestByProject.get(plan.projectId);
+        if (!current || plan.createdAt > current.createdAt || (plan.createdAt === current.createdAt && plan.id < current.id)) newestByProject.set(plan.projectId, plan);
+      }
+      const superseded = bundles.filter(({ plan }) => newestByProject.get(plan.projectId)?.id !== plan.id);
+      for (const { directory } of superseded) await rm(directory, { recursive: true });
+      return { snapshotsCreated, plansRemoved: superseded.length };
     }
   };
 }
