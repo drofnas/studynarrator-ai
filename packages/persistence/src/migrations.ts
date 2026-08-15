@@ -481,6 +481,44 @@ function migrateGlobalTiming(database: DatabaseLike): void {
   `).run();
 }
 
+interface SystemPauseMigrationRow {
+  pause_id: "pause_short" | "pause_medium" | "pause_long";
+  ordinal: number;
+  duration_ms: number;
+}
+
+function migrateNamedTransitionPauses(database: DatabaseLike): void {
+  const presets = database.prepare(`
+    SELECT pause_id, ordinal, duration_ms
+    FROM system_pause_presets
+    ORDER BY ordinal ASC
+  `).all() as SystemPauseMigrationRow[];
+  if (presets.length === 0) throw new Error("Global pause presets are missing.");
+
+  const row = database.prepare(`
+    SELECT paragraph_transition_mode, paragraph_transition_duration_ms,
+      speaker_change_transition_mode, speaker_change_transition_duration_ms,
+      section_transition_mode, section_transition_duration_ms
+    FROM system_pacing_defaults WHERE singleton_id = 1
+  `).get() as Record<string, unknown> | undefined;
+  if (!row) return;
+
+  for (const prefix of ["paragraph", "speaker_change", "section"] as const) {
+    if (row[`${prefix}_transition_mode`] !== "duration") continue;
+    const durationMs = Number(row[`${prefix}_transition_duration_ms`] ?? 0);
+    const nearest = presets.reduce((closest, candidate) =>
+      Math.abs(candidate.duration_ms - durationMs) < Math.abs(closest.duration_ms - durationMs) ? candidate : closest
+    );
+    database.prepare(`
+      UPDATE system_pacing_defaults
+      SET ${prefix}_transition_mode = 'preset',
+        ${prefix}_transition_pause_id = ?,
+        ${prefix}_transition_duration_ms = NULL
+      WHERE singleton_id = 1
+    `).run(nearest.pause_id);
+  }
+}
+
 export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
   { version: 1, name: "runtime-diagnostics", up: (database) => { database.exec(MIGRATION_1_SQL); } },
   {
@@ -546,6 +584,11 @@ export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
     version: 11,
     name: "global-timing",
     up: migrateGlobalTiming
+  },
+  {
+    version: 12,
+    name: "named-transition-pauses",
+    up: migrateNamedTransitionPauses
   }
 ]);
 

@@ -49,14 +49,15 @@ describe("database migrations", () => {
       { version: 8, name: "simplified-global-lexicon" },
       { version: 9, name: "voice-catalog-favorites" },
       { version: 10, name: "simplified-project-lexicon-and-global-model" },
-      { version: 11, name: "global-timing" }
+      { version: 11, name: "global-timing" },
+      { version: 12, name: "named-transition-pauses" }
     ]);
   });
 
-  it("creates schema version 11 with ordered starter pronunciations and reruns without reseeding", async () => {
+  it("creates schema version 12 with ordered starter pronunciations and reruns without reseeding", async () => {
     const databasePath = await temporaryDatabase("studynarrator-migration-fresh-");
     const first = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-12T12:00:00.000Z") });
-    expect(first.appliedVersions).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    expect(first.appliedVersions).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
     expect(first.backupPath).toBeNull();
     expect(first.database.prepare("SELECT display_text, spoken_text, enabled FROM lexicon_entries WHERE scope = 'global' ORDER BY ordinal").all()).toEqual([
       { display_text: "API", spoken_text: "A P I", enabled: 1 },
@@ -74,7 +75,7 @@ describe("database migrations", () => {
     const second = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-13T12:00:00.000Z") });
     expect(second.appliedVersions).toEqual([]);
     expect(second.backupPath).toBeNull();
-    expect(second.database.prepare("SELECT count(*) AS count FROM schema_migrations").get()).toEqual({ count: 11 });
+    expect(second.database.prepare("SELECT count(*) AS count FROM schema_migrations").get()).toEqual({ count: 12 });
     expect(second.database.prepare("SELECT count(*) AS count FROM lexicon_entries WHERE scope = 'global'").get()).toEqual({ count: 0 });
     second.database.close();
   });
@@ -86,8 +87,8 @@ describe("database migrations", () => {
     old.close();
 
     const upgraded = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-12T12:00:00.000Z") });
-    expect(upgraded.appliedVersions).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
-    expect(upgraded.backupPath).toContain("-v1-to-v11-");
+    expect(upgraded.appliedVersions).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    expect(upgraded.backupPath).toContain("-v1-to-v12-");
     expect((await stat(upgraded.backupPath!)).mode & 0o777).toBe(0o600);
     expect(upgraded.database.prepare("SELECT value FROM diagnostic_kv WHERE key = 'fixture'").get()).toEqual({ value: "preserved" });
     const backup = new Database(upgraded.backupPath!, { readonly: true });
@@ -114,8 +115,8 @@ describe("database migrations", () => {
     previous.database.close();
 
     const upgraded = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-13T12:00:00.000Z") });
-    expect(upgraded.appliedVersions).toEqual([3, 4, 5, 6, 7, 8, 9, 10, 11]);
-    expect(upgraded.backupPath).toContain("-v2-to-v11-");
+    expect(upgraded.appliedVersions).toEqual([3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    expect(upgraded.backupPath).toContain("-v2-to-v12-");
     expect(upgraded.database.prepare("SELECT name, model_id, paragraph_transition_mode, paragraph_transition_pause_id FROM projects WHERE id = ?").get(projectId))
       .toEqual({ name: "V2 project", model_id: null, paragraph_transition_mode: "none", paragraph_transition_pause_id: null });
     upgraded.database.close();
@@ -148,7 +149,7 @@ describe("database migrations", () => {
     legacy.database.close();
 
     const upgraded = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-13T12:00:00.000Z") });
-    expect(upgraded.appliedVersions).toEqual([7, 8, 9, 10, 11]);
+    expect(upgraded.appliedVersions).toEqual([7, 8, 9, 10, 11, 12]);
     expect(upgraded.database.prepare("SELECT id, name, source, api_key_reference FROM connection_profiles").all()).toEqual([
       { id: "active-environment", name: "Speaches", source: "saved", api_key_reference: null }
     ]);
@@ -193,8 +194,8 @@ describe("database migrations", () => {
     legacy.database.close();
 
     const upgraded = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-13T12:00:00.000Z") });
-    expect(upgraded.appliedVersions).toEqual([8, 9, 10, 11]);
-    expect(upgraded.backupPath).toContain("-v7-to-v11-");
+    expect(upgraded.appliedVersions).toEqual([8, 9, 10, 11, 12]);
+    expect(upgraded.backupPath).toContain("-v7-to-v12-");
     expect(upgraded.database.prepare(`
       SELECT id, entry_type, sense_id, case_sensitive, whole_word, priority, enabled, notes
       FROM lexicon_entries WHERE scope = 'global' ORDER BY ordinal
@@ -229,8 +230,8 @@ describe("database migrations", () => {
     legacy.database.close();
 
     const upgraded = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-13T12:00:00.000Z") });
-    expect(upgraded.appliedVersions).toEqual([9, 10, 11]);
-    expect(upgraded.backupPath).toContain("-v8-to-v11-");
+    expect(upgraded.appliedVersions).toEqual([9, 10, 11, 12]);
+    expect(upgraded.backupPath).toContain("-v8-to-v12-");
     expect(upgraded.database.prepare("SELECT voice_id, favorite FROM voice_catalog_overrides").all())
       .toEqual([{ voice_id: "voice", favorite: 0 }]);
     upgraded.database.close();
@@ -268,25 +269,67 @@ describe("database migrations", () => {
     legacy.database.close();
 
     const upgraded = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-14T12:00:00.000Z") });
-    expect(upgraded.appliedVersions).toEqual([11]);
-    expect(upgraded.backupPath).toContain("-v10-to-v11-");
+    expect(upgraded.appliedVersions).toEqual([11, 12]);
+    expect(upgraded.backupPath).toContain("-v10-to-v12-");
     expect(upgraded.database.prepare("SELECT pause_id, duration_ms, description FROM system_pause_presets ORDER BY ordinal").all()).toEqual([
       { pause_id: "pause_short", duration_ms: 300, description: "Older short" },
       { pause_id: "pause_medium", duration_ms: 800, description: "Newest medium" },
       { pause_id: "pause_long", duration_ms: 1_400, description: "Older long" }
     ]);
     expect(upgraded.database.prepare(`
-      SELECT paragraph_transition_mode, paragraph_transition_duration_ms,
+      SELECT paragraph_transition_mode, paragraph_transition_pause_id, paragraph_transition_duration_ms,
         speaker_change_transition_mode, speaker_change_transition_pause_id,
-        section_transition_mode, section_transition_duration_ms
+        section_transition_mode, section_transition_pause_id, section_transition_duration_ms
       FROM system_pacing_defaults WHERE singleton_id = 1
     `).get()).toEqual({
-      paragraph_transition_mode: "duration", paragraph_transition_duration_ms: 600,
+      paragraph_transition_mode: "preset", paragraph_transition_pause_id: "pause_medium", paragraph_transition_duration_ms: null,
       speaker_change_transition_mode: "preset", speaker_change_transition_pause_id: "pause_short",
-      section_transition_mode: "duration", section_transition_duration_ms: 975
+      section_transition_mode: "preset", section_transition_pause_id: "pause_medium", section_transition_duration_ms: null
     });
     expect(upgraded.database.prepare("SELECT count(*) AS count FROM pause_presets").get()).toEqual({ count: 0 });
     expect(upgraded.database.prepare("SELECT count(*) AS count FROM projects WHERE paragraph_transition_mode != 'none' OR speaker_change_transition_mode != 'none' OR section_transition_mode != 'none'").get()).toEqual({ count: 0 });
+    upgraded.database.close();
+  });
+
+  it("migrates direct global durations to exact or nearest named pauses with stable ties", async () => {
+    const databasePath = await temporaryDatabase("studynarrator-migration-named-timing-");
+    const legacy = await migrateDatabase({
+      Database: DatabaseAdapter,
+      databasePath,
+      migrations: STUDYNARRATOR_MIGRATIONS.slice(0, 11),
+      now: () => new Date("2026-08-12T12:00:00.000Z")
+    });
+    legacy.database.prepare(`
+      INSERT INTO system_pacing_defaults (
+        singleton_id, paragraph_pause_enabled, paragraph_pause_duration_ms,
+        paragraph_transition_mode, paragraph_transition_pause_id, paragraph_transition_duration_ms,
+        speaker_change_transition_mode, speaker_change_transition_pause_id, speaker_change_transition_duration_ms,
+        section_transition_mode, section_transition_pause_id, section_transition_duration_ms, updated_at
+      ) VALUES (1, 1, 750, 'preset', 'pause_medium', NULL, 'none', NULL, NULL, 'none', NULL, NULL, '2026-08-12T12:00:00.000Z')
+    `).run();
+    legacy.database.prepare("UPDATE system_pause_presets SET duration_ms = CASE pause_id WHEN 'pause_short' THEN 300 WHEN 'pause_medium' THEN 900 ELSE 1500 END").run();
+    legacy.database.prepare(`
+      UPDATE system_pacing_defaults SET
+        paragraph_transition_mode = 'duration', paragraph_transition_pause_id = NULL, paragraph_transition_duration_ms = 300,
+        speaker_change_transition_mode = 'duration', speaker_change_transition_pause_id = NULL, speaker_change_transition_duration_ms = 1200,
+        section_transition_mode = 'none', section_transition_pause_id = NULL, section_transition_duration_ms = NULL
+      WHERE singleton_id = 1
+    `).run();
+    legacy.database.close();
+
+    const upgraded = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-13T12:00:00.000Z") });
+    expect(upgraded.appliedVersions).toEqual([12]);
+    expect(upgraded.backupPath).toContain("-v11-to-v12-");
+    expect(upgraded.database.prepare(`
+      SELECT paragraph_transition_mode, paragraph_transition_pause_id, paragraph_transition_duration_ms,
+        speaker_change_transition_mode, speaker_change_transition_pause_id, speaker_change_transition_duration_ms,
+        section_transition_mode, section_transition_pause_id, section_transition_duration_ms
+      FROM system_pacing_defaults WHERE singleton_id = 1
+    `).get()).toEqual({
+      paragraph_transition_mode: "preset", paragraph_transition_pause_id: "pause_short", paragraph_transition_duration_ms: null,
+      speaker_change_transition_mode: "preset", speaker_change_transition_pause_id: "pause_medium", speaker_change_transition_duration_ms: null,
+      section_transition_mode: "none", section_transition_pause_id: null, section_transition_duration_ms: null
+    });
     upgraded.database.close();
   });
 
