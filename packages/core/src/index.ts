@@ -1,7 +1,5 @@
 export {
   CIR_SCHEMA_VERSION,
-  CirNodeSchema,
-  DiagnosticSchema,
   DEFAULT_PARAGRAPH_PAUSE_DURATION_MS,
   DEFAULT_PARAGRAPH_PAUSE_ID,
   SUPPORTED_PAUSE_IDS,
@@ -10,37 +8,23 @@ export {
   LexiconEntryAuthoringCollectionSchema,
   LexiconEntryAuthoringSchema,
   LexiconEntrySchema,
-  LexiconEntryTypeSchema,
-  LexiconMatchAuditSchema,
-  LexiconScopeSchema,
-  ParagraphBreakNodeSchema,
   ParagraphPauseConfigurationSchema,
   PARAGRAPH_PACING_VERSION,
   ParseScriptInputSchema,
   ParseScriptResultSchema,
-  PauseNodeSchema,
   PauseIdSchema,
   SupportedPauseIdSchema,
-  PronunciationAnnotationSchema,
-  PronunciationDiscoverySchema,
   ResolveParagraphPausesInputSchema,
   ResolveParagraphPausesResultSchema,
-  ResolvedParagraphPauseAuditSchema,
   SCRIPT_GRAMMAR_VERSION,
-  SectionNodeSchema,
-  SourcePositionSchema,
   SourceRangeSchema,
   SpeakerIdSchema,
-  SpeechNodeSchema,
   SYSTEM_DEFAULT_SPEAKER_ID,
-  TransformDiagnosticSchema,
   TransformScriptInputSchema,
   TransformScriptResultSchema,
-  TransformedSpeechSegmentSchema,
   type CirNode,
   type IgnoredDiagnostic,
   type LexiconEntryAuthoring,
-  type LexiconEntryAuthoringCollection,
   type LexiconEntry,
   type LexiconMatchAudit,
   type ParseDiagnostic,
@@ -55,39 +39,20 @@ export {
   type SupportedPauseId,
   type TransformDiagnostic,
   type TransformScriptInput,
-  type TransformScriptResult,
-  type TransformedSpeechSegment
+  type TransformScriptResult
 } from "./schemas.js";
 export { parseScript } from "./parser.js";
 export {
-  normalizeLexiconEntries,
-  type NormalizeLexiconEntriesOptions,
-  type NormalizeLexiconEntriesResult
+  normalizeLexiconEntries
 } from "./lexicon.js";
 export { transformScript } from "./transformer.js";
 export { resolveParagraphPauses } from "./pacing.js";
 export {
-  SCRATCHPAD_PASSAGE_MAX_CHARACTERS,
   ScratchpadPassageError,
-  transformScratchpadPassage,
-  type ScratchpadPassageProjection
+  transformScratchpadPassage
 } from "./scratchpad.js";
 export {
-  AUTHORING_SCHEMA_VERSION,
   AuthoringDryRunResultSchema,
-  AuthoringPauseConfigurationSchema,
-  AuthoringPauseRowSchema,
-  AuthoringSectionRowSchema,
-  AuthoringSpeakerConfigurationSchema,
-  AuthoringSpeakerRowSchema,
-  AuthoringValidationIssueSchema,
-  AuthoringValidationResultSchema,
-  DryRunPauseRowSchema,
-  DryRunRowSchema,
-  DryRunSectionRowSchema,
-  DryRunSpeechRowSchema,
-  PauseDurationParseResultSchema,
-  ReconciledAuthoringConfigurationSchema,
   buildAuthoringDryRun,
   parsePauseDuration,
   reconcileDiscoveredConfiguration,
@@ -95,27 +60,15 @@ export {
   type AuthoringDryRunResult,
   type AuthoringPauseConfiguration,
   type AuthoringPauseRow,
-  type AuthoringSectionRow,
   type AuthoringSpeakerConfiguration,
   type AuthoringSpeakerRow,
-  type AuthoringValidationIssue,
-  type AuthoringValidationResult,
-  type DryRunRow,
-  type PauseDurationParseResult,
-  type ReconciledAuthoringConfiguration
 } from "./authoring.js";
 export {
   SCRIPT_GENERATION_SCHEMA_VERSION,
   ScriptGenerationContextSchema,
-  ScriptGenerationLexiconSchema,
-  ScriptGenerationPauseSchema,
-  ScriptGenerationSpeakerSchema,
   ScriptPromptKindSchema,
   buildExternalLlmPrompt,
   buildSkillPackageFiles,
-  type GeneratedTextFile,
   type ScriptGenerationContext,
-  type ScriptGenerationPause,
-  type ScriptGenerationSpeaker,
   type ScriptPromptKind
 } from "./scriptGeneration.js";

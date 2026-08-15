@@ -27,7 +27,7 @@ export const ParseScriptInputSchema = z.object({
 }).strict();
 export type ParseScriptInput = z.infer<typeof ParseScriptInputSchema>;
 
-export const SourcePositionSchema = z.object({
+const SourcePositionSchema = z.object({
   line: z.number().int().positive(),
   column: z.number().int().positive()
 }).strict();
@@ -38,7 +38,7 @@ export const SourceRangeSchema = z.object({
 }).strict();
 export type SourceRange = z.infer<typeof SourceRangeSchema>;
 
-export const PronunciationAnnotationSchema = z.object({
+const PronunciationAnnotationSchema = z.object({
   displayText: z.string().min(1),
   senseId: z.string().regex(/^[A-Za-z0-9_-]+$/u),
   rawText: z.string().min(1),
@@ -51,7 +51,7 @@ const NodeBaseSchema = z.object({
   range: SourceRangeSchema
 });
 
-export const SpeechNodeSchema = NodeBaseSchema.extend({
+const SpeechNodeSchema = NodeBaseSchema.extend({
   type: z.literal("speech"),
   speakerId: SpeakerIdSchema,
   rawText: z.string().min(1),
@@ -59,22 +59,22 @@ export const SpeechNodeSchema = NodeBaseSchema.extend({
   annotations: z.array(PronunciationAnnotationSchema)
 }).strict();
 
-export const PauseNodeSchema = NodeBaseSchema.extend({
+const PauseNodeSchema = NodeBaseSchema.extend({
   type: z.literal("pause"),
   pauseId: PauseIdSchema
 }).strict();
 
-export const SectionNodeSchema = NodeBaseSchema.extend({
+const SectionNodeSchema = NodeBaseSchema.extend({
   type: z.literal("section"),
   title: z.string().min(1)
 }).strict();
 
-export const ParagraphBreakNodeSchema = NodeBaseSchema.extend({
+const ParagraphBreakNodeSchema = NodeBaseSchema.extend({
   type: z.literal("paragraphBreak"),
   lineCount: z.number().int().positive()
 }).strict();
 
-export const CirNodeSchema = z.discriminatedUnion("type", [
+const CirNodeSchema = z.discriminatedUnion("type", [
   SpeechNodeSchema,
   PauseNodeSchema,
   SectionNodeSchema,
@@ -82,7 +82,7 @@ export const CirNodeSchema = z.discriminatedUnion("type", [
 ]);
 export type CirNode = z.infer<typeof CirNodeSchema>;
 
-export const DiagnosticSchema = z.object({
+const DiagnosticSchema = z.object({
   code: z.string().regex(/^[A-Z][A-Z0-9_]*$/u),
   message: z.string().min(1),
   line: z.number().int().positive(),
@@ -107,7 +107,7 @@ const SectionDiscoverySchema = z.object({
   occurrences: z.array(DiscoveryOccurrenceSchema).min(1)
 }).strict();
 
-export const PronunciationDiscoverySchema = PronunciationAnnotationSchema.extend({
+const PronunciationDiscoverySchema = PronunciationAnnotationSchema.extend({
   nodeOrdinal: z.number().int().positive()
 }).strict();
 
@@ -155,7 +155,7 @@ const ParagraphBreakAuditSchema = z.object({
   range: SourceRangeSchema
 }).strict();
 
-export const ResolvedParagraphPauseAuditSchema = z.object({
+const ResolvedParagraphPauseAuditSchema = z.object({
   status: z.enum(["applied", "suppressedByExplicitPause"]),
   pauseId: PauseIdSchema,
   durationMs: z.number().int().min(0).max(30_000),
@@ -180,8 +180,8 @@ export const ResolveParagraphPausesResultSchema = z.object({
 }).strict();
 export type ResolveParagraphPausesResult = z.infer<typeof ResolveParagraphPausesResultSchema>;
 
-export const LexiconScopeSchema = z.enum(["global", "project"]);
-export const LexiconEntryTypeSchema = z.enum(["exactTerm", "exactPhrase", "namedSense"]);
+const LexiconScopeSchema = z.enum(["global", "project"]);
+const LexiconEntryTypeSchema = z.enum(["exactTerm", "exactPhrase", "namedSense"]);
 
 export const LexiconEntryAuthoringSchema = z.object({
   id: z.string().min(1).optional(),
@@ -215,7 +215,6 @@ export const LexiconEntryAuthoringCollectionSchema = z.array(LexiconEntryAuthori
     seenIds.add(entry.id);
   });
 });
-export type LexiconEntryAuthoringCollection = z.infer<typeof LexiconEntryAuthoringCollectionSchema>;
 
 export const LexiconEntrySchema = z.object({
   id: z.string().min(1),
@@ -248,7 +247,7 @@ export const TransformScriptInputSchema = z.object({
 }).strict();
 export type TransformScriptInput = z.infer<typeof TransformScriptInputSchema>;
 
-export const TransformDiagnosticSchema = z.object({
+const TransformDiagnosticSchema = z.object({
   code: z.string().regex(/^[A-Z][A-Z0-9_]*$/u),
   message: z.string().min(1),
   nodeOrdinal: z.number().int().positive(),
@@ -261,7 +260,7 @@ export const TransformDiagnosticSchema = z.object({
 }).strict();
 export type TransformDiagnostic = z.infer<typeof TransformDiagnosticSchema>;
 
-export const LexiconMatchAuditSchema = z.object({
+const LexiconMatchAuditSchema = z.object({
   entryId: z.string().min(1),
   scope: LexiconScopeSchema,
   entryType: LexiconEntryTypeSchema,
@@ -276,7 +275,7 @@ export const LexiconMatchAuditSchema = z.object({
 }).strict();
 export type LexiconMatchAudit = z.infer<typeof LexiconMatchAuditSchema>;
 
-export const TransformedSpeechSegmentSchema = z.object({
+const TransformedSpeechSegmentSchema = z.object({
   nodeOrdinal: z.number().int().positive(),
   speakerId: SpeakerIdSchema,
   sourceRange: SourceRangeSchema,
@@ -284,7 +283,6 @@ export const TransformedSpeechSegmentSchema = z.object({
   ttsText: z.string().min(1),
   matches: z.array(LexiconMatchAuditSchema)
 }).strict();
-export type TransformedSpeechSegment = z.infer<typeof TransformedSpeechSegmentSchema>;
 
 export const TransformScriptResultSchema = z.object({
   transformVersion: z.literal(LEXICON_TRANSFORM_VERSION),

@@ -1,8 +1,8 @@
 # Product Requirements Document: StudyNarrator
 
 **Product name:** StudyNarrator  
-**Document status:** Draft v1.3  
-**Date:** August 10, 2026  
+**Document status:** Pre-release v1 baseline
+**Date:** August 15, 2026
 **Primary usage:** Local-first, self-hosted, single-user  
 **Supported v1 distributions:** Docker Web UI and Electron desktop application  
 **Application stack:** React + TypeScript, Node.js + TypeScript, and Electron  
@@ -799,7 +799,9 @@ The connection must support:
 - Default response format for temporary segments.
 - Last successful test time and a non-secret diagnostic summary.
 
-A project automatically uses the singleton connection and may override rendering choices such as model ID. Moving a project between Docker and Electron does not copy or replace the destination installation's endpoint.
+A project automatically uses the singleton connection. Speaker mappings select voices, while the connection supplies the installation's model and endpoint. Moving project data between Docker and Electron does not copy or replace the destination installation's connection.
+
+The connection is application-managed. There are no named profiles, credential records, environment-managed connection readers, API-key inputs, Electron vaults, or operating-system credential-store integrations in version 1. An authenticated Speaches response is reported as unsupported.
 
 The application must provide a **Test Connection** action that checks progressively:
 
@@ -845,14 +847,8 @@ A project must store:
 
 - Name and optional description.
 - Current script.
-- Speaches connection-profile reference.
-- Model selection.
 - Speaker mappings.
-- Pause presets.
-- Transition rules.
 - Project lexicon entries.
-- Output settings.
-- Prompt-builder settings.
 - Render history.
 
 Required project actions:
@@ -927,9 +923,9 @@ The project may define automatic pauses for:
 - Paragraph boundaries.
 - Section boundaries.
 
-Each transition is set with one dropdown containing None or the named system presets `pause_short`, `pause_medium`, and `pause_long`. Direct per-transition durations are not offered; their equivalent timing is configured by editing the named preset durations. Existing saved direct durations are migrated to the nearest named preset, while frozen render plans retain their captured historical timing.
+Each transition is set with one dropdown containing None or the named system presets `pause_short`, `pause_medium`, and `pause_long`. Direct per-transition durations are not offered; their equivalent timing is configured by editing the named preset durations.
 
-Automatic paragraph pauses are enabled by default and use `pause_medium`, initially 750 milliseconds. System Settings supplies this default for projectless analysis and new projects. Project creation copies the effective value so existing projects remain reproducible when the system default later changes.
+Automatic paragraph pauses are enabled by default and use `pause_medium`, initially 750 milliseconds. System Settings owns the singleton timing configuration used by live projects and projectless analysis. Frozen render plans retain the timing captured when they were created.
 
 Precedence rules:
 
@@ -1152,7 +1148,7 @@ The cache is a core requirement, not an optional optimization.
 A speech cache key should include at least:
 
 - TTS adapter version.
-- Speaches base identity or configured server profile.
+- Normalized Speaches endpoint identity.
 - Model ID.
 - Voice ID.
 - Speed.
@@ -1206,7 +1202,7 @@ The manifest must include:
 - Script hash.
 - Configuration hash.
 - Lexicon version or hash.
-- Model and server profile.
+- Model, voice, and redacted endpoint identity.
 - Ordered segment list.
 - Segment type.
 - Speaker and voice.
@@ -1327,7 +1323,12 @@ A Settings area must provide:
 The primary navigation must make these surfaces obvious:
 
 ```text
-Projects | Quick Scratchpad | Lexicon | Render History | Settings
+Prompt Kit | Projects | Quick Scratchpad | Settings
+                                        |-- General
+                                        |-- Voices
+                                        |-- Lexicon
+                                        |-- Timings
+                                        `-- System diagnostics
 ```
 
 The Quick Scratchpad should open without requiring a project and should keep the minimum useful controls together: connection status, voice, speed, text, transformed-text preview, synthesize, playback, and explicit save. It should be usable as the fastest path for testing a newly configured voice or pronunciation.
@@ -1501,17 +1502,20 @@ The UI must:
 
 ## 12. Data Model
 
-### 12.1 TTS connection
+### 12.1 Singleton Speaches connection
 
 ```text
-TtsConnection
+SpeachesConnection (singleton row)
 - base_url
 - default_model_id
 - default_voice_id
 - timeout_seconds
 - retry_count
+- response_format
+- supplied_url_form
 - last_tested_at, nullable
-- last_test_status, nullable
+- last_successful_test_at, nullable
+- last_test_summary, nullable
 - created_at
 - updated_at
 ```
@@ -1523,17 +1527,16 @@ Project
 - id
 - name
 - description
-- script_text
+- script_source
 - script_hash
-- config_json
 - created_at
 - updated_at
 ```
 
-### 12.3 Speaker profile
+### 12.3 Speaker mapping
 
 ```text
-SpeakerProfile
+SpeakerMapping
 - project_id
 - speaker_id
 - display_name
@@ -1544,12 +1547,12 @@ SpeakerProfile
 - sample_text
 ```
 
-### 12.4 Pause preset
+### 12.4 System pause preset
 
 ```text
-PausePreset
-- project_id
+SystemPausePreset
 - pause_id
+- ordinal
 - duration_ms
 - description
 ```
@@ -1691,7 +1694,7 @@ RenderArtifact
 }
 ```
 
-The canonical portable project format should be versioned JSON so the Web UI and Electron application use the same schema, runtime validation, and migration logic. The singleton connection is installation-local and is not included in portable project configuration.
+The canonical frozen project snapshot is strict schema 1 JSON shared by the Web UI and Electron application. No pre-release snapshot shapes or compatibility readers are supported. The singleton connection is installation-local; a render snapshot captures only the redacted endpoint identity and synthesis choices needed for deterministic rendering.
 
 ---
 
@@ -1858,64 +1861,45 @@ The audio renderer consumes this representation rather than reparsing the source
 
 The shared TypeScript application service layer is the primary contract. The Docker Web UI exposes it through REST. Electron exposes the same operations through typed preload/IPC commands.
 
-The exact HTTP paths may change, but the Web distribution requires capabilities equivalent to:
+The Web distribution exposes the following manifest-backed route groups. The checked-in REST manifest and its contract test are authoritative and must change together:
 
 ```text
 GET    /api/health
 GET    /api/runtime
 GET    /api/diagnostics
-
-GET    /api/tts-connections
-POST   /api/tts-connections
-GET    /api/tts-connections/{connection_id}
-PUT    /api/tts-connections/{connection_id}
-DELETE /api/tts-connections/{connection_id}
-POST   /api/tts-connections/{connection_id}/test
-
-GET    /api/projects
-POST   /api/projects
-GET    /api/projects/{project_id}
-PUT    /api/projects/{project_id}
-DELETE /api/projects/{project_id}
-
-POST   /api/projects/{project_id}/parse
-POST   /api/projects/{project_id}/validate
-POST   /api/projects/{project_id}/preview
+GET    /api/persistence/status
+GET|POST /api/projects
+GET|PUT|DELETE /api/projects/:projectId
+POST   /api/projects/:projectId/duplicate
+POST   /api/projects/:projectId/preview
+DELETE /api/projects/:projectId/speech-cache
+POST|GET /api/projects/:projectId/render-plans
+GET    /api/render-plans/:planId
+POST   /api/render-plans/:planId/renders
+POST   /api/projects/:projectId/{prompt-preview,prompt-export,skill-export}
+POST   /api/script-generation/{prompt-preview,prompt-export,skill-export}
+GET    /api/projects/:projectId/renders
+GET    /api/renders/:renderId
+POST   /api/renders/:renderId/{cancel,retry}
+GET    /api/renders/:renderId/{artifacts,audio,waveform,segments}
+GET    /api/renders/:renderId/segments/:ordinal/audio
+POST   /api/renders/:renderId/segments/:ordinal/export
+GET    /api/render-artifacts/:artifactId
+GET|PUT /api/settings/pacing
+GET|PUT /api/preferences/ignored-diagnostics
+GET|PUT /api/lexicon/global
+GET|PUT /api/connection
+POST   /api/connection/{test,speech-catalog}
+GET    /api/connection/diagnostics
+GET    /api/setup
+POST   /api/setup/complete
+GET|PUT /api/voice-catalog
 POST   /api/scratchpad/preview
-
-GET    /api/lexicon
-POST   /api/lexicon
-PUT    /api/lexicon/{entry_id}
-DELETE /api/lexicon/{entry_id}
-
-POST   /api/projects/{project_id}/renders
-GET    /api/renders/{render_id}
-POST   /api/renders/{render_id}/cancel
-POST   /api/renders/{render_id}/retry
-
-GET    /api/renders/{render_id}/artifacts
-GET    /api/renders/{render_id}/segments
-GET    /api/renders/{render_id}/segments/{ordinal}/audio
-GET    /api/renders/{render_id}/waveform
-POST   /api/renders/{render_id}/segments/{ordinal}/export
-GET    /api/artifacts/{artifact_id}
-
-POST   /api/projects/{project_id}/prompt-export
-POST   /api/projects/{project_id}/skill-export
+GET|DELETE /api/speech-cache
+DELETE /api/speech-cache/:cacheKey
 ```
 
-Electron should expose equivalent high-level commands, not raw filesystem, database, HTTP, or process primitives. Example command groups are:
-
-```text
-connections.list / save / test / delete
-projects.list / create / read / update / delete
-scripts.parse / validate / preview
-scratchpad.preview / history / clear
-lexicon.list / save / delete
-renders.start / status / cancel / retry / artifacts / segments / waveform
-exports.prompt / skill / artifact / segment
-system.diagnostics / openExternal / revealFile
-```
+Electron exposes the same high-level operations from the shared persistence, connection, Scratchpad, preview, speech-cache, render-plan, render, script-generation, and diagnostics channel constants. Its public IPC manifest is contract-tested against every registered handler and preload invocation; it does not expose raw filesystem, database, HTTP, or process primitives.
 
 Shared Zod schemas or equivalent runtime validators must validate inputs and outputs at REST and IPC boundaries.
 
@@ -1980,7 +1964,6 @@ It must never assume an output is complete merely because the final filename exi
 The application must provide specific handling for:
 
 - Missing or malformed required Docker environment variables.
-- An environment-managed setting that cannot be edited in the UI.
 - Speaches hostname resolution or connection refusal.
 - Authentication failure.
 - A selected model that is absent, loading, or rejected by the external server.
@@ -2025,11 +2008,12 @@ Startup errors must preserve access to a redacted diagnostics screen whenever th
 
 ### 17.4 Maintainability
 
-- Script grammar must be versioned.
-- Project configuration must contain a schema version.
+- Every pre-release contract counter starts at 1, including database, persistence, diagnostics, grammar, script generation, preview, Scratchpad, render plan, and project snapshot schemas.
+- Project snapshots accept only the current strict schema 1 shape.
 - Render manifests must identify application, parser, and adapter versions.
 - Database migrations must be explicit and reversible when practical.
 - TTS backend behavior must be isolated behind an adapter interface.
+- `npm run verify` must run the compiler-backed dead-code audit for unreachable TS/TSX/CSS files, unused exports, and unused declared dependencies.
 
 ### 17.5 Observability
 
@@ -2062,15 +2046,18 @@ Docker deployments must keep persistent data outside the container layer. Electr
 ### 17.7 Distribution, upgrades, and migration
 
 - Docker images and desktop packages must report the same semantic application version when built from the same release.
-- Database and project-schema migrations must run before the UI accepts writes.
+- The pre-release database consists of one schema-1 baseline migration. The migration engine, backup behavior, and `db:migrate` command remain for post-v1 upgrades.
+- Existing development databases and snapshots from removed pre-release shapes are unsupported and rejected without automatic deletion or conversion.
 - A migration failure must leave the previous data intact and produce recovery guidance.
 - Before upgrading an existing SQLite database, StudyNarrator must create and retain a consistent protected backup in the application data directory. Fresh and already-current databases do not create a backup.
 - Each ordered migration runs transactionally. A failed migration closes persistence, preserves the original database and backup, leaves diagnostics available, and rejects writes until recovery; boundary guidance must not reveal SQL, source text, credentials, or internal exception details.
 - Docker upgrades must preserve named or bind-mounted application-data volumes.
-- Desktop upgrades must preserve application data without requiring manual copying.
+- Developers must explicitly reset unsupported local SQLite files, render plans, and caches after stopping the application; StudyNarrator never erases them automatically.
 - Release notes must identify schema changes, minimum tested Speaches version when applicable, and any manual migration step.
 - CI must build and smoke-test the Docker Web and Electron artifacts rather than treating source tests as sufficient.
 - Speaches upgrades remain the user’s responsibility and are not coupled to StudyNarrator release installation.
+
+For a pre-release reset, the developer stops the application, backs up anything needed, then removes the complete configured data directory: `.tmp/dev/web` for the default source Web runtime, the path named by `STUDYNARRATOR_DATA_DIR` for a custom Node runtime, or the application-data path reported by Electron diagnostics. `docker compose down --volumes` is the explicit full reset for the disposable Docker named volume. These operations remove the SQLite database, render plans, cache, and render artifacts and are never initiated automatically by StudyNarrator.
 
 ## 18. Privacy and Security Requirements
 
@@ -2783,7 +2770,7 @@ The cache and temporary directories may be moved to a different volume through c
 13. **The singleton connection is installation-local.** Portable projects do not carry or select a server endpoint.
 14. **Offline editing remains available.** A missing Speaches server does not prevent project editing, parsing, lexicon work, or prompt export.
 15. **Localhost is the secure Web default.** LAN exposure requires an explicit configuration change and visible warning.
-16. **The Electron renderer is unprivileged.** Filesystem, credentials, HTTP, and process execution remain behind validated IPC commands.
+16. **The Electron renderer is unprivileged.** Filesystem, HTTP, and process execution remain behind validated IPC commands; version 1 has no credential vault.
 17. **CLI and combined deployment are future work.** They are not hidden requirements for the initial harness.
 18. **Quick experiments do not require a project.** The Scratchpad uses the production transformation and adapter path without mutating project state.
 19. **The waveform is for navigation, not editing.** Version 1 provides compact, accessible seeking without becoming a DAW.
@@ -2821,16 +2808,14 @@ The diagnostics page should render effective values in a table similar to:
 
 ```text
 Setting                    Effective value                 Source       Editable
-Speaches base URL          http://192.168.1.50:8000        environment  no
-Default model              speaches-ai/Kokoro-82M-...      environment  no
-Default voice              af_heart                        saved profile yes
+Speaches base URL          http://192.168.1.50:8000        application  yes
+Default model              speaches-ai/Kokoro-82M-...      application  yes
+Default voice              af_heart                        application  yes
 Application data path      /data                           environment  no
 Client type                docker-web                      runtime      no
 ```
 
-Secrets display only as “configured” or “not configured.”
-
-Electron stores equivalent values in application settings and the operating-system credential store where available; it does not use this `.env` contract for normal installed-app usage.
+Web and Electron store the same singleton non-secret connection settings in the application database. Neither runtime reads environment-managed profiles or stores API keys or credentials.
 
 ---
 
@@ -2846,7 +2831,7 @@ Runtime: Node.js application serving the React build and Express API
 Image: versioned StudyNarrator image
 Ports: ${STUDYNARRATOR_BIND_ADDRESS}:${STUDYNARRATOR_HOST_PORT}:<container-port>
 Volume: application data -> /data
-Environment: external Speaches connection and StudyNarrator settings
+Environment: StudyNarrator deployment settings only
 Extra host: host.docker.internal -> host-gateway where supported
 Restart policy: unless-stopped or documented equivalent
 ```

@@ -4,7 +4,7 @@ const DEFAULT_PORT = 4310;
 const DEFAULT_HOST = "127.0.0.1";
 const DISTRIBUTIONS = new Set(["development-web", "docker-web"] as const);
 
-export interface ServerRuntimeConfiguration {
+interface ServerRuntimeConfiguration {
   distribution: "development-web" | "docker-web";
   host: string;
   port: number;

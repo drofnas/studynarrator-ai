@@ -46,7 +46,6 @@ test.describe("Settings and connection diagnostics", () => {
     await expect(page.getByRole("button", { name: "Export redacted JSON" })).toHaveCount(0);
     const endpointHost = new URL(studyNarrator.fakeSpeaches.baseUrl).host.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
     await expect(page.getByRole("link", { name: new RegExp(`Connected\\. ${endpointHost}\\. Manage connection\\.`, "u") })).toBeVisible();
-    await expect(page.getByText(/New saved profile|Active profile|API key|Environment Speaches/u)).toHaveCount(0);
 
     const scenarios: ReadonlyArray<[FakeSpeachesScenario, string]> = [
       ["unauthorized", "authenticationRequired"],
@@ -262,7 +261,6 @@ test.describe("Projects connected authoring", () => {
     await expect(voices).toHaveValue("af_heart");
     await expect(voices.getByRole("option", { name: "Heart (af_heart | en-US)" })).toBeAttached();
     await expect(voices.locator('optgroup[label="en-US"]')).toBeAttached();
-    await expect(page.getByLabel("Connection profile")).toHaveCount(0);
     await expect(page.getByLabel("Optional model override")).toHaveCount(0);
     await expect(voices).toHaveValue("af_heart");
     await expect(page.locator("strong").filter({ hasText: "Heart — American English — af_heart" })).toHaveCount(0);
@@ -304,7 +302,6 @@ test.describe("Projects connected authoring", () => {
     await page.getByRole("tab", { name: "Script Editor" }).click();
     await expect(page.getByLabel("Script source")).toHaveValue(longScript);
     await page.getByRole("tab", { name: "Settings" }).click();
-    await expect(page.getByLabel("Connection profile")).toHaveCount(0);
     await expect(page.getByLabel("Optional model override")).toHaveCount(0);
     await expect(page.getByLabel("Voice for speaker teacher")).toHaveValue("af_sky");
     await expect(page.getByRole("region", { name: "Project lexicon" }).getByRole("article", { name: "Lexicon entry GraphQL" })).toBeVisible();

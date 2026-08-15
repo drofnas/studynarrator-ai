@@ -2,8 +2,7 @@ import { z } from "zod";
 import { PreviewAudioSchema, PreviewCacheMetadataSchema } from "./preview.js";
 
 export const SCRATCHPAD_SCHEMA_VERSION = 1;
-export const SCRATCHPAD_MAX_CHARACTERS = 1_200;
-export const SCRATCHPAD_MAX_AUDIO_BYTES = 5 * 1024 * 1024;
+const SCRATCHPAD_MAX_CHARACTERS = 1_200;
 export const SCRATCHPAD_CHANNELS = Object.freeze({ preview: "scratchpad.preview" } as const);
 
 export const ScratchpadPreviewInputSchema = z.object({
@@ -13,15 +12,14 @@ export const ScratchpadPreviewInputSchema = z.object({
   text: z.string().max(SCRATCHPAD_MAX_CHARACTERS).refine((value) => value.trim().length > 0, "Enter a passage to synthesize."),
   applyGlobalLexicon: z.boolean()
 }).strict();
-export type ScratchpadPreviewInput = z.infer<typeof ScratchpadPreviewInputSchema>;
+type ScratchpadPreviewInput = z.infer<typeof ScratchpadPreviewInputSchema>;
 
-export const ScratchpadWarningSchema = z.object({
+const ScratchpadWarningSchema = z.object({
   code: z.string().regex(/^[A-Z][A-Z0-9_]*$/u),
   message: z.string().min(1).max(1_000),
   line: z.number().int().positive().optional(),
   column: z.number().int().positive().optional()
 }).strict();
-export type ScratchpadWarning = z.infer<typeof ScratchpadWarningSchema>;
 
 export const ScratchpadPreviewResultSchema = z.object({
   schemaVersion: z.literal(SCRATCHPAD_SCHEMA_VERSION),

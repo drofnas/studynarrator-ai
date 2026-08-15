@@ -9,16 +9,16 @@ import type {
   SpeechCatalog,
   SpeechCatalogVoice
 } from "@studynarrator/shared-types";
-import { SpeechCatalogSchema } from "@studynarrator/shared-types";
+import { CONNECTION_DIAGNOSTIC_SCHEMA_VERSION, SpeechCatalogSchema } from "@studynarrator/shared-types";
 
 const DIAGNOSTIC_TEXT = "StudyNarrator connection check.";
 export const MAX_AUDIO_BYTES = 5 * 1024 * 1024;
 const MAX_ERROR_LENGTH = 280;
 const STAGE_NAMES = ["url", "dns", "tcp", "http", "authentication", "model", "voice", "audio"] as const;
 
-export type SuppliedUrlForm = "root" | "v1";
+type SuppliedUrlForm = "root" | "v1";
 
-export interface NormalizedSpeachesUrl {
+interface NormalizedSpeachesUrl {
   rootUrl: string;
   suppliedForm: SuppliedUrlForm;
   hostname: string;
@@ -26,7 +26,7 @@ export interface NormalizedSpeachesUrl {
   protocol: "http:" | "https:";
 }
 
-export interface SpeachesDiagnosticInput {
+interface SpeachesDiagnosticInput {
   baseUrl: string;
   modelId: string | null;
   voiceId: string | null;
@@ -40,12 +40,12 @@ export interface SpeachesDiagnosticResult {
   summary: ConnectionTestSummary;
 }
 
-export interface AudioProbeResult {
+interface AudioProbeResult {
   decodable: boolean;
   formatName: string | null;
 }
 
-export interface SpeachesAdapterDependencies {
+interface SpeachesAdapterDependencies {
   fetch?: typeof fetch;
   lookup?: typeof dns.lookup;
   connect?: typeof connectTcp;
@@ -54,7 +54,7 @@ export interface SpeachesAdapterDependencies {
   sleep?: (durationMs: number, signal?: AbortSignal) => Promise<void>;
 }
 
-export type SpeachesSynthesisErrorCode =
+type SpeachesSynthesisErrorCode =
   | "aborted"
   | "audioTooLarge"
   | "authenticationRequired"
@@ -92,7 +92,7 @@ export interface SpeachesSynthesisResult {
   attempts: number;
 }
 
-export type SpeachesCatalogErrorCode =
+type SpeachesCatalogErrorCode =
   | "aborted"
   | "authenticationRequired"
   | "configurationError"
@@ -217,7 +217,7 @@ async function defaultSleep(durationMs: number, signal?: AbortSignal): Promise<v
   });
 }
 
-export async function connectTcp(hostname: string, port: number, signal: AbortSignal): Promise<void> {
+async function connectTcp(hostname: string, port: number, signal: AbortSignal): Promise<void> {
   if (signal.aborted) throw abortError(signal);
   await new Promise<void>((resolve, reject) => {
     const socket = net.createConnection({ host: hostname, port });
@@ -385,7 +385,7 @@ function parseSpeechCatalog(payload: unknown): SpeechCatalog {
     models.set(modelId, voices);
   }
   return SpeechCatalogSchema.parse({
-    schemaVersion: 1,
+    schemaVersion: CONNECTION_DIAGNOSTIC_SCHEMA_VERSION,
     models: [...models].map(([modelId, voices]) => ({ modelId, voices: [...voices.values()] }))
   });
 }
@@ -480,7 +480,7 @@ function result(
   availableVoiceIds: string[] | null
 ): ConnectionTestSummary {
   return {
-    schemaVersion: 1,
+    schemaVersion: CONNECTION_DIAGNOSTIC_SCHEMA_VERSION,
     overall,
     testedAt: testedAt.toISOString(),
     httpStatus,

@@ -11,9 +11,9 @@ import {
   type TransformScriptResult
 } from "./schemas.js";
 
-export const AUTHORING_SCHEMA_VERSION = 1;
+const AUTHORING_SCHEMA_VERSION = 1;
 
-export const AuthoringSpeakerConfigurationSchema = z.object({
+const AuthoringSpeakerConfigurationSchema = z.object({
   speakerId: SpeakerIdSchema,
   displayName: z.string().trim().min(1).max(200),
   voiceId: z.string().max(500).nullable(),
@@ -24,20 +24,20 @@ export const AuthoringSpeakerConfigurationSchema = z.object({
 }).strict();
 export type AuthoringSpeakerConfiguration = z.infer<typeof AuthoringSpeakerConfigurationSchema>;
 
-export const AuthoringPauseConfigurationSchema = z.object({
+const AuthoringPauseConfigurationSchema = z.object({
   pauseId: PauseIdSchema,
   durationMs: z.number().int().min(0).max(30_000),
   description: z.string().max(500)
 }).strict();
 export type AuthoringPauseConfiguration = z.infer<typeof AuthoringPauseConfigurationSchema>;
 
-export const AuthoringSpeakerRowSchema = AuthoringSpeakerConfigurationSchema.extend({
+const AuthoringSpeakerRowSchema = AuthoringSpeakerConfigurationSchema.extend({
   discovered: z.boolean(),
   occurrenceCount: z.number().int().nonnegative()
 }).strict();
 export type AuthoringSpeakerRow = z.infer<typeof AuthoringSpeakerRowSchema>;
 
-export const AuthoringPauseRowSchema = z.object({
+const AuthoringPauseRowSchema = z.object({
   pauseId: PauseIdSchema,
   durationMs: z.number().int().min(0).max(30_000).nullable(),
   description: z.string().max(500),
@@ -46,34 +46,28 @@ export const AuthoringPauseRowSchema = z.object({
 }).strict();
 export type AuthoringPauseRow = z.infer<typeof AuthoringPauseRowSchema>;
 
-export const AuthoringSectionRowSchema = z.object({
+const AuthoringSectionRowSchema = z.object({
   title: z.string().min(1),
   sourceLine: z.number().int().positive(),
   speechSegmentCount: z.number().int().nonnegative()
 }).strict();
-export type AuthoringSectionRow = z.infer<typeof AuthoringSectionRowSchema>;
+type AuthoringSectionRow = z.infer<typeof AuthoringSectionRowSchema>;
 
-export const ReconciledAuthoringConfigurationSchema = z.object({
+const ReconciledAuthoringConfigurationSchema = z.object({
   schemaVersion: z.literal(AUTHORING_SCHEMA_VERSION),
   speakers: z.array(AuthoringSpeakerRowSchema),
   pauses: z.array(AuthoringPauseRowSchema),
   sections: z.array(AuthoringSectionRowSchema)
 }).strict();
-export type ReconciledAuthoringConfiguration = z.infer<typeof ReconciledAuthoringConfigurationSchema>;
+type ReconciledAuthoringConfiguration = z.infer<typeof ReconciledAuthoringConfigurationSchema>;
 
-export const PauseDurationParseResultSchema = z.discriminatedUnion("ok", [
-  z.object({
-    ok: z.literal(true),
-    durationMs: z.number().int().min(0).max(30_000),
-    normalized: z.string().regex(/^\d+ ms$/u)
-  }).strict(),
-  z.object({
-    ok: z.literal(false),
-    code: z.enum(["EMPTY", "NEGATIVE", "INVALID_FORMAT", "SUB_MILLISECOND_PRECISION", "OUT_OF_RANGE"]),
-    message: z.string().min(1)
-  }).strict()
-]);
-export type PauseDurationParseResult = z.infer<typeof PauseDurationParseResultSchema>;
+type PauseDurationParseResult =
+  | { ok: true; durationMs: number; normalized: string }
+  | {
+      ok: false;
+      code: "EMPTY" | "NEGATIVE" | "INVALID_FORMAT" | "SUB_MILLISECOND_PRECISION" | "OUT_OF_RANGE";
+      message: string;
+    };
 
 export function parsePauseDuration(value: string): PauseDurationParseResult {
   const source = value.trim();
@@ -174,7 +168,7 @@ export function reconcileDiscoveredConfiguration(input: {
   return ReconciledAuthoringConfigurationSchema.parse({ schemaVersion: AUTHORING_SCHEMA_VERSION, speakers, pauses, sections });
 }
 
-export const AuthoringValidationIssueSchema = z.object({
+const AuthoringValidationIssueSchema = z.object({
   code: z.string().regex(/^[A-Z][A-Z0-9_]*$/u),
   severity: z.enum(["error", "warning"]),
   message: z.string().min(1),
@@ -182,14 +176,14 @@ export const AuthoringValidationIssueSchema = z.object({
   column: z.number().int().positive().optional(),
   target: z.object({ kind: z.enum(["script", "speaker", "pause", "lexicon"]), id: z.string().min(1) }).strict().optional()
 }).strict();
-export type AuthoringValidationIssue = z.infer<typeof AuthoringValidationIssueSchema>;
+type AuthoringValidationIssue = z.infer<typeof AuthoringValidationIssueSchema>;
 
-export const AuthoringValidationResultSchema = z.object({
+const AuthoringValidationResultSchema = z.object({
   schemaVersion: z.literal(AUTHORING_SCHEMA_VERSION),
   status: z.enum(["ready", "readyWithWarnings", "blocked"]),
   issues: z.array(AuthoringValidationIssueSchema)
 }).strict();
-export type AuthoringValidationResult = z.infer<typeof AuthoringValidationResultSchema>;
+type AuthoringValidationResult = z.infer<typeof AuthoringValidationResultSchema>;
 
 export function validateAuthoringConfiguration(input: {
   parseResult: ParseScriptResult;
@@ -236,12 +230,12 @@ const DryRunBaseSchema = z.object({
   validationStatus: z.enum(["valid", "error"])
 });
 
-export const DryRunSectionRowSchema = DryRunBaseSchema.extend({
+const DryRunSectionRowSchema = DryRunBaseSchema.extend({
   type: z.literal("section"),
   nodeOrdinal: z.number().int().positive(),
   title: z.string().min(1)
 }).strict();
-export const DryRunSpeechRowSchema = DryRunBaseSchema.extend({
+const DryRunSpeechRowSchema = DryRunBaseSchema.extend({
   type: z.literal("speech"),
   nodeOrdinal: z.number().int().positive(),
   speakerId: SpeakerIdSchema,
@@ -251,15 +245,15 @@ export const DryRunSpeechRowSchema = DryRunBaseSchema.extend({
   ttsText: z.string().min(1),
   durationMs: z.null()
 }).strict();
-export const DryRunPauseRowSchema = DryRunBaseSchema.extend({
+const DryRunPauseRowSchema = DryRunBaseSchema.extend({
   type: z.literal("pause"),
   nodeOrdinal: z.number().int().positive().optional(),
   pauseId: PauseIdSchema,
   origin: z.enum(["explicit", "paragraph"]),
   durationMs: z.number().int().min(0).max(30_000).nullable()
 }).strict();
-export const DryRunRowSchema = z.discriminatedUnion("type", [DryRunSectionRowSchema, DryRunSpeechRowSchema, DryRunPauseRowSchema]);
-export type DryRunRow = z.infer<typeof DryRunRowSchema>;
+const DryRunRowSchema = z.discriminatedUnion("type", [DryRunSectionRowSchema, DryRunSpeechRowSchema, DryRunPauseRowSchema]);
+type DryRunRow = z.infer<typeof DryRunRowSchema>;
 type WithoutRowNumber<T> = T extends unknown ? Omit<T, "rowNumber"> : never;
 type DryRunRowInput = WithoutRowNumber<DryRunRow>;
 

@@ -3,7 +3,7 @@ import { basename, dirname, extname, join } from "node:path";
 import { DATABASE_SCHEMA_VERSION, DEFAULT_GLOBAL_LEXICON, DEFAULT_SYSTEM_TIMING } from "@studynarrator/shared-types";
 import { MigrationFailureError } from "./errors.js";
 
-export interface StatementLike {
+interface StatementLike {
   run(...parameters: unknown[]): { changes?: number | bigint };
   get(...parameters: unknown[]): unknown;
   all(...parameters: unknown[]): unknown[];
@@ -281,7 +281,7 @@ function validateBaselineSchema(database: DatabaseLike): void {
   }
 }
 
-export interface MigrationResult {
+interface MigrationResult {
   database: DatabaseLike;
   databasePath: string;
   databaseSchemaVersion: number;

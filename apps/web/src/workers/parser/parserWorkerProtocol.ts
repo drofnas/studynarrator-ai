@@ -27,11 +27,6 @@ export interface ScriptAnalysisResult {
   transformResult: TransformScriptResult;
 }
 
-export interface ParserWorkerRequest {
-  requestId: number;
-  input: ScriptAnalysisInput;
-}
-
 export type ParserWorkerResponse =
   | { requestId: number; ok: true; result: ScriptAnalysisResult }
   | { requestId: number; ok: false; error: string };

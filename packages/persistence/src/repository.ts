@@ -6,11 +6,13 @@ import {
 } from "@studynarrator/core";
 import {
   ConnectionTestSummarySchema,
+  CONNECTION_DIAGNOSTIC_SCHEMA_VERSION,
   DATABASE_SCHEMA_VERSION,
   GlobalLexiconEntryCollectionSchema,
   GlobalLexiconReplaceInputSchema,
   IgnoredDiagnosticCollectionSchema,
   PERSISTENCE_CONTRACT_VERSION,
+  RENDER_CONTRACT_VERSION,
   PersistenceReadyStatusSchema,
   ProjectCreateInputSchema,
   ProjectDetailSchema,
@@ -55,9 +57,9 @@ import {
   type Migration
 } from "./migrations.js";
 
-export const STORAGE_SELF_TEST_KEY = "runtime.storage-self-test";
-export const STORAGE_SELF_TEST_VALUE = "study-narrator-storage-ok";
-export const CURRENT_MIGRATION_VERSION = DATABASE_SCHEMA_VERSION;
+const STORAGE_SELF_TEST_KEY = "runtime.storage-self-test";
+const STORAGE_SELF_TEST_VALUE = "study-narrator-storage-ok";
+const CURRENT_MIGRATION_VERSION = DATABASE_SCHEMA_VERSION;
 
 interface ProjectRow {
   id: string;
@@ -127,11 +129,11 @@ interface ConnectionRow {
 interface MarkerRow { key: string; value: string; created_at: string }
 interface VersionRow { version: string }
 
-export interface ConnectionSetupRecord {
+interface ConnectionSetupRecord {
   onboardingCompletedAt: string | null;
 }
 
-export interface MarkerEvidence {
+interface MarkerEvidence {
   status: "pass";
   driver: "better-sqlite3";
   sqliteVersion: string;
@@ -198,7 +200,7 @@ interface RenderSegmentRow {
 
 function renderJobFromRow(row: RenderJobRow): RenderJob {
   return RenderJobSchema.parse({
-    contractVersion: 1, id: row.id, projectId: row.project_id, planId: row.plan_id,
+    contractVersion: RENDER_CONTRACT_VERSION, id: row.id, projectId: row.project_id, planId: row.plan_id,
     retryOfRenderId: row.retry_of_render_id, state: row.state,
     progress: JSON.parse(row.progress_json) as unknown,
     error: row.error_json === null ? null : JSON.parse(row.error_json) as unknown,
@@ -208,7 +210,7 @@ function renderJobFromRow(row: RenderJobRow): RenderJob {
 
 function renderArtifactFromRow(row: RenderArtifactRow): RenderArtifact {
   return RenderArtifactSchema.parse({
-    contractVersion: 1, id: row.id, renderId: row.render_id, type: row.artifact_type,
+    contractVersion: RENDER_CONTRACT_VERSION, id: row.id, renderId: row.render_id, type: row.artifact_type,
     fileName: row.file_name, sizeBytes: row.size_bytes, checksum: row.checksum,
     durationMs: row.duration_ms, createdAt: row.created_at
   });
@@ -445,7 +447,7 @@ function createRepository(options: {
       accent: string | null; category: string | null; style: string | null; sample_text: string | null;
     }>;
     return VoiceCatalogSchema.parse({
-      schemaVersion: 1,
+      schemaVersion: CONNECTION_DIAGNOSTIC_SCHEMA_VERSION,
       modelId,
       entries: rows.map((row) => ({
         voiceId: row.voice_id,

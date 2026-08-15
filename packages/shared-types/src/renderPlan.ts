@@ -59,20 +59,20 @@ const RenderEntryBaseSchema = z.object({
   sourceRange: SourceRangeSchema.nullable()
 });
 
-export const RenderSectionEntrySchema = RenderEntryBaseSchema.extend({
+const RenderSectionEntrySchema = RenderEntryBaseSchema.extend({
   type: z.literal("section"),
   nodeOrdinal: z.number().int().positive(),
   title: z.string().min(1)
 }).strict();
 
-export const RenderSpeechChunkSchema = z.object({
+const RenderSpeechChunkSchema = z.object({
   ordinal: z.number().int().positive(),
   text: z.string().min(1),
   cacheKey: HashSchema,
   cacheStatus: z.enum(["hit", "miss"])
 }).strict();
 
-export const RenderSpeechEntrySchema = RenderEntryBaseSchema.extend({
+const RenderSpeechEntrySchema = RenderEntryBaseSchema.extend({
   type: z.literal("speech"),
   nodeOrdinal: z.number().int().positive(),
   speakerId: z.string().min(1),
@@ -85,7 +85,7 @@ export const RenderSpeechEntrySchema = RenderEntryBaseSchema.extend({
   chunks: z.array(RenderSpeechChunkSchema).length(1)
 }).strict();
 
-export const SilenceAssetSchema = z.object({
+const SilenceAssetSchema = z.object({
   relativePath: z.string().regex(/^silence\/[a-f0-9]{64}\.wav$/u),
   checksum: HashSchema,
   byteLength: z.number().int().positive(),
@@ -96,7 +96,7 @@ export const SilenceAssetSchema = z.object({
 }).strict();
 export type SilenceAsset = z.infer<typeof SilenceAssetSchema>;
 
-export const RenderPauseEntrySchema = RenderEntryBaseSchema.extend({
+const RenderPauseEntrySchema = RenderEntryBaseSchema.extend({
   type: z.literal("pause"),
   pauseKind: z.enum(["explicit", "automatic"]),
   reason: z.enum(["explicit", "paragraph", "speakerChange", "section"]),
@@ -105,7 +105,7 @@ export const RenderPauseEntrySchema = RenderEntryBaseSchema.extend({
   silence: SilenceAssetSchema.nullable()
 }).strict();
 
-export const RenderPlanEntrySchema = z.discriminatedUnion("type", [
+const RenderPlanEntrySchema = z.discriminatedUnion("type", [
   RenderSectionEntrySchema,
   RenderSpeechEntrySchema,
   RenderPauseEntrySchema
@@ -138,7 +138,7 @@ export const RenderPlanSchema = z.object({
 });
 export type RenderPlan = z.infer<typeof RenderPlanSchema>;
 
-export const RenderPlanSummarySchema = z.object({
+const RenderPlanSummarySchema = z.object({
   id: RenderPlanIdSchema,
   projectId: ProjectIdSchema,
   createdAt: z.iso.datetime({ offset: true }),

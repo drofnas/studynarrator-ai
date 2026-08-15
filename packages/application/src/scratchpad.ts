@@ -14,7 +14,7 @@ import { createCachedSpeechSynthesis, type CachedSpeechSynthesisRunner } from ".
 import type { SpeechCache } from "@studynarrator/rendering";
 import { BUNDLED_VOICE_CATALOGS } from "./kokoroCatalog.js";
 
-export type ScratchpadServiceErrorCode =
+type ScratchpadServiceErrorCode =
   | "SCRATCHPAD_ABORTED"
   | "SCRATCHPAD_AUTHENTICATION"
   | "SCRATCHPAD_CONFIGURATION"
@@ -22,7 +22,7 @@ export type ScratchpadServiceErrorCode =
   | "SCRATCHPAD_SELECTION_REJECTED"
   | "SCRATCHPAD_UNAVAILABLE";
 
-export class ScratchpadServiceError extends Error {
+class ScratchpadServiceError extends Error {
   constructor(readonly code: ScratchpadServiceErrorCode, message: string) {
     super(message);
   }
@@ -30,7 +30,7 @@ export class ScratchpadServiceError extends Error {
 
 export interface ScratchpadRepository extends ConnectionRepository, Pick<PersistenceRepository, "listGlobalLexicon"> {}
 
-export type ScratchpadSynthesisRunner = CachedSpeechSynthesisRunner;
+type ScratchpadSynthesisRunner = CachedSpeechSynthesisRunner;
 
 function safeSynthesisError(error: unknown): ScratchpadServiceError {
   if (error instanceof ScratchpadServiceError) return error;

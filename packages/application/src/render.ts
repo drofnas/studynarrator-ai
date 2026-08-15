@@ -36,7 +36,7 @@ const NONTERMINAL = new Set<RenderJob["state"]>([
   "queued", "validating", "synthesizing", "assembling", "normalizing", "encoding", "writing_artifacts"
 ]);
 
-export class RenderMediaUnavailableError extends Error {
+class RenderMediaUnavailableError extends Error {
   readonly code = "RENDER_MEDIA_UNAVAILABLE";
 }
 
@@ -277,7 +277,7 @@ export async function createRenderService(options: {
           ...(ffprobePath ? { ffprobePath } : {})
         });
         await writeFile(join(stage, "waveform.json"), `${JSON.stringify({
-          schemaVersion: 1,
+          schemaVersion: RENDER_CONTRACT_VERSION,
           sourceChecksum: mp3Metadata.checksum,
           durationMs: waveform.durationMs,
           sampleRate: waveform.sampleRate,
@@ -299,7 +299,7 @@ export async function createRenderService(options: {
         else timelineMs += actualDurations.get(entry.ordinal) ?? 0;
       }
       const manifest = {
-        schemaVersion: 1, renderId, projectId: plan.projectId, planId: plan.id, createdAt: now().toISOString(),
+        schemaVersion: RENDER_CONTRACT_VERSION, renderId, projectId: plan.projectId, planId: plan.id, createdAt: now().toISOString(),
         scriptHash: plan.scriptHash, snapshotHash: plan.snapshotHash, planHash: plan.planHash,
         connection: snapshot.connection,
         versions: snapshot.versions,
@@ -463,7 +463,7 @@ export async function createRenderService(options: {
       if (available.status !== "available") throw new Error("The waveform result is unavailable.");
       const temporary = join(dirname(media.path), `waveform.${createId()}.tmp`);
       await writeFile(temporary, `${JSON.stringify({
-        schemaVersion: 1, sourceChecksum: available.sourceChecksum, durationMs: available.durationMs,
+        schemaVersion: RENDER_CONTRACT_VERSION, sourceChecksum: available.sourceChecksum, durationMs: available.durationMs,
         sampleRate: available.sampleRate, peaks: available.peaks
       })}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
       await rename(temporary, cachePath);

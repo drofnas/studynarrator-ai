@@ -1,6 +1,6 @@
 import type { SpeechCatalogVoice, VoiceCatalogEntry } from "@studynarrator/shared-types";
 
-export const UNAVAILABLE_VOICE_LOCALE = "Locale unavailable";
+const UNAVAILABLE_VOICE_LOCALE = "Locale unavailable";
 
 export interface PresentedVoice {
   voiceId: string;
@@ -15,7 +15,7 @@ export interface PresentedVoice {
   catalogEntry: VoiceCatalogEntry;
 }
 
-export interface PresentedVoiceGroup {
+interface PresentedVoiceGroup {
   key: string;
   label: string;
   voices: PresentedVoice[];

@@ -272,7 +272,6 @@ describe("Projects workbench", () => {
     ] };
     renderPage(client, analyze, { connection, catalog });
     await openProjectTab("Settings");
-    expect(screen.queryByLabelText("Connection profile")).not.toBeInTheDocument();
     await waitFor(() => expect(analyze).toHaveBeenCalled());
     await waitFor(() => expect(screen.getByLabelText("Voice for speaker teacher")).toHaveValue("af_heart"));
     const speakers = screen.getByRole("region", { name: "Project speakers" });

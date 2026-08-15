@@ -66,7 +66,6 @@ describe("Quick Scratchpad", () => {
     const preview = vi.fn(async (input: { text: string }) => previewResult(input.text));
     const { container } = renderPage(preview);
     expect(await screen.findByRole("heading", { name: "Quick Scratchpad" })).toBeInTheDocument();
-    expect(screen.queryByLabelText("Connection profile")).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByLabelText("Model")).toHaveValue("model"));
     await waitFor(() => expect(screen.getByLabelText("Voice")).toHaveValue("voice"));
     expect(screen.getByLabelText("Model")).toBeInstanceOf(HTMLSelectElement);

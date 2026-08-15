@@ -5,7 +5,7 @@ export interface ResolvedRenderMedia {
   sizeBytes: number;
 }
 
-export type RenderMediaRange =
+type RenderMediaRange =
   | { status: "full"; start: 0; end: number }
   | { status: "partial"; start: number; end: number }
   | { status: "unsatisfiable" };

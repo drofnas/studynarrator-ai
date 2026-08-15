@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { SystemClient, SystemDiagnostics } from "@studynarrator/shared-types";
 
-export type DiagnosticsState =
+type DiagnosticsState =
   | { phase: "idle" }
   | { phase: "loading" }
   | { phase: "loaded"; diagnostics: SystemDiagnostics }

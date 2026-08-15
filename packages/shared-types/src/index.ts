@@ -11,7 +11,7 @@ export const APPLICATION_VERSION = "0.1.0";
 export const DIAGNOSTICS_SCHEMA_VERSION = 1;
 export const SYSTEM_DIAGNOSTICS_CHANNEL = "system.diagnostics";
 
-export const CheckStatusSchema = z.enum(["pass", "fail"]);
+const CheckStatusSchema = z.enum(["pass", "fail"]);
 export type CheckStatus = z.infer<typeof CheckStatusSchema>;
 
 export const HealthSchema = z.object({
@@ -40,12 +40,12 @@ const FailureSchema = z.object({
   message: z.string().min(1)
 }).strict();
 
-export const SharedCoreCheckSchema = z.discriminatedUnion("status", [
+const SharedCoreCheckSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("pass"), marker: z.literal("study-narrator-core") }).strict(),
   FailureSchema
 ]);
 
-export const StorageCheckSchema = z.discriminatedUnion("status", [
+const StorageCheckSchema = z.discriminatedUnion("status", [
   z.object({
     status: z.literal("pass"),
     driver: z.literal("better-sqlite3"),
@@ -63,7 +63,7 @@ export const StorageCheckSchema = z.discriminatedUnion("status", [
   }).strict()
 ]);
 
-export const FfmpegCheckSchema = z.discriminatedUnion("status", [
+const FfmpegCheckSchema = z.discriminatedUnion("status", [
   z.object({
     status: z.literal("pass"),
     executable: z.string().min(1),
@@ -93,7 +93,6 @@ export const BoundaryErrorSchema = z.object({
     issues: z.array(z.object({ path: z.string(), message: z.string().min(1) }).strict()).optional()
   }).strict()
 }).strict();
-export type BoundaryError = z.infer<typeof BoundaryErrorSchema>;
 
 export interface SystemClient {
   diagnostics(): Promise<SystemDiagnostics>;

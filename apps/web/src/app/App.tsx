@@ -5,7 +5,7 @@ import { AppRoutes } from "./routes.js";
 import type { ScriptAnalyzer } from "@/workers/parser/parserClient.js";
 import "./styles/global.css";
 
-export interface AppProps {
+interface AppProps {
   client: SystemClient;
   persistence: PersistenceClient;
   connection: SpeachesConnectionClient;

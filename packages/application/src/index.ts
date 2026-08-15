@@ -17,7 +17,7 @@ export interface DiagnosticRepository {
   close(): void;
 }
 
-export interface FfmpegProbe {
+interface FfmpegProbe {
   run(): Promise<FfmpegCheck>;
 }
 
@@ -108,15 +108,11 @@ export {
 } from "./persistence.js";
 export {
   ConnectionCatalogError,
-  ConnectionConfigurationError,
   classifyEndpoint,
   createConnectionService,
   createVoiceCatalogService,
-  type ConnectionCatalogErrorCode,
   type ConnectionCatalogRunner,
-  type ConnectionDiagnosticRunner,
-  type ConnectionRepository,
-  type ConnectionRuntimeContext
+  type ConnectionRepository
 } from "./connections.js";
 export { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
 export {
@@ -126,42 +122,30 @@ export {
   createCachedSpeechSynthesis,
   createSpeechCacheService,
   type CachedSpeechSynthesis,
-  type CachedSpeechSynthesisInput,
   type CachedSpeechSynthesisRunner
 } from "./cachedSpeech.js";
 export {
-  ProjectPreviewServiceError,
   createProjectPreviewService,
-  type ProjectPreviewRepository,
-  type ProjectPreviewServiceErrorCode
+  type ProjectPreviewRepository
 } from "./projectPreview.js";
 export {
-  RenderPlanServiceError,
   createRenderPlanService,
-  type RenderPlanRepository,
-  type RenderPlanServiceErrorCode
+  type RenderPlanRepository
 } from "./renderPlan.js";
 export {
-  RenderMediaUnavailableError,
   createRenderService,
   type RenderRepository,
   type RenderService
 } from "./render.js";
-export { parseRenderMediaRange, type RenderMediaRange, type ResolvedRenderMedia } from "./renderMedia.js";
+export { parseRenderMediaRange, type ResolvedRenderMedia } from "./renderMedia.js";
 export {
-  ScriptGenerationServiceError,
   createScriptGenerationService,
-  type ResolvedGeneratedFile,
   type ScriptGenerationRepository,
-  type ScriptGenerationService,
-  type ScriptGenerationServiceErrorCode
+  type ScriptGenerationService
 } from "./scriptGeneration.js";
 export {
-  ScratchpadServiceError,
   createScratchpadService,
-  type ScratchpadRepository,
-  type ScratchpadServiceErrorCode,
-  type ScratchpadSynthesisRunner
+  type ScratchpadRepository
 } from "./scratchpad.js";
 export {
   BUNDLED_VOICE_CATALOGS,

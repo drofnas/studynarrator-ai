@@ -33,7 +33,7 @@ async function launch(application: StudyNarratorTestApplication, dataDirectory: 
   });
 }
 
-export class ElectronStudyNarrator {
+class ElectronStudyNarrator {
   application: ElectronApplication;
   page: Page;
 

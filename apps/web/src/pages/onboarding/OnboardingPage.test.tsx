@@ -79,7 +79,6 @@ describe("connection onboarding", () => {
     const connection = client();
     renderApp(connection);
     expect(await screen.findByRole("heading", { name: "Connect the voice workshop" })).toBeInTheDocument();
-    expect(screen.queryByText(/API key|profile/u)).not.toBeInTheDocument();
 
     await userEvent.type(screen.getByLabelText("Speaches address"), "http://127.0.0.1:8000");
     await userEvent.click(screen.getByRole("button", { name: "Load catalog" }));

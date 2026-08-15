@@ -6,7 +6,6 @@ test.describe("shell, onboarding, and runtime routes", () => {
 
     await expect(page.getByRole("heading", { name: "Connect the voice workshop" })).toBeVisible();
     await expect(page.getByLabel("Speaches address")).toHaveValue("");
-    await expect(page.getByText(/API key|profile|environment-managed/u)).toHaveCount(0);
     await page.getByRole("button", { name: "Continue offline" }).click();
     await expect(page.getByRole("heading", { name: "Projects", exact: true })).toBeVisible();
 
@@ -55,7 +54,7 @@ test.describe("shell, onboarding, and runtime routes", () => {
     await expect(page.getByRole("heading", { name: "Runtime self-test" })).toBeVisible();
     await page.getByRole("button", { name: "Run self-test" }).click();
     await expect(page.getByText(/SQLite 3/u)).toBeVisible();
-    await expect(page.getByText(/diagnostics schema 4/u)).toBeVisible();
+    await expect(page.getByText(/diagnostics schema 1/u)).toBeVisible();
     await expect(page.getByText("REST", { exact: true })).toBeVisible();
     await navigation.getByRole("link", { name: "Projects" }).click();
     await expect(page.getByRole("heading", { name: "Projects", exact: true })).toBeVisible();

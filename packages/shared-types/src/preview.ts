@@ -4,9 +4,9 @@ import { ProjectIdSchema } from "./persistence.js";
 
 export const PROJECT_PREVIEW_SCHEMA_VERSION = 1;
 export const SPEECH_CACHE_CONTRACT_VERSION = 1;
-export const MAX_PREVIEW_AUDIO_BYTES = 5 * 1024 * 1024;
-export const MAX_PRONUNCIATION_PREVIEW_CHARACTERS = 1_200;
-export const CACHE_KEY_PATTERN = /^[a-f0-9]{64}$/u;
+const MAX_PREVIEW_AUDIO_BYTES = 5 * 1024 * 1024;
+const MAX_PRONUNCIATION_PREVIEW_CHARACTERS = 1_200;
+const CACHE_KEY_PATTERN = /^[a-f0-9]{64}$/u;
 
 export const PROJECT_PREVIEW_CHANNELS = Object.freeze({ preview: "projects.preview" } as const);
 export const SPEECH_CACHE_CHANNELS = Object.freeze({
@@ -35,14 +35,13 @@ export const PreviewCacheMetadataSchema = z.object({
   createdAt: z.iso.datetime({ offset: true }),
   lastUsedAt: z.iso.datetime({ offset: true })
 }).strict();
-export type PreviewCacheMetadata = z.infer<typeof PreviewCacheMetadataSchema>;
 
-export const ProjectSegmentPreviewInputSchema = z.object({
+const ProjectSegmentPreviewInputSchema = z.object({
   mode: z.literal("segment"),
   nodeOrdinal: z.number().int().positive()
 }).strict();
 
-export const PronunciationPreviewInputSchema = z.object({
+const PronunciationPreviewInputSchema = z.object({
   mode: z.literal("pronunciation"),
   text: z.string().max(MAX_PRONUNCIATION_PREVIEW_CHARACTERS)
     .refine((value) => value.trim().length > 0, "Enter a pronunciation sample."),
@@ -99,7 +98,7 @@ export const SpeechCacheCleanupResultSchema = z.object({
   entriesRemoved: z.number().int().nonnegative(),
   bytesFreed: z.number().int().nonnegative()
 }).strict();
-export type SpeechCacheCleanupResult = z.infer<typeof SpeechCacheCleanupResultSchema>;
+type SpeechCacheCleanupResult = z.infer<typeof SpeechCacheCleanupResultSchema>;
 
 export const SpeechCacheKeyInputSchema = z.object({ cacheKey: z.string().regex(CACHE_KEY_PATTERN) }).strict();
 export const SpeechCacheProjectInputSchema = z.object({ projectId: ProjectIdSchema }).strict();

@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { ScratchpadPreviewResult } from "@studynarrator/shared-types";
 
-export interface ScratchpadSessionResult {
+interface ScratchpadSessionResult {
   result: ScratchpadPreviewResult;
   audioUrl: string;
 }

@@ -3,7 +3,6 @@ import {
   DEFAULT_PARAGRAPH_PAUSE_ID,
   IgnoredDiagnosticSchema,
   LexiconEntrySchema,
-  PauseIdSchema,
   SpeakerIdSchema,
   SupportedPauseIdSchema
 } from "@studynarrator/core";
@@ -28,10 +27,9 @@ export const PERSISTENCE_CHANNELS = Object.freeze({
 } as const);
 
 export const ProjectIdSchema = z.uuid();
-export const DurableIdSchema = z.string().min(1).max(128).regex(/^[A-Za-z0-9][A-Za-z0-9_.-]*$/u);
 const TimestampSchema = z.iso.datetime({ offset: true });
 
-export const SpeakerMappingSchema = z.object({
+const SpeakerMappingSchema = z.object({
   speakerId: SpeakerIdSchema,
   displayName: z.string().trim().min(1).max(200),
   voiceId: z.string().max(500).nullable(),
@@ -40,47 +38,24 @@ export const SpeakerMappingSchema = z.object({
   roleDescription: z.string().max(5_000),
   sampleText: z.string().max(5_000)
 }).strict();
-export type SpeakerMapping = z.infer<typeof SpeakerMappingSchema>;
-
-export const PausePresetSchema = z.object({
-  pauseId: PauseIdSchema,
-  durationMs: z.number().int().min(0).max(30_000),
-  description: z.string().max(500)
-}).strict();
-export type PausePreset = z.infer<typeof PausePresetSchema>;
-
-export const TransitionPauseSettingSchema = z.discriminatedUnion("mode", [
-  z.object({ mode: z.literal("none") }).strict(),
-  z.object({ mode: z.literal("preset"), pauseId: PauseIdSchema }).strict(),
-  z.object({ mode: z.literal("duration"), durationMs: z.number().int().min(0).max(30_000) }).strict()
-]);
-export type TransitionPauseSetting = z.infer<typeof TransitionPauseSettingSchema>;
-
-export const TransitionPauseConfigurationSchema = z.object({
-  paragraph: TransitionPauseSettingSchema,
-  speakerChange: TransitionPauseSettingSchema,
-  section: TransitionPauseSettingSchema
-}).strict();
-export type TransitionPauseConfiguration = z.infer<typeof TransitionPauseConfigurationSchema>;
-
 const fixedPausePreset = <TId extends "pause_short" | "pause_medium" | "pause_long">(pauseId: TId) => z.object({
   pauseId: z.literal(pauseId),
   durationMs: z.number().int().min(0).max(30_000),
   description: z.string().max(500)
 }).strict();
 
-export const SystemPausePresetCollectionSchema = z.tuple([
+const SystemPausePresetCollectionSchema = z.tuple([
   fixedPausePreset("pause_short"),
   fixedPausePreset("pause_medium"),
   fixedPausePreset("pause_long")
 ]);
-export const SystemTransitionPauseSettingSchema = z.discriminatedUnion("mode", [
+const SystemTransitionPauseSettingSchema = z.discriminatedUnion("mode", [
   z.object({ mode: z.literal("none") }).strict(),
   z.object({ mode: z.literal("preset"), pauseId: SupportedPauseIdSchema }).strict(),
   z.object({ mode: z.literal("duration"), durationMs: z.number().int().min(0).max(30_000) }).strict()
 ]);
 export type SystemTransitionPauseSetting = z.infer<typeof SystemTransitionPauseSettingSchema>;
-export const SystemTransitionPauseConfigurationSchema = z.object({
+const SystemTransitionPauseConfigurationSchema = z.object({
   paragraph: SystemTransitionPauseSettingSchema,
   speakerChange: SystemTransitionPauseSettingSchema,
   section: SystemTransitionPauseSettingSchema
@@ -131,14 +106,6 @@ export const SpeakerMappingCollectionSchema = z.array(SpeakerMappingSchema).supe
   });
 });
 
-export const PausePresetCollectionSchema = z.array(PausePresetSchema).superRefine((items, context) => {
-  const seen = new Set<string>();
-  items.forEach((item, index) => {
-    if (seen.has(item.pauseId)) context.addIssue({ code: "custom", message: `Duplicate pause ID: ${item.pauseId}.`, path: [index, "pauseId"] });
-    seen.add(item.pauseId);
-  });
-});
-
 function enforceUniqueOptionalIds(
   items: readonly { id?: string | undefined }[],
   context: z.RefinementCtx,
@@ -155,7 +122,7 @@ function enforceUniqueOptionalIds(
 export const ProjectLexiconAuthoringCollectionSchema = z.array(ProjectLexiconAuthoringSchema)
   .superRefine((items, context) => enforceUniqueOptionalIds(items, context, "lexicon entry"));
 
-export const GlobalLexiconAuthoringCollectionSchema = z.array(GlobalLexiconAuthoringSchema)
+const GlobalLexiconAuthoringCollectionSchema = z.array(GlobalLexiconAuthoringSchema)
   .superRefine((items, context) => enforceUniqueOptionalIds(items, context, "lexicon entry"));
 
 const ProjectLexiconEntrySchema = LexiconEntrySchema.superRefine((entry, context) => {
@@ -201,7 +168,7 @@ export const ProjectReplaceInputSchema = z.object({
 }).strict();
 export type ProjectReplaceInput = z.input<typeof ProjectReplaceInputSchema>;
 
-export const ProjectSummarySchema = z.object({
+const ProjectSummarySchema = z.object({
   id: ProjectIdSchema,
   name: z.string().min(1),
   description: z.string(),
@@ -262,7 +229,7 @@ export const PersistenceReadyStatusSchema = z.object({
   latestBackupPath: z.string().min(1).nullable()
 }).strict();
 
-export const PersistenceUnavailableStatusSchema = z.object({
+const PersistenceUnavailableStatusSchema = z.object({
   contractVersion: z.literal(PERSISTENCE_CONTRACT_VERSION),
   state: z.literal("unavailable"),
   databaseSchemaVersion: z.number().int().nonnegative().nullable(),
@@ -276,7 +243,7 @@ export const PersistenceUnavailableStatusSchema = z.object({
 export const PersistenceStatusSchema = z.discriminatedUnion("state", [PersistenceReadyStatusSchema, PersistenceUnavailableStatusSchema]);
 export type PersistenceStatus = z.infer<typeof PersistenceStatusSchema>;
 
-export interface ProjectsClient {
+interface ProjectsClient {
   list(): Promise<ProjectSummary[]>;
   create(input: ProjectCreateInput): Promise<ProjectDetail>;
   get(projectId: string): Promise<ProjectDetail>;
@@ -285,17 +252,17 @@ export interface ProjectsClient {
   delete(projectId: string): Promise<void>;
 }
 
-export interface PersistenceSettingsClient {
+interface PersistenceSettingsClient {
   getPacing(): Promise<SystemTimingConfiguration>;
   updatePacing(input: SystemTimingConfiguration): Promise<SystemTimingConfiguration>;
 }
 
-export interface PreferencesClient {
+interface PreferencesClient {
   getIgnoredDiagnostics(): Promise<IgnoredDiagnosticCollection>;
   replaceIgnoredDiagnostics(input: IgnoredDiagnosticCollection): Promise<IgnoredDiagnosticCollection>;
 }
 
-export interface GlobalLexiconClient {
+interface GlobalLexiconClient {
   list(): Promise<z.infer<typeof GlobalLexiconEntryCollectionSchema>>;
   replace(input: GlobalLexiconReplaceInput): Promise<z.infer<typeof GlobalLexiconEntryCollectionSchema>>;
 }
@@ -307,9 +274,3 @@ export interface PersistenceClient {
   preferences: PreferencesClient;
   globalLexicon: GlobalLexiconClient;
 }
-
-export const DEFAULT_PROJECT_PARAGRAPH_PAUSE = Object.freeze({
-  enabled: DEFAULT_SYSTEM_TIMING.transitionPauses.paragraph.mode !== "none",
-  pauseId: DEFAULT_PARAGRAPH_PAUSE_ID,
-  durationMs: DEFAULT_PARAGRAPH_PAUSE_DURATION_MS
-});

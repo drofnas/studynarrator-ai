@@ -8,9 +8,8 @@ export default defineConfig({
     }
   },
   test: {
-    coverage: { provider: "v8", reporter: ["text", "json-summary"] },
     globals: true,
-    include: ["apps/**/*.test.ts", "apps/**/*.test.tsx", "packages/**/*.test.ts"],
+    include: ["apps/**/*.test.ts", "apps/**/*.test.tsx", "packages/**/*.test.ts", "scripts/**/*.test.ts"],
     testTimeout: 10_000
   }
 });

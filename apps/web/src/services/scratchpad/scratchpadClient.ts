@@ -11,7 +11,7 @@ declare global {
   }
 }
 
-export class ScratchpadClientError extends Error {
+class ScratchpadClientError extends Error {
   constructor(message: string, readonly code: string, readonly status: number) {
     super(message);
   }

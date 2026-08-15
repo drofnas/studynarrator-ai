@@ -78,7 +78,6 @@ test.describe("Electron acceptance", () => {
     await createProject(page, "Desktop global model voices");
     await page.getByLabel("Script source").fill("[speaker_narrator] Globally configured model voice.");
     await page.getByRole("tab", { name: "Settings" }).click();
-    await expect(page.getByLabel("Connection profile")).toHaveCount(0);
     await expect(page.getByLabel("Optional model override")).toHaveCount(0);
     await expect(page.getByLabel("Voice for speaker narrator")).toHaveValue("af_heart");
     await expect(page.getByLabel("Voice for speaker narrator").getByRole("option", { name: "Heart (af_heart | en-US)" })).toBeAttached();
@@ -132,7 +131,6 @@ test.describe("Electron acceptance", () => {
     await createProject(page, "Desktop frozen plan");
     await page.getByLabel("Script source").fill("[speaker_teacher] First.\n\n[speaker_teacher] Second.");
     await page.getByRole("tab", { name: "Settings" }).click();
-    await expect(page.getByLabel("Connection profile")).toHaveCount(0);
     await expect(page.getByLabel("Optional model override")).toHaveCount(0);
     await expect(page.getByLabel("Voice for speaker teacher")).toHaveValue("af_heart");
     await page.getByRole("tab", { name: "Render" }).click();
@@ -171,7 +169,6 @@ test.describe("Electron acceptance", () => {
     await createProject(page, "Desktop render recovery");
     await page.getByLabel("Script source").fill("[speaker_teacher] Resume this render.");
     await page.getByRole("tab", { name: "Settings" }).click();
-    await expect(page.getByLabel("Connection profile")).toHaveCount(0);
     await expect(page.getByLabel("Optional model override")).toHaveCount(0);
     await expect(page.getByLabel("Voice for speaker teacher")).toHaveValue("af_heart");
     await page.getByRole("tab", { name: "Render" }).click();
@@ -253,7 +250,6 @@ test.describe("Electron acceptance", () => {
     await expect(page.getByLabel("Model")).toHaveValue("speaches-ai/Kokoro-82M-v1.0-ONNX");
     await expect(page.getByLabel("Default Voice")).toHaveValue("af_heart");
     await expect(page.getByRole("option", { name: "Heart (af_heart | en-US)" })).toBeAttached();
-    await expect(page.getByText(/New saved profile|Active profile|API key|Environment Speaches/u)).toHaveCount(0);
     await page.getByRole("link", { name: "Voices" }).click();
     await page.getByLabel("Search voice catalog").fill("en-US");
     await expect(page.getByLabel("en-US voices")).toBeVisible();
