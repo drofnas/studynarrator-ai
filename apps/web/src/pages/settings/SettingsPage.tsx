@@ -439,7 +439,7 @@ export function SettingsPage({ client, cacheClient, scratchpadClient }: { client
             const phase = audition?.voiceId === entry.voiceId ? audition.phase : "normal";
             const action = phase === "processing" ? "Preparing" : phase === "playing" ? "Playing" : "Test";
             return <article data-enabled={entry.enabled} key={entry.voiceId}>
-              <div><strong>{entry.friendlyName}</strong><code>{entry.voiceId}</code><span>{entry.enabled ? "enabled" : "disabled"} · {entry.localeLabel}</span></div>
+              <div><strong>{entry.friendlyName}</strong><code>{entry.voiceId} | {entry.localeLabel}</code></div>
               <div className={styles.voiceActions}>
                 <button type="button" className={styles.favoriteButton} data-active={entry.favorite} disabled={Boolean(favoriteSaving)} aria-pressed={entry.favorite} aria-label={`${entry.favorite ? "Remove" : "Add"} ${entry.friendlyName} ${entry.favorite ? "from" : "to"} favorites`} onClick={() => void toggleVoiceFavorite(entry)}>
                   <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 20.5 4.4 13A5.1 5.1 0 0 1 11.6 5.8L12 6.2l.4-.4A5.1 5.1 0 0 1 19.6 13L12 20.5Z" /></svg>

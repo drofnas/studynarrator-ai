@@ -229,6 +229,10 @@ describe("System Settings", () => {
     expect(screen.getByLabelText("Default Voice")).toHaveValue("voice-b2");
     expect(await screen.findByRole("option", { name: "Second (voice-b2 | en-US)" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "First (voice-b1 | en-US)" })).toBeInTheDocument();
+    const secondVoice = screen.getByText("voice-b2 | en-US").closest("article");
+    expect(secondVoice).not.toBeNull();
+    expect(secondVoice).toHaveAttribute("data-enabled", "false");
+    expect(secondVoice).not.toHaveTextContent(/\b(?:enabled|disabled)\b/u);
     expect(screen.getByLabelText("Voice test script")).toHaveValue("This short sample lets you hear how this voice handles clear narration.");
     expect(screen.getByText("Default model")).toBeInTheDocument();
     expect(screen.getByLabelText("en-US voices")).toBeInTheDocument();

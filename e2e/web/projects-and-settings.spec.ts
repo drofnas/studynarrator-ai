@@ -101,7 +101,10 @@ test.describe("Settings and connection diagnostics", () => {
     });
     await page.getByRole("button", { name: "Refresh catalog" }).click();
     await expect(page.getByRole("option", { name: "Heart (af_heart | en-US)" })).toBeAttached();
-    await expect(page.getByRole("article").filter({ hasText: "af_heart" }).getByText("Heart", { exact: true })).toBeVisible();
+    const heartVoice = page.getByRole("article").filter({ hasText: "af_heart" });
+    await expect(heartVoice.getByText("Heart", { exact: true })).toBeVisible();
+    await expect(heartVoice.getByText("af_heart | en-US", { exact: true })).toBeVisible();
+    await expect(heartVoice).not.toContainText(/\b(?:enabled|disabled)\b/u);
     await expect.poll(() => page.locator("section[aria-label$=' voices']").evaluateAll((groups) => groups.slice(0, 2).map((group) => group.getAttribute("aria-label")))).toEqual(["en-US voices", "en-GB voices"]);
     await openRoute(page, studyNarrator, "/settings");
     await page.getByLabel("Search voice catalog").fill("en-US");
