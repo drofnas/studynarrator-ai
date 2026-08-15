@@ -38,9 +38,9 @@ describe("render plan web client", () => {
 
   it("surfaces sanitized REST failures", async () => {
     const client = createRestRenderPlanClient(async () => new Response(JSON.stringify({
-      error: { code: "RENDER_PLAN_CONFIGURATION", message: "Choose a connection profile." }
+      error: { code: "RENDER_PLAN_CONFIGURATION", message: "Configure the Speaches connection." }
     }), { status: 409, headers: { "content-type": "application/json" } }));
-    await expect(client.create(projectId)).rejects.toEqual(new RenderPlanClientError("RENDER_PLAN_CONFIGURATION", "Choose a connection profile."));
+    await expect(client.create(projectId)).rejects.toEqual(new RenderPlanClientError("RENDER_PLAN_CONFIGURATION", "Configure the Speaches connection."));
   });
 
   it("prefers the validated Electron bridge", () => {

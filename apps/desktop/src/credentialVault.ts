@@ -1,6 +1,5 @@
 import { promises as fs } from "node:fs";
 import { dirname, resolve } from "node:path";
-import type { CredentialStore } from "@studynarrator/application";
 
 const VAULT_VERSION = 1;
 const REFERENCE_PREFIX = "safe-storage:";
@@ -36,7 +35,7 @@ function emptyVault(): VaultDocument {
   return { version: VAULT_VERSION, entries: {} };
 }
 
-export class ElectronCredentialVault implements CredentialStore {
+export class ElectronCredentialVault {
   readonly replacementAllowed = true;
   readonly filePath: string;
 

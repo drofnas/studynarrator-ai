@@ -7,14 +7,9 @@ import { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
 const timestamp = "2026-08-12T12:00:00.000Z";
 const profile = {
   id: "local",
-  name: "Local Speaches",
   baseUrl: "http://127.0.0.1:8000",
   suppliedUrlForm: "root" as const,
-  source: "saved" as const,
-  editable: true,
-  credentialEntryAllowed: false,
   configured: true,
-  apiKeyConfigured: true,
   defaultModelId: "model",
   defaultVoiceId: "voice",
   timeoutSeconds: 12,
@@ -29,26 +24,24 @@ const profile = {
 
 function repository(): ScratchpadRepository {
   return {
-    getConnectionProfile: vi.fn(() => profile),
-    getConnectionCredentialReference: vi.fn(() => "safe-storage:local"),
+    getSpeachesConnection: vi.fn(() => profile),
     listGlobalLexicon: vi.fn(() => [{
       id: "sql", scope: "global" as const, entryType: "exactTerm" as const, displayText: "SQL", spokenText: "sequel",
       caseSensitive: true, wholeWord: true, priority: 0, enabled: true, notes: "", createdAt: timestamp, updatedAt: timestamp
     }]),
-    listConnectionProfiles: vi.fn(), createConnectionProfile: vi.fn(), replaceConnectionProfile: vi.fn(), deleteConnectionProfile: vi.fn(),
-    setConnectionCredentialReference: vi.fn(), setConnectionSuppliedUrlForm: vi.fn(), upsertEnvironmentConnectionProfile: vi.fn(),
-    recordConnectionTest: vi.fn(), getConnectionSetup: vi.fn(), setActiveConnectionProfile: vi.fn(), completeConnectionOnboarding: vi.fn(),
+    replaceSpeachesConnection: vi.fn(), recordConnectionTest: vi.fn(), getConnectionSetup: vi.fn(), completeConnectionOnboarding: vi.fn(),
     getVoiceCatalogOverrides: vi.fn(() => ({
       schemaVersion: 1, modelId: "model", entries: [{
-        voiceId: "voice", label: "Friendly Voice", enabled: true, language: null, locale: null,
+        voiceId: "voice", label: "Friendly Voice", enabled: true, favorite: false, language: null, locale: null,
         accent: null, category: null, style: null, sampleText: null
       }]
     })), replaceVoiceCatalogOverrides: vi.fn()
   } as unknown as ScratchpadRepository;
 }
 
-function speechCache(): SpeechCache {
-  return {
+function speechCache() {
+  const retainScratchpad = vi.fn(async () => ({ entriesRemoved: 0, bytesFreed: 0 }));
+  const cache: SpeechCache = {
     async getOrCreate(input, _usage, synthesize, signal) {
       const bytes = await synthesize(input.text, signal ?? new AbortController().signal);
       return {
@@ -67,16 +60,17 @@ function speechCache(): SpeechCache {
     async status() { return { entryCount: 0, totalBytes: 0, lastUsedAt: null, sessionHits: 0, sessionMisses: 0, sessionWrites: 0, sessionCorruptMisses: 0, inFlight: 0 }; },
     async clearAll() { return { entriesRemoved: 0, bytesFreed: 0 }; },
     async clearProject() { return { entriesRemoved: 0, bytesFreed: 0 }; },
-    async clearEntry() { return { entriesRemoved: 0, bytesFreed: 0 }; }
+    async clearEntry() { return { entriesRemoved: 0, bytesFreed: 0 }; },
+    retainScratchpad
   };
+  return { cache, retainScratchpad };
 }
 
 describe("scratchpad service", () => {
   it("matches the public application-service manifest", () => {
     const service = createScratchpadService({
       repository: repository(),
-      credentials: { replacementAllowed: false, read: vi.fn(async () => null), write: vi.fn(), delete: vi.fn() },
-      cache: speechCache()
+      cache: speechCache().cache
     });
     expect(Object.keys(service).map((key) => `scratchpad.${key}`)).toEqual(
       APPLICATION_SERVICE_MANIFEST.filter((path) => path.startsWith("scratchpad."))
@@ -86,44 +80,42 @@ describe("scratchpad service", () => {
   it("reads privileged configuration, transforms text, and creates a portable validated result", async () => {
     const store = repository();
     const synthesize = vi.fn(async () => ({ bytes: new Uint8Array([1, 2, 3]), mimeType: "audio/wav" as const, attempts: 1 }));
+    const { cache, retainScratchpad } = speechCache();
     const service = createScratchpadService({
       repository: store,
-      credentials: { replacementAllowed: false, read: vi.fn(async () => "test-secret-must-not-appear"), write: vi.fn(), delete: vi.fn() },
-      cache: speechCache(),
+      cache,
       synthesize,
       createId: () => "00000000-0000-4000-8000-000000000001",
       now: () => new Date(timestamp)
     });
-    const result = await service.preview({ connectionProfileId: "local", modelId: "model", voiceId: "voice", speed: 1.1, text: "SQL indexes.", applyGlobalLexicon: true });
+    const result = await service.preview({ modelId: "model", voiceId: "voice", speed: 1.1, text: "SQL indexes.", applyGlobalLexicon: true });
     expect(synthesize).toHaveBeenCalledWith(expect.objectContaining({
       baseUrl: profile.baseUrl,
       modelId: "model",
       voiceId: "voice",
       speed: 1.1,
       text: "sequel indexes.",
-      apiKey: "test-secret-must-not-appear",
       timeoutSeconds: 12,
       retryCount: 2
     }));
     expect(result).toMatchObject({
-      schemaVersion: 2, originalText: "SQL indexes.", transformedText: "sequel indexes.",
+      schemaVersion: 3, originalText: "SQL indexes.", transformedText: "sequel indexes.",
       voiceLabel: "Friendly Voice", cache: { status: "miss" }, audio: { base64: "AQID", byteLength: 3 }
     });
+    expect(retainScratchpad).toHaveBeenCalledWith("a".repeat(64));
     expect(JSON.stringify(result)).not.toContain("test-secret-must-not-appear");
     expect((store.recordConnectionTest as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(0);
-    expect((store.replaceConnectionProfile as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(0);
   });
 
   it("maps adapter failures to stable sanitized application errors and creates no result", async () => {
     const service = createScratchpadService({
       repository: repository(),
-      credentials: { replacementAllowed: false, read: vi.fn(async () => null), write: vi.fn(), delete: vi.fn() },
-      cache: speechCache(),
+      cache: speechCache().cache,
       synthesize: vi.fn(async () => { throw new SpeachesSynthesisError("selectionRejected", "upstream-private-body", false, 422); }),
       createId: vi.fn(() => "00000000-0000-4000-8000-000000000001")
     });
     try {
-      await service.preview({ connectionProfileId: "local", modelId: "bad", voiceId: "bad", speed: 1, text: "Keep me.", applyGlobalLexicon: false });
+      await service.preview({ modelId: "bad", voiceId: "bad", speed: 1, text: "Keep me.", applyGlobalLexicon: false });
       throw new Error("Expected synthesis to fail.");
     } catch (error) {
       expect(error).toMatchObject({ code: "SCRATCHPAD_SELECTION_REJECTED" });
@@ -134,11 +126,10 @@ describe("scratchpad service", () => {
   it("turns an oversized WAV into actionable, sanitized guidance", async () => {
     const service = createScratchpadService({
       repository: repository(),
-      credentials: { replacementAllowed: false, read: vi.fn(async () => null), write: vi.fn(), delete: vi.fn() },
-      cache: speechCache(),
+      cache: speechCache().cache,
       synthesize: vi.fn(async () => { throw new SpeachesSynthesisError("audioTooLarge", "upstream-private-body", false, 200); })
     });
-    await expect(service.preview({ connectionProfileId: "local", modelId: "model", voiceId: "voice", speed: 1, text: "Keep me.", applyGlobalLexicon: false }))
+    await expect(service.preview({ modelId: "model", voiceId: "voice", speed: 1, text: "Keep me.", applyGlobalLexicon: false }))
       .rejects.toMatchObject({
         code: "SCRATCHPAD_INVALID_AUDIO",
         message: "The generated WAV exceeded the 5 MiB Scratchpad limit. Shorten the passage and retry."
@@ -149,11 +140,10 @@ describe("scratchpad service", () => {
     const synthesize = vi.fn();
     const service = createScratchpadService({
       repository: repository(),
-      credentials: { replacementAllowed: false, read: vi.fn(async () => null), write: vi.fn(), delete: vi.fn() },
-      cache: speechCache(),
+      cache: speechCache().cache,
       synthesize
     });
-    await expect(service.preview({ connectionProfileId: "local", modelId: "model", voiceId: "voice", speed: 1, text: "[pause_short]", applyGlobalLexicon: false }))
+    await expect(service.preview({ modelId: "model", voiceId: "voice", speed: 1, text: "[pause_short]", applyGlobalLexicon: false }))
       .rejects.toMatchObject({ code: "SCRATCHPAD_CONFIGURATION" });
     expect(synthesize).not.toHaveBeenCalled();
   });

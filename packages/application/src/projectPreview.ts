@@ -51,7 +51,7 @@ function safePreviewError(error: unknown): ProjectPreviewServiceError {
     switch (error.code) {
       case "aborted": return new ProjectPreviewServiceError("PROJECT_PREVIEW_ABORTED", "Project preview was cancelled.");
       case "audioTooLarge": return new ProjectPreviewServiceError("PROJECT_PREVIEW_INVALID_AUDIO", "The preview WAV exceeded the 5 MiB limit.");
-      case "authenticationRequired": return new ProjectPreviewServiceError("PROJECT_PREVIEW_AUTHENTICATION", "Speaches rejected authentication. Test the profile and update its API key.");
+      case "authenticationRequired": return new ProjectPreviewServiceError("PROJECT_PREVIEW_AUTHENTICATION", "This Speaches server requires authentication, which StudyNarrator does not support.");
       case "configurationError": return new ProjectPreviewServiceError("PROJECT_PREVIEW_CONFIGURATION", "The project preview settings are incomplete.");
       case "invalidAudio": return new ProjectPreviewServiceError("PROJECT_PREVIEW_INVALID_AUDIO", "Speaches returned WAV audio that StudyNarrator could not validate.");
       case "selectionRejected": return new ProjectPreviewServiceError("PROJECT_PREVIEW_SELECTION_REJECTED", "Speaches rejected the selected model or voice.");
@@ -60,7 +60,7 @@ function safePreviewError(error: unknown): ProjectPreviewServiceError {
   }
   const record = error && typeof error === "object" ? error as Record<string, unknown> : undefined;
   if (record?.code === "PERSISTENCE_NOT_FOUND") {
-    return new ProjectPreviewServiceError("PROJECT_PREVIEW_CONFIGURATION", "The project or connection profile no longer exists.");
+    return new ProjectPreviewServiceError("PROJECT_PREVIEW_CONFIGURATION", "The project or Speaches connection no longer exists.");
   }
   return new ProjectPreviewServiceError("PROJECT_PREVIEW_UNAVAILABLE", "StudyNarrator could not complete the project preview.");
 }
@@ -70,11 +70,10 @@ function entries(repository: ProjectPreviewRepository, project: ProjectDetail): 
 }
 
 function projectConnection(project: ProjectDetail, repository: ProjectPreviewRepository) {
-  if (!project.connectionProfileId) throw new ProjectPreviewServiceError("PROJECT_PREVIEW_CONFIGURATION", "Choose a connection profile before previewing.");
-  const profile = repository.getConnectionProfile(project.connectionProfileId);
-  const modelId = project.modelId ?? profile.defaultModelId;
+  const connection = repository.getSpeachesConnection();
+  const modelId = connection.defaultModelId;
   if (!modelId) throw new ProjectPreviewServiceError("PROJECT_PREVIEW_CONFIGURATION", "Choose a speech model before previewing.");
-  return { profile, modelId };
+  return { connection, modelId };
 }
 
 function segmentProjection(project: ProjectDetail, input: Extract<ProjectPreviewInput, { mode: "segment" }>, lexicon: LexiconEntry[]): PreviewProjection {
@@ -147,13 +146,12 @@ export function createProjectPreviewService(dependencies: {
         const projectId = ProjectIdSchema.parse(projectIdValue);
         const input = ProjectPreviewInputSchema.parse(inputValue);
         const project = dependencies.repository.getProject(projectId);
-        const { profile, modelId } = projectConnection(project, dependencies.repository);
+        const { connection, modelId } = projectConnection(project, dependencies.repository);
         const lexicon = entries(dependencies.repository, project);
         const projection = input.mode === "segment"
           ? segmentProjection(project, input, lexicon)
-          : pronunciationProjection(project, input, lexicon, profile.defaultVoiceId);
+          : pronunciationProjection(project, input, lexicon, connection.defaultVoiceId);
         const cached = await dependencies.speech.synthesize({
-          connectionProfileId: profile.id,
           modelId,
           voiceId: projection.voiceId,
           speed: projection.speed,
@@ -171,8 +169,6 @@ export function createProjectPreviewService(dependencies: {
           createdAt: now().toISOString(),
           projectId,
           ...projection,
-          connectionProfileId: profile.id,
-          connectionProfileName: profile.name,
           modelId,
           voiceLabel,
           cache: {

@@ -11,5 +11,4 @@
 .projections article { padding: 10px; background: white; border-left: 3px solid var(--signal); }
 .projections span { color: var(--signal); font-size: 0.62rem; font-weight: 800; text-transform: uppercase; }
 .projections p { margin: 5px 0 0; font-size: 0.78rem; line-height: 1.45; }
-.result footer button { flex: none; min-height: 36px; padding: 0 11px; color: var(--ink); background: transparent; }
 @media (max-width: 760px) { .identity, .projections { grid-template-columns: 1fr; } .result header, .result footer { align-items: stretch; flex-direction: column; } }

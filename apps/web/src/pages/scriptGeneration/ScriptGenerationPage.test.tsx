@@ -8,17 +8,13 @@ import type { PersistenceClient, ProjectDetail, ScriptGenerationClient } from "@
 import { ScriptGenerationPage } from "./ScriptGenerationPage.js";
 
 const project: ProjectDetail = {
-  contractVersion: 4,
+  contractVersion: 9,
   id: "00000000-0000-4000-8000-000000000001",
   name: "Caching guide",
   description: "Explain cache invalidation.",
   scriptSource: "PRIVATE SAVED SCRIPT",
   scriptHash: "a".repeat(64),
-  connectionProfileId: null,
-  modelId: null,
   speakerMappings: [{ speakerId: "teacher", displayName: "Teacher", voiceId: null, speed: 1, gainDb: 0, roleDescription: "Explains clearly.", sampleText: "" }],
-  pausePresets: [{ pauseId: "pause_short", durationMs: 350, description: "Brief handoff." }],
-  transitionPauses: { paragraph: { mode: "none" }, speakerChange: { mode: "none" }, section: { mode: "none" } },
   lexiconEntries: [{ id: "sql", scope: "project", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel", caseSensitive: true, wholeWord: true, priority: 0, enabled: true, notes: "", createdAt: "2026-08-14T00:00:00.000Z", updatedAt: "2026-08-14T00:00:00.000Z" }],
   createdAt: "2026-08-14T00:00:00.000Z",
   updatedAt: "2026-08-14T00:00:00.000Z"

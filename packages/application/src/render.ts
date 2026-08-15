@@ -41,7 +41,7 @@ export class RenderMediaUnavailableError extends Error {
 }
 
 export type RenderRepository = Pick<StudyNarratorRepository,
-  "getConnectionProfile" | "createRenderJob" | "getRenderJob" | "listRenderJobs" | "findActiveRenderJob" |
+  "getSpeachesConnection" | "createRenderJob" | "getRenderJob" | "listRenderJobs" | "findActiveRenderJob" |
   "listRecoverableRenderJobs" | "updateRenderJob" | "updateRenderSegment" | "replaceRenderArtifacts" |
   "listRenderArtifacts" | "getRenderArtifactPath" | "listRenderSegments" | "getRenderSegmentPath">;
 
@@ -80,18 +80,20 @@ function slug(value: string): string {
 
 function safeRenderError(error: unknown, phase: RenderJob["state"], entry: RenderPlanEntry | null): RenderError {
   const aborted = error instanceof DOMException && error.name === "AbortError";
+  const legacyConnectionUnavailable = error instanceof Error && error.message === "Legacy connection unavailable. Freeze this project again.";
   return {
-    code: aborted ? "RENDER_ABORTED" : phase === "validating" ? "RENDER_VALIDATION_FAILED"
+    code: aborted ? "RENDER_ABORTED" : legacyConnectionUnavailable ? "RENDER_LEGACY_CONNECTION_UNAVAILABLE" : phase === "validating" ? "RENDER_VALIDATION_FAILED"
       : phase === "synthesizing" ? "RENDER_SYNTHESIS_FAILED"
         : phase === "assembling" ? "RENDER_ASSEMBLY_FAILED"
           : phase === "encoding" ? "RENDER_ENCODING_FAILED" : "RENDER_ARTIFACT_FAILED",
     message: aborted ? "The render operation stopped before completion."
+      : legacyConnectionUnavailable ? "This frozen plan uses a legacy connection that is no longer available. Freeze the project again."
       : phase === "validating" ? "The frozen render plan no longer matches its configured speech endpoint."
         : phase === "synthesizing" ? "Speech generation failed for the current segment."
           : phase === "assembling" ? "The generated audio segments could not be assembled."
             : phase === "encoding" ? "The final MP3 could not be encoded or validated."
               : "The render artifact bundle could not be published.",
-    retryable: phase !== "validating",
+    retryable: !legacyConnectionUnavailable && phase !== "validating",
     phase,
     entryOrdinal: entry?.ordinal ?? null,
     chunkOrdinal: entry?.type === "speech" ? 1 : null,
@@ -173,8 +175,9 @@ export async function createRenderService(options: {
       await mkdir(join(stage, "work"), { mode: 0o700 });
       job = update(job, "validating");
       const { plan, snapshot, silenceAssets } = await options.plans.load(job.planId);
-      const profile = options.repository.getConnectionProfile(snapshot.connection.profileId);
-      if (!profile.baseUrl || sha256(profile.baseUrl) !== snapshot.connection.serverIdentityHash) throw new Error("Frozen endpoint identity changed.");
+      const connection = options.repository.getSpeachesConnection();
+      if (snapshot.schemaVersion === 1 && connection.id !== snapshot.connection.profileId) throw new Error("Legacy connection unavailable. Freeze this project again.");
+      if (!connection.baseUrl || sha256(connection.baseUrl) !== snapshot.connection.serverIdentityHash) throw new Error("Frozen endpoint identity changed.");
 
       const orderedAudio: string[] = [];
       const actualCacheStatuses = new Map<number, "hit" | "miss">();
@@ -211,7 +214,7 @@ export async function createRenderService(options: {
           voiceId: entry.voiceId, excerpt: entry.readableText.slice(0, 160), sectionTitle: entry.sectionTitle
         });
         const result = await options.speech.synthesize({
-          connectionProfileId: snapshot.connection.profileId, modelId: snapshot.connection.modelId,
+          modelId: snapshot.connection.modelId,
           voiceId: entry.voiceId, speed: entry.speed, text: entry.ttsText,
           usage: { projectId: plan.projectId }, signal: controller.signal
         });
@@ -299,7 +302,7 @@ export async function createRenderService(options: {
       const manifest = {
         schemaVersion: 1, renderId, projectId: plan.projectId, planId: plan.id, createdAt: now().toISOString(),
         scriptHash: plan.scriptHash, snapshotHash: plan.snapshotHash, planHash: plan.planHash,
-        connection: { profileId: snapshot.connection.profileId, profileName: snapshot.connection.profileName, profileSource: snapshot.connection.profileSource, modelId: snapshot.connection.modelId, serverIdentityHash: snapshot.connection.serverIdentityHash },
+        connection: snapshot.connection,
         versions: snapshot.versions,
         encoding: { format: "mp3", codec: "libmp3lame", bitRate: 192_000, sampleRate: 24_000, channels: 1 },
         durationMs: mp3Probe.durationMs,

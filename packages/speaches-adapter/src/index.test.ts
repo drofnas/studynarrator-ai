@@ -148,7 +148,6 @@ describe("diagnoseSpeaches failure boundaries", () => {
 
 describe("discoverSpeachesSpeechCatalog", () => {
   const input = {
-    profileId: "profile",
     baseUrl: "http://127.0.0.1:8000/v1",
     apiKey: "test-secret-must-not-appear",
     timeoutSeconds: 2,
@@ -165,7 +164,6 @@ describe("discoverSpeachesSpeechCatalog", () => {
     });
     await expect(discoverSpeachesSpeechCatalog(input, { fetch: fetchInput as typeof fetch })).resolves.toEqual({
       schemaVersion: 1,
-      profileId: "profile",
       models: [
         { modelId: "model-a", voices: [
           { voiceId: "voice-a", name: "Voice A", language: "English", gender: "female" },

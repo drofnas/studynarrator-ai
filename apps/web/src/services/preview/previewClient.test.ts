@@ -12,15 +12,13 @@ const cache = {
   createdAt: timestamp, lastUsedAt: timestamp
 };
 const preview = {
-  schemaVersion: 1 as const,
+  schemaVersion: 2 as const,
   id: "00000000-0000-4000-8000-000000000002",
   createdAt: timestamp,
   projectId: "00000000-0000-4000-8000-000000000001",
   mode: "pronunciation" as const,
   nodeOrdinal: null,
   sourceRange: null,
-  connectionProfileId: "profile",
-  connectionProfileName: "Local",
   modelId: "model",
   speakerId: "narrator" as const,
   voiceId: "voice",

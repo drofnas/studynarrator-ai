@@ -1,9 +1,22 @@
-import { continueOffline, expect, test } from "../support/studyNarratorTest.js";
+import { configureConnection, expect, test } from "../support/studyNarratorTest.js";
 
 test.describe("Frozen render plans", () => {
   test("creates and reopens immutable plans without synthesizing speech", async ({ page, studyNarrator }) => {
-    await continueOffline(page, studyNarrator);
+    await configureConnection(page, studyNarrator);
+    await page.getByRole("link", { name: "Settings", exact: true }).click();
+    const paragraphTiming = page.getByRole("group", { name: "Paragraph" });
+    expect(await paragraphTiming.getByRole("option").allTextContents()).toEqual(["None", "pause_short", "pause_medium", "pause_long"]);
+    await paragraphTiming.getByLabel("Pause").selectOption("pause_medium");
+    await page.getByLabel("pause_medium duration").fill("600 ms");
+    const speakerChangeTiming = page.getByRole("group", { name: "Speaker change" });
+    await speakerChangeTiming.getByLabel("Pause").selectOption("pause_short");
+    const sectionTiming = page.getByRole("group", { name: "Section" });
+    await sectionTiming.getByLabel("Pause").selectOption("pause_long");
+    await page.getByRole("button", { name: "Save timing" }).click();
+    await expect(page.getByText("Global timing saved.")).toBeVisible();
+    await page.getByRole("link", { name: "Projects" }).click();
     studyNarrator.fakeSpeaches.reset();
+    await page.getByRole("button", { name: "New project" }).click();
     await page.getByLabel("Project name").fill("Frozen plan acceptance");
     await page.getByRole("button", { name: "Create project" }).click();
     await page.getByLabel("Script source").fill([
@@ -17,17 +30,12 @@ test.describe("Frozen render plans", () => {
       "[pause_short]",
       "[speaker_teacher] After explicit pause."
     ].join("\n"));
-    await page.getByLabel("Connection profile").selectOption("environment-speaches");
-    await page.getByLabel("Optional model override").fill("speaches-ai/Kokoro-82M-v1.0-ONNX");
-    await expect(page.getByLabel("Voices").first()).toHaveValue("af_heart");
+    await page.getByRole("tab", { name: "Settings" }).click();
+    await expect(page.getByLabel("Connection profile")).toHaveCount(0);
+    await expect(page.getByLabel("Optional model override")).toHaveCount(0);
+    await expect(page.getByLabel("Voice for speaker teacher").first()).toHaveValue("af_heart");
 
-    await page.getByLabel("Paragraph transition mode").selectOption("duration");
-    await page.getByLabel("Paragraph transition duration (ms)").fill("600");
-    await page.getByLabel("Speaker change transition mode").selectOption("preset");
-    await page.getByLabel("Speaker change transition preset").selectOption("pause_short");
-    await page.getByLabel("Section transition mode").selectOption("duration");
-    await page.getByLabel("Section transition duration (ms)").fill("1500");
-
+    await page.getByRole("tab", { name: "Render" }).click();
     const freeze = page.getByRole("button", { name: "Freeze render plan" });
     await expect(freeze).toBeEnabled();
     await freeze.click();
@@ -42,15 +50,19 @@ test.describe("Frozen render plans", () => {
     await expect(table).toContainText("automatic · section");
     await expect(table).toContainText("explicit · explicit");
     await expect(table).toContainText("600 ms");
-    await expect(table).toContainText("SQL one.");
+    await expect(table).toContainText("S Q L one.");
     await expect(table).toContainText("miss");
     await expect(page.getByText("Matches current project").first()).toBeVisible();
     expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/speech"] ?? 0).toBe(0);
 
-    await page.getByLabel("Paragraph transition duration (ms)").fill("900");
-    await page.getByRole("button", { name: "Save now" }).click();
-    await expect(page.getByText("All changes saved.")).toBeVisible();
-    await expect(page.getByText("Frozen from earlier project").first()).toBeVisible();
+    await page.getByRole("link", { name: "Settings", exact: true }).click();
+    await page.getByLabel("pause_medium duration").fill("900 ms");
+    await page.getByRole("button", { name: "Save timing" }).click();
+    await expect(page.getByText("Global timing saved.")).toBeVisible();
+    await page.getByRole("link", { name: "Projects" }).click();
+    await page.getByRole("row", { name: /Frozen plan acceptance/u }).getByRole("link", { name: "Open" }).click();
+    await page.getByRole("tab", { name: "Render" }).click();
+    await page.getByLabel("Saved render plans").getByRole("button").click();
     await expect(table).toContainText("600 ms");
 
     await freeze.click();
@@ -59,7 +71,6 @@ test.describe("Frozen render plans", () => {
     await expect(savedPlans.getByRole("button")).toHaveCount(2);
     await savedPlans.getByRole("button").nth(1).click();
     await expect(table).toContainText("600 ms");
-    await expect(page.getByText("Frozen from earlier project").first()).toBeVisible();
     expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/speech"] ?? 0).toBe(0);
 
     await page.reload();

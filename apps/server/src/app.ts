@@ -2,12 +2,7 @@ import express, { type ErrorRequestHandler, type Express, type NextFunction, typ
 import { createReadStream } from "node:fs";
 import { resolve } from "node:path";
 import {
-  ActiveConnectionProfileInputSchema,
   BoundaryErrorSchema,
-  ConnectionProfileCollectionSchema,
-  ConnectionProfileIdInputSchema,
-  ConnectionProfileMutationSchema,
-  ConnectionProfileMutationRequestSchema,
   ConnectionSetupStateSchema,
   ConnectionTestSummarySchema,
   GlobalLexiconEntryCollectionSchema,
@@ -42,11 +37,14 @@ import {
   SpeechCacheKeyInputSchema,
   SpeechCacheStatusSchema,
   SpeechCatalogSchema,
+  SpeachesCatalogDiscoveryInputSchema,
+  SpeachesConnectionAuthoringSchema,
+  SpeachesConnectionSchema,
   SystemDiagnosticsSchema,
-  SystemPacingDefaultsSchema,
+  SystemTimingConfigurationSchema,
   VoiceCatalogModelInputSchema,
   VoiceCatalogSchema,
-  type ConnectionsClient,
+  type SpeachesConnectionClient,
   type PersistenceClient,
   type ProjectPreviewClient,
   type RenderPlanClient,
@@ -105,7 +103,7 @@ export function createExpressApp(options: {
   service: SystemService;
   context: DiagnosticsContext;
   persistence?: PersistenceClient;
-  connections?: ConnectionsClient;
+  connection?: SpeachesConnectionClient;
   voiceCatalog?: VoiceCatalogClient;
   scratchpad?: ScratchpadClient;
   projectPreview?: ProjectPreviewClient;
@@ -177,10 +175,10 @@ export function createExpressApp(options: {
       } catch (error) { next(error); }
     });
     app.get("/api/settings/pacing", async (_request, response, next) => {
-      try { response.json(SystemPacingDefaultsSchema.parse(await persistence.settings.getPacing())); } catch (error) { next(error); }
+      try { response.json(SystemTimingConfigurationSchema.parse(await persistence.settings.getPacing())); } catch (error) { next(error); }
     });
     app.put("/api/settings/pacing", async (request, response, next) => {
-      try { response.json(SystemPacingDefaultsSchema.parse(await persistence.settings.updatePacing(SystemPacingDefaultsSchema.parse(request.body)))); } catch (error) { next(error); }
+      try { response.json(SystemTimingConfigurationSchema.parse(await persistence.settings.updatePacing(SystemTimingConfigurationSchema.parse(request.body)))); } catch (error) { next(error); }
     });
     app.get("/api/preferences/ignored-diagnostics", async (_request, response, next) => {
       try { response.json(IgnoredDiagnosticCollectionSchema.parse(await persistence.preferences.getIgnoredDiagnostics())); } catch (error) { next(error); }
@@ -196,63 +194,42 @@ export function createExpressApp(options: {
     });
   }
 
-  if (options.connections && options.voiceCatalog) {
-    const connections = options.connections;
+  if (options.connection && options.voiceCatalog) {
+    const connection = options.connection;
     const voiceCatalog = options.voiceCatalog;
-    app.get("/api/connections", async (_request, response, next) => {
-      try { response.json(ConnectionProfileCollectionSchema.parse(await connections.list())); } catch (error) { next(error); }
+    app.get("/api/connection", async (_request, response, next) => {
+      try { response.json(SpeachesConnectionSchema.parse(await connection.get())); } catch (error) { next(error); }
     });
-    app.post("/api/connections", async (request, response, next) => {
-      try { response.status(201).json(await connections.create(ConnectionProfileMutationSchema.parse(request.body))); } catch (error) { next(error); }
+    app.put("/api/connection", async (request, response, next) => {
+      try { response.json(SpeachesConnectionSchema.parse(await connection.update(SpeachesConnectionAuthoringSchema.parse(request.body)))); } catch (error) { next(error); }
     });
-    app.put("/api/connections/:profileId", async (request, response, next) => {
-      try {
-        const parsed = ConnectionProfileMutationRequestSchema.parse({ profileId: request.params.profileId, mutation: request.body as unknown });
-        response.json(await connections.replace(parsed.profileId, parsed.mutation));
-      } catch (error) { next(error); }
+    app.post("/api/connection/test", async (_request, response, next) => {
+      try { response.json(ConnectionTestSummarySchema.parse(await connection.test())); } catch (error) { next(error); }
     });
-    app.delete("/api/connections/:profileId", async (request, response, next) => {
-      try {
-        const parsed = ConnectionProfileIdInputSchema.parse({ profileId: request.params.profileId });
-        await connections.delete(parsed.profileId);
-        response.status(204).end();
-      } catch (error) { next(error); }
-    });
-    app.post("/api/connections/:profileId/test", async (request, response, next) => {
-      try {
-        const parsed = ConnectionProfileIdInputSchema.parse({ profileId: request.params.profileId });
-        response.json(ConnectionTestSummarySchema.parse(await connections.test(parsed.profileId)));
-      } catch (error) { next(error); }
-    });
-    app.get("/api/connections/:profileId/speech-catalog", async (request, response, next) => {
+    app.post("/api/connection/speech-catalog", async (request, response, next) => {
       const controller = new AbortController();
       const abort = () => controller.abort();
       request.once("aborted", abort);
       const abortIfDisconnected = () => { if (!response.writableEnded) abort(); };
       response.once("close", abortIfDisconnected);
       try {
-        const parsed = ConnectionProfileIdInputSchema.parse({ profileId: request.params.profileId });
-        response.json(SpeechCatalogSchema.parse(await connections.discoverSpeechCatalog(parsed.profileId, controller.signal)));
+        response.json(SpeechCatalogSchema.parse(await connection.discoverSpeechCatalog(
+          SpeachesCatalogDiscoveryInputSchema.parse(request.body), controller.signal
+        )));
       } catch (error) { next(error); }
       finally {
         request.off("aborted", abort);
         response.off("close", abortIfDisconnected);
       }
     });
-    app.get("/api/connections/:profileId/diagnostics", async (request, response, next) => {
-      try {
-        const parsed = ConnectionProfileIdInputSchema.parse({ profileId: request.params.profileId });
-        response.json(RedactedConnectionDiagnosticsSchema.parse(await connections.exportDiagnostics(parsed.profileId)));
-      } catch (error) { next(error); }
+    app.get("/api/connection/diagnostics", async (_request, response, next) => {
+      try { response.json(RedactedConnectionDiagnosticsSchema.parse(await connection.exportDiagnostics())); } catch (error) { next(error); }
     });
     app.get("/api/setup", async (_request, response, next) => {
-      try { response.json(ConnectionSetupStateSchema.parse(await connections.getSetupState())); } catch (error) { next(error); }
-    });
-    app.put("/api/setup/active-profile", async (request, response, next) => {
-      try { response.json(ConnectionSetupStateSchema.parse(await connections.setActiveProfile(ActiveConnectionProfileInputSchema.parse(request.body).profileId))); } catch (error) { next(error); }
+      try { response.json(ConnectionSetupStateSchema.parse(await connection.getSetupState())); } catch (error) { next(error); }
     });
     app.post("/api/setup/complete", async (_request, response, next) => {
-      try { response.json(ConnectionSetupStateSchema.parse(await connections.completeOnboarding())); } catch (error) { next(error); }
+      try { response.json(ConnectionSetupStateSchema.parse(await connection.completeOnboarding())); } catch (error) { next(error); }
     });
     app.get("/api/voice-catalog", async (request, response, next) => {
       try {

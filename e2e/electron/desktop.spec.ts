@@ -1,17 +1,12 @@
+import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { strFromU8, unzipSync } from "fflate";
+import type { Page } from "@playwright/test";
 import type { StudyNarratorBridge } from "@studynarrator/shared-types";
-import { FAKE_SPEACHES_SECONDARY_MODEL_ID, FAKE_SPEACHES_SECONDARY_VOICE_ID } from "@studynarrator/fake-speaches";
-import { continueElectronOffline, expect, test } from "../support/electronTest.js";
-
-const secret = "test-secret-must-not-appear";
+import { configureElectronConnection, continueElectronOffline, expect, test } from "../support/electronTest.js";
 
 interface ElectronEvaluationApi {
-  safeStorage: {
-    isEncryptionAvailable(): boolean;
-    getSelectedStorageBackend?: () => string;
-  };
   shell: {
     openExternal(url: string): Promise<void>;
   };
@@ -20,10 +15,22 @@ interface ElectronEvaluationApi {
   };
 }
 
+async function createProject(page: Page, name: string): Promise<void> {
+  await page.getByRole("button", { name: "New project" }).click();
+  await page.getByLabel("Project name").fill(name);
+  await page.getByRole("button", { name: "Create project" }).click();
+  await expect(page.getByRole("tab", { name: "Script Editor" })).toHaveAttribute("aria-selected", "true");
+}
+
+async function openProject(page: Page, name: string): Promise<void> {
+  await page.getByRole("row", { name: new RegExp(name, "u") }).getByRole("link", { name: "Open" }).click();
+  await expect(page.getByRole("tab", { name: "Script Editor" })).toHaveAttribute("aria-selected", "true");
+}
+
 test.describe("Electron acceptance", () => {
   test("uses typed IPC for Scratchpad playback and exposes no Node or generic primitive", async ({ electronStudyNarrator, studyNarrator }) => {
     const { page } = electronStudyNarrator;
-    await continueElectronOffline(page);
+    await configureElectronConnection(page, studyNarrator);
     const bridgeShape = await page.evaluate(() => {
       const renderer = window as typeof window & { studyNarrator?: StudyNarratorBridge };
       return {
@@ -34,7 +41,7 @@ test.describe("Electron acceptance", () => {
       };
     });
     expect(bridgeShape).toEqual({
-      bridge: ["connections", "persistence", "projectPreview", "renderPlans", "renders", "scratchpad", "scriptGeneration", "speechCache", "system", "voiceCatalog"],
+      bridge: ["connection", "persistence", "projectPreview", "renderPlans", "renders", "scratchpad", "scriptGeneration", "speechCache", "system", "voiceCatalog"],
       hasRequire: false,
       hasProcess: false,
       frozen: true
@@ -43,7 +50,17 @@ test.describe("Electron acceptance", () => {
     studyNarrator.fakeSpeaches.reset();
     await page.getByRole("link", { name: "Quick Scratchpad" }).click();
     await expect(page.getByRole("heading", { name: "Quick Scratchpad" })).toBeVisible();
+    await expect(page.getByLabel("Model")).toHaveValue("speaches-ai/Kokoro-82M-v1.0-ONNX");
+    await expect(page.getByLabel("Voice")).toHaveValue("af_heart");
+    await expect(page.getByLabel("Voice").getByRole("option", { name: "Heart (af_heart | en-US)" })).toBeAttached();
+    await expect(page.getByLabel("Voice").locator('optgroup[label="en-US"]')).toBeAttached();
+    await expect(page.getByText("Recent results")).toHaveCount(0);
+    await expect(page.getByText("Sent to Speaches")).toHaveCount(0);
+    await expect(page.getByText("No audio loaded")).toHaveCount(0);
     await page.getByLabel("Passage").fill("SQL indexes can improve database reads.");
+    await page.getByRole("link", { name: "Projects" }).click();
+    await page.getByRole("link", { name: "Quick Scratchpad" }).click();
+    await expect(page.getByLabel("Passage")).toHaveValue("SQL indexes can improve database reads.");
     await page.getByRole("button", { name: "Synthesize passage" }).click();
     const player = page.getByLabel(/Audio player for/u);
     await expect(player).toBeVisible();
@@ -52,19 +69,25 @@ test.describe("Electron acceptance", () => {
     await expect(player.getByRole("status")).toHaveText("Playing");
     await expect(player.getByRole("status")).toHaveText("Playback complete", { timeout: 5_000 });
     expect(studyNarrator.fakeSpeaches.getState().requests.filter(({ path }) => path === "/v1/audio/speech")).toHaveLength(1);
+    await page.getByLabel("Voice").selectOption("af_sky");
+    await page.getByRole("button", { name: "Synthesize passage" }).click();
+    await expect(page.getByLabel(/Audio player for/u)).toHaveCount(1);
+    expect(studyNarrator.fakeSpeaches.getState().requests.filter(({ path }) => path === "/v1/audio/speech")).toHaveLength(2);
 
     await page.getByRole("link", { name: "Projects" }).click();
-    await page.getByLabel("Project name").fill("Desktop model voices");
-    await page.getByRole("button", { name: "Create project" }).click();
-    await page.getByLabel("Script source").fill("[speaker_narrator] Model scoped voice.");
-    await page.getByLabel("Connection profile").selectOption("environment-speaches");
-    await page.getByLabel("Optional model override").fill(FAKE_SPEACHES_SECONDARY_MODEL_ID);
-    await expect(page.getByLabel("Voices")).toHaveValue(FAKE_SPEACHES_SECONDARY_VOICE_ID);
+    await createProject(page, "Desktop global model voices");
+    await page.getByLabel("Script source").fill("[speaker_narrator] Globally configured model voice.");
+    await page.getByRole("tab", { name: "Settings" }).click();
+    await expect(page.getByLabel("Connection profile")).toHaveCount(0);
+    await expect(page.getByLabel("Optional model override")).toHaveCount(0);
+    await expect(page.getByLabel("Voice for speaker narrator")).toHaveValue("af_heart");
+    await expect(page.getByLabel("Voice for speaker narrator").getByRole("option", { name: "Heart (af_heart | en-US)" })).toBeAttached();
+    await expect(page.locator("strong").filter({ hasText: "Heart — American English — af_heart" })).toHaveCount(0);
     await page.getByRole("button", { name: "Save now" }).click();
-    await expect(page.getByText("All changes saved.")).toBeVisible();
-    expect(studyNarrator.fakeSpeaches.getState().requests.filter(({ path }) => path === "/v1/audio/speech")).toHaveLength(1);
+    await expect(page.getByText("All changes saved.")).toHaveCount(0);
+    expect(studyNarrator.fakeSpeaches.getState().requests.filter(({ path }) => path === "/v1/audio/speech")).toHaveLength(2);
 
-    await page.getByRole("link", { name: "Settings" }).click();
+    await page.getByRole("link", { name: "Settings", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
     await page.getByRole("link", { name: "System diagnostics" }).click();
     await page.getByRole("button", { name: "Run self-test" }).click();
@@ -75,47 +98,67 @@ test.describe("Electron acceptance", () => {
   test("persists project UI state across a desktop relaunch", async ({ electronStudyNarrator }) => {
     let page = electronStudyNarrator.page;
     await continueElectronOffline(page);
-    await page.getByLabel("Project name").fill("Desktop durable project");
-    await page.getByRole("button", { name: "Create project" }).click();
+    await createProject(page, "Desktop durable project");
     await expect(page.getByRole("heading", { name: "Script editor" })).toBeVisible();
     await page.getByLabel("Script source").fill("[speaker_teacher] Persist through relaunch.");
+    await page.getByRole("tab", { name: "Settings" }).click();
+    const lexicon = page.getByRole("region", { name: "Project lexicon" });
+    await lexicon.getByLabel("Script Text").first().fill("CLI");
+    await lexicon.getByLabel("Spoken Text").first().fill("C L I");
+    await lexicon.getByRole("button", { name: "Add" }).click();
+    await expect(lexicon.getByRole("article", { name: "Lexicon entry CLI" })).toBeVisible();
     await page.getByRole("button", { name: "Save now" }).click();
-    await expect(page.getByText("All changes saved.")).toBeVisible();
+    await expect(page.getByText("All changes saved.")).toHaveCount(0);
 
     page = await electronStudyNarrator.relaunch();
     await expect(page.getByRole("heading", { name: "Projects", exact: true })).toBeVisible();
-    await page.getByRole("button", { name: /Desktop durable project/u }).click();
+    await openProject(page, "Desktop durable project");
     await expect(page.getByLabel("Script source")).toHaveValue("[speaker_teacher] Persist through relaunch.");
+    await page.getByRole("tab", { name: "Settings" }).click();
+    await expect(page.getByRole("region", { name: "Project lexicon" }).getByRole("article", { name: "Lexicon entry CLI" })).toBeVisible();
   });
 
   test("freezes and reopens immutable plans through typed IPC without TTS", async ({ electronStudyNarrator, studyNarrator }) => {
     let page = electronStudyNarrator.page;
-    await continueElectronOffline(page);
+    await configureElectronConnection(page, studyNarrator);
+    await page.getByRole("link", { name: "Settings", exact: true }).click();
+    const paragraphTiming = page.getByRole("group", { name: "Paragraph" });
+    await paragraphTiming.getByLabel("Pause").selectOption("pause_short");
+    await page.getByLabel("pause_short duration").fill("350 ms");
+    await page.getByRole("button", { name: "Save timing" }).click();
+    await expect(page.getByText("Global timing saved.")).toBeVisible();
+    await page.getByRole("link", { name: "Projects" }).click();
     studyNarrator.fakeSpeaches.reset();
-    await page.getByLabel("Project name").fill("Desktop frozen plan");
-    await page.getByRole("button", { name: "Create project" }).click();
+    await createProject(page, "Desktop frozen plan");
     await page.getByLabel("Script source").fill("[speaker_teacher] First.\n\n[speaker_teacher] Second.");
-    await page.getByLabel("Connection profile").selectOption("environment-speaches");
-    await page.getByLabel("Optional model override").fill("speaches-ai/Kokoro-82M-v1.0-ONNX");
-    await expect(page.getByLabel("Voices")).toHaveValue("af_heart");
-    await page.getByLabel("Paragraph transition mode").selectOption("duration");
-    await page.getByLabel("Paragraph transition duration (ms)").fill("350");
+    await page.getByRole("tab", { name: "Settings" }).click();
+    await expect(page.getByLabel("Connection profile")).toHaveCount(0);
+    await expect(page.getByLabel("Optional model override")).toHaveCount(0);
+    await expect(page.getByLabel("Voice for speaker teacher")).toHaveValue("af_heart");
+    await page.getByRole("tab", { name: "Render" }).click();
     await page.getByRole("button", { name: "Freeze render plan" }).click();
     await expect(page.getByRole("table", { name: "Frozen render plan ordered entries" })).toContainText("350 ms");
     expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/speech"] ?? 0).toBe(0);
 
     page = await electronStudyNarrator.relaunch();
     await expect(page.getByRole("heading", { name: "Projects", exact: true })).toBeVisible();
-    await page.getByRole("button", { name: /Desktop frozen plan/u }).click();
+    await openProject(page, "Desktop frozen plan");
+    await page.getByRole("tab", { name: "Render" }).click();
     const savedPlans = page.getByLabel("Saved render plans");
     await expect(savedPlans.getByRole("button")).toHaveCount(1);
     await savedPlans.getByRole("button").click();
     const table = page.getByRole("table", { name: "Frozen render plan ordered entries" });
     await expect(table).toContainText("350 ms");
 
-    await page.getByLabel("Paragraph transition duration (ms)").fill("750");
-    await page.getByRole("button", { name: "Save now" }).click();
-    await expect(page.getByText("Frozen from earlier project").first()).toBeVisible();
+    await page.getByRole("link", { name: "Settings", exact: true }).click();
+    await page.getByLabel("pause_short duration").fill("750 ms");
+    await page.getByRole("button", { name: "Save timing" }).click();
+    await expect(page.getByText("Global timing saved.")).toBeVisible();
+    await page.getByRole("link", { name: "Projects" }).click();
+    await openProject(page, "Desktop frozen plan");
+    await page.getByRole("tab", { name: "Render" }).click();
+    await page.getByLabel("Saved render plans").getByRole("button").click();
+    await expect(table).toContainText("350 ms");
     await page.getByRole("button", { name: "Freeze render plan" }).click();
     await expect(table).toContainText("750 ms");
     await expect(savedPlans.getByRole("button")).toHaveCount(2);
@@ -124,13 +167,14 @@ test.describe("Electron acceptance", () => {
 
   test("auto-resumes an interrupted render and saves a validated artifact through native IPC", async ({ electronStudyNarrator, studyNarrator }) => {
     let page = electronStudyNarrator.page;
-    await continueElectronOffline(page);
-    await page.getByLabel("Project name").fill("Desktop render recovery");
-    await page.getByRole("button", { name: "Create project" }).click();
+    await configureElectronConnection(page, studyNarrator);
+    await createProject(page, "Desktop render recovery");
     await page.getByLabel("Script source").fill("[speaker_teacher] Resume this render.");
-    await page.getByLabel("Connection profile").selectOption("environment-speaches");
-    await page.getByLabel("Optional model override").fill("speaches-ai/Kokoro-82M-v1.0-ONNX");
-    await expect(page.getByLabel("Voices")).toHaveValue("af_heart");
+    await page.getByRole("tab", { name: "Settings" }).click();
+    await expect(page.getByLabel("Connection profile")).toHaveCount(0);
+    await expect(page.getByLabel("Optional model override")).toHaveCount(0);
+    await expect(page.getByLabel("Voice for speaker teacher")).toHaveValue("af_heart");
+    await page.getByRole("tab", { name: "Render" }).click();
     await page.getByRole("button", { name: "Freeze render plan" }).click();
     studyNarrator.fakeSpeaches.setScenario("timeout");
     await page.getByRole("button", { name: "Render this frozen plan" }).click();
@@ -139,7 +183,8 @@ test.describe("Electron acceptance", () => {
     studyNarrator.fakeSpeaches.setScenario("healthy");
     page = await electronStudyNarrator.relaunch();
     await expect(page.getByRole("heading", { name: "Projects", exact: true })).toBeVisible();
-    await page.getByRole("button", { name: /Desktop render recovery/u }).click();
+    await openProject(page, "Desktop render recovery");
+    await page.getByRole("tab", { name: "Render" }).click();
     await expect(page.getByText(/Phase: complete/u)).toBeVisible({ timeout: 20_000 });
     const mp3Row = page.getByRole("list", { name: "Render artifacts" }).getByRole("listitem").filter({ hasText: "mp3" });
     await expect(mp3Row).toBeVisible();
@@ -167,7 +212,7 @@ test.describe("Electron acceptance", () => {
     const { page, application, dataDirectory } = electronStudyNarrator;
     await continueElectronOffline(page);
     studyNarrator.fakeSpeaches.reset();
-    await page.getByRole("link", { name: "Script prompt kit" }).click();
+    await page.getByRole("link", { name: "Prompt Kit" }).click();
     await expect(page.getByRole("heading", { name: "Script prompt kit" })).toBeVisible();
     const creationPreview = page.getByLabel("Create a script prompt preview");
     await expect(creationPreview).toContainText("KNOWLEDGE TO GATHER AND TEACH");
@@ -200,37 +245,40 @@ test.describe("Electron acceptance", () => {
     expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/speech"] ?? 0).toBe(0);
   });
 
-  test("clears one-shot credential input and never stores plaintext", async ({ electronStudyNarrator, studyNarrator }) => {
-    const { page, application, dataDirectory } = electronStudyNarrator;
-    await continueElectronOffline(page);
-    await page.getByRole("link", { name: "Settings" }).click();
-    await page.getByRole("button", { name: "New saved profile" }).click();
-    await page.getByLabel("Name", { exact: true }).fill("Desktop credential profile");
-    await page.getByLabel("Endpoint root or /v1").fill(studyNarrator.fakeSpeaches.baseUrl);
-    await page.getByLabel("Model ID").fill("speaches-ai/Kokoro-82M-v1.0-ONNX");
-    await page.getByLabel("Default voice ID").fill("af_heart");
-    const credential = page.getByLabel("Replace API key (one shot)");
-    await credential.fill(secret);
-    await page.getByRole("button", { name: "Create profile" }).click();
-    await expect(credential).toHaveValue("");
+  test("exposes and persists only the singleton connection settings", async ({ electronStudyNarrator, studyNarrator }) => {
+    let page = electronStudyNarrator.page;
+    await configureElectronConnection(page, studyNarrator);
+    await page.getByRole("link", { name: "Settings", exact: true }).click();
+    await expect(page.getByLabel("Address")).toHaveValue(studyNarrator.fakeSpeaches.baseUrl);
+    await expect(page.getByLabel("Model")).toHaveValue("speaches-ai/Kokoro-82M-v1.0-ONNX");
+    await expect(page.getByLabel("Default Voice")).toHaveValue("af_heart");
+    await expect(page.getByRole("option", { name: "Heart (af_heart | en-US)" })).toBeAttached();
+    await expect(page.getByText(/New saved profile|Active profile|API key|Environment Speaches/u)).toHaveCount(0);
+    await page.getByLabel("Search voice catalog").fill("en-US");
+    await expect(page.getByLabel("en-US voices")).toBeVisible();
+    await page.getByRole("button", { name: "Add Heart to favorites" }).click();
+    await expect(page.getByLabel("Favorites voices")).toContainText("Heart");
+    const script = "Electron voice audition without a player.";
+    await page.getByLabel("Voice test script").fill(script);
+    studyNarrator.fakeSpeaches.reset();
+    await page.getByRole("button", { name: /^Test Heart/u }).click();
+    await expect.poll(() => studyNarrator.fakeSpeaches.getState().requests.filter(({ path, status }) => path === "/v1/audio/speech" && status === 200).length).toBe(1);
+    expect(studyNarrator.fakeSpeaches.getState().requests.find(({ path }) => path === "/v1/audio/speech")).toMatchObject({
+      model: "speaches-ai/Kokoro-82M-v1.0-ONNX",
+      voice: "af_heart",
+      speed: 1,
+      inputLength: script.length,
+      inputHash: createHash("sha256").update(script).digest("hex")
+    });
+    await expect(page.locator("audio")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Test Heart/u })).toBeVisible({ timeout: 5_000 });
 
-    const encryptionAvailable = await application.evaluate(({ safeStorage }: ElectronEvaluationApi) =>
-      safeStorage.isEncryptionAvailable() && safeStorage.getSelectedStorageBackend?.() !== "basic_text");
-    if (encryptionAvailable) {
-      await expect(page.getByText("Desktop credential profile saved.")).toBeVisible();
-      await expect(page.getByText(/API key: configured/u)).toBeVisible();
-      const vaultPath = resolve(dataDirectory, "credentials.safe-storage.json");
-      const vault = await readFile(vaultPath, "utf8");
-      expect(vault).not.toContain(secret);
-      expect((await stat(vaultPath)).mode & 0o777).toBe(0o600);
-    } else {
-      await expect(page.getByRole("alert")).toContainText("could not complete the connection operation");
-    }
-
-    const rendererStorage = await page.evaluate(() => `${JSON.stringify(localStorage)}${JSON.stringify(sessionStorage)}${document.body.textContent ?? ""}`);
-    expect(rendererStorage).not.toContain(secret);
-    const database = await readFile(resolve(dataDirectory, "studynarrator.sqlite"));
-    expect(database.includes(Buffer.from(secret))).toBe(false);
+    page = await electronStudyNarrator.relaunch();
+    await page.getByRole("link", { name: "Settings", exact: true }).click();
+    await expect(page.getByLabel("Address")).toHaveValue(studyNarrator.fakeSpeaches.baseUrl);
+    await expect(page.getByLabel("Model")).toHaveValue("speaches-ai/Kokoro-82M-v1.0-ONNX");
+    await expect(page.getByLabel("Favorites voices")).toContainText("Heart");
+    await expect(page.getByRole("button", { name: "Remove Heart from favorites" })).toHaveAttribute("aria-pressed", "true");
   });
 
   test("opens only approved Speaches links outside the renderer", async ({ electronStudyNarrator }) => {

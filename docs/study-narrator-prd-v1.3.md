@@ -20,7 +20,7 @@ The product name describes the user outcome rather than a specific model or serv
 
 Version 1 supports two application distributions:
 
-1. A Docker-based Web UI that connects to an existing Speaches endpoint through environment configuration.
+1. A Docker-based Web UI that connects to an existing Speaches endpoint through application onboarding.
 2. An Electron desktop application for Windows, macOS, and Linux that connects to a local or private-network Speaches endpoint through application settings.
 
 StudyNarrator does **not** install, bundle, launch, update, or administer Speaches in version 1. Users who do not already have Speaches can follow the official upstream documentation:
@@ -28,7 +28,7 @@ StudyNarrator does **not** install, bundle, launch, update, or administer Speach
 - [Speaches installation guide](https://speaches.ai/installation/)
 - [Speaches text-to-speech guide](https://speaches.ai/usage/text-to-speech/)
 
-After Speaches is available, the user supplies its base URL and optionally an API key. The application validates that connection and uses the configured OpenAI-compatible speech endpoint.
+After Speaches is available, the user supplies its base URL. The application discovers the server's models and voices, validates the selected defaults, and uses the configured OpenAI-compatible speech endpoint. Authenticated Speaches servers are outside the version 1 configuration flow.
 
 The application will support:
 
@@ -203,7 +203,7 @@ The user needs “resume” pronounced differently in two places. The source scr
 
 #### Existing local Speaches server
 
-A user already has Speaches running on the same computer. They start the StudyNarrator Docker Web UI with `SPEACHES_BASE_URL=http://host.docker.internal:8000`, or they configure the Electron application with `http://localhost:8000`.
+A user already has Speaches running on the same computer. They enter `http://host.docker.internal:8000` during Docker Web onboarding, or `http://localhost:8000` during Electron onboarding.
 
 #### Private-network Speaches server
 
@@ -348,40 +348,37 @@ Speaches is an external prerequisite for preview and rendering. A user who does 
 
 The user then chooses one of two StudyNarrator paths:
 
-1. **Docker Web UI:** copy `.env.example` to `.env`, set `SPEACHES_BASE_URL`, and start the supplied StudyNarrator Compose file.
-2. **Electron desktop application:** install the native package, open the first-run connection screen, and enter a local or private-network Speaches endpoint.
+1. **Docker Web UI:** start the supplied StudyNarrator Compose file, open the first-run connection screen, and enter a host-accessible Speaches endpoint.
+2. **Electron desktop application:** install the native package, open the same first-run connection screen, and enter a local or private-network Speaches endpoint.
 
 At startup, the application must:
 
-- Load the effective Speaches connection from environment variables or saved desktop settings.
+- Load the single saved Speaches connection from application persistence.
 - Start even when Speaches is temporarily unavailable.
 - Show a clear disconnected state rather than a blank page or fatal startup error.
 - Provide the official setup links when no endpoint has been configured.
 - Offer a connection test that distinguishes URL, DNS, TCP, HTTP, authentication, model, voice, and audio-response failures.
-- Explain whether a setting is editable in the UI or managed by the Docker environment.
 - Never attempt to install, update, start, stop, or reconfigure Speaches.
 
-Before creating a project, the user may open the **Quick Scratchpad**, choose a connection profile and voice, enter a short passage, and synthesize it through the same adapter used by project previews. This provides a fast connection, voice, and pronunciation check without introducing project state.
+Before creating a project, the user may open the **Quick Scratchpad**, choose a model and voice from the singleton connection, enter a short passage, and synthesize it through the same adapter used by project previews. This provides a fast connection, voice, and pronunciation check without introducing project state.
 
 ### 8.2 Create or open a project
 
 The user creates a project and provides:
 
 - Project name.
-- Speaches connection profile, preselected from the installation default when available.
 - TTS model ID.
 - Default output directory or export behavior.
 - Optional project override for the system default `narrator`.
 
 Recommended defaults:
 
-- Connection profile: current installation default.
-- Model: `speaches-ai/Kokoro-82M-v1.0-ONNX`
+- Model: the first model returned by Speaches during initial discovery.
 - Output format: MP3
 - TTS segment format: WAV
 - Voice speed: `1.0`
 
-The endpoint and API key belong to the installation-local connection profile rather than the portable project itself.
+The endpoint belongs to the installation-local singleton connection rather than the portable project itself.
 
 ### 8.3 Paste or upload a script
 
@@ -609,7 +606,7 @@ The readable transcript removes only the escape character. This also prevents an
 
 Blank lines preserve paragraph boundaries in the parsed representation. The parser itself never inserts silence. The default transition configuration resolves eligible boundaries between speech segments to `pause_medium`, initially 750 milliseconds, without changing the source, CIR, or transcripts.
 
-The user may disable this behavior or override its duration. An explicit pause directive anywhere between the neighboring speech segments wins and suppresses the automatic paragraph pause.
+The user may disable this behavior or select `pause_short`, `pause_medium`, or `pause_long`; each named preset's duration remains editable globally. An explicit pause directive anywhere between the neighboring speech segments wins and suppresses the automatic paragraph pause.
 
 ### 9.8 Unknown directives
 
@@ -659,7 +656,7 @@ Both distributions must:
 - Display the application version, schema version, client type, data directory, FFmpeg availability, and effective Speaches endpoint in diagnostics.
 - Persist projects, global lexicon entries, render history, artifacts, and cache data across restarts and upgrades.
 - Start the UI even if Speaches is offline.
-- Keep TTS requests outside the browser renderer. The Web browser and Electron renderer must not receive a Speaches API key or call Speaches directly.
+- Keep TTS requests outside the browser renderer. The Web browser and Electron renderer must not call Speaches directly.
 - Accept a Speaches root URL such as `http://server:8000` and safely normalize an OpenAI-style URL ending in `/v1` without producing `/v1/v1/audio/speech`.
 - Support loopback, Docker-host, DNS-hostname, and private-network endpoints.
 - Include a tested upgrade path and document which directories or volumes must be backed up.
@@ -680,8 +677,7 @@ Required deliverables:
 
 Required behavior:
 
-- `SPEACHES_BASE_URL` is the primary connection setting.
-- `SPEACHES_API_KEY` is optional and must remain in the Node.js server process.
+- The Speaches address, default model, and default voice are configured through application onboarding and persisted under `/data`.
 - The application container stores persistent state under a documented mount such as `/data`.
 - The host port and bind address are configurable. The supplied Compose file binds to `127.0.0.1` by default.
 - The Compose file may provide a Linux-compatible `host.docker.internal` mapping through the Docker host gateway so the application can reach Speaches running on the Docker host.
@@ -710,7 +706,7 @@ The desktop package must:
 - Bundle or reliably provide the required FFmpeg runtime under a license-compatible distribution approach.
 - Store projects and generated files under operating-system-appropriate application-data locations while allowing user-selected export destinations.
 - Provide native file selection, drag-and-drop import, “show in folder,” and normal desktop open/save behavior.
-- Use a first-run screen for Speaches base URL, optional API key, default model, and default voice.
+- Use a first-run screen for Speaches base URL, discovered default model, and discovered default voice.
 - Support Speaches on `localhost` or on a private-network server.
 - Start and remain usable for project editing when Speaches is offline.
 - Display the official Speaches installation and TTS links when no server is available.
@@ -748,18 +744,9 @@ Test connection
 Continue offline
 ```
 
-#### 10.1.5 Configuration precedence and locking
+#### 10.1.5 Application-managed connection
 
-The effective runtime configuration must be resolved in this order:
-
-1. Explicit process or launch arguments.
-2. Environment variables or injected container secrets.
-3. Saved application-level connection profiles.
-4. Product defaults.
-
-Project configuration may select a connection profile and model, but project exports must not contain raw API keys. A Docker deployment may set `STUDYNARRATOR_LOCK_SPEACHES_SETTINGS=true` to make an environment-managed endpoint read-only in the UI. The UI must identify the source of each effective value.
-
-Electron should store API keys in the operating system’s credential store where available. Docker deployments should receive secrets through environment variables, an environment file with restricted permissions, or Docker secrets. API keys must not be written into render manifests, project bundles, browser storage, crash reports, or logs.
+Both distributions use one editable application-managed Speaches connection. The address starts empty on a fresh installation. Catalog discovery does not persist a draft; Save and Test persists the selected endpoint, model, voice, timeout, and retry policy. Projects may override the model, but do not choose or carry a connection. Speaches servers that require authentication are unsupported.
 
 #### 10.1.6 Required release-package layout
 
@@ -800,29 +787,26 @@ The final filenames may change, but the Docker Web UI and Electron workflows mus
 
 ### 10.2 Speaches connection and model configuration
 
-Speaches connectivity must be represented by installation-local **connection profiles** rather than duplicating machine-specific URLs and secrets in every project.
+Speaches connectivity must be represented by one installation-local **connection** rather than duplicating a machine-specific URL in every project.
 
-A connection profile must support:
+The connection must support:
 
-- Human-readable name.
 - Speaches base URL.
-- Optional API-key reference.
 - Default model ID.
 - Default voice ID.
 - Request timeout.
 - Retry count and bounded retry policy.
 - Default response format for temporary segments.
-- Whether the profile is editable or managed by Docker environment configuration.
 - Last successful test time and a non-secret diagnostic summary.
 
-A project references a connection profile and may override non-secret rendering choices such as model ID when the installation permits it. Moving a project between Docker and Electron should require selecting a valid local connection profile, not editing the script or exposing an old server key.
+A project automatically uses the singleton connection and may override rendering choices such as model ID. Moving a project between Docker and Electron does not copy or replace the destination installation's endpoint.
 
 The application must provide a **Test Connection** action that checks progressively:
 
 1. URL validity and normalization.
 2. Hostname resolution and TCP reachability.
 3. A usable HTTP response from the Speaches server.
-4. Authentication when configured.
+4. Whether the server rejects unauthenticated access, with guidance that authenticated servers are unsupported.
 5. Whether the selected model can accept a speech request or returns an actionable model error.
 6. Whether the selected default voice can produce a small sample.
 7. Receipt of decodable audio.
@@ -943,11 +927,7 @@ The project may define automatic pauses for:
 - Paragraph boundaries.
 - Section boundaries.
 
-Each transition may be set to:
-
-- None.
-- A named project pause preset.
-- A direct duration.
+Each transition is set with one dropdown containing None or the named system presets `pause_short`, `pause_medium`, and `pause_long`. Direct per-transition durations are not offered; their equivalent timing is configured by editing the named preset durations. Existing saved direct durations are migrated to the nearest named preset, while frozen render plans retain their captured historical timing.
 
 Automatic paragraph pauses are enabled by default and use `pause_medium`, initially 750 milliseconds. System Settings supplies this default for projectless analysis and new projects. Project creation copies the effective value so existing projects remain reproducible when the system default later changes.
 
@@ -1075,13 +1055,12 @@ Chunking requirements:
 The Quick Scratchpad is a project-independent surface for fast experiments. It must allow the user to:
 
 - Enter or paste a short passage.
-- Select an installation-local Speaches connection profile, model, voice, and speed.
-- Optionally apply the global lexicon and inspect the transformed TTS text before synthesis.
+- Select a model, voice, and speed from the installation's singleton Speaches connection.
+- Optionally apply the global lexicon before synthesis.
 - Synthesize, play, pause, seek, replay, and explicitly save the result.
-- See whether the result came from cache and which server/profile produced it.
-- Copy the passage into a new project or the current project through an explicit action.
+- Replace the previous Scratchpad result and retain only the latest successful audio.
 
-Scratchpad activity must not silently modify a project, project lexicon, speaker mapping, pause configuration, or render history. A lightweight scratchpad history may retain recent tests locally, subject to the same storage-cleanup controls as previews.
+Scratchpad activity must not silently modify a project, project lexicon, speaker mapping, pause configuration, or render history. Only the latest passage is retained for the current application session, and Scratchpad-only cache entries are reduced to the newest successful result.
 
 #### 10.12.2 Project preview modes
 
@@ -1310,8 +1289,9 @@ On first launch, the UI must detect whether a usable Speaches connection has bee
 The onboarding flow must:
 
 - Identify whether the user is in the Docker Web UI or Electron application.
-- Prepopulate Docker environment-managed values without revealing secrets.
-- Let Electron users create and test a connection profile.
+- Start with an empty address on a fresh installation and let either client discover the server catalog without persisting the draft.
+- Preselect the first returned model and its first returned voice while preserving server response order.
+- Let users review the discovered defaults before Save and Test completes onboarding.
 - Provide same-computer and private-network endpoint examples.
 - Link to the official [Speaches installation guide](https://speaches.ai/installation/) and [Speaches text-to-speech guide](https://speaches.ai/usage/text-to-speech/).
 - State clearly that StudyNarrator does not install or manage Speaches in version 1.
@@ -1328,12 +1308,12 @@ Disconnected
 Configuration error
 ```
 
-Selecting the indicator opens diagnostics containing the effective endpoint, connection-profile source, HTTP result, selected model, selected voice, and last test time. API keys are never displayed after entry.
+Selecting the indicator opens diagnostics containing the endpoint, HTTP result, selected model, selected voice, and last test time. The indicator identifies the configured endpoint host.
 
 A Settings area must provide:
 
-- Connection profiles.
-- Pacing defaults, including whether new projects pause at paragraph breaks and the editable `pause_medium` duration.
+- The singleton Speaches connection and catalog refresh controls.
+- Pacing defaults, including the named preset selected for each automatic transition and the editable durations for `pause_short`, `pause_medium`, and `pause_long`.
 - Client and application-version information.
 - Data, cache, and output locations.
 - FFmpeg status.
@@ -1521,16 +1501,11 @@ The UI must:
 
 ## 12. Data Model
 
-### 12.1 TTS connection profile
+### 12.1 TTS connection
 
 ```text
-TtsConnectionProfile
-- id
-- name
+TtsConnection
 - base_url
-- api_key_source
-- api_key_reference, nullable
-- managed_by_environment
 - default_model_id
 - default_voice_id
 - timeout_seconds
@@ -1541,8 +1516,6 @@ TtsConnectionProfile
 - updated_at
 ```
 
-`api_key_reference` identifies an environment variable, container secret, or operating-system credential-store entry. It must not contain a raw key in exported project data.
-
 ### 12.2 Project
 
 ```text
@@ -1550,7 +1523,6 @@ Project
 - id
 - name
 - description
-- tts_connection_profile_id
 - script_text
 - script_hash
 - config_json
@@ -1663,7 +1635,6 @@ RenderArtifact
 {
   "version": 1,
   "speaches": {
-    "connectionProfile": "default",
     "model": "speaches-ai/Kokoro-82M-v1.0-ONNX",
     "timeoutSeconds": 120,
     "retryCount": 2,
@@ -1720,7 +1691,7 @@ RenderArtifact
 }
 ```
 
-The canonical portable project format should be versioned JSON so the Web UI and Electron application use the same schema, runtime validation, and migration logic. Connection profiles are installation-local; project bundles may preserve a profile name as a hint but must require remapping when that profile does not exist on the destination installation. Raw API keys must never be included in this project configuration.
+The canonical portable project format should be versioned JSON so the Web UI and Electron application use the same schema, runtime validation, and migration logic. The singleton connection is installation-local and is not included in portable project configuration.
 
 ---
 
@@ -1753,7 +1724,7 @@ The architecture separates product behavior from transport:
 - The Web UI implements that interface through HTTP requests to the Node.js server.
 - Electron implements that interface through validated IPC calls exposed by the preload bridge.
 - Both transports invoke the same TypeScript application services.
-- The browser and Electron renderer never receive the Speaches API key or execute FFmpeg directly.
+- The browser and Electron renderer never call Speaches directly or execute FFmpeg.
 
 ### 14.2 Docker Web UI topology
 
@@ -2109,18 +2080,17 @@ Docker deployments must keep persistent data outside the container layer. Electr
 - Do not fetch remote scripts, prompts, dictionaries, or updates without a user action or explicit update policy.
 - Do not send source text to any service other than the configured Speaches endpoint.
 - Display the target Speaches host before a render when it is not loopback or a recognized private address.
-- Keep Speaches requests and credentials in the backend process.
+- Keep Speaches requests in the backend process.
 - Sanitize uploaded filenames and store uploads under generated internal IDs.
 - Invoke FFmpeg and other processes with argument arrays, not shell-composed command strings.
 - Prevent directory traversal in project names, uploaded paths, archive extraction, and output filenames.
-- Redact API keys and authorization headers from logs, manifests, diagnostics, and support exports.
+- Redact authorization headers from logs, manifests, diagnostics, and support exports.
 - Validate imported project bundles before writing files.
 
 ### 18.2 Docker Web requirements
 
 - The supplied Compose file binds StudyNarrator to `127.0.0.1` by default.
 - The application image runs as a non-root user and writes only to documented data and temporary locations.
-- Speaches API keys should be supplied through environment variables, a protected `.env` file, or Docker secrets.
 - The `.env.example` must contain placeholders only.
 - Enabling LAN binding must produce a visible warning when no application authentication or trusted reverse proxy is configured.
 - The StudyNarrator image must not contain Speaches model weights or an embedded Speaches service.
@@ -2135,7 +2105,6 @@ Docker deployments must keep persistent data outside the container layer. Electr
 - Prevent arbitrary renderer-controlled process execution, HTTP requests, database queries, and filesystem access.
 - Open external Speaches documentation links through the operating system only after validating the `https` scheme and approved host.
 - Keep Speaches API calls and FFmpeg execution in the main process or a controlled worker, never in the renderer.
-- Store API keys in the operating-system credential store where available and never in browser local storage.
 - Verify downloaded update packages before installation when auto-update is added.
 - Document the signing and notarization status of every desktop release accurately.
 
@@ -2274,7 +2243,7 @@ Each published desktop target must verify:
 - No unrestricted Node.js API in the renderer.
 - IPC input and output validation.
 - File import, output export, and “show in folder.”
-- Localhost and private-network Speaches connection profiles.
+- Localhost and private-network singleton Speaches connections.
 - Application-data persistence across upgrade.
 - Offline project editing when Speaches is unavailable.
 - External documentation links open only to approved HTTPS destinations.
@@ -2358,7 +2327,7 @@ The Docker Web UI and Electron application use the same React component library 
 
 ### AC-16: Docker Web deployment
 
-Given a supplied `.env` containing a reachable `SPEACHES_BASE_URL`, the StudyNarrator Compose package starts the Node.js Web application, persists a project under its data volume, and completes a preview through the external server.
+Given the supplied Compose package, StudyNarrator starts without Speaches environment variables. A user configures a reachable server through onboarding, the application persists the connection and a project under its data volume, and completes a preview through the external server. Both remain configured after container recreation.
 
 ### AC-17: Docker package excludes Speaches
 
@@ -2380,13 +2349,13 @@ An Electron installation can connect to a Speaches server on a private-network h
 
 When no Speaches endpoint is configured, both clients offer the official Speaches installation and TTS documentation links, allow offline authoring, and do not attempt to install or start Speaches.
 
-### AC-22: Secret isolation
+### AC-22: Unsupported authenticated servers
 
-A Speaches API key supplied through Docker environment configuration or the desktop credential store is not present in browser storage, project export, render manifest, redacted diagnostics, or normal logs.
+If a Speaches server rejects unauthenticated access, StudyNarrator reports that authenticated servers are unsupported and does not expose authorization controls in Web or Electron.
 
 ### AC-23: Cross-client project portability
 
-A project bundle exported from Docker imports into Electron and produces the same parsed node order after the user maps it to a valid local connection profile.
+A project bundle exported from Docker imports into Electron and produces the same parsed node order while using the destination installation's singleton connection.
 
 ### AC-24: Versioned upgrade
 
@@ -2394,7 +2363,7 @@ Upgrading the Docker image or Electron application from the previous supported r
 
 ### AC-25: Quick Scratchpad
 
-A user can synthesize a short passage with a selected connection profile, model, voice, speed, and optional global lexicon without creating or modifying a project. The result uses the same adapter and transformation path as a project preview.
+A user can synthesize a short passage with the singleton connection plus a selected model, voice, speed, and optional global lexicon without creating or modifying a project. The result uses the same adapter and transformation path as a project preview.
 
 ### AC-26: Friendly voice presentation
 
@@ -2451,7 +2420,7 @@ The release contains an Apache-2.0 `LICENSE`, accurate dependency notices, and a
 - Shared seekable player and compact waveform.
 - Expandable render history with segment-level play, copy, and save actions.
 - Artifact playback and access.
-- TTS connection profiles and diagnostics.
+- Singleton TTS connection and diagnostics.
 - Express API and React static hosting.
 - Production StudyNarrator image.
 - Application-only Compose file and `.env.example`.
@@ -2811,7 +2780,7 @@ The cache and temporary directories may be moved to a different volume through c
 10. **React and Node.js are the v1 application stack.** Shared product behavior is implemented in TypeScript.
 11. **Two v1 clients share one core.** Docker Web and Electron use the same parser, services, schemas, and React UI components.
 12. **Speaches is an external dependency.** Version 1 links to official setup documentation but does not bundle or administer it.
-13. **Connection profiles are installation-local.** Portable projects reference profiles without carrying server credentials.
+13. **The singleton connection is installation-local.** Portable projects do not carry or select a server endpoint.
 14. **Offline editing remains available.** A missing Speaches server does not prevent project editing, parsing, lexicon work, or prompt export.
 15. **Localhost is the secure Web default.** LAN exposure requires an explicit configuration change and visible warning.
 16. **The Electron renderer is unprivileged.** Filesystem, credentials, HTTP, and process execution remain behind validated IPC commands.
@@ -2838,21 +2807,10 @@ STUDYNARRATOR_HOST_PORT=8080
 # Persistent path inside the application container.
 STUDYNARRATOR_DATA_DIR=/data
 
-# External Speaches connection. No Speaches service is defined by this Compose file.
-SPEACHES_BASE_URL=http://host.docker.internal:8000
-SPEACHES_API_KEY=
-SPEACHES_MODEL_ID=speaches-ai/Kokoro-82M-v1.0-ONNX
-SPEACHES_DEFAULT_VOICE=af_heart
-SPEACHES_REQUEST_TIMEOUT_SECONDS=120
-SPEACHES_RETRY_COUNT=2
-
-# Prevent UI changes when the deployment owner controls the endpoint.
-STUDYNARRATOR_LOCK_SPEACHES_SETTINGS=false
 ```
 
-The `.env.example` must contain no live secrets and must explain that:
+The `.env.example` contains deployment settings only. Speaches address, model, voice, timeout, and retry values are entered through application onboarding and persisted in the application data volume. Deployment documentation must explain that:
 
-- `SPEACHES_BASE_URL` points to a separately installed server.
 - `localhost` inside the StudyNarrator container refers to that container, not the Docker host.
 - `host.docker.internal` or a private hostname/IP is commonly required.
 - Speaches installation, hardware selection, and model management follow the official upstream documentation.
@@ -2898,7 +2856,7 @@ It must not define:
 ```text
 A Speaches service
 A Speaches model-cache volume
-CPU or GPU Speaches profiles
+CPU or GPU Speaches deployment variants
 A Kokoro model download command
 Speaches lifecycle scripts
 ```
@@ -2941,7 +2899,7 @@ React application                Packaged renderer assets
 Application service command      Validated preload/IPC invocation
 Node.js backend service          Electron main/shared TypeScript service
 SQLite repository                Per-user application-data database
-Docker .env connection defaults  First-run/saved connection profile
+Application-managed connection   First-run/saved singleton connection
 Browser file upload              Native open dialog and drag/drop
 Artifact download                Native save/export dialog
 Artifact path                    Show in Finder/Explorer/file manager

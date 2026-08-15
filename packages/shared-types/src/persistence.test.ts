@@ -1,60 +1,68 @@
 import { describe, expect, it } from "vitest";
 import {
-  ConnectionProfileAuthoringSchema,
   GlobalLexiconReplaceInputSchema,
   IgnoredDiagnosticCollectionSchema,
-  PausePresetCollectionSchema,
   ProjectLexiconAuthoringCollectionSchema,
   ProjectReplaceInputSchema,
   SpeakerMappingCollectionSchema,
-  SystemPacingDefaultsSchema
+  SystemTimingConfigurationSchema
 } from "./persistence.js";
+import { SpeachesConnectionAuthoringSchema } from "./connections.js";
 
 const validProject = {
   name: "Persistence contract",
   description: "",
   scriptSource: "SQL",
-  connectionProfileId: null,
-  modelId: null,
   speakerMappings: [],
-  pausePresets: [{ pauseId: "pause_medium", durationMs: 750, description: "Paragraph" }],
-  transitionPauses: {
-    paragraph: { mode: "preset", pauseId: "pause_medium" },
-    speakerChange: { mode: "none" },
-    section: { mode: "none" }
-  },
   lexiconEntries: []
 };
 
 describe("persistence contracts", () => {
-  it("accepts a strict complete aggregate and rejects mismatched pacing", () => {
+  it("accepts a strict complete aggregate and rejects project timing", () => {
     expect(ProjectReplaceInputSchema.parse(validProject)).toEqual(validProject);
     expect(() => ProjectReplaceInputSchema.parse({ ...validProject, unknown: true })).toThrow();
-    expect(() => ProjectReplaceInputSchema.parse({
-      ...validProject,
-      transitionPauses: { ...validProject.transitionPauses, paragraph: { mode: "preset", pauseId: "pause_missing" } }
-    })).toThrow(/must reference/iu);
+    expect(() => ProjectReplaceInputSchema.parse({ ...validProject, pausePresets: [] })).toThrow();
   });
 
   it("enforces project and global lexicon ownership", () => {
     expect(() => ProjectReplaceInputSchema.parse({
       ...validProject,
       lexiconEntries: [{ scope: "global", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel" }]
-    })).toThrow(/project scope/iu);
+    })).toThrow();
     expect(() => GlobalLexiconReplaceInputSchema.parse([
       { scope: "project", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel" }
-    ])).toThrow(/global scope/iu);
+    ])).toThrow();
+    expect(GlobalLexiconReplaceInputSchema.parse([
+      { scope: "global", displayText: " SQL ", spokenText: " S Q L " }
+    ])).toEqual([{
+      scope: "global", entryType: "exactTerm", displayText: "SQL", spokenText: "S Q L",
+      caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: ""
+    }]);
+    expect(() => GlobalLexiconReplaceInputSchema.parse([
+      { scope: "global", entryType: "namedSense", displayText: "resume", senseId: "cv", spokenText: "résumé" }
+    ])).toThrow();
+    expect(() => GlobalLexiconReplaceInputSchema.parse([
+      { scope: "global", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel", caseSensitive: true }
+    ])).toThrow();
   });
 
-  it("bounds pacing values and excludes credential-shaped connection fields", () => {
-    expect(SystemPacingDefaultsSchema.parse({ enabled: true, durationMs: 0 })).toEqual({ enabled: true, durationMs: 0 });
-    expect(SystemPacingDefaultsSchema.parse({ enabled: false, durationMs: 30_000 })).toEqual({ enabled: false, durationMs: 30_000 });
-    expect(() => SystemPacingDefaultsSchema.parse({ enabled: true, durationMs: 30_001 })).toThrow();
-    expect(() => ConnectionProfileAuthoringSchema.parse({
-      name: "Unsafe", baseUrl: "http://127.0.0.1:8000", defaultModelId: null, defaultVoiceId: null, apiKey: "secret"
+  it("bounds global timing values and excludes credential-shaped connection fields", () => {
+    const timing = {
+      pausePresets: [
+        { pauseId: "pause_short", durationMs: 0, description: "Short" },
+        { pauseId: "pause_medium", durationMs: 750, description: "Medium" },
+        { pauseId: "pause_long", durationMs: 30_000, description: "Long" }
+      ],
+      transitionPauses: { paragraph: { mode: "preset", pauseId: "pause_medium" }, speakerChange: { mode: "none" }, section: { mode: "duration", durationMs: 900 } }
+    };
+    expect(SystemTimingConfigurationSchema.parse(timing)).toEqual(timing);
+    expect(() => SystemTimingConfigurationSchema.parse({ ...timing, pausePresets: timing.pausePresets.map((preset) => ({ ...preset, durationMs: 30_001 })) })).toThrow();
+    expect(() => SystemTimingConfigurationSchema.parse({ ...timing, transitionPauses: { ...timing.transitionPauses, paragraph: { mode: "preset", pauseId: "pause_custom" } } })).toThrow();
+    expect(() => SpeachesConnectionAuthoringSchema.parse({
+      baseUrl: "http://127.0.0.1:8000", defaultModelId: null, defaultVoiceId: null, apiKey: "secret"
     })).toThrow();
-    expect(() => ConnectionProfileAuthoringSchema.parse({
-      name: "Unsafe", baseUrl: "file:///tmp/socket", defaultModelId: null, defaultVoiceId: null
+    expect(() => SpeachesConnectionAuthoringSchema.parse({
+      baseUrl: "file:///tmp/socket", defaultModelId: null, defaultVoiceId: null
     })).toThrow();
   });
 
@@ -62,23 +70,15 @@ describe("persistence contracts", () => {
     const speakerMappings = SpeakerMappingCollectionSchema.parse([
       { speakerId: "teacher", displayName: "Teacher", voiceId: "voice_teacher", speed: 1, gainDb: 0, roleDescription: "Guide", sampleText: "Welcome" }
     ]);
-    const pausePresets = PausePresetCollectionSchema.parse([
-      { pauseId: "pause_medium", durationMs: 750, description: "Paragraph" }
-    ]);
-    const transitionPauses = validProject.transitionPauses;
     const lexiconEntries = ProjectLexiconAuthoringCollectionSchema.parse([
-      { id: "project-resume", scope: "project", entryType: "namedSense", displayText: "resume", senseId: "cv", spokenText: "rez-oo-may" }
+      { id: "project-resume", scope: "project", displayText: "resume", spokenText: "rez-oo-may" }
     ]);
 
     expect(ProjectReplaceInputSchema.parse({
       name: "Persistent project",
       description: "Reopen proof",
-      scriptSource: "{{resume|cv}} SQL",
-      connectionProfileId: "local-speaches",
-      modelId: null,
+      scriptSource: "resume SQL",
       speakerMappings,
-      pausePresets,
-      transitionPauses,
       lexiconEntries
     })).toBeDefined();
     expect(GlobalLexiconReplaceInputSchema.parse([
@@ -87,21 +87,10 @@ describe("persistence contracts", () => {
     expect(IgnoredDiagnosticCollectionSchema.parse([
       { code: "MALFORMED_SECTION_DIRECTIVE", pattern: "[section bad]" }
     ])).toHaveLength(1);
-    expect(ConnectionProfileAuthoringSchema.parse({
-      id: "local-speaches",
-      name: "Local Speaches",
+    expect(SpeachesConnectionAuthoringSchema.parse({
       baseUrl: "http://127.0.0.1:8000",
       defaultModelId: "speaches-ai/Kokoro-82M-v1.0-ONNX",
       defaultVoiceId: "af_heart"
     })).toBeDefined();
-
-    const updatedPauses = PausePresetCollectionSchema.parse([
-      { pauseId: "pause_medium", durationMs: 900, description: "Automatic paragraph transition" }
-    ]);
-    expect(ProjectReplaceInputSchema.parse({
-      ...validProject,
-      pausePresets: updatedPauses,
-      transitionPauses: { ...validProject.transitionPauses, section: { mode: "duration", durationMs: 900 } }
-    }).transitionPauses.section).toEqual({ mode: "duration", durationMs: 900 });
   });
 });

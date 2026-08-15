@@ -1,7 +1,5 @@
 import {
   CONNECTION_CHANNELS,
-  ConnectionProfileCollectionSchema,
-  ConnectionProfileSchema,
   ConnectionSetupStateSchema,
   ConnectionTestSummarySchema,
   EmptyResponseSchema,
@@ -26,7 +24,7 @@ import {
   RenderWaveformSchema,
   SYSTEM_DIAGNOSTICS_CHANNEL,
   SystemDiagnosticsSchema,
-  SystemPacingDefaultsSchema,
+  SystemTimingConfigurationSchema,
   RedactedConnectionDiagnosticsSchema,
   SCRATCHPAD_CHANNELS,
   SCRIPT_GENERATION_CHANNELS,
@@ -37,8 +35,9 @@ import {
   SpeechCacheCleanupResultSchema,
   SpeechCacheStatusSchema,
   SpeechCatalogSchema,
+  SpeachesConnectionSchema,
   VoiceCatalogSchema,
-  type ConnectionsClient,
+  type SpeachesConnectionClient,
   type PersistenceClient,
   type ProjectPreviewClient,
   type RenderPlanClient,
@@ -63,8 +62,8 @@ export function createPreloadBridge(invoke: (channel: string, input?: unknown) =
       async delete(projectId) { EmptyResponseSchema.parse(await invoke(PERSISTENCE_CHANNELS.projectsDelete, { projectId })); }
     },
     settings: {
-      async getPacing() { return SystemPacingDefaultsSchema.parse(await invoke(PERSISTENCE_CHANNELS.pacingGet)); },
-      async updatePacing(input) { return SystemPacingDefaultsSchema.parse(await invoke(PERSISTENCE_CHANNELS.pacingUpdate, input)); }
+      async getPacing() { return SystemTimingConfigurationSchema.parse(await invoke(PERSISTENCE_CHANNELS.pacingGet)); },
+      async updatePacing(input) { return SystemTimingConfigurationSchema.parse(await invoke(PERSISTENCE_CHANNELS.pacingUpdate, input)); }
     },
     preferences: {
       async getIgnoredDiagnostics() { return IgnoredDiagnosticCollectionSchema.parse(await invoke(PERSISTENCE_CHANNELS.ignoredGet)); },
@@ -79,16 +78,13 @@ export function createPreloadBridge(invoke: (channel: string, input?: unknown) =
   Object.freeze(persistence.settings);
   Object.freeze(persistence.preferences);
   Object.freeze(persistence.globalLexicon);
-  const connections: ConnectionsClient = {
-    async list() { return ConnectionProfileCollectionSchema.parse(await invoke(CONNECTION_CHANNELS.list)); },
-    async create(input) { return ConnectionProfileSchema.parse(await invoke(CONNECTION_CHANNELS.create, input)); },
-    async replace(profileId, mutation) { return ConnectionProfileSchema.parse(await invoke(CONNECTION_CHANNELS.replace, { profileId, mutation })); },
-    async delete(profileId) { EmptyResponseSchema.parse(await invoke(CONNECTION_CHANNELS.delete, { profileId })); },
-    async test(profileId) { return ConnectionTestSummarySchema.parse(await invoke(CONNECTION_CHANNELS.test, { profileId })); },
-    async discoverSpeechCatalog(profileId) { return SpeechCatalogSchema.parse(await invoke(CONNECTION_CHANNELS.speechCatalogDiscover, { profileId })); },
-    async exportDiagnostics(profileId) { return RedactedConnectionDiagnosticsSchema.parse(await invoke(CONNECTION_CHANNELS.exportDiagnostics, { profileId })); },
+  const connection: SpeachesConnectionClient = {
+    async get() { return SpeachesConnectionSchema.parse(await invoke(CONNECTION_CHANNELS.get)); },
+    async update(input) { return SpeachesConnectionSchema.parse(await invoke(CONNECTION_CHANNELS.update, input)); },
+    async test() { return ConnectionTestSummarySchema.parse(await invoke(CONNECTION_CHANNELS.test)); },
+    async discoverSpeechCatalog(input) { return SpeechCatalogSchema.parse(await invoke(CONNECTION_CHANNELS.speechCatalogDiscover, input)); },
+    async exportDiagnostics() { return RedactedConnectionDiagnosticsSchema.parse(await invoke(CONNECTION_CHANNELS.exportDiagnostics)); },
     async getSetupState() { return ConnectionSetupStateSchema.parse(await invoke(CONNECTION_CHANNELS.setupGet)); },
-    async setActiveProfile(profileId) { return ConnectionSetupStateSchema.parse(await invoke(CONNECTION_CHANNELS.setupSetActive, { profileId })); },
     async completeOnboarding() { return ConnectionSetupStateSchema.parse(await invoke(CONNECTION_CHANNELS.setupComplete)); }
   };
   const voiceCatalog: VoiceCatalogClient = {
@@ -161,7 +157,7 @@ export function createPreloadBridge(invoke: (channel: string, input?: unknown) =
       }
     }),
     persistence: Object.freeze(persistence),
-    connections: Object.freeze(connections),
+    connection: Object.freeze(connection),
     voiceCatalog: Object.freeze(voiceCatalog),
     scratchpad: Object.freeze(scratchpad),
     projectPreview: Object.freeze(projectPreview),

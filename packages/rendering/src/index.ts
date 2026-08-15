@@ -98,6 +98,7 @@ export interface SpeechCache {
   clearAll(): Promise<SpeechCacheCleanupResult>;
   clearProject(projectId: string): Promise<SpeechCacheCleanupResult>;
   clearEntry(key: string): Promise<SpeechCacheCleanupResult>;
+  retainScratchpad(key: string): Promise<SpeechCacheCleanupResult>;
 }
 
 export type CachedAudioValidator = (bytes: Uint8Array, signal?: AbortSignal) => Promise<boolean>;
@@ -556,6 +557,28 @@ export function createSpeechCache(options: {
     },
     async clearEntry(key) {
       return await removeEntry(assertCacheKey(key));
+    },
+    async retainScratchpad(keyValue) {
+      const retainedKey = assertCacheKey(keyValue);
+      let entriesRemoved = 0;
+      let bytesFreed = 0;
+      for (const key of await listKeys()) {
+        if (key === retainedKey) continue;
+        const entryPaths = paths(key);
+        if (!(await regularFile(entryPaths.metadata))) continue;
+        try {
+          const metadata = parseMetadata(JSON.parse((await readBoundedFile(entryPaths.metadata, MAX_CACHE_METADATA_BYTES)).toString("utf8")) as unknown);
+          if (!metadata?.scratchpadUsed) continue;
+          if (metadata.projectIds.length > 0) {
+            await writeMetadata({ ...metadata, scratchpadUsed: false });
+            continue;
+          }
+          const removed = await removeEntry(key);
+          entriesRemoved += removed.entriesRemoved;
+          bytesFreed += removed.bytesFreed;
+        } catch { /* malformed metadata has no trusted Scratchpad association */ }
+      }
+      return { entriesRemoved, bytesFreed };
     }
   };
 
@@ -766,7 +789,11 @@ export function hashJson(value: unknown): string {
   return sha256(JSON.stringify(value));
 }
 
-export function withProjectSnapshotHash(input: Omit<ProjectSnapshot, "snapshotHash">): ProjectSnapshot {
+type ProjectSnapshotWithoutHash = ProjectSnapshot extends infer T
+  ? T extends { snapshotHash: string } ? Omit<T, "snapshotHash"> : never
+  : never;
+
+export function withProjectSnapshotHash(input: ProjectSnapshotWithoutHash): ProjectSnapshot {
   const normalized = ProjectSnapshotSchema.parse({ ...input, snapshotHash: "0".repeat(64) });
   const { snapshotHash: _snapshotHash, ...payload } = normalized;
   void _snapshotHash;

@@ -1,20 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  ConnectionProfileSchema,
-  type ConnectionProfile,
-  type ConnectionProfileAuthoring,
+  SpeachesConnectionSchema,
   type ConnectionTestSummary,
+  type SpeachesConnectionAuthoring,
+  type SpeechCatalog,
+  type VoiceCatalog,
   type VoiceCatalogAuthoring
 } from "@studynarrator/shared-types";
 import {
-  ConnectionPolicyError,
+  ConnectionCatalogError,
   classifyEndpoint,
-  createConnectionsService,
-  createRoutedCredentialStore,
+  createConnectionService,
   createVoiceCatalogService,
-  reconcileEnvironmentConnectionProfile,
+  type ConnectionCatalogRunner,
   type ConnectionRepository,
-  type CredentialStore
+  type StoredSpeachesConnection
 } from "./connections.js";
 import { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
 
@@ -36,292 +36,141 @@ const connected: ConnectionTestSummary = {
 };
 
 class MemoryRepository implements ConnectionRepository {
-  profiles = new Map<string, ConnectionProfile>();
-  references = new Map<string, string>();
-  setup = { activeProfileId: null as string | null, onboardingCompletedAt: null as string | null };
-  failDelete = false;
+  setup = { onboardingCompletedAt: null as string | null };
+  connection: StoredSpeachesConnection = {
+    id: "legacy-winner",
+    ...SpeachesConnectionSchema.parse({
+      baseUrl: null,
+      suppliedUrlForm: "unconfigured",
+      configured: false,
+      defaultModelId: null,
+      defaultVoiceId: null,
+      timeoutSeconds: 120,
+      retryCount: 2,
+      responseFormat: "wav",
+      lastTestedAt: null,
+      lastSuccessfulTestAt: null,
+      lastTestSummary: null,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    })
+  };
+  overrides = new Map<string, VoiceCatalog>();
 
-  private materialize(profile: ConnectionProfile): ConnectionProfile {
-    return ConnectionProfileSchema.parse({ ...profile, apiKeyConfigured: this.references.has(profile.id) });
-  }
-
-  listConnectionProfiles() { return [...this.profiles.values()].map((profile) => this.materialize(profile)); }
-  getConnectionProfile(profileId: string) {
-    const profile = this.profiles.get(profileId);
-    if (!profile) throw Object.assign(new Error("missing"), { code: "PERSISTENCE_NOT_FOUND" });
-    return this.materialize(profile);
-  }
-  createConnectionProfile(input: ConnectionProfileAuthoring) {
-    const id = input.id ?? `profile-${this.profiles.size + 1}`;
-    const profile = this.makeProfile(id, input, "saved");
-    this.profiles.set(id, profile);
-    return profile;
-  }
-  replaceConnectionProfile(profileId: string, input: ConnectionProfileAuthoring) {
-    const previous = this.getConnectionProfile(profileId);
-    const next = this.makeProfile(profileId, input, previous.source, previous);
-    this.profiles.set(profileId, next);
-    return next;
-  }
-  deleteConnectionProfile(profileId: string) {
-    if (this.failDelete) { this.failDelete = false; throw new Error("database delete failed"); }
-    this.profiles.delete(profileId);
-    this.references.delete(profileId);
-    if (this.setup.activeProfileId === profileId) this.setup.activeProfileId = null;
-  }
-  getConnectionCredentialReference(profileId: string) { this.getConnectionProfile(profileId); return this.references.get(profileId) ?? null; }
-  setConnectionCredentialReference(profileId: string, reference: string | null) {
-    this.getConnectionProfile(profileId);
-    if (reference) this.references.set(profileId, reference); else this.references.delete(profileId);
-    return this.getConnectionProfile(profileId);
-  }
-  setConnectionSuppliedUrlForm(profileId: string, suppliedUrlForm: "root" | "v1" | "unconfigured") {
-    const profile = this.getConnectionProfile(profileId);
-    this.profiles.set(profileId, ConnectionProfileSchema.parse({ ...profile, suppliedUrlForm }));
-    return this.getConnectionProfile(profileId);
-  }
-  upsertEnvironmentConnectionProfile(input: ConnectionProfileAuthoring, reference: string | null) {
-    const id = input.id ?? "environment-speaches";
-    const profile = this.makeProfile(id, input, "environment", this.profiles.get(id));
-    this.profiles.set(id, profile);
-    if (reference) this.references.set(id, reference); else this.references.delete(id);
-    return this.getConnectionProfile(id);
-  }
-  recordConnectionTest(profileId: string, summary: ConnectionTestSummary) {
-    const profile = this.getConnectionProfile(profileId);
-    this.profiles.set(profileId, ConnectionProfileSchema.parse({
-      ...profile,
-      lastTestedAt: summary.testedAt,
-      lastSuccessfulTestAt: summary.overall === "connected" ? summary.testedAt : profile.lastSuccessfulTestAt,
-      lastTestSummary: summary
-    }));
-    return this.getConnectionProfile(profileId);
-  }
-  getConnectionSetup() { return { ...this.setup }; }
-  setActiveConnectionProfile(profileId: string | null) { this.setup.activeProfileId = profileId; return this.getConnectionSetup(); }
-  completeConnectionOnboarding() { this.setup.onboardingCompletedAt = timestamp; return this.getConnectionSetup(); }
-  getVoiceCatalogOverrides(modelId: string) { return { schemaVersion: 1 as const, modelId, entries: [] }; }
-  replaceVoiceCatalogOverrides(input: VoiceCatalogAuthoring) { return { schemaVersion: 1 as const, modelId: input.modelId, entries: [] }; }
-
-  private makeProfile(id: string, input: ConnectionProfileAuthoring, source: "saved" | "environment", previous?: ConnectionProfile): ConnectionProfile {
-    return ConnectionProfileSchema.parse({
-      id,
-      name: input.name,
-      baseUrl: input.baseUrl,
-      suppliedUrlForm: previous?.suppliedUrlForm ?? (input.baseUrl ? "root" : "unconfigured"),
-      source,
-      editable: source === "saved",
-      credentialEntryAllowed: false,
+  getSpeachesConnection() { return this.connection; }
+  replaceSpeachesConnection(input: SpeachesConnectionAuthoring, suppliedUrlForm: "root" | "v1" | "unconfigured") {
+    this.connection = {
+      ...this.connection,
+      ...input,
+      suppliedUrlForm,
       configured: input.baseUrl !== null && input.defaultModelId !== null && input.defaultVoiceId !== null,
-      apiKeyConfigured: this.references.has(id),
-      defaultModelId: input.defaultModelId,
-      defaultVoiceId: input.defaultVoiceId,
       timeoutSeconds: input.timeoutSeconds ?? 120,
       retryCount: input.retryCount ?? 2,
       responseFormat: "wav",
-      lastTestedAt: previous?.lastTestedAt ?? null,
-      lastSuccessfulTestAt: previous?.lastSuccessfulTestAt ?? null,
-      lastTestSummary: previous?.lastTestSummary ?? null,
-      createdAt: previous?.createdAt ?? timestamp,
       updatedAt: timestamp
-    });
+    };
+    return this.connection;
+  }
+  recordConnectionTest(summary: ConnectionTestSummary) {
+    this.connection = {
+      ...this.connection,
+      lastTestedAt: summary.testedAt,
+      lastSuccessfulTestAt: summary.overall === "connected" ? summary.testedAt : this.connection.lastSuccessfulTestAt,
+      lastTestSummary: summary
+    };
+    return this.connection;
+  }
+  getConnectionSetup() { return { ...this.setup }; }
+  completeConnectionOnboarding() { this.setup.onboardingCompletedAt = timestamp; return this.getConnectionSetup(); }
+  getVoiceCatalogOverrides(modelId: string): VoiceCatalog {
+    return this.overrides.get(modelId) ?? { schemaVersion: 1 as const, modelId, entries: [] };
+  }
+  replaceVoiceCatalogOverrides(input: VoiceCatalogAuthoring): VoiceCatalog {
+    const catalog: VoiceCatalog = { schemaVersion: 1, modelId: input.modelId, entries: input.entries.map((entry) => ({
+      voiceId: entry.voiceId,
+      label: entry.label,
+      enabled: entry.enabled ?? true,
+      favorite: entry.favorite ?? false,
+      language: entry.language ?? null,
+      locale: entry.locale ?? null,
+      accent: entry.accent ?? null,
+      category: entry.category ?? null,
+      style: entry.style ?? null,
+      sampleText: entry.sampleText ?? null
+    })) };
+    this.overrides.set(input.modelId, catalog);
+    return catalog;
   }
 }
 
-class MemoryVault implements CredentialStore {
-  readonly replacementAllowed = true;
-  entries = new Map<string, string>();
-  failNextWrite = false;
-  failNextDelete = false;
-  async read(reference: string) { return this.entries.get(reference) ?? null; }
-  async write(profileId: string, apiKey: string) {
-    if (this.failNextWrite) { this.failNextWrite = false; throw new Error("vault write failed"); }
-    const reference = `safe-storage:${profileId}`;
-    this.entries.set(reference, apiKey);
-    return reference;
-  }
-  async delete(reference: string) {
-    if (this.failNextDelete) { this.failNextDelete = false; throw new Error("vault delete failed"); }
-    this.entries.delete(reference);
-  }
-}
-
-function mutation(name = "Local") {
-  return {
-    profile: { id: "local", name, baseUrl: "http://127.0.0.1:8000/v1", defaultModelId: "model", defaultVoiceId: "voice" },
-    credential: { action: "replace" as const, apiKey: "test-secret-must-not-appear" }
-  };
-}
-
-function desktopService(repository: MemoryRepository, vault: MemoryVault) {
-  return createConnectionsService({
+function service(repository: MemoryRepository, discoverCatalog: (input: Parameters<ConnectionCatalogRunner>[0]) => Promise<SpeechCatalog> = vi.fn(async () => ({
+  schemaVersion: 1 as const,
+  models: [{ modelId: "model", voices: [{ voiceId: "voice", name: "Voice", language: null, gender: null }] }]
+}))) {
+  return createConnectionService({
     repository,
-    credentials: createRoutedCredentialStore({ environmentApiKey: null, vault }),
-    context: { client: "electron", nodeVersion: "26.0.0", electronVersion: "43.3.0", activeProfileLocked: false },
+    context: { client: "electron", nodeVersion: "26.0.0", electronVersion: "43.3.0" },
     diagnose: vi.fn(async () => ({ normalizedUrl: null, summary: connected })),
-    discoverCatalog: vi.fn(async ({ profileId }: { profileId: string }) => ({ schemaVersion: 1 as const, profileId, models: [{ modelId: "model", voices: [{ voiceId: "voice", name: "Voice", language: null, gender: null }] }] }))
+    discoverCatalog
   });
 }
 
-describe("connections service", () => {
-  it("executes every connection, setup, and voice-catalog service method", async () => {
+describe("connection service", () => {
+  it("executes every singular connection and voice-catalog service method", async () => {
     const repository = new MemoryRepository();
-    const vault = new MemoryVault();
-    const service = desktopService(repository, vault);
-    expect(Object.keys(service).map((key) => `connections.${key}`).sort()).toEqual(
-      APPLICATION_SERVICE_MANIFEST.filter((path) => path.startsWith("connections.")).sort()
+    const connection = service(repository);
+    expect(Object.keys(connection).map((key) => `connection.${key}`).sort()).toEqual(
+      APPLICATION_SERVICE_MANIFEST.filter((path) => path.startsWith("connection.")).sort()
     );
-    await service.create(mutation());
-    await expect(service.list()).resolves.toHaveLength(1);
-    await service.replace("local", { ...mutation("Updated"), credential: { action: "keep" } });
-    await service.test("local");
-    await expect(service.discoverSpeechCatalog("local")).resolves.toMatchObject({ models: [{ modelId: "model" }] });
-    await service.exportDiagnostics("local");
-    await expect(service.getSetupState()).resolves.toMatchObject({ client: "electron" });
-    await service.setActiveProfile("local");
-    await expect(service.completeOnboarding()).resolves.toMatchObject({ activeProfileId: "local", onboardingCompletedAt: timestamp });
+    await connection.update({ baseUrl: "http://127.0.0.1:8000/v1", defaultModelId: "model", defaultVoiceId: "voice" });
+    await expect(connection.get()).resolves.toMatchObject({ baseUrl: "http://127.0.0.1:8000", configured: true });
+    await expect(connection.discoverSpeechCatalog({ baseUrl: "http://127.0.0.1:8000/v1" })).resolves.toMatchObject({ models: [{ modelId: "model" }] });
+    await expect(connection.test()).resolves.toEqual(connected);
+    await expect(connection.exportDiagnostics()).resolves.toMatchObject({ endpointClass: "loopback" });
+    await expect(connection.completeOnboarding()).resolves.toMatchObject({ onboardingCompletedAt: timestamp, client: "electron" });
 
-    const catalog = createVoiceCatalogService({
-      repository,
-      bundledCatalogs: new Map([["model", { schemaVersion: 1, modelId: "model", entries: [{ voiceId: "voice", label: "Bundled", enabled: true, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }] }]])
-    });
-    expect(Object.keys(catalog).map((key) => `voiceCatalog.${key}`).sort()).toEqual(
-      APPLICATION_SERVICE_MANIFEST.filter((path) => path.startsWith("voiceCatalog.")).sort()
-    );
-    await expect(catalog.get("model")).resolves.toMatchObject({ entries: [expect.objectContaining({ voiceId: "voice" })] });
-    await expect(catalog.replace({ schemaVersion: 1, modelId: "model", entries: [{ voiceId: "voice", label: "Renamed", enabled: false, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }] })).resolves.toMatchObject({ entries: [expect.objectContaining({ label: "Bundled" })] });
-    await service.delete("local");
-    await expect(service.list()).resolves.toEqual([]);
+    const catalog = createVoiceCatalogService({ repository, bundledCatalogs: new Map() });
+    await catalog.replace({ schemaVersion: 1, modelId: "model", entries: [{ voiceId: "voice", label: "Voice", enabled: false, favorite: true, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }] });
+    await expect(catalog.get("model")).resolves.toMatchObject({ entries: [{ voiceId: "voice", enabled: false, favorite: true }] });
   });
 
-  it("resolves privileged catalog data without changing persisted connection state", async () => {
+  it("discovers a draft without persisting it and preserves response order", async () => {
     const repository = new MemoryRepository();
-    const vault = new MemoryVault();
-    const discoverCatalog = vi.fn(async ({ profileId, apiKey }: { profileId: string; apiKey?: string | undefined }) => {
-      expect(apiKey).toBe("test-secret-must-not-appear");
-      return { schemaVersion: 1 as const, profileId, models: [{ modelId: "model", voices: [{ voiceId: "voice", name: "Voice", language: null, gender: null }] }] };
-    });
-    const service = createConnectionsService({
-      repository,
-      credentials: createRoutedCredentialStore({ environmentApiKey: null, vault }),
-      context: { client: "electron", nodeVersion: "26.0.0", electronVersion: "43.3.0", activeProfileLocked: false },
-      diagnose: vi.fn(async () => ({ normalizedUrl: null, summary: connected })),
-      discoverCatalog
-    });
-    await service.create(mutation());
-    const before = JSON.stringify(repository.getConnectionProfile("local"));
-    const result = await service.discoverSpeechCatalog("local");
-    expect(result.models[0]?.voices[0]?.voiceId).toBe("voice");
-    expect(JSON.stringify(repository.getConnectionProfile("local"))).toBe(before);
-    expect(JSON.stringify(result)).not.toContain("test-secret-must-not-appear");
+    const discover = vi.fn(async () => ({
+      schemaVersion: 1 as const,
+      models: [
+        { modelId: "second-by-name", voices: [{ voiceId: "z-voice", name: null, language: null, gender: null }] },
+        { modelId: "first-by-name", voices: [{ voiceId: "a-voice", name: null, language: null, gender: null }] }
+      ]
+    }));
+    const connection = service(repository, discover);
+    const before = JSON.stringify(repository.connection);
+    const result = await connection.discoverSpeechCatalog({ baseUrl: "http://127.0.0.1:8000/v1", timeoutSeconds: 15, retryCount: 1 });
+    expect(result.models.map(({ modelId }) => modelId)).toEqual(["second-by-name", "first-by-name"]);
+    expect(result.models[0]?.voices[0]?.voiceId).toBe("z-voice");
+    expect(JSON.stringify(repository.connection)).toBe(before);
+    expect(discover).toHaveBeenCalledWith(expect.objectContaining({ baseUrl: "http://127.0.0.1:8000" }));
   });
 
-  it("normalizes profiles, stores only an opaque reference, and never returns the key", async () => {
+  it("reports empty catalogs and allows explicit offline onboarding", async () => {
     const repository = new MemoryRepository();
-    const vault = new MemoryVault();
-    const service = desktopService(repository, vault);
-    const created = await service.create(mutation());
-    expect(created.baseUrl).toBe("http://127.0.0.1:8000");
-    expect(created).toMatchObject({ apiKeyConfigured: true, credentialEntryAllowed: true });
-    expect(repository.references.get("local")).toBe("safe-storage:local");
-    expect(JSON.stringify(created)).not.toContain("test-secret-must-not-appear");
+    const connection = service(repository, vi.fn(async () => ({ schemaVersion: 1 as const, models: [] })));
+    await expect(connection.discoverSpeechCatalog({ baseUrl: "http://127.0.0.1:8000" })).rejects.toMatchObject({ code: "CONNECTION_CATALOG_EMPTY" });
+    await expect(connection.completeOnboarding()).resolves.toMatchObject({ onboardingCompletedAt: timestamp });
+    expect(ConnectionCatalogError).toBeDefined();
   });
 
-  it("rejects Web credential replacement before persisting anything", async () => {
+  it("normalizes URLs and emits redacted diagnostics", async () => {
     const repository = new MemoryRepository();
-    const service = createConnectionsService({
-      repository,
-      credentials: createRoutedCredentialStore({ environmentApiKey: null }),
-      context: { client: "web", nodeVersion: "26.0.0", electronVersion: null, activeProfileLocked: false }
-    });
-    await expect(service.create(mutation())).rejects.toBeInstanceOf(ConnectionPolicyError);
-    expect(repository.profiles.size).toBe(0);
-  });
-
-  it("compensates failed vault writes and failed database deletes", async () => {
-    const repository = new MemoryRepository();
-    const vault = new MemoryVault();
-    const service = desktopService(repository, vault);
-    vault.failNextWrite = true;
-    await expect(service.create(mutation())).rejects.toThrow("vault write failed");
-    expect(repository.profiles.size).toBe(0);
-
-    await service.create(mutation());
-    repository.failDelete = true;
-    await expect(service.delete("local")).rejects.toThrow("database delete failed");
-    expect(repository.profiles.has("local")).toBe(true);
-    expect(vault.entries.get("safe-storage:local")).toBe("test-secret-must-not-appear");
-  });
-
-  it("records diagnostics without touching project state and emits a redacted export", async () => {
-    const repository = new MemoryRepository();
-    const vault = new MemoryVault();
-    const service = desktopService(repository, vault);
-    await service.create(mutation());
-    const profileCount = repository.profiles.size;
-    await expect(service.test("local")).resolves.toEqual(connected);
-    expect(repository.profiles.size).toBe(profileCount);
-    const exported = await service.exportDiagnostics("local");
-    expect(exported).toMatchObject({ endpointClass: "loopback", apiKeyConfigured: true, requestCounts: { health: 1, models: 1, voices: 1, speech: 1 } });
+    const connection = service(repository);
+    const updated = await connection.update({ baseUrl: "http://127.0.0.1:8000/v1", defaultModelId: "model", defaultVoiceId: "voice" });
+    expect(updated.baseUrl).toBe("http://127.0.0.1:8000");
+    expect(Object.keys(updated)).not.toContain("id");
+    expect(JSON.stringify(updated)).not.toContain("profile");
+    await connection.test();
+    const exported = await connection.exportDiagnostics();
     expect(JSON.stringify(exported)).not.toContain("127.0.0.1");
-    expect(JSON.stringify(exported)).not.toContain("test-secret-must-not-appear");
-  });
-
-  it("reconciles and locks the stable environment profile without storing its key", () => {
-    const repository = new MemoryRepository();
-    const result = reconcileEnvironmentConnectionProfile(repository, {
-      SPEACHES_BASE_URL: "https://speech.example.test/v1",
-      SPEACHES_API_KEY: "test-secret-must-not-appear",
-      STUDYNARRATOR_LOCK_SPEACHES_SETTINGS: "true"
-    });
-    expect(result).toEqual({ activeProfileLocked: true, apiKey: "test-secret-must-not-appear" });
-    expect(repository.getConnectionProfile("environment-speaches")).toMatchObject({ baseUrl: "https://speech.example.test", source: "environment", editable: false });
-    expect(repository.getConnectionCredentialReference("environment-speaches")).toBe("environment:SPEACHES_API_KEY");
-    expect(repository.setup.activeProfileId).toBe("environment-speaches");
-  });
-
-  it("prefers the documented voice and timeout environment names while retaining compatibility aliases", () => {
-    const repository = new MemoryRepository();
-    reconcileEnvironmentConnectionProfile(repository, {
-      SPEACHES_BASE_URL: "https://speech.example.test",
-      SPEACHES_DEFAULT_VOICE: "documented-voice",
-      SPEACHES_VOICE_ID: "legacy-voice",
-      SPEACHES_REQUEST_TIMEOUT_SECONDS: "45",
-      SPEACHES_TIMEOUT_SECONDS: "90"
-    });
-    expect(repository.getConnectionProfile("environment-speaches")).toMatchObject({
-      defaultVoiceId: "documented-voice",
-      timeoutSeconds: 45
-    });
-
-    reconcileEnvironmentConnectionProfile(repository, {
-      SPEACHES_BASE_URL: "https://speech.example.test",
-      SPEACHES_VOICE_ID: "legacy-voice",
-      SPEACHES_TIMEOUT_SECONDS: "90"
-    });
-    expect(repository.getConnectionProfile("environment-speaches")).toMatchObject({
-      defaultVoiceId: "legacy-voice",
-      timeoutSeconds: 90
-    });
-  });
-
-  it("retains an unconfigured environment profile when variables disappear", () => {
-    const repository = new MemoryRepository();
-    reconcileEnvironmentConnectionProfile(repository, { SPEACHES_BASE_URL: "http://127.0.0.1:8000" });
-    reconcileEnvironmentConnectionProfile(repository, {});
-    expect(repository.getConnectionProfile("environment-speaches")).toMatchObject({ baseUrl: null, configured: false, apiKeyConfigured: false });
-  });
-
-  it("rejects active-profile changes when environment locking is enabled", async () => {
-    const repository = new MemoryRepository();
-    reconcileEnvironmentConnectionProfile(repository, { STUDYNARRATOR_LOCK_SPEACHES_SETTINGS: "true" });
-    const service = createConnectionsService({
-      repository,
-      credentials: createRoutedCredentialStore({ environmentApiKey: null }),
-      context: { client: "web", nodeVersion: "26.0.0", electronVersion: null, activeProfileLocked: true }
-    });
-    await expect(service.setActiveProfile(null)).rejects.toBeInstanceOf(ConnectionPolicyError);
-    expect((await service.getSetupState()).activeProfileId).toBe("environment-speaches");
+    expect(Object.keys(exported)).not.toContain("apiKeyConfigured");
   });
 });
 

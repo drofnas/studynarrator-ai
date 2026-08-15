@@ -1,13 +1,12 @@
 import { z } from "zod";
 import { PreviewAudioSchema, PreviewCacheMetadataSchema } from "./preview.js";
 
-export const SCRATCHPAD_SCHEMA_VERSION = 2;
+export const SCRATCHPAD_SCHEMA_VERSION = 3;
 export const SCRATCHPAD_MAX_CHARACTERS = 1_200;
 export const SCRATCHPAD_MAX_AUDIO_BYTES = 5 * 1024 * 1024;
 export const SCRATCHPAD_CHANNELS = Object.freeze({ preview: "scratchpad.preview" } as const);
 
 export const ScratchpadPreviewInputSchema = z.object({
-  connectionProfileId: z.string().min(1).max(128),
   modelId: z.string().trim().min(1).max(500),
   voiceId: z.string().trim().min(1).max(500),
   speed: z.number().positive().max(4),
@@ -28,8 +27,6 @@ export const ScratchpadPreviewResultSchema = z.object({
   schemaVersion: z.literal(SCRATCHPAD_SCHEMA_VERSION),
   id: z.uuid(),
   createdAt: z.iso.datetime({ offset: true }),
-  connectionProfileId: z.string().min(1).max(128),
-  connectionProfileName: z.string().min(1).max(200),
   modelId: z.string().min(1).max(500),
   voiceId: z.string().min(1).max(500),
   voiceLabel: z.string().min(1).max(500),

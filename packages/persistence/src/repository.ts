@@ -1,17 +1,13 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
-  DEFAULT_PARAGRAPH_PAUSE_ID,
   LexiconEntrySchema,
   type LexiconEntry,
   type LexiconEntryAuthoring
 } from "@studynarrator/core";
 import {
-  ConnectionProfileAuthoringSchema,
-  ConnectionProfileCollectionSchema,
-  ConnectionProfilePlaceholderSchema,
   ConnectionTestSummarySchema,
   DATABASE_SCHEMA_VERSION,
-  DEFAULT_SYSTEM_PACING,
+  DEFAULT_SYSTEM_TIMING,
   GlobalLexiconEntryCollectionSchema,
   GlobalLexiconReplaceInputSchema,
   IgnoredDiagnosticCollectionSchema,
@@ -23,15 +19,15 @@ import {
   ProjectIdSchema,
   ProjectReplaceInputSchema,
   ProjectSummaryCollectionSchema,
-  SystemPacingDefaultsSchema,
+  SystemTimingConfigurationSchema,
+  SpeachesConnectionAuthoringSchema,
+  SpeachesConnectionSchema,
   VoiceCatalogSchema,
   RenderArtifactCollectionSchema,
   RenderArtifactSchema,
   RenderJobCollectionSchema,
   RenderJobSchema,
   RenderSegmentSchema,
-  type ConnectionProfileAuthoring,
-  type ConnectionProfilePlaceholder,
   type ConnectionTestSummary,
   type GlobalLexiconReplaceInput,
   type IgnoredDiagnosticCollection,
@@ -41,9 +37,11 @@ import {
   type ProjectDuplicateInput,
   type ProjectReplaceInput,
   type ProjectSummary,
-  type SystemPacingDefaults,
-  type TransitionPauseConfiguration,
-  type TransitionPauseSetting,
+  type SystemTimingConfiguration,
+  type SystemTransitionPauseConfiguration,
+  type SystemTransitionPauseSetting,
+  type SpeachesConnection,
+  type SpeachesConnectionAuthoring,
   type VoiceCatalog,
   type VoiceCatalogAuthoring,
   type RenderArtifact,
@@ -96,7 +94,19 @@ interface SpeakerRow {
   sample_text: string;
 }
 
-interface PauseRow { pause_id: string; duration_ms: number; description: string }
+interface PauseRow { pause_id: "pause_short" | "pause_medium" | "pause_long"; duration_ms: number; description: string }
+
+interface SystemTimingRow {
+  paragraph_transition_mode: "none" | "preset" | "duration";
+  paragraph_transition_pause_id: string | null;
+  paragraph_transition_duration_ms: number | null;
+  speaker_change_transition_mode: "none" | "preset" | "duration";
+  speaker_change_transition_pause_id: string | null;
+  speaker_change_transition_duration_ms: number | null;
+  section_transition_mode: "none" | "preset" | "duration";
+  section_transition_pause_id: string | null;
+  section_transition_duration_ms: number | null;
+}
 
 interface LexiconRow {
   id: string;
@@ -137,8 +147,12 @@ interface MarkerRow { key: string; value: string; created_at: string }
 interface VersionRow { version: string }
 
 export interface ConnectionSetupRecord {
-  activeProfileId: string | null;
   onboardingCompletedAt: string | null;
+}
+
+export interface StoredSpeachesConnection extends SpeachesConnection {
+  /** Internal compatibility identity retained for caches and legacy frozen plans. */
+  id: string;
 }
 
 export interface MarkerEvidence {
@@ -162,24 +176,17 @@ export interface StudyNarratorRepository {
   replaceProject(projectId: string, input: ProjectReplaceInput): ProjectDetail;
   duplicateProject(projectId: string, input: ProjectDuplicateInput): ProjectDetail;
   deleteProject(projectId: string): void;
-  getSystemPacing(): SystemPacingDefaults;
-  updateSystemPacing(input: SystemPacingDefaults): SystemPacingDefaults;
+  getSystemPacing(): SystemTimingConfiguration;
+  updateSystemPacing(input: SystemTimingConfiguration): SystemTimingConfiguration;
   getIgnoredDiagnostics(): IgnoredDiagnosticCollection;
   replaceIgnoredDiagnostics(input: IgnoredDiagnosticCollection): IgnoredDiagnosticCollection;
   listGlobalLexicon(): LexiconEntry[];
   replaceGlobalLexicon(input: GlobalLexiconReplaceInput): LexiconEntry[];
-  listConnectionProfiles(): ConnectionProfilePlaceholder[];
-  getConnectionProfile(profileId: string): ConnectionProfilePlaceholder;
-  createConnectionProfile(input: ConnectionProfileAuthoring): ConnectionProfilePlaceholder;
-  replaceConnectionProfile(profileId: string, input: ConnectionProfileAuthoring): ConnectionProfilePlaceholder;
-  deleteConnectionProfile(profileId: string): void;
-  getConnectionCredentialReference(profileId: string): string | null;
-  setConnectionCredentialReference(profileId: string, reference: string | null): ConnectionProfilePlaceholder;
-  setConnectionSuppliedUrlForm(profileId: string, suppliedUrlForm: "root" | "v1" | "unconfigured"): ConnectionProfilePlaceholder;
-  upsertEnvironmentConnectionProfile(input: ConnectionProfileAuthoring, credentialReference: string | null): ConnectionProfilePlaceholder;
-  recordConnectionTest(profileId: string, summary: ConnectionTestSummary): ConnectionProfilePlaceholder;
+  getSpeachesConnection(): StoredSpeachesConnection;
+  replaceSpeachesConnection(input: SpeachesConnectionAuthoring, suppliedUrlForm: "root" | "v1" | "unconfigured"): StoredSpeachesConnection;
+  recordConnectionTest(summary: ConnectionTestSummary): StoredSpeachesConnection;
+  getProjectConnectionId(projectId: string): string;
   getConnectionSetup(): ConnectionSetupRecord;
-  setActiveConnectionProfile(profileId: string | null): ConnectionSetupRecord;
   completeConnectionOnboarding(): ConnectionSetupRecord;
   getVoiceCatalogOverrides(modelId: string): VoiceCatalog;
   replaceVoiceCatalogOverrides(input: VoiceCatalogAuthoring): VoiceCatalog;
@@ -258,20 +265,20 @@ function transitionFromRow(
   mode: ProjectRow["paragraph_transition_mode"],
   pauseId: string | null,
   durationMs: number | null
-): TransitionPauseSetting {
+): SystemTransitionPauseSetting {
   if (mode === "none") return { mode };
-  if (mode === "preset" && pauseId) return { mode, pauseId };
+  if (mode === "preset" && (pauseId === "pause_short" || pauseId === "pause_medium" || pauseId === "pause_long")) return { mode, pauseId };
   if (mode === "duration" && durationMs !== null) return { mode, durationMs };
   throw new Error("Stored transition pause configuration is invalid.");
 }
 
-function transitionParameters(setting: TransitionPauseSetting): [string, string | null, number | null] {
+function transitionParameters(setting: SystemTransitionPauseSetting): [string, string | null, number | null] {
   if (setting.mode === "none") return [setting.mode, null, null];
   if (setting.mode === "preset") return [setting.mode, setting.pauseId, null];
   return [setting.mode, null, setting.durationMs];
 }
 
-function transitionConfiguration(row: ProjectRow): TransitionPauseConfiguration {
+function transitionConfiguration(row: SystemTimingRow): SystemTransitionPauseConfiguration {
   return {
     paragraph: transitionFromRow(row.paragraph_transition_mode, row.paragraph_transition_pause_id, row.paragraph_transition_duration_ms),
     speakerChange: transitionFromRow(row.speaker_change_transition_mode, row.speaker_change_transition_pause_id, row.speaker_change_transition_duration_ms),
@@ -297,16 +304,12 @@ function lexiconFromRow(row: LexiconRow): LexiconEntry {
   });
 }
 
-function profileFromRow(row: ProfileRow): ConnectionProfilePlaceholder {
-  return ConnectionProfilePlaceholderSchema.parse({
+function connectionFromRow(row: ProfileRow): StoredSpeachesConnection {
+  return {
     id: row.id,
-    name: row.name,
+    ...SpeachesConnectionSchema.parse({
     baseUrl: row.base_url,
-    source: row.source,
-    editable: row.source === "saved",
-    credentialEntryAllowed: false,
     configured: row.base_url !== null && row.default_model_id !== null && row.default_voice_id !== null,
-    apiKeyConfigured: row.api_key_reference !== null,
     defaultModelId: row.default_model_id,
     defaultVoiceId: row.default_voice_id,
     timeoutSeconds: row.timeout_seconds,
@@ -318,7 +321,8 @@ function profileFromRow(row: ProfileRow): ConnectionProfilePlaceholder {
     lastTestSummary: row.last_test_summary_json === null ? null : JSON.parse(row.last_test_summary_json) as unknown,
     createdAt: row.created_at,
     updatedAt: row.updated_at
-  });
+    })
+  };
 }
 
 function lexiconBehaviorMatches(existing: LexiconEntry, authored: LexiconEntryAuthoring): boolean {
@@ -423,8 +427,6 @@ function createRepository(options: {
     if (!row) throw new PersistenceNotFoundError(`Project ${projectId} was not found.`);
     const speakers = database.prepare("SELECT * FROM speaker_mappings WHERE project_id = ? ORDER BY ordinal ASC, speaker_id ASC")
       .all(projectId) as SpeakerRow[];
-    const pauses = database.prepare("SELECT * FROM pause_presets WHERE project_id = ? ORDER BY ordinal ASC, pause_id ASC")
-      .all(projectId) as PauseRow[];
     return ProjectDetailSchema.parse({
       contractVersion: PERSISTENCE_CONTRACT_VERSION,
       id: row.id,
@@ -432,8 +434,6 @@ function createRepository(options: {
       description: row.description,
       scriptSource: row.script_source,
       scriptHash: row.script_hash,
-      connectionProfileId: row.connection_profile_id,
-      modelId: row.model_id,
       speakerMappings: speakers.map((speaker) => ({
         speakerId: speaker.speaker_id,
         displayName: speaker.display_name,
@@ -443,35 +443,40 @@ function createRepository(options: {
         roleDescription: speaker.role_description,
         sampleText: speaker.sample_text
       })),
-      pausePresets: pauses.map((pause) => ({ pauseId: pause.pause_id, durationMs: pause.duration_ms, description: pause.description })),
-      transitionPauses: transitionConfiguration(row),
       lexiconEntries: readLexicon("project", projectId),
       createdAt: row.created_at,
       updatedAt: row.updated_at
     });
   };
 
-  const getConnectionProfile = (profileId: string): ConnectionProfilePlaceholder => {
+  const getSpeachesConnection = (): StoredSpeachesConnection => {
     assertOpen();
-    const row = database.prepare("SELECT * FROM connection_profiles WHERE id = ?").get(profileId) as ProfileRow | undefined;
-    if (!row) throw new PersistenceNotFoundError(`Connection profile ${profileId} was not found.`);
-    return profileFromRow(row);
+    const row = database.prepare(`
+      SELECT profile.* FROM connection_profiles profile
+      LEFT JOIN connection_setup setup ON setup.singleton_id = 1
+      ORDER BY CASE WHEN profile.id = setup.active_profile_id THEN 0 ELSE 1 END, profile.ordinal ASC, profile.id ASC
+      LIMIT 1
+    `).get() as ProfileRow | undefined;
+    if (!row) throw new PersistenceNotFoundError("The Speaches connection was not found.");
+    return connectionFromRow(row);
   };
+
+  const getConnectionId = (): string => getSpeachesConnection().id;
 
   const getConnectionSetup = (): ConnectionSetupRecord => {
     assertOpen();
     const row = database.prepare("SELECT active_profile_id, onboarding_completed_at FROM connection_setup WHERE singleton_id = 1")
       .get() as { active_profile_id: string | null; onboarding_completed_at: string | null };
-    return { activeProfileId: row.active_profile_id, onboardingCompletedAt: row.onboarding_completed_at };
+    return { onboardingCompletedAt: row.onboarding_completed_at };
   };
 
   const getVoiceCatalogOverrides = (modelId: string): VoiceCatalog => {
     assertOpen();
     const rows = database.prepare(`
-      SELECT voice_id, label, enabled, language, locale, accent, category, style, sample_text
+      SELECT voice_id, label, enabled, favorite, language, locale, accent, category, style, sample_text
       FROM voice_catalog_overrides WHERE model_id = ? ORDER BY ordinal ASC, voice_id ASC
     `).all(modelId) as Array<{
-      voice_id: string; label: string; enabled: number; language: string | null; locale: string | null;
+      voice_id: string; label: string; enabled: number; favorite: number; language: string | null; locale: string | null;
       accent: string | null; category: string | null; style: string | null; sample_text: string | null;
     }>;
     return VoiceCatalogSchema.parse({
@@ -481,6 +486,7 @@ function createRepository(options: {
         voiceId: row.voice_id,
         label: row.label,
         enabled: booleanFromSql(row.enabled),
+        favorite: booleanFromSql(row.favorite),
         language: row.language,
         locale: row.locale,
         accent: row.accent,
@@ -537,7 +543,6 @@ function createRepository(options: {
       const input = ProjectCreateInputSchema.parse(inputValue);
       const id = ProjectIdSchema.parse(nextId());
       const timestamp = options.now().toISOString();
-      const pacing = this.getSystemPacing();
       transaction(() => {
         database.prepare(`
           INSERT INTO projects (
@@ -547,14 +552,10 @@ function createRepository(options: {
             speaker_change_transition_mode, speaker_change_transition_pause_id, speaker_change_transition_duration_ms,
             section_transition_mode, section_transition_pause_id, section_transition_duration_ms,
             created_at, updated_at
-          ) VALUES (?, ?, ?, '', ?, NULL, NULL, ?, ?, ?, ?, ?, NULL, 'none', NULL, NULL, 'none', NULL, NULL, ?, ?)
+          ) VALUES (?, ?, ?, '', ?, ?, NULL, 0, 'pause_medium', 0, 'none', NULL, NULL, 'none', NULL, NULL, 'none', NULL, NULL, ?, ?)
         `).run(
-          id, input.name, input.description, scriptHash(""), booleanToSql(pacing.enabled),
-          DEFAULT_PARAGRAPH_PAUSE_ID, pacing.durationMs, pacing.enabled ? "preset" : "none",
-          pacing.enabled ? DEFAULT_PARAGRAPH_PAUSE_ID : null, timestamp, timestamp
+          id, input.name, input.description, scriptHash(""), getConnectionId(), timestamp, timestamp
         );
-        database.prepare("INSERT INTO pause_presets (project_id, pause_id, ordinal, duration_ms, description) VALUES (?, ?, 0, ?, ?)")
-          .run(id, DEFAULT_PARAGRAPH_PAUSE_ID, pacing.durationMs, "Paragraph or subtopic separation.");
       });
       return getProject(id);
     },
@@ -565,35 +566,15 @@ function createRepository(options: {
       const input = ProjectReplaceInputSchema.parse(inputValue);
       const prior = getProject(projectId);
       const timestamp = options.now().toISOString();
-      const paragraphSetting = input.transitionPauses.paragraph;
-      const paragraph = transitionParameters(paragraphSetting);
-      const speakerChange = transitionParameters(input.transitionPauses.speakerChange);
-      const section = transitionParameters(input.transitionPauses.section);
-      const legacyParagraphPauseId = paragraphSetting.mode === "preset"
-        ? paragraphSetting.pauseId
-        : DEFAULT_PARAGRAPH_PAUSE_ID;
-      const legacyParagraphDuration = paragraphSetting.mode === "duration"
-        ? paragraphSetting.durationMs
-        : paragraphSetting.mode === "preset"
-          ? input.pausePresets.find(({ pauseId }) => pauseId === paragraphSetting.pauseId)?.durationMs ?? 0
-          : 0;
       transaction(() => {
         const result = database.prepare(`
           UPDATE projects SET name = ?, description = ?, script_source = ?, script_hash = ?,
-            connection_profile_id = ?, model_id = ?, paragraph_pause_enabled = ?, paragraph_pause_id = ?,
-            paragraph_pause_duration_ms = ?,
-            paragraph_transition_mode = ?, paragraph_transition_pause_id = ?, paragraph_transition_duration_ms = ?,
-            speaker_change_transition_mode = ?, speaker_change_transition_pause_id = ?, speaker_change_transition_duration_ms = ?,
-            section_transition_mode = ?, section_transition_pause_id = ?, section_transition_duration_ms = ?,
-            updated_at = ? WHERE id = ?
+            connection_profile_id = ?, model_id = NULL, updated_at = ? WHERE id = ?
         `).run(
-          input.name, input.description, input.scriptSource, scriptHash(input.scriptSource), input.connectionProfileId, input.modelId,
-          booleanToSql(input.transitionPauses.paragraph.mode !== "none"), legacyParagraphPauseId,
-          legacyParagraphDuration, ...paragraph, ...speakerChange, ...section, timestamp, projectId
+          input.name, input.description, input.scriptSource, scriptHash(input.scriptSource), getConnectionId(), timestamp, projectId
         );
         if (Number(result.changes ?? 0) !== 1) throw new PersistenceNotFoundError(`Project ${projectId} was not found.`);
         database.prepare("DELETE FROM speaker_mappings WHERE project_id = ?").run(projectId);
-        database.prepare("DELETE FROM pause_presets WHERE project_id = ?").run(projectId);
         const insertSpeaker = database.prepare(`
           INSERT INTO speaker_mappings (
             project_id, speaker_id, ordinal, display_name, voice_id, speed, gain_db, role_description, sample_text
@@ -603,8 +584,6 @@ function createRepository(options: {
           projectId, speaker.speakerId, ordinal, speaker.displayName, speaker.voiceId, speaker.speed,
           speaker.gainDb, speaker.roleDescription, speaker.sampleText
         ));
-        const insertPause = database.prepare("INSERT INTO pause_presets (project_id, pause_id, ordinal, duration_ms, description) VALUES (?, ?, ?, ?, ?)");
-        input.pausePresets.forEach((pause, ordinal) => insertPause.run(projectId, pause.pauseId, ordinal, pause.durationMs, pause.description));
         replaceLexicon("project", projectId, input.lexiconEntries, timestamp);
       });
       const updated = getProject(projectId);
@@ -618,18 +597,6 @@ function createRepository(options: {
       const source = getProject(projectId);
       const duplicateId = ProjectIdSchema.parse(nextId());
       const timestamp = options.now().toISOString();
-      const paragraphSetting = source.transitionPauses.paragraph;
-      const paragraph = transitionParameters(paragraphSetting);
-      const speakerChange = transitionParameters(source.transitionPauses.speakerChange);
-      const section = transitionParameters(source.transitionPauses.section);
-      const legacyParagraphPauseId = paragraphSetting.mode === "preset"
-        ? paragraphSetting.pauseId
-        : DEFAULT_PARAGRAPH_PAUSE_ID;
-      const legacyParagraphDuration = paragraphSetting.mode === "duration"
-        ? paragraphSetting.durationMs
-        : paragraphSetting.mode === "preset"
-          ? source.pausePresets.find(({ pauseId }) => pauseId === paragraphSetting.pauseId)?.durationMs ?? 0
-          : 0;
       transaction(() => {
         database.prepare(`
           INSERT INTO projects (
@@ -641,9 +608,8 @@ function createRepository(options: {
             created_at, updated_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
-          duplicateId, input.name, source.description, source.scriptSource, source.scriptHash, source.connectionProfileId, source.modelId,
-          booleanToSql(source.transitionPauses.paragraph.mode !== "none"), legacyParagraphPauseId,
-          legacyParagraphDuration, ...paragraph, ...speakerChange, ...section, timestamp, timestamp
+          duplicateId, input.name, source.description, source.scriptSource, source.scriptHash, getConnectionId(), null,
+          0, "pause_medium", 0, "none", null, null, "none", null, null, "none", null, null, timestamp, timestamp
         );
         const insertSpeaker = database.prepare(`
           INSERT INTO speaker_mappings (
@@ -654,8 +620,6 @@ function createRepository(options: {
           duplicateId, speaker.speakerId, ordinal, speaker.displayName, speaker.voiceId, speaker.speed,
           speaker.gainDb, speaker.roleDescription, speaker.sampleText
         ));
-        const insertPause = database.prepare("INSERT INTO pause_presets (project_id, pause_id, ordinal, duration_ms, description) VALUES (?, ?, ?, ?, ?)");
-        source.pausePresets.forEach((pause, ordinal) => insertPause.run(duplicateId, pause.pauseId, ordinal, pause.durationMs, pause.description));
         replaceLexicon("project", duplicateId, source.lexiconEntries.map((entry) => ({
           scope: entry.scope,
           entryType: entry.entryType,
@@ -679,15 +643,41 @@ function createRepository(options: {
     },
     getSystemPacing() {
       assertOpen();
-      const row = database.prepare("SELECT paragraph_pause_enabled, paragraph_pause_duration_ms FROM system_pacing_defaults WHERE singleton_id = 1")
-        .get() as { paragraph_pause_enabled: number; paragraph_pause_duration_ms: number };
-      return SystemPacingDefaultsSchema.parse({ enabled: booleanFromSql(row.paragraph_pause_enabled), durationMs: row.paragraph_pause_duration_ms });
+      const row = database.prepare("SELECT * FROM system_pacing_defaults WHERE singleton_id = 1").get() as SystemTimingRow;
+      const pauses = database.prepare("SELECT pause_id, duration_ms, description FROM system_pause_presets ORDER BY ordinal ASC")
+        .all() as PauseRow[];
+      return SystemTimingConfigurationSchema.parse({
+        pausePresets: pauses.map((pause) => ({ pauseId: pause.pause_id, durationMs: pause.duration_ms, description: pause.description })),
+        transitionPauses: transitionConfiguration(row)
+      });
     },
     updateSystemPacing(inputValue) {
       assertOpen();
-      const input = SystemPacingDefaultsSchema.parse(inputValue);
-      database.prepare("UPDATE system_pacing_defaults SET paragraph_pause_enabled = ?, paragraph_pause_duration_ms = ?, updated_at = ? WHERE singleton_id = 1")
-        .run(booleanToSql(input.enabled), input.durationMs, options.now().toISOString());
+      const input = SystemTimingConfigurationSchema.parse(inputValue);
+      const paragraphSetting = input.transitionPauses.paragraph;
+      const paragraph = transitionParameters(paragraphSetting);
+      const speakerChange = transitionParameters(input.transitionPauses.speakerChange);
+      const section = transitionParameters(input.transitionPauses.section);
+      transaction(() => {
+        const paragraphDuration = paragraphSetting.mode === "duration"
+          ? paragraphSetting.durationMs
+          : paragraphSetting.mode === "preset"
+            ? input.pausePresets.find(({ pauseId }) => pauseId === paragraphSetting.pauseId)!.durationMs
+            : 0;
+        database.prepare(`
+          UPDATE system_pacing_defaults SET paragraph_pause_enabled = ?, paragraph_pause_duration_ms = ?,
+            paragraph_transition_mode = ?, paragraph_transition_pause_id = ?, paragraph_transition_duration_ms = ?,
+            speaker_change_transition_mode = ?, speaker_change_transition_pause_id = ?, speaker_change_transition_duration_ms = ?,
+            section_transition_mode = ?, section_transition_pause_id = ?, section_transition_duration_ms = ?, updated_at = ?
+          WHERE singleton_id = 1
+        `).run(
+          booleanToSql(input.transitionPauses.paragraph.mode !== "none"), paragraphDuration,
+          ...paragraph, ...speakerChange, ...section, options.now().toISOString()
+        );
+        database.prepare("DELETE FROM system_pause_presets").run();
+        const insert = database.prepare("INSERT INTO system_pause_presets (pause_id, ordinal, duration_ms, description) VALUES (?, ?, ?, ?)");
+        input.pausePresets.forEach((pause, ordinal) => insert.run(pause.pauseId, ordinal, pause.durationMs, pause.description));
+      });
       return this.getSystemPacing();
     },
     getIgnoredDiagnostics() {
@@ -715,131 +705,50 @@ function createRepository(options: {
       const result = transaction(() => replaceLexicon("global", null, input, options.now().toISOString()));
       return GlobalLexiconEntryCollectionSchema.parse(result);
     },
-    listConnectionProfiles() {
+    getSpeachesConnection,
+    replaceSpeachesConnection(inputValue, suppliedUrlForm) {
       assertOpen();
-      const rows = database.prepare("SELECT * FROM connection_profiles ORDER BY ordinal ASC, id ASC").all() as ProfileRow[];
-      return ConnectionProfileCollectionSchema.parse(rows.map(profileFromRow));
-    },
-    getConnectionProfile,
-    createConnectionProfile(inputValue) {
-      assertOpen();
-      const input = ConnectionProfileAuthoringSchema.parse(inputValue);
-      const id = input.id ?? nextId();
-      if (database.prepare("SELECT id FROM connection_profiles WHERE id = ?").get(id)) throw new PersistenceConflictError(`Connection profile ${id} already exists.`);
-      const timestamp = options.now().toISOString();
-      const ordinal = (database.prepare("SELECT COALESCE(MAX(ordinal), -1) + 1 AS ordinal FROM connection_profiles").get() as { ordinal: number }).ordinal;
+      const input = SpeachesConnectionAuthoringSchema.parse(inputValue);
+      const existing = getSpeachesConnection();
+      const unchanged = existing.baseUrl === input.baseUrl
+        && existing.defaultModelId === input.defaultModelId && existing.defaultVoiceId === input.defaultVoiceId
+        && existing.timeoutSeconds === input.timeoutSeconds && existing.retryCount === input.retryCount
+        && existing.suppliedUrlForm === suppliedUrlForm;
       database.prepare(`
-        INSERT INTO connection_profiles (
-          id, ordinal, name, base_url, default_model_id, default_voice_id,
-          timeout_seconds, retry_count, response_format, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        UPDATE connection_profiles SET name = 'Speaches', base_url = ?, default_model_id = ?, default_voice_id = ?,
+          source = 'saved', api_key_reference = NULL, timeout_seconds = ?, retry_count = ?, response_format = ?,
+          supplied_url_form = ?, updated_at = ? WHERE id = ?
       `).run(
-        id, ordinal, input.name, input.baseUrl, input.defaultModelId, input.defaultVoiceId,
-        input.timeoutSeconds, input.retryCount, input.responseFormat, timestamp, timestamp
+        input.baseUrl, input.defaultModelId, input.defaultVoiceId, input.timeoutSeconds, input.retryCount,
+        input.responseFormat, suppliedUrlForm, unchanged ? existing.updatedAt : options.now().toISOString(), existing.id
       );
-      return profileFromRow(database.prepare("SELECT * FROM connection_profiles WHERE id = ?").get(id) as ProfileRow);
+      return getSpeachesConnection();
     },
-    replaceConnectionProfile(profileIdInput, inputValue) {
-      assertOpen();
-      const input = ConnectionProfileAuthoringSchema.parse(inputValue);
-      const profileId = profileIdInput;
-      if (input.id !== undefined && input.id !== profileId) throw new PersistenceConflictError("Connection profile IDs cannot be changed.");
-      const existing = database.prepare("SELECT * FROM connection_profiles WHERE id = ?").get(profileId) as ProfileRow | undefined;
-      if (!existing) throw new PersistenceNotFoundError(`Connection profile ${profileId} was not found.`);
-      const unchanged = existing.name === input.name && existing.base_url === input.baseUrl
-        && existing.default_model_id === input.defaultModelId && existing.default_voice_id === input.defaultVoiceId
-        && existing.timeout_seconds === input.timeoutSeconds && existing.retry_count === input.retryCount;
-      database.prepare(`
-        UPDATE connection_profiles SET name = ?, base_url = ?, default_model_id = ?, default_voice_id = ?,
-          timeout_seconds = ?, retry_count = ?, response_format = ?, updated_at = ? WHERE id = ?
-      `).run(
-        input.name, input.baseUrl, input.defaultModelId, input.defaultVoiceId,
-        input.timeoutSeconds, input.retryCount, input.responseFormat,
-        unchanged ? existing.updated_at : options.now().toISOString(), profileId
-      );
-      return profileFromRow(database.prepare("SELECT * FROM connection_profiles WHERE id = ?").get(profileId) as ProfileRow);
-    },
-    deleteConnectionProfile(profileId) {
-      assertOpen();
-      const existing = database.prepare("SELECT source FROM connection_profiles WHERE id = ?").get(profileId) as { source: string } | undefined;
-      if (!existing) throw new PersistenceNotFoundError(`Connection profile ${profileId} was not found.`);
-      if (existing.source === "environment") throw new PersistenceConflictError("Environment-managed connection profiles cannot be deleted.");
-      const result = database.prepare("DELETE FROM connection_profiles WHERE id = ?").run(profileId);
-      if (Number(result.changes ?? 0) !== 1) throw new PersistenceNotFoundError(`Connection profile ${profileId} was not found.`);
-    },
-    getConnectionCredentialReference(profileId) {
-      assertOpen();
-      const row = database.prepare("SELECT api_key_reference FROM connection_profiles WHERE id = ?").get(profileId) as { api_key_reference: string | null } | undefined;
-      if (!row) throw new PersistenceNotFoundError(`Connection profile ${profileId} was not found.`);
-      return row.api_key_reference;
-    },
-    setConnectionCredentialReference(profileId, reference) {
-      assertOpen();
-      const result = database.prepare("UPDATE connection_profiles SET api_key_reference = ?, updated_at = ? WHERE id = ?")
-        .run(reference, options.now().toISOString(), profileId);
-      if (Number(result.changes ?? 0) !== 1) throw new PersistenceNotFoundError(`Connection profile ${profileId} was not found.`);
-      return getConnectionProfile(profileId);
-    },
-    setConnectionSuppliedUrlForm(profileId, suppliedUrlForm) {
-      assertOpen();
-      const result = database.prepare("UPDATE connection_profiles SET supplied_url_form = ?, updated_at = ? WHERE id = ?")
-        .run(suppliedUrlForm, options.now().toISOString(), profileId);
-      if (Number(result.changes ?? 0) !== 1) throw new PersistenceNotFoundError(`Connection profile ${profileId} was not found.`);
-      return getConnectionProfile(profileId);
-    },
-    upsertEnvironmentConnectionProfile(inputValue, credentialReference) {
-      assertOpen();
-      const input = ConnectionProfileAuthoringSchema.parse(inputValue);
-      if (!input.id) throw new PersistenceConflictError("Environment profiles require a stable ID.");
-      const existing = database.prepare("SELECT id, created_at FROM connection_profiles WHERE id = ?").get(input.id) as { id: string; created_at: string } | undefined;
-      const timestamp = options.now().toISOString();
-      if (!existing) {
-        const ordinal = (database.prepare("SELECT COALESCE(MAX(ordinal), -1) + 1 AS ordinal FROM connection_profiles").get() as { ordinal: number }).ordinal;
-        database.prepare(`
-          INSERT INTO connection_profiles (
-            id, ordinal, name, base_url, default_model_id, default_voice_id, source, api_key_reference,
-            timeout_seconds, retry_count, response_format, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, 'environment', ?, ?, ?, ?, ?, ?)
-        `).run(
-          input.id, ordinal, input.name, input.baseUrl, input.defaultModelId, input.defaultVoiceId, credentialReference,
-          input.timeoutSeconds, input.retryCount, input.responseFormat, timestamp, timestamp
-        );
-      } else {
-        database.prepare(`
-          UPDATE connection_profiles SET name = ?, base_url = ?, default_model_id = ?, default_voice_id = ?,
-            source = 'environment', api_key_reference = ?, timeout_seconds = ?, retry_count = ?, response_format = ?, updated_at = ?
-          WHERE id = ?
-        `).run(
-          input.name, input.baseUrl, input.defaultModelId, input.defaultVoiceId, credentialReference,
-          input.timeoutSeconds, input.retryCount, input.responseFormat, timestamp, input.id
-        );
-      }
-      return getConnectionProfile(input.id);
-    },
-    recordConnectionTest(profileId, summaryValue) {
+    recordConnectionTest(summaryValue) {
       assertOpen();
       const summary = ConnectionTestSummarySchema.parse(summaryValue);
+      const connection = getSpeachesConnection();
       const result = database.prepare(`
         UPDATE connection_profiles SET last_tested_at = ?, last_successful_test_at = ?,
           last_test_summary_json = ?, updated_at = ? WHERE id = ?
       `).run(
         summary.testedAt,
-        summary.overall === "connected" ? summary.testedAt : getConnectionProfile(profileId).lastSuccessfulTestAt,
+        summary.overall === "connected" ? summary.testedAt : connection.lastSuccessfulTestAt,
         JSON.stringify(summary),
         options.now().toISOString(),
-        profileId
+        connection.id
       );
-      if (Number(result.changes ?? 0) !== 1) throw new PersistenceNotFoundError(`Connection profile ${profileId} was not found.`);
-      return getConnectionProfile(profileId);
+      if (Number(result.changes ?? 0) !== 1) throw new PersistenceNotFoundError("The Speaches connection was not found.");
+      return getSpeachesConnection();
+    },
+    getProjectConnectionId(projectIdInput) {
+      assertOpen();
+      const projectId = ProjectIdSchema.parse(projectIdInput);
+      const row = database.prepare("SELECT connection_profile_id FROM projects WHERE id = ?").get(projectId) as { connection_profile_id: string | null } | undefined;
+      if (!row) throw new PersistenceNotFoundError(`Project ${projectId} was not found.`);
+      return row.connection_profile_id ?? getConnectionId();
     },
     getConnectionSetup,
-    setActiveConnectionProfile(profileId) {
-      assertOpen();
-      if (profileId !== null) getConnectionProfile(profileId);
-      database.prepare("UPDATE connection_setup SET active_profile_id = ?, updated_at = ? WHERE singleton_id = 1")
-        .run(profileId, options.now().toISOString());
-      return getConnectionSetup();
-    },
     completeConnectionOnboarding() {
       assertOpen();
       const timestamp = options.now().toISOString();
@@ -855,11 +764,11 @@ function createRepository(options: {
         database.prepare("DELETE FROM voice_catalog_overrides WHERE model_id = ?").run(input.modelId);
         const insert = database.prepare(`
           INSERT INTO voice_catalog_overrides (
-            model_id, voice_id, ordinal, label, enabled, language, locale, accent, category, style, sample_text
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            model_id, voice_id, ordinal, label, enabled, favorite, language, locale, accent, category, style, sample_text
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
         input.entries.forEach((entry, ordinal) => insert.run(
-          input.modelId, entry.voiceId, ordinal, entry.label, booleanToSql(entry.enabled), entry.language,
+          input.modelId, entry.voiceId, ordinal, entry.label, booleanToSql(entry.enabled), booleanToSql(entry.favorite), entry.language,
           entry.locale, entry.accent, entry.category, entry.style, entry.sampleText
         ));
       });
@@ -1014,9 +923,12 @@ export async function openStudyNarratorRepository(options: {
   const timestamp = now().toISOString();
   migrated.database.prepare(`
     INSERT OR IGNORE INTO system_pacing_defaults (
-      singleton_id, paragraph_pause_enabled, paragraph_pause_duration_ms, updated_at
-    ) VALUES (1, ?, ?, ?)
-  `).run(booleanToSql(DEFAULT_SYSTEM_PACING.enabled), DEFAULT_SYSTEM_PACING.durationMs, timestamp);
+      singleton_id, paragraph_pause_enabled, paragraph_pause_duration_ms,
+      paragraph_transition_mode, paragraph_transition_pause_id, paragraph_transition_duration_ms,
+      speaker_change_transition_mode, speaker_change_transition_pause_id, speaker_change_transition_duration_ms,
+      section_transition_mode, section_transition_pause_id, section_transition_duration_ms, updated_at
+    ) VALUES (1, 1, ?, 'preset', 'pause_medium', NULL, 'none', NULL, NULL, 'none', NULL, NULL, ?)
+  `).run(DEFAULT_SYSTEM_TIMING.pausePresets[1].durationMs, timestamp);
   migrated.database.prepare(`
     INSERT OR IGNORE INTO connection_setup (singleton_id, active_profile_id, onboarding_completed_at, updated_at)
     VALUES (1, NULL, NULL, ?)

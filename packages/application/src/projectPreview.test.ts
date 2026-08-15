@@ -7,26 +7,21 @@ import { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
 const timestamp = "2026-08-13T12:00:00.000Z";
 const projectId = "00000000-0000-4000-8000-000000000001";
 const profile = {
-  id: "local", name: "Local Speaches", baseUrl: "http://127.0.0.1:8000", suppliedUrlForm: "root" as const,
-  source: "saved" as const, editable: true, credentialEntryAllowed: false, configured: true, apiKeyConfigured: false,
+  id: "local", baseUrl: "http://127.0.0.1:8000", suppliedUrlForm: "root" as const, configured: true,
   defaultModelId: "model", defaultVoiceId: "voice-default", timeoutSeconds: 12, retryCount: 0, responseFormat: "wav" as const,
   lastTestedAt: null, lastSuccessfulTestAt: null, lastTestSummary: null, createdAt: timestamp, updatedAt: timestamp
 };
 const project = {
-  contractVersion: 4 as const,
+  contractVersion: 9 as const,
   id: projectId,
   name: "Preview project",
   description: "",
   scriptSource: "[speaker_teacher] SQL indexes.\n\n[pause_short]\n\nSecond line.",
   scriptHash: "a".repeat(64),
-  connectionProfileId: profile.id,
-  modelId: "model",
   speakerMappings: [{ speakerId: "teacher", displayName: "Teacher", voiceId: "voice-teacher", speed: 1.2, gainDb: 3, roleDescription: "", sampleText: "" }],
-  pausePresets: [{ pauseId: "pause_medium", durationMs: 750, description: "Paragraph" }, { pauseId: "pause_short", durationMs: 300, description: "Short" }],
-  transitionPauses: { paragraph: { mode: "preset" as const, pauseId: "pause_medium" as const }, speakerChange: { mode: "none" as const }, section: { mode: "none" as const } },
   lexiconEntries: [{
     id: "project-sql", scope: "project" as const, entryType: "exactTerm" as const, displayText: "SQL", spokenText: "sequel",
-    caseSensitive: true, wholeWord: true, priority: 10, enabled: true, notes: "", createdAt: timestamp, updatedAt: timestamp
+    caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: "", createdAt: timestamp, updatedAt: timestamp
   }],
   createdAt: timestamp,
   updatedAt: timestamp
@@ -36,11 +31,10 @@ function repository(): ProjectPreviewRepository {
   return {
     getProject: vi.fn(() => project),
     listGlobalLexicon: vi.fn(() => []),
-    getConnectionProfile: vi.fn(() => profile),
-    getConnectionCredentialReference: vi.fn(() => null),
+    getSpeachesConnection: vi.fn(() => profile),
     getVoiceCatalogOverrides: vi.fn(() => ({
       schemaVersion: 1, modelId: "model", entries: [{
-        voiceId: "voice-teacher", label: "Teacher Voice", enabled: true, language: null, locale: null,
+        voiceId: "voice-teacher", label: "Teacher Voice", enabled: true, favorite: false, language: null, locale: null,
         accent: null, category: null, style: null, sampleText: null
       }]
     }))
@@ -69,7 +63,8 @@ describe("project preview service", () => {
       })),
       clearAll: vi.fn(async () => ({ entriesRemoved: 0, bytesFreed: 0 })),
       clearProject: vi.fn(async () => ({ entriesRemoved: 0, bytesFreed: 0 })),
-      clearEntry: vi.fn(async () => ({ entriesRemoved: 0, bytesFreed: 0 }))
+      clearEntry: vi.fn(async () => ({ entriesRemoved: 0, bytesFreed: 0 })),
+      retainScratchpad: vi.fn(async () => ({ entriesRemoved: 0, bytesFreed: 0 }))
     } as never);
     expect(Object.keys(preview).map((key) => `projectPreview.${key}`)).toEqual(
       APPLICATION_SERVICE_MANIFEST.filter((path) => path.startsWith("projectPreview."))
@@ -90,7 +85,7 @@ describe("project preview service", () => {
     });
     const result = await service.preview(projectId, { mode: "segment", nodeOrdinal: 1 });
     expect(speech.synthesize).toHaveBeenCalledWith(expect.objectContaining({
-      connectionProfileId: profile.id, modelId: "model", voiceId: "voice-teacher", speed: 1.2,
+      modelId: "model", voiceId: "voice-teacher", speed: 1.2,
       text: "sequel indexes.", usage: { projectId }
     }));
     expect(result).toMatchObject({

@@ -1,6 +1,6 @@
 import { chmod, mkdir, readdir, stat } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
-import { DATABASE_SCHEMA_VERSION } from "@studynarrator/shared-types";
+import { DATABASE_SCHEMA_VERSION, DEFAULT_GLOBAL_LEXICON, DEFAULT_SYSTEM_TIMING } from "@studynarrator/shared-types";
 import { MigrationFailureError } from "./errors.js";
 
 export interface StatementLike {
@@ -170,6 +170,11 @@ const MIGRATION_3_SQL = `
   );
 `;
 
+const MIGRATION_9_SQL = `
+  ALTER TABLE voice_catalog_overrides
+  ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0 CHECK (favorite IN (0, 1));
+`;
+
 const MIGRATION_4_SQL = `
   ALTER TABLE projects ADD COLUMN paragraph_transition_mode TEXT NOT NULL DEFAULT 'preset' CHECK (paragraph_transition_mode IN ('none', 'preset', 'duration'));
   ALTER TABLE projects ADD COLUMN paragraph_transition_pause_id TEXT;
@@ -237,6 +242,283 @@ const MIGRATION_6_SQL = `
   ALTER TABLE render_segments ADD COLUMN audio_checksum TEXT CHECK (audio_checksum IS NULL OR length(audio_checksum) = 64);
 `;
 
+const MIGRATION_7_SQL = `
+  INSERT OR IGNORE INTO connection_setup (singleton_id, active_profile_id, onboarding_completed_at, updated_at)
+  VALUES (1, NULL, NULL, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+
+  CREATE TEMP TABLE migration_7_connection_winner (
+    id TEXT PRIMARY KEY
+  );
+
+  INSERT INTO migration_7_connection_winner (id)
+  SELECT profile.id
+  FROM connection_profiles AS profile
+  LEFT JOIN connection_setup AS setup ON setup.singleton_id = 1
+  ORDER BY
+    CASE
+      WHEN profile.id = setup.active_profile_id
+        AND profile.base_url IS NOT NULL
+        AND profile.default_model_id IS NOT NULL
+        AND profile.default_voice_id IS NOT NULL THEN 0
+      WHEN profile.source = 'saved'
+        AND profile.base_url IS NOT NULL
+        AND profile.default_model_id IS NOT NULL
+        AND profile.default_voice_id IS NOT NULL THEN 1
+      WHEN profile.base_url IS NOT NULL
+        AND profile.default_model_id IS NOT NULL
+        AND profile.default_voice_id IS NOT NULL THEN 2
+      WHEN profile.id = setup.active_profile_id THEN 3
+      WHEN profile.source = 'saved' THEN 4
+      ELSE 5
+    END,
+    profile.ordinal ASC,
+    profile.id ASC
+  LIMIT 1;
+
+  INSERT INTO connection_profiles (
+    id, ordinal, name, base_url, default_model_id, default_voice_id, source,
+    api_key_reference, timeout_seconds, retry_count, response_format,
+    supplied_url_form, last_tested_at, last_successful_test_at,
+    last_test_summary_json, created_at, updated_at
+  )
+  SELECT
+    'speaches', 0, 'Speaches', NULL, NULL, NULL, 'saved', NULL, 120, 2, 'wav',
+    'unconfigured', NULL, NULL, NULL,
+    strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+    strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+  WHERE NOT EXISTS (SELECT 1 FROM migration_7_connection_winner);
+
+  INSERT OR IGNORE INTO migration_7_connection_winner (id)
+  SELECT 'speaches';
+
+  UPDATE connection_profiles
+  SET name = 'Speaches', source = 'saved', api_key_reference = NULL,
+      updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+  WHERE id = (SELECT id FROM migration_7_connection_winner LIMIT 1);
+
+  UPDATE projects
+  SET connection_profile_id = (SELECT id FROM migration_7_connection_winner LIMIT 1);
+
+  UPDATE connection_setup
+  SET active_profile_id = (SELECT id FROM migration_7_connection_winner LIMIT 1),
+      updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+  WHERE singleton_id = 1;
+
+  DELETE FROM connection_profiles
+  WHERE id != (SELECT id FROM migration_7_connection_winner LIMIT 1);
+
+  DROP TABLE migration_7_connection_winner;
+`;
+
+interface MigrationGlobalLexiconRow {
+  id: string;
+  ordinal: number;
+  display_text: string;
+  enabled: number;
+}
+
+function migrateSimplifiedGlobalLexicon(database: DatabaseLike): void {
+  const rows = database.prepare(`
+    SELECT id, ordinal, display_text, enabled
+    FROM lexicon_entries
+    WHERE scope = 'global'
+    ORDER BY ordinal ASC, id ASC
+  `).all() as MigrationGlobalLexiconRow[];
+  const duplicateKeys = new Set<string>();
+  const update = database.prepare(`
+    UPDATE lexicon_entries
+    SET entry_type = 'exactTerm', sense_id = NULL, case_sensitive = 0,
+        whole_word = 1, priority = 0, enabled = ?, notes = ''
+    WHERE id = ? AND scope = 'global'
+  `);
+  for (const row of rows) {
+    const key = row.display_text.trim().toLocaleLowerCase("en-US");
+    const duplicate = duplicateKeys.has(key);
+    duplicateKeys.add(key);
+    update.run(duplicate ? 0 : row.enabled, row.id);
+  }
+
+  if (rows.length !== 0) return;
+  const timestamp = new Date().toISOString();
+  const insert = database.prepare(`
+    INSERT INTO lexicon_entries (
+      id, scope, project_id, ordinal, entry_type, display_text, sense_id, spoken_text,
+      case_sensitive, whole_word, priority, enabled, notes, created_at, updated_at
+    ) VALUES (?, 'global', NULL, ?, 'exactTerm', ?, NULL, ?, 0, 1, 0, 1, '', ?, ?)
+  `);
+  DEFAULT_GLOBAL_LEXICON.forEach((entry, ordinal) => {
+    insert.run(entry.id, ordinal, entry.displayText, entry.spokenText, timestamp, timestamp);
+  });
+}
+
+interface MigrationProjectLexiconRow {
+  id: string;
+  project_id: string;
+  ordinal: number;
+  display_text: string;
+  enabled: number;
+}
+
+function migrateSimplifiedProjectLexicons(database: DatabaseLike): void {
+  const rows = database.prepare(`
+    SELECT id, project_id, ordinal, display_text, enabled
+    FROM lexicon_entries
+    WHERE scope = 'project'
+    ORDER BY project_id ASC, ordinal ASC, id ASC
+  `).all() as MigrationProjectLexiconRow[];
+  const duplicateKeys = new Set<string>();
+  const update = database.prepare(`
+    UPDATE lexicon_entries
+    SET entry_type = 'exactTerm', sense_id = NULL, case_sensitive = 0,
+        whole_word = 1, priority = 0, enabled = ?, notes = ''
+    WHERE id = ? AND scope = 'project'
+  `);
+  for (const row of rows) {
+    const key = `${row.project_id}\u0000${row.display_text.trim().toLocaleLowerCase("en-US")}`;
+    const duplicate = duplicateKeys.has(key);
+    duplicateKeys.add(key);
+    update.run(duplicate ? 0 : row.enabled, row.id);
+  }
+  database.prepare("UPDATE projects SET model_id = NULL").run();
+}
+
+const MIGRATION_11_SQL = `
+  ALTER TABLE system_pacing_defaults ADD COLUMN paragraph_transition_mode TEXT NOT NULL DEFAULT 'none' CHECK (paragraph_transition_mode IN ('none', 'preset', 'duration'));
+  ALTER TABLE system_pacing_defaults ADD COLUMN paragraph_transition_pause_id TEXT;
+  ALTER TABLE system_pacing_defaults ADD COLUMN paragraph_transition_duration_ms INTEGER CHECK (paragraph_transition_duration_ms BETWEEN 0 AND 30000);
+  ALTER TABLE system_pacing_defaults ADD COLUMN speaker_change_transition_mode TEXT NOT NULL DEFAULT 'none' CHECK (speaker_change_transition_mode IN ('none', 'preset', 'duration'));
+  ALTER TABLE system_pacing_defaults ADD COLUMN speaker_change_transition_pause_id TEXT;
+  ALTER TABLE system_pacing_defaults ADD COLUMN speaker_change_transition_duration_ms INTEGER CHECK (speaker_change_transition_duration_ms BETWEEN 0 AND 30000);
+  ALTER TABLE system_pacing_defaults ADD COLUMN section_transition_mode TEXT NOT NULL DEFAULT 'none' CHECK (section_transition_mode IN ('none', 'preset', 'duration'));
+  ALTER TABLE system_pacing_defaults ADD COLUMN section_transition_pause_id TEXT;
+  ALTER TABLE system_pacing_defaults ADD COLUMN section_transition_duration_ms INTEGER CHECK (section_transition_duration_ms BETWEEN 0 AND 30000);
+
+  CREATE TABLE system_pause_presets (
+    pause_id TEXT PRIMARY KEY CHECK (pause_id IN ('pause_short', 'pause_medium', 'pause_long')),
+    ordinal INTEGER NOT NULL UNIQUE CHECK (ordinal BETWEEN 0 AND 2),
+    duration_ms INTEGER NOT NULL CHECK (duration_ms BETWEEN 0 AND 30000),
+    description TEXT NOT NULL
+  );
+`;
+
+interface LegacyTimingProjectRow {
+  id: string;
+  paragraph_transition_mode: "none" | "preset" | "duration";
+  paragraph_transition_pause_id: string | null;
+  paragraph_transition_duration_ms: number | null;
+  speaker_change_transition_mode: "none" | "preset" | "duration";
+  speaker_change_transition_pause_id: string | null;
+  speaker_change_transition_duration_ms: number | null;
+  section_transition_mode: "none" | "preset" | "duration";
+  section_transition_pause_id: string | null;
+  section_transition_duration_ms: number | null;
+}
+
+interface LegacyPauseRow { project_id: string; pause_id: string; duration_ms: number; description: string }
+
+function migrateGlobalTiming(database: DatabaseLike): void {
+  database.exec(MIGRATION_11_SQL);
+  const pacing = database.prepare(`
+    SELECT paragraph_pause_enabled, paragraph_pause_duration_ms
+    FROM system_pacing_defaults WHERE singleton_id = 1
+  `).get() as { paragraph_pause_enabled: number; paragraph_pause_duration_ms: number } | undefined;
+  const projects = database.prepare(`
+    SELECT id, paragraph_transition_mode, paragraph_transition_pause_id, paragraph_transition_duration_ms,
+      speaker_change_transition_mode, speaker_change_transition_pause_id, speaker_change_transition_duration_ms,
+      section_transition_mode, section_transition_pause_id, section_transition_duration_ms
+    FROM projects ORDER BY updated_at DESC, id ASC
+  `).all() as LegacyTimingProjectRow[];
+  const pauses = database.prepare(`
+    SELECT pause.project_id, pause.pause_id, pause.duration_ms, pause.description
+    FROM pause_presets pause
+    JOIN projects project ON project.id = pause.project_id
+    ORDER BY project.updated_at DESC, project.id ASC, pause.ordinal ASC, pause.pause_id ASC
+  `).all() as LegacyPauseRow[];
+  const newestPause = new Map<string, LegacyPauseRow>();
+  for (const pause of pauses) if (!newestPause.has(pause.pause_id)) newestPause.set(pause.pause_id, pause);
+  const insertPause = database.prepare("INSERT INTO system_pause_presets (pause_id, ordinal, duration_ms, description) VALUES (?, ?, ?, ?)");
+  DEFAULT_SYSTEM_TIMING.pausePresets.forEach((fallback, ordinal) => {
+    const legacy = newestPause.get(fallback.pauseId);
+    const durationMs = legacy?.duration_ms
+      ?? (fallback.pauseId === "pause_medium" ? pacing?.paragraph_pause_duration_ms : undefined)
+      ?? fallback.durationMs;
+    insertPause.run(fallback.pauseId, ordinal, durationMs, legacy?.description ?? fallback.description);
+  });
+
+  const latest = projects[0];
+  const resolve = (prefix: "paragraph" | "speaker_change" | "section"): [string, string | null, number | null] => {
+    if (!latest) {
+      return prefix === "paragraph" && pacing?.paragraph_pause_enabled === 1
+        ? ["preset", "pause_medium", null]
+        : ["none", null, null];
+    }
+    const record = latest as unknown as Record<string, unknown>;
+    const mode = record[`${prefix}_transition_mode`] as "none" | "preset" | "duration";
+    const pauseId = record[`${prefix}_transition_pause_id`] as string | null;
+    const durationMs = record[`${prefix}_transition_duration_ms`] as number | null;
+    if (mode === "duration") return ["duration", null, durationMs ?? 0];
+    if (mode !== "preset" || !pauseId) return ["none", null, null];
+    if (pauseId === "pause_short" || pauseId === "pause_medium" || pauseId === "pause_long") return ["preset", pauseId, null];
+    const custom = pauses.find((pause) => pause.project_id === latest.id && pause.pause_id === pauseId);
+    return custom ? ["duration", null, custom.duration_ms] : ["none", null, null];
+  };
+  const paragraph = resolve("paragraph");
+  const speakerChange = resolve("speaker_change");
+  const section = resolve("section");
+  database.prepare(`
+    UPDATE system_pacing_defaults SET
+      paragraph_transition_mode = ?, paragraph_transition_pause_id = ?, paragraph_transition_duration_ms = ?,
+      speaker_change_transition_mode = ?, speaker_change_transition_pause_id = ?, speaker_change_transition_duration_ms = ?,
+      section_transition_mode = ?, section_transition_pause_id = ?, section_transition_duration_ms = ?
+    WHERE singleton_id = 1
+  `).run(...paragraph, ...speakerChange, ...section);
+  database.prepare("DELETE FROM pause_presets").run();
+  database.prepare(`
+    UPDATE projects SET paragraph_pause_enabled = 0, paragraph_pause_id = 'pause_medium', paragraph_pause_duration_ms = 0,
+      paragraph_transition_mode = 'none', paragraph_transition_pause_id = NULL, paragraph_transition_duration_ms = NULL,
+      speaker_change_transition_mode = 'none', speaker_change_transition_pause_id = NULL, speaker_change_transition_duration_ms = NULL,
+      section_transition_mode = 'none', section_transition_pause_id = NULL, section_transition_duration_ms = NULL
+  `).run();
+}
+
+interface SystemPauseMigrationRow {
+  pause_id: "pause_short" | "pause_medium" | "pause_long";
+  ordinal: number;
+  duration_ms: number;
+}
+
+function migrateNamedTransitionPauses(database: DatabaseLike): void {
+  const presets = database.prepare(`
+    SELECT pause_id, ordinal, duration_ms
+    FROM system_pause_presets
+    ORDER BY ordinal ASC
+  `).all() as SystemPauseMigrationRow[];
+  if (presets.length === 0) throw new Error("Global pause presets are missing.");
+
+  const row = database.prepare(`
+    SELECT paragraph_transition_mode, paragraph_transition_duration_ms,
+      speaker_change_transition_mode, speaker_change_transition_duration_ms,
+      section_transition_mode, section_transition_duration_ms
+    FROM system_pacing_defaults WHERE singleton_id = 1
+  `).get() as Record<string, unknown> | undefined;
+  if (!row) return;
+
+  for (const prefix of ["paragraph", "speaker_change", "section"] as const) {
+    if (row[`${prefix}_transition_mode`] !== "duration") continue;
+    const durationMs = Number(row[`${prefix}_transition_duration_ms`] ?? 0);
+    const nearest = presets.reduce((closest, candidate) =>
+      Math.abs(candidate.duration_ms - durationMs) < Math.abs(closest.duration_ms - durationMs) ? candidate : closest
+    );
+    database.prepare(`
+      UPDATE system_pacing_defaults
+      SET ${prefix}_transition_mode = 'preset',
+        ${prefix}_transition_pause_id = ?,
+        ${prefix}_transition_duration_ms = NULL
+      WHERE singleton_id = 1
+    `).run(nearest.pause_id);
+  }
+}
+
 export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
   { version: 1, name: "runtime-diagnostics", up: (database) => { database.exec(MIGRATION_1_SQL); } },
   {
@@ -273,6 +555,40 @@ export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
     up: (database) => {
       database.exec(MIGRATION_6_SQL);
     }
+  },
+  {
+    version: 7,
+    name: "single-speaches-connection",
+    up: (database) => {
+      database.exec(MIGRATION_7_SQL);
+    }
+  },
+  {
+    version: 8,
+    name: "simplified-global-lexicon",
+    up: migrateSimplifiedGlobalLexicon
+  },
+  {
+    version: 9,
+    name: "voice-catalog-favorites",
+    up: (database) => {
+      database.exec(MIGRATION_9_SQL);
+    }
+  },
+  {
+    version: 10,
+    name: "simplified-project-lexicon-and-global-model",
+    up: migrateSimplifiedProjectLexicons
+  },
+  {
+    version: 11,
+    name: "global-timing",
+    up: migrateGlobalTiming
+  },
+  {
+    version: 12,
+    name: "named-transition-pauses",
+    up: migrateNamedTransitionPauses
   }
 ]);
 

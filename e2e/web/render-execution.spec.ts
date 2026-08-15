@@ -1,29 +1,25 @@
 import { unlink } from "node:fs/promises";
 import { join } from "node:path";
-import { continueOffline, expect, openRoute, test } from "../support/studyNarratorTest.js";
+import { configureConnection, expect, openRoute, test } from "../support/studyNarratorTest.js";
 
 test.describe("render execution", () => {
   test("renders a frozen plan, publishes the complete bundle, and restores completion after reload", async ({ page, request, studyNarrator }) => {
-    await continueOffline(page, studyNarrator);
+    await configureConnection(page, studyNarrator);
     const createdResponse = await request.post(`${studyNarrator.baseUrl}/api/projects`, { data: { name: "Render acceptance" } });
-    const created = await createdResponse.json() as { id: string; name: string; pausePresets: unknown[]; transitionPauses: unknown };
+    const created = await createdResponse.json() as { id: string; name: string };
     await request.put(`${studyNarrator.baseUrl}/api/projects/${created.id}`, { data: {
       name: created.name,
       description: "End-to-end render fixture.",
       scriptSource: "[section: Opening]\n[speaker_teacher] SQL renders this sentence.\n[pause_medium]\n[speaker_teacher] Finish this render.",
-      connectionProfileId: "environment-speaches",
-      modelId: "speaches-ai/Kokoro-82M-v1.0-ONNX",
       speakerMappings: [{ speakerId: "teacher", displayName: "Teacher", voiceId: "af_heart", speed: 1, gainDb: 0, roleDescription: "", sampleText: "" }],
-      pausePresets: created.pausePresets,
-      transitionPauses: created.transitionPauses,
       lexiconEntries: [{
         scope: "project", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel",
-        caseSensitive: true, wholeWord: true, priority: 0, enabled: true, notes: ""
+        caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: ""
       }]
     } });
     studyNarrator.fakeSpeaches.reset();
 
-    await openRoute(page, studyNarrator, `/projects/${created.id}`);
+    await openRoute(page, studyNarrator, `/projects/${created.id}?tab=render`);
     await expect(page.getByRole("button", { name: "Freeze render plan" })).toBeEnabled();
     await page.getByRole("button", { name: "Freeze render plan" }).click();
     await expect(page.getByRole("button", { name: "Render this frozen plan" })).toBeVisible();
@@ -62,6 +58,8 @@ test.describe("render execution", () => {
     expect((await downloadPromise).suggestedFilename()).toMatch(/^\d{6}\.wav$/u);
     await firstSpeech.getByRole("button", { name: /Source line/u }).click();
     await expect(page.getByLabel("Script source")).toBeFocused();
+    await expect(page.getByRole("tab", { name: "Script Editor" })).toHaveAttribute("aria-selected", "true");
+    await page.getByRole("tab", { name: "Render" }).click();
 
     const renders = await request.get(`${studyNarrator.baseUrl}/api/projects/${created.id}/renders`);
     const [render] = await renders.json() as Array<{ id: string; state: string }>;
@@ -92,15 +90,14 @@ test.describe("render execution", () => {
   });
 
   test("reports synthesis failure, retries from cache-safe state, and cancels an active request", async ({ page, request, studyNarrator }) => {
-    await continueOffline(page, studyNarrator);
-    const created = await (await request.post(`${studyNarrator.baseUrl}/api/projects`, { data: { name: "Render recovery" } })).json() as { id: string; name: string; pausePresets: unknown[]; transitionPauses: unknown };
+    await configureConnection(page, studyNarrator);
+    const created = await (await request.post(`${studyNarrator.baseUrl}/api/projects`, { data: { name: "Render recovery" } })).json() as { id: string; name: string };
     await request.put(`${studyNarrator.baseUrl}/api/projects/${created.id}`, { data: {
       name: created.name, description: "Failure fixture.", scriptSource: "[speaker_teacher] Recover this render.",
-      connectionProfileId: "environment-speaches", modelId: "speaches-ai/Kokoro-82M-v1.0-ONNX",
       speakerMappings: [{ speakerId: "teacher", displayName: "Teacher", voiceId: "af_heart", speed: 1, gainDb: 0, roleDescription: "", sampleText: "" }],
-      pausePresets: created.pausePresets, transitionPauses: created.transitionPauses, lexiconEntries: []
+      lexiconEntries: []
     } });
-    await openRoute(page, studyNarrator, `/projects/${created.id}`);
+    await openRoute(page, studyNarrator, `/projects/${created.id}?tab=render`);
     await page.getByRole("button", { name: "Freeze render plan" }).click();
     await expect(page.getByRole("button", { name: "Render this frozen plan" })).toBeVisible();
 
@@ -112,11 +109,20 @@ test.describe("render execution", () => {
     await page.getByRole("button", { name: "Retry render" }).click();
     await expect(page.getByText(/Phase: complete/u)).toBeVisible({ timeout: 20_000 });
 
+    const connectionResponse = await request.put(`${studyNarrator.baseUrl}/api/connection`, { data: {
+      baseUrl: studyNarrator.fakeSpeaches.baseUrl,
+      defaultModelId: "speaches-ai/Kokoro-82M-v1.0-ONNX",
+      defaultVoiceId: "af_heart",
+      timeoutSeconds: 30,
+      retryCount: 0,
+      responseFormat: "wav"
+    } });
+    expect(connectionResponse.ok()).toBe(true);
     studyNarrator.fakeSpeaches.setScenario("timeout");
     await request.delete(`${studyNarrator.baseUrl}/api/speech-cache`);
     await page.getByRole("button", { name: "Render this frozen plan" }).click();
     await expect(page.getByText(/Phase: synthesizing/u)).toBeVisible();
-    await page.getByRole("button", { name: "Cancel render" }).click();
+    await page.getByRole("button", { name: "Cancel render" }).dispatchEvent("click");
     await expect(page.getByText(/Phase: canceled/u)).toBeVisible();
   });
 });

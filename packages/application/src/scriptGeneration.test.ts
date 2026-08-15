@@ -1,29 +1,25 @@
 import { unzipSync, strFromU8 } from "fflate";
 import { describe, expect, it, vi } from "vitest";
-import type { ProjectDetail } from "@studynarrator/shared-types";
+import { DEFAULT_SYSTEM_TIMING, type ProjectDetail } from "@studynarrator/shared-types";
 import { createScriptGenerationService, type ScriptGenerationRepository } from "./scriptGeneration.js";
 import { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
 
 const timestamp = "2026-08-14T00:00:00.000Z";
 const project: ProjectDetail = {
-  contractVersion: 4,
+  contractVersion: 9,
   id: "00000000-0000-4000-8000-000000000001",
   name: "Résumé / unsafe project",
   description: "",
   scriptSource: "PRIVATE SOURCE MARKER",
   scriptHash: "a".repeat(64),
-  connectionProfileId: null,
-  modelId: null,
   speakerMappings: [],
-  pausePresets: [],
-  transitionPauses: { paragraph: { mode: "none" }, speakerChange: { mode: "none" }, section: { mode: "none" } },
   lexiconEntries: [{ id: "sql", scope: "project", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel", caseSensitive: true, wholeWord: true, priority: 0, enabled: true, notes: "", createdAt: timestamp, updatedAt: timestamp }],
   createdAt: timestamp,
   updatedAt: timestamp
 };
 
 function repository(): ScriptGenerationRepository {
-  return { getProject: vi.fn(() => project), listGlobalLexicon: vi.fn(() => []) };
+  return { getProject: vi.fn(() => project), getSystemPacing: vi.fn(() => DEFAULT_SYSTEM_TIMING), listGlobalLexicon: vi.fn(() => []) };
 }
 
 describe("script generation service", () => {
@@ -49,7 +45,7 @@ describe("script generation service", () => {
   it("builds a default prompt kit from global lexicon without loading a project", async () => {
     const getProject = vi.fn(() => project);
     const globalSql = { ...project.lexiconEntries[0]!, id: "global-sql", scope: "global" as const };
-    const service = createScriptGenerationService({ repository: { getProject, listGlobalLexicon: vi.fn(() => [globalSql]) } });
+    const service = createScriptGenerationService({ repository: { getProject, getSystemPacing: vi.fn(() => DEFAULT_SYSTEM_TIMING), listGlobalLexicon: vi.fn(() => [globalSql]) } });
     const document = await service.previewPrompt(null, "creation");
     expect(document.fileName).toBe("studynarrator-creation-prompt.md");
     expect(document.content).toContain("[speaker_narrator]");
@@ -73,7 +69,7 @@ describe("script generation service", () => {
   });
 
   it("sanitizes repository failures", async () => {
-    const missing = { getProject: vi.fn(() => { throw Object.assign(new Error("secret path"), { code: "PERSISTENCE_NOT_FOUND" }); }), listGlobalLexicon: vi.fn(() => []) };
+    const missing = { getProject: vi.fn(() => { throw Object.assign(new Error("secret path"), { code: "PERSISTENCE_NOT_FOUND" }); }), getSystemPacing: vi.fn(() => DEFAULT_SYSTEM_TIMING), listGlobalLexicon: vi.fn(() => []) };
     const service = createScriptGenerationService({ repository: missing });
     await expect(service.previewPrompt(project.id, "creation")).rejects.toMatchObject({ code: "SCRIPT_GENERATION_NOT_FOUND", message: "The requested project does not exist." });
   });

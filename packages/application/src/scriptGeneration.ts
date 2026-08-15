@@ -2,8 +2,6 @@ import { createHash } from "node:crypto";
 import { strToU8, zipSync } from "fflate";
 import {
   SCRIPT_GENERATION_SCHEMA_VERSION,
-  DEFAULT_PARAGRAPH_PAUSE_DURATION_MS,
-  DEFAULT_PARAGRAPH_PAUSE_ID,
   ScriptGenerationContextSchema,
   ScriptPromptKindSchema,
   buildExternalLlmPrompt,
@@ -16,7 +14,8 @@ import {
   PromptDocumentSchema,
   ProjectIdSchema,
   type PromptDocument,
-  type ProjectDetail
+  type ProjectDetail,
+  type SystemTimingConfiguration
 } from "@studynarrator/shared-types";
 import type { PersistenceRepository } from "./persistence.js";
 
@@ -26,7 +25,7 @@ export class ScriptGenerationServiceError extends Error {
   constructor(readonly code: ScriptGenerationServiceErrorCode, message: string) { super(message); }
 }
 
-export type ScriptGenerationRepository = Pick<PersistenceRepository, "getProject" | "listGlobalLexicon">;
+export type ScriptGenerationRepository = Pick<PersistenceRepository, "getProject" | "getSystemPacing" | "listGlobalLexicon">;
 
 export interface ResolvedGeneratedFile {
   fileName: string;
@@ -64,7 +63,7 @@ function lexicon(repository: ScriptGenerationRepository, project: ProjectDetail)
   return [...repository.listGlobalLexicon(), ...project.lexiconEntries];
 }
 
-function generationContext(project?: ProjectDetail): ScriptGenerationContext {
+function generationContext(timing: SystemTimingConfiguration, project?: ProjectDetail): ScriptGenerationContext {
   return ScriptGenerationContextSchema.parse({
     schemaVersion: SCRIPT_GENERATION_SCHEMA_VERSION,
     projectName: project?.name ?? "StudyNarrator",
@@ -74,17 +73,15 @@ function generationContext(project?: ProjectDetail): ScriptGenerationContext {
         roleDescription: roleDescription.trim() || `${displayName} contributes clear spoken explanations.`
       }))
       : [{ speakerId: "narrator", roleDescription: "Explains the material clearly and accurately." }],
-    pauses: project
-      ? project.pausePresets.map(({ pauseId, durationMs, description }) => ({
-        pauseId,
-        description: description.trim() || `${String(durationMs)} millisecond pause.`
-      }))
-      : [{ pauseId: DEFAULT_PARAGRAPH_PAUSE_ID, description: `${String(DEFAULT_PARAGRAPH_PAUSE_DURATION_MS)} millisecond paragraph or subtopic separation.` }]
+    pauses: timing.pausePresets.map(({ pauseId, durationMs, description }) => ({
+      pauseId,
+      description: description.trim() || `${String(durationMs)} millisecond pause.`
+    }))
   });
 }
 
-function promptDocument(project: ProjectDetail | undefined, kind: ScriptPromptKind, entries: readonly LexiconEntry[]): PromptDocument {
-  const content = buildExternalLlmPrompt({ kind, context: generationContext(project), lexiconEntries: entries });
+function promptDocument(timing: SystemTimingConfiguration, project: ProjectDetail | undefined, kind: ScriptPromptKind, entries: readonly LexiconEntry[]): PromptDocument {
+  const content = buildExternalLlmPrompt({ kind, context: generationContext(timing, project), lexiconEntries: entries });
   return PromptDocumentSchema.parse({
     kind,
     fileName: `${slug(project?.name ?? "StudyNarrator")}-${kind}-prompt.md`,
@@ -95,33 +92,34 @@ function promptDocument(project: ProjectDetail | undefined, kind: ScriptPromptKi
 }
 
 export function createScriptGenerationService(dependencies: { repository: ScriptGenerationRepository }): ScriptGenerationService {
-  const load = (projectIdInput: string | null): { project?: ProjectDetail; entries: LexiconEntry[] } => {
-    if (projectIdInput === null) return { entries: [...dependencies.repository.listGlobalLexicon()] };
+  const load = (projectIdInput: string | null): { project?: ProjectDetail; timing: SystemTimingConfiguration; entries: LexiconEntry[] } => {
+    const timing = dependencies.repository.getSystemPacing();
+    if (projectIdInput === null) return { timing, entries: [...dependencies.repository.listGlobalLexicon()] };
     const project = dependencies.repository.getProject(ProjectIdSchema.parse(projectIdInput));
-    return { project, entries: lexicon(dependencies.repository, project) };
+    return { project, timing, entries: lexicon(dependencies.repository, project) };
   };
   return {
     async previewPrompt(projectIdInput, kindInput) {
       try {
         const kind = ScriptPromptKindSchema.parse(kindInput);
-        const { project, entries } = load(projectIdInput);
-        return await Promise.resolve(promptDocument(project, kind, entries));
+        const { project, timing, entries } = load(projectIdInput);
+        return await Promise.resolve(promptDocument(timing, project, kind, entries));
       } catch (error) { throw safeError(error); }
     },
     async resolvePromptExport(projectIdInput, kindInput) {
       try {
         const kind = ScriptPromptKindSchema.parse(kindInput);
-        const { project, entries } = load(projectIdInput);
-        const document = promptDocument(project, kind, entries);
+        const { project, timing, entries } = load(projectIdInput);
+        const document = promptDocument(timing, project, kind, entries);
         const bytes = strToU8(document.content);
         return await Promise.resolve({ fileName: document.fileName, mimeType: document.mimeType, bytes, checksum: document.checksum });
       } catch (error) { throw safeError(error); }
     },
     async resolveSkillPackage(projectIdInput) {
       try {
-        const { project, entries } = load(projectIdInput);
+        const { project, timing, entries } = load(projectIdInput);
         const archiveEntries: Record<string, [Uint8Array, { mtime: Date }]> = {};
-        for (const file of buildSkillPackageFiles({ context: generationContext(project), lexiconEntries: entries })) {
+        for (const file of buildSkillPackageFiles({ context: generationContext(timing, project), lexiconEntries: entries })) {
           archiveEntries[file.path] = [strToU8(file.content), { mtime: new Date(1980, 0, 1, 0, 0, 0, 0) }];
         }
         const bytes = zipSync(archiveEntries, { level: 9 });

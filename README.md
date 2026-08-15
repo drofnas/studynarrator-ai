@@ -110,16 +110,7 @@ cd studynarrator-ai
 cp .env.example .env
 ```
 
-The default `.env` points a StudyNarrator container at port `8000` on the Docker host:
-
-```dotenv
-SPEACHES_BASE_URL=http://host.docker.internal:8000
-SPEACHES_MODEL_ID=speaches-ai/Kokoro-82M-v1.0-ONNX
-SPEACHES_DEFAULT_VOICE=af_heart
-SPEACHES_API_KEY=
-```
-
-Leave `SPEACHES_API_KEY` empty for a default Speaches installation. If your server requires authentication, put its key in `.env`, restrict access to that file, and never commit it.
+The checked-in environment template configures only the StudyNarrator Web binding and image metadata. Speaches is configured inside the application.
 
 Build and start StudyNarrator:
 
@@ -128,7 +119,7 @@ docker compose up --build --detach
 docker compose ps
 ```
 
-Open <http://127.0.0.1:8080>. Complete onboarding, open **System diagnostics**, run the self-test, and then test the environment-managed Speaches profile in **Settings**. A connected result confirms DNS, TCP, HTTP, model, voice, and sample-audio checks.
+Open <http://127.0.0.1:8080>. During onboarding, enter `http://host.docker.internal:8000` for Speaches running on the Docker host, load the catalog, review the selected model and default voice, then choose **Save and Test**. A connected result confirms DNS, TCP, HTTP, model, voice, and sample-audio checks.
 
 StudyNarrator remains healthy if Speaches is stopped. You can continue editing and reconnect from Settings after Speaches returns without recreating the StudyNarrator container.
 
@@ -166,18 +157,15 @@ npm ci
 
 ### Web development server
 
-Point the backend at Speaches running on the same machine and start the Vite UI plus Node API:
+Start the Vite UI plus Node API:
 
 ```sh
-export SPEACHES_BASE_URL=http://127.0.0.1:8000
-export SPEACHES_MODEL_ID=speaches-ai/Kokoro-82M-v1.0-ONNX
-export SPEACHES_DEFAULT_VOICE=af_heart
 npm run dev:web
 ```
 
 Open <http://127.0.0.1:5173>. Vite proxies `/api` requests to the Node server on `127.0.0.1:4310`. Development Web data is stored under `.tmp/dev/web` unless `STUDYNARRATOR_DATA_DIR` is set.
 
-If Speaches requires a key, export `SPEACHES_API_KEY` in the backend process environment. The Web client never receives the key.
+Enter the Speaches address during onboarding. Authenticated Speaches servers are not supported by the application connection flow.
 
 ### Production Web server without Docker
 
@@ -187,9 +175,6 @@ Build the React application and Node server, then serve both from port `4310`:
 npm run build --workspace @studynarrator/web
 npm run build --workspace @studynarrator/server
 
-export SPEACHES_BASE_URL=http://127.0.0.1:8000
-export SPEACHES_MODEL_ID=speaches-ai/Kokoro-82M-v1.0-ONNX
-export SPEACHES_DEFAULT_VOICE=af_heart
 npm run start --workspace @studynarrator/server
 ```
 
@@ -203,7 +188,7 @@ Start the React development server and Electron shell together:
 npm run dev:desktop
 ```
 
-Electron opens its own window and uses the operating system's application-data directory. Configure a loopback, LAN, or HTTPS Speaches profile during onboarding or in Settings. Where supported, API keys entered in Electron are stored with the operating system's secure-storage facility rather than in project data.
+Electron opens its own window and uses the operating system's application-data directory. Configure the single loopback, LAN, or HTTPS Speaches connection during onboarding or in Settings.
 
 ## Connecting to Speaches from each runtime
 
@@ -230,13 +215,6 @@ The checked-in [.env.example](.env.example) documents the complete Compose-facin
 | `STUDYNARRATOR_HOST_PORT` | `8080` | Host port for Docker Web. |
 | `STUDYNARRATOR_IMAGE_TAG` | `0.1.0` | Local image version and OCI version label. |
 | `STUDYNARRATOR_SOURCE_REVISION` | `local` | Revision reported by runtime diagnostics and the OCI image label. |
-| `SPEACHES_BASE_URL` | `http://host.docker.internal:8000` | Separately installed Speaches endpoint. |
-| `SPEACHES_API_KEY` | empty | Optional server-side credential. It is never sent to the browser. |
-| `SPEACHES_MODEL_ID` | `speaches-ai/Kokoro-82M-v1.0-ONNX` | Default text-to-speech model. |
-| `SPEACHES_DEFAULT_VOICE` | `af_heart` | Default voice for the environment profile. |
-| `SPEACHES_REQUEST_TIMEOUT_SECONDS` | `120` | Per-request timeout, from 1 to 600 seconds. |
-| `SPEACHES_RETRY_COUNT` | `2` | Retry count, from 0 to 5. |
-| `STUDYNARRATOR_LOCK_SPEACHES_SETTINGS` | `false` | Prevent browser users from replacing deployment-managed connection settings. |
 
 The Compose package fixes `STUDYNARRATOR_DATA_DIR` to `/data`, the only persistent container path. Direct Node and Electron runs can set `STUDYNARRATOR_DATA_DIR` to another writable directory. Set `STUDYNARRATOR_FFMPEG_PATH` only when FFmpeg is not discoverable on `PATH`.
 
@@ -247,7 +225,7 @@ The Compose package fixes `STUDYNARRATOR_DATA_DIR` to `/data`, the only persiste
 1. Run `curl --fail http://127.0.0.1:8000/health` on the Speaches host.
 2. Confirm the Speaches container is running with `docker compose ps` in its directory.
 3. Use `http://host.docker.internal:8000` for Docker Web, not `localhost`.
-4. Open **Settings**, select the intended profile, and run the connection test. The staged result identifies the failed URL, DNS, TCP, HTTP, authentication, model, voice, or audio check.
+4. Open **Settings**, verify the saved address, and run the connection test. The staged result identifies the failed URL, DNS, TCP, HTTP, model, voice, or audio check.
 
 ### The server is reachable but the model is unavailable
 
@@ -261,7 +239,7 @@ SPEACHES_BASE_URL=http://127.0.0.1:8000 \
   uvx speaches-cli model ls --task text-to-speech
 ```
 
-The StudyNarrator environment and project must use the same model ID.
+Choose that same model in the StudyNarrator connection or project settings.
 
 ### Diagnostics report that FFmpeg is unavailable
 

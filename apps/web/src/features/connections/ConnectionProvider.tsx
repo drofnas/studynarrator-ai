@@ -1,12 +1,13 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type {
-  ConnectionProfile,
-  ConnectionProfileMutation,
   ConnectionSetupState,
   ConnectionTestOverall,
   ConnectionTestSummary,
-  ConnectionsClient,
   RedactedConnectionDiagnostics,
+  SpeachesCatalogDiscoveryInput,
+  SpeachesConnection,
+  SpeachesConnectionAuthoring,
+  SpeachesConnectionClient,
   SpeechCatalog,
   VoiceCatalog,
   VoiceCatalogClient
@@ -21,168 +22,98 @@ export type SpeechCatalogLoadState =
 const idleSpeechCatalog: SpeechCatalogLoadState = { status: "idle", catalog: null, error: "" };
 
 interface ConnectionWorkspace {
-  profiles: ConnectionProfile[];
+  connection: SpeachesConnection | null;
   setup: ConnectionSetupState | null;
   loading: boolean;
   error: string;
-  testingProfileId: string | null;
-  activeProfile: ConnectionProfile | null;
+  testing: boolean;
   shellState: ShellConnectionState;
+  catalog: SpeechCatalogLoadState;
   refresh(): Promise<void>;
-  create(input: ConnectionProfileMutation): Promise<ConnectionProfile>;
-  replace(profileId: string, input: ConnectionProfileMutation): Promise<ConnectionProfile>;
-  delete(profileId: string): Promise<void>;
-  test(profileId: string): Promise<ConnectionTestSummary>;
-  exportDiagnostics(profileId: string): Promise<RedactedConnectionDiagnostics>;
-  setActive(profileId: string | null): Promise<void>;
+  update(input: SpeachesConnectionAuthoring): Promise<SpeachesConnection>;
+  test(): Promise<ConnectionTestSummary>;
+  discover(input: SpeachesCatalogDiscoveryInput): Promise<SpeechCatalog>;
+  exportDiagnostics(): Promise<RedactedConnectionDiagnostics>;
   completeOnboarding(): Promise<void>;
-  speechCatalog(profileId: string): SpeechCatalogLoadState;
-  loadSpeechCatalog(this: void, profileId: string, force?: boolean): Promise<SpeechCatalog>;
   getCatalog(modelId: string): Promise<VoiceCatalog>;
   replaceCatalog(input: VoiceCatalog): Promise<VoiceCatalog>;
 }
 
 const Context = createContext<ConnectionWorkspace | null>(null);
 
-function stateFor(profile: ConnectionProfile | null, testingProfileId: string | null): ShellConnectionState {
-  if (profile && testingProfileId === profile.id) return "testing";
-  if (!profile || !profile.configured) return "configurationError";
-  return profile.lastTestSummary?.overall ?? "disconnected";
+function stateFor(connection: SpeachesConnection | null, testing: boolean): ShellConnectionState {
+  if (testing) return "testing";
+  if (!connection?.configured) return "configurationError";
+  return connection.lastTestSummary?.overall ?? "disconnected";
 }
 
-export function ConnectionProvider({
-  connections,
-  voiceCatalog,
-  children
-}: {
-  connections: ConnectionsClient;
+export function ConnectionProvider({ connectionClient, voiceCatalog, children }: {
+  connectionClient: SpeachesConnectionClient;
   voiceCatalog: VoiceCatalogClient;
   children: ReactNode;
 }) {
-  const [profiles, setProfiles] = useState<ConnectionProfile[]>([]);
+  const [connection, setConnection] = useState<SpeachesConnection | null>(null);
   const [setup, setSetup] = useState<ConnectionSetupState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [testingProfileId, setTestingProfileId] = useState<string | null>(null);
-  const [speechCatalogs, setSpeechCatalogs] = useState<Record<string, SpeechCatalogLoadState>>({});
-  const speechCatalogCache = useRef(new Map<string, SpeechCatalog>());
-  const speechCatalogPending = useRef(new Map<string, Promise<SpeechCatalog>>());
-  const speechCatalogGeneration = useRef(new Map<string, number>());
+  const [testing, setTesting] = useState(false);
+  const [catalog, setCatalog] = useState<SpeechCatalogLoadState>(idleSpeechCatalog);
 
   const refresh = useCallback(async () => {
     try {
-      const [nextProfiles, nextSetup] = await Promise.all([connections.list(), connections.getSetupState()]);
-      setProfiles(nextProfiles);
+      const [nextConnection, nextSetup] = await Promise.all([connectionClient.get(), connectionClient.getSetupState()]);
+      setConnection(nextConnection);
       setSetup(nextSetup);
       setError("");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Connection settings could not be loaded.");
-    } finally {
-      setLoading(false);
-    }
-  }, [connections]);
+    } finally { setLoading(false); }
+  }, [connectionClient]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
-  const loadSpeechCatalog = useCallback(async (profileId: string, force = false): Promise<SpeechCatalog> => {
-    const cached = speechCatalogCache.current.get(profileId);
-    if (!force && cached) return cached;
-    const pending = speechCatalogPending.current.get(profileId);
-    if (!force && pending) return await pending;
-    const generation = (speechCatalogGeneration.current.get(profileId) ?? 0) + 1;
-    speechCatalogGeneration.current.set(profileId, generation);
-    if (force) speechCatalogCache.current.delete(profileId);
-    setSpeechCatalogs((current) => ({ ...current, [profileId]: { status: "loading", catalog: null, error: "" } }));
-    const request = connections.discoverSpeechCatalog(profileId);
-    speechCatalogPending.current.set(profileId, request);
-    try {
-      const catalog = await request;
-      if (speechCatalogGeneration.current.get(profileId) === generation) {
-        speechCatalogCache.current.set(profileId, catalog);
-        setSpeechCatalogs((current) => ({ ...current, [profileId]: { status: "ready", catalog, error: "" } }));
-      }
-      return catalog;
-    } catch (reason) {
-      if (speechCatalogGeneration.current.get(profileId) === generation) {
-        const error = reason instanceof Error ? reason.message : "Supported voices could not be loaded.";
-        setSpeechCatalogs((current) => ({ ...current, [profileId]: { status: "failed", catalog: null, error } }));
-      }
-      throw reason;
-    } finally {
-      if (speechCatalogPending.current.get(profileId) === request) speechCatalogPending.current.delete(profileId);
-    }
-  }, [connections]);
-
-  useEffect(() => {
-    if (loading || !setup?.activeProfileId) return;
-    void loadSpeechCatalog(setup.activeProfileId).catch(() => undefined);
-  }, [loadSpeechCatalog, loading, setup?.activeProfileId]);
-
-  const value = useMemo<ConnectionWorkspace>(() => {
-    const activeProfile = profiles.find(({ id }) => id === setup?.activeProfileId) ?? null;
-    return {
-      profiles,
-      setup,
-      loading,
-      error,
-      testingProfileId,
-      activeProfile,
-      shellState: stateFor(activeProfile, testingProfileId),
-      refresh,
-      async create(input) {
-        const created = await connections.create(input);
-        await refresh();
-        void loadSpeechCatalog(created.id, true).catch(() => undefined);
-        return created;
-      },
-      async replace(profileId, input) {
-        const replaced = await connections.replace(profileId, input);
-        await refresh();
-        void loadSpeechCatalog(profileId, true).catch(() => undefined);
-        return replaced;
-      },
-      async delete(profileId) {
-        await connections.delete(profileId);
-        speechCatalogCache.current.delete(profileId);
-        speechCatalogPending.current.delete(profileId);
-        speechCatalogGeneration.current.set(profileId, (speechCatalogGeneration.current.get(profileId) ?? 0) + 1);
-        setSpeechCatalogs((current) => {
-          const remaining = { ...current };
-          delete remaining[profileId];
-          return remaining;
-        });
-        await refresh();
-      },
-      async test(profileId) {
-        setTestingProfileId(profileId);
-        try {
-          const result = await connections.test(profileId);
-          if (result.overall === "connected" && setup?.onboardingCompletedAt === null) {
-            setSetup(await connections.completeOnboarding());
-          }
-          await refresh();
-          void loadSpeechCatalog(profileId, true).catch(() => undefined);
-          return result;
-        } finally {
-          setTestingProfileId(null);
+  const value = useMemo<ConnectionWorkspace>(() => ({
+    connection,
+    setup,
+    loading,
+    error,
+    testing,
+    shellState: stateFor(connection, testing),
+    catalog,
+    refresh,
+    async update(input) {
+      const updated = await connectionClient.update(input);
+      setConnection(updated);
+      return updated;
+    },
+    async test() {
+      setTesting(true);
+      try {
+        const result = await connectionClient.test();
+        if (result.overall === "connected" && setup?.onboardingCompletedAt === null) {
+          setSetup(await connectionClient.completeOnboarding());
         }
-      },
-      exportDiagnostics: async (profileId) => await connections.exportDiagnostics(profileId),
-      async setActive(profileId) {
-        setSetup(await connections.setActiveProfile(profileId));
         await refresh();
-      },
-      async completeOnboarding() {
-        setSetup(await connections.completeOnboarding());
-      },
-      speechCatalog: (profileId) => speechCatalogs[profileId] ?? idleSpeechCatalog,
-      loadSpeechCatalog,
-      getCatalog: async (modelId) => await voiceCatalog.get(modelId),
-      async replaceCatalog(input) {
-        return await voiceCatalog.replace(input);
+        return result;
+      } finally { setTesting(false); }
+    },
+    async discover(input) {
+      setCatalog({ status: "loading", catalog: null, error: "" });
+      try {
+        const discovered = await connectionClient.discoverSpeechCatalog(input);
+        setCatalog({ status: "ready", catalog: discovered, error: "" });
+        return discovered;
+      } catch (reason) {
+        const message = reason instanceof Error ? reason.message : "Supported models and voices could not be loaded.";
+        setCatalog({ status: "failed", catalog: null, error: message });
+        throw reason;
       }
-    };
-  }, [connections, error, loadSpeechCatalog, loading, profiles, refresh, setup, speechCatalogs, testingProfileId, voiceCatalog]);
+    },
+    exportDiagnostics: async () => await connectionClient.exportDiagnostics(),
+    async completeOnboarding() { setSetup(await connectionClient.completeOnboarding()); },
+    getCatalog: async (modelId) => await voiceCatalog.get(modelId),
+    replaceCatalog: async (input) => await voiceCatalog.replace(input)
+  }), [catalog, connection, connectionClient, error, loading, refresh, setup, testing, voiceCatalog]);
 
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }

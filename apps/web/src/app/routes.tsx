@@ -42,11 +42,11 @@ export function AppRoutes({ analyzer, client, persistence, scratchpad, projectPr
       <Route element={<AppShell />}>
         <Route index element={<Navigate to={APP_PATHS.projects} replace />} />
         <Route path={APP_PATHS.onboarding} element={<OnboardingPage />} />
-        <Route path={APP_PATHS.projects} element={<ProjectsPage analyzer={analyzer} client={persistence} previewClient={projectPreview} cacheClient={speechCache} renderPlanClient={renderPlans} {...(renders ? { renderClient: renders } : {})} />} />
-        <Route path={`${APP_PATHS.projects}/:projectId`} element={<ProjectsPage analyzer={analyzer} client={persistence} previewClient={projectPreview} cacheClient={speechCache} renderPlanClient={renderPlans} {...(renders ? { renderClient: renders } : {})} />} />
+        <Route path={APP_PATHS.projects} element={<ProjectsPage analyzer={analyzer} client={persistence} previewClient={projectPreview} renderPlanClient={renderPlans} {...(renders ? { renderClient: renders } : {})} />} />
+        <Route path={`${APP_PATHS.projects}/:projectId`} element={<ProjectsPage analyzer={analyzer} client={persistence} previewClient={projectPreview} renderPlanClient={renderPlans} {...(renders ? { renderClient: renders } : {})} />} />
         <Route path={`${APP_PATHS.projects}/:projectId/script-generation`} element={<ScriptGenerationPage persistence={persistence} generation={scriptGeneration} />} />
         <Route path={APP_PATHS.scriptPrompts} element={<ScriptGenerationPage persistence={persistence} generation={scriptGeneration} />} />
-        <Route path={APP_PATHS.settings} element={<SettingsPage client={persistence} cacheClient={speechCache} />} />
+        <Route path={APP_PATHS.settings} element={<SettingsPage client={persistence} cacheClient={speechCache} scratchpadClient={scratchpad} />} />
         <Route path={APP_PATHS.scratchpad} element={<ScratchpadPage client={scratchpad} persistence={persistence} />} />
         <Route path={APP_PATHS.diagnostics} element={<DiagnosticsPage client={client} />} />
         <Route path="*" element={<Navigate to={APP_PATHS.projects} replace />} />

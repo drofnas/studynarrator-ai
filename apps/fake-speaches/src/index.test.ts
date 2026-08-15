@@ -36,7 +36,6 @@ describe("fake Speaches diagnostic scenarios", () => {
   it("reports disjoint model-scoped voice lists", async () => {
     current = await startFakeSpeachesServer();
     const catalog = await discoverSpeachesSpeechCatalog({
-      profileId: "fake",
       baseUrl: current.baseUrl,
       timeoutSeconds: 2,
       retryCount: 0

@@ -59,7 +59,7 @@ void app.whenReady().then(async () => {
   runtime = await createDesktopServices({ defaultDataDirectory: app.getPath("userData"), safeStorage });
   registerDiagnosticsHandler(ipcMain, runtime.service, runtime.context);
   registerPersistenceHandlers(ipcMain, runtime.persistence);
-  if (runtime.connections && runtime.voiceCatalog) registerConnectionHandlers(ipcMain, runtime.connections, runtime.voiceCatalog);
+  if (runtime.connection && runtime.voiceCatalog) registerConnectionHandlers(ipcMain, runtime.connection, runtime.voiceCatalog);
   if (runtime.scratchpad) registerScratchpadHandlers(ipcMain, runtime.scratchpad);
   if (runtime.projectPreview) registerProjectPreviewHandlers(ipcMain, runtime.projectPreview);
   if (runtime.renderPlans) registerRenderPlanHandlers(ipcMain, runtime.renderPlans);

@@ -1,5 +1,5 @@
 import type { LexiconEntry, LexiconEntryAuthoring } from "@studynarrator/core";
-import type { ProjectDetail, ProjectReplaceInput, SpeechCatalogVoice, TransitionPauseConfiguration, VoiceCatalogEntry } from "@studynarrator/shared-types";
+import type { ProjectDetail, ProjectReplaceInput, SpeechCatalogVoice, SystemTimingConfiguration, VoiceCatalogEntry } from "@studynarrator/shared-types";
 
 export const MAX_SCRIPT_CHARACTERS = 5_000_000;
 export const GLOBAL_VOICE_CATALOG_MODEL_ID = "speaches-ai/Kokoro-82M-v1.0-ONNX";
@@ -31,6 +31,7 @@ export function supportedProjectVoices(
       voiceId: voice.voiceId,
       label: voice.name && voice.name !== voice.voiceId ? `${voice.name} — ${voice.voiceId}` : voice.voiceId,
       enabled: true,
+      favorite: false,
       language: voice.language,
       locale: null,
       accent: null,
@@ -48,7 +49,7 @@ export function authoringLexicon(entries: readonly LexiconEntry[]): LexiconEntry
     scope: entry.scope,
     entryType: entry.entryType,
     displayText: entry.displayText,
-    ...(entry.senseId === undefined ? {} : { senseId: entry.senseId }),
+    ...("senseId" in entry && entry.senseId !== undefined ? { senseId: entry.senseId } : {}),
     spokenText: entry.spokenText,
     caseSensitive: entry.caseSensitive,
     wholeWord: entry.wholeWord,
@@ -63,20 +64,26 @@ export function draftFromProject(project: ProjectDetail): ProjectDraft {
     name: project.name,
     description: project.description,
     scriptSource: project.scriptSource,
-    connectionProfileId: project.connectionProfileId,
-    modelId: project.modelId,
     speakerMappings: project.speakerMappings,
-    pausePresets: project.pausePresets,
-    transitionPauses: project.transitionPauses,
-    lexiconEntries: authoringLexicon(project.lexiconEntries)
+    lexiconEntries: project.lexiconEntries.map((entry) => ({
+      id: entry.id,
+      scope: "project",
+      entryType: "exactTerm",
+      displayText: entry.displayText,
+      spokenText: entry.spokenText,
+      caseSensitive: false,
+      wholeWord: true,
+      priority: 0,
+      enabled: entry.enabled,
+      notes: ""
+    }))
   };
 }
 
 export function paragraphPauseForAnalysis(
-  transitions: TransitionPauseConfiguration,
-  pausePresets: ProjectReplaceInput["pausePresets"]
+  timing: SystemTimingConfiguration
 ) {
-  const paragraph = transitions.paragraph;
+  const paragraph = timing.transitionPauses.paragraph;
   if (paragraph.mode === "duration") {
     return { enabled: true, pauseId: "pause_medium" as const, durationMs: paragraph.durationMs };
   }
@@ -84,7 +91,7 @@ export function paragraphPauseForAnalysis(
     return {
       enabled: true,
       pauseId: paragraph.pauseId,
-      durationMs: pausePresets.find(({ pauseId }) => pauseId === paragraph.pauseId)?.durationMs ?? 0
+      durationMs: timing.pausePresets.find(({ pauseId }) => pauseId === paragraph.pauseId)?.durationMs ?? 0
     };
   }
   return { enabled: false, pauseId: "pause_medium" as const, durationMs: 0 };
@@ -118,8 +125,12 @@ export function replaceLiteral(source: string, search: string, replacement: stri
 export function materializeLexicon(entries: readonly (LexiconEntryAuthoring | ProjectReplaceInput["lexiconEntries"][number])[], scopePrefix: string): LexiconEntry[] {
   const timestamp = "2000-01-01T00:00:00.000Z";
   return entries.map((entry, index) => ({
-    ...entry,
     id: entry.id ?? `${scopePrefix}-${String(index + 1).padStart(4, "0")}`,
+    scope: entry.scope,
+    entryType: entry.entryType ?? "exactTerm",
+    displayText: entry.displayText,
+    ...("senseId" in entry && entry.senseId !== undefined ? { senseId: entry.senseId } : {}),
+    spokenText: entry.spokenText,
     caseSensitive: entry.caseSensitive ?? true,
     wholeWord: entry.wholeWord ?? true,
     priority: entry.priority ?? 0,

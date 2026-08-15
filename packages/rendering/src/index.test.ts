@@ -128,6 +128,22 @@ describe("content-addressed speech cache", () => {
     await expect(cache.status()).resolves.toMatchObject({ entryCount: 0, totalBytes: 0 });
   });
 
+  it("retains one Scratchpad entry without deleting audio shared with projects", async () => {
+    const { cache, rootDirectory } = await fixture();
+    const oldScratchpad = await cache.getOrCreate(input, { scratchpad: true }, async () => Uint8Array.from([82, 1]));
+    const sharedInput = { ...input, text: "shared" };
+    const shared = await cache.getOrCreate(sharedInput, { scratchpad: true }, async () => Uint8Array.from([82, 2, 3]));
+    await cache.getOrCreate(sharedInput, { projectId: "project-a" }, async () => Uint8Array.from([82, 2, 3]));
+    const newest = await cache.getOrCreate({ ...input, text: "newest" }, { scratchpad: true }, async () => Uint8Array.from([82, 3, 4, 5]));
+
+    await expect(cache.retainScratchpad(newest.key)).resolves.toEqual({ entriesRemoved: 1, bytesFreed: 2 });
+    await expect(cache.inspect(input)).resolves.toMatchObject({ status: "miss", key: oldScratchpad.key });
+    await expect(cache.inspect(sharedInput)).resolves.toMatchObject({ status: "hit", key: shared.key });
+    await expect(cache.status()).resolves.toMatchObject({ entryCount: 2, totalBytes: 7 });
+    const sharedMetadata = JSON.parse(await readFile(join(rootDirectory, shared.key.slice(0, 2), `${shared.key}.json`), "utf8")) as { projectIds: string[]; scratchpadUsed: boolean };
+    expect(sharedMetadata).toMatchObject({ projectIds: ["project-a"], scratchpadUsed: false });
+  });
+
   it("treats a symlinked cache entry as a safe miss and replaces only the link", async () => {
     const { cache, rootDirectory } = await fixture();
     const key = createSpeechCacheKey(input);
@@ -156,25 +172,25 @@ describe("render plan silence and storage", () => {
       schemaVersion: PROJECT_SNAPSHOT_SCHEMA_VERSION,
       capturedAt: timestamp,
       project: {
-        contractVersion: 4,
+        contractVersion: 9,
         id: projectId,
         name: "Frozen plan",
         description: "",
         scriptSource: "[pause_medium]",
         scriptHash: "a".repeat(64),
-        connectionProfileId: "profile",
-        modelId: "model",
         speakerMappings: [],
-        pausePresets: [{ pauseId: "pause_medium", durationMs, description: "Paragraph" }],
-        transitionPauses: { paragraph: { mode: "preset", pauseId: "pause_medium" }, speakerChange: { mode: "none" }, section: { mode: "none" } },
         lexiconEntries: [],
         createdAt: timestamp,
         updatedAt: timestamp
       },
+      timing: {
+        pausePresets: [{ pauseId: "pause_short", durationMs: 350, description: "Short" }, { pauseId: "pause_medium", durationMs, description: "Paragraph" }, { pauseId: "pause_long", durationMs: 1_500, description: "Long" }],
+        transitionPauses: { paragraph: { mode: "preset", pauseId: "pause_medium" }, speakerChange: { mode: "none" }, section: { mode: "none" } }
+      },
       globalLexiconEntries: [],
       ignoredDiagnostics: [],
-      connection: { profileId: "profile", profileName: "Fixture", profileSource: "saved", modelId: "model", serverIdentityHash: "b".repeat(64) },
-      versions: { scriptGrammar: 1, cirSchema: 1, lexiconTransform: 1, pacing: 1, speechCacheSchema: 1, speechNormalization: 1, speechChunking: 1, speechAdapter: 1 }
+      connection: { modelId: "model", serverIdentityHash: "b".repeat(64) },
+      versions: { scriptGrammar: 2, cirSchema: 1, lexiconTransform: 1, pacing: 1, speechCacheSchema: 1, speechNormalization: 1, speechChunking: 1, speechAdapter: 1 }
     });
     const plan = withRenderPlanHash({
       schemaVersion: RENDER_PLAN_SCHEMA_VERSION,

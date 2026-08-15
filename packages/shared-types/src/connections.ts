@@ -1,57 +1,33 @@
 import { z } from "zod";
 
-function hasCredentialControlLineBreak(value: string): boolean {
-  return [...value].some((character) => {
-    const code = character.codePointAt(0);
-    return code === 0 || code === 10 || code === 13;
-  });
-}
-
 const TimestampSchema = z.iso.datetime({ offset: true });
 const NullableTimestampSchema = TimestampSchema.nullable();
 
 export const CONNECTION_DIAGNOSTIC_SCHEMA_VERSION = 1;
-export const CONNECTION_PROFILE_DEFAULT_TIMEOUT_SECONDS = 120;
-export const CONNECTION_PROFILE_DEFAULT_RETRY_COUNT = 2;
-export const ENVIRONMENT_CONNECTION_PROFILE_ID = "environment-speaches";
+export const CONNECTION_DEFAULT_TIMEOUT_SECONDS = 120;
+export const CONNECTION_DEFAULT_RETRY_COUNT = 2;
+export const SPEACHES_CONNECTION_ID = "speaches";
+
 export const CONNECTION_CHANNELS = Object.freeze({
-  list: "connections.list",
-  create: "connections.create",
-  replace: "connections.replace",
-  delete: "connections.delete",
-  test: "connections.test",
-  speechCatalogDiscover: "connections.discover-speech-catalog",
-  exportDiagnostics: "connections.export-diagnostics",
+  get: "connection.get",
+  update: "connection.update",
+  test: "connection.test",
+  speechCatalogDiscover: "connection.discover-speech-catalog",
+  exportDiagnostics: "connection.export-diagnostics",
   setupGet: "setup.get",
-  setupSetActive: "setup.set-active",
   setupComplete: "setup.complete",
   voiceCatalogGet: "voice-catalog.get",
   voiceCatalogReplace: "voice-catalog.replace"
 } as const);
 
-export const ConnectionProfileSourceSchema = z.enum(["saved", "environment"]);
-export type ConnectionProfileSource = z.infer<typeof ConnectionProfileSourceSchema>;
-
 export const ConnectionTestOverallSchema = z.enum([
-  "connected",
-  "configurationError",
-  "disconnected",
-  "authenticationRequired",
-  "modelUnavailable",
-  "voiceUnavailable",
-  "invalidAudio"
+  "connected", "configurationError", "disconnected", "authenticationRequired",
+  "modelUnavailable", "voiceUnavailable", "invalidAudio"
 ]);
 export type ConnectionTestOverall = z.infer<typeof ConnectionTestOverallSchema>;
 
 export const ConnectionDiagnosticStageNameSchema = z.enum([
-  "url",
-  "dns",
-  "tcp",
-  "http",
-  "authentication",
-  "model",
-  "voice",
-  "audio"
+  "url", "dns", "tcp", "http", "authentication", "model", "voice", "audio"
 ]);
 
 export const ConnectionDiagnosticStageSchema = z.object({
@@ -74,44 +50,27 @@ export const ConnectionTestSummarySchema = z.object({
 }).strict();
 export type ConnectionTestSummary = z.infer<typeof ConnectionTestSummarySchema>;
 
-export const ConnectionProfileAuthoringSchema = z.object({
-  id: z.string().min(1).max(128).regex(/^[A-Za-z0-9][A-Za-z0-9_.-]*$/u).optional(),
-  name: z.string().trim().min(1).max(200),
+export const SpeachesConnectionAuthoringSchema = z.object({
   baseUrl: z.url({ protocol: /^https?$/u }).nullable(),
   defaultModelId: z.string().trim().min(1).max(500).nullable(),
   defaultVoiceId: z.string().trim().min(1).max(500).nullable(),
-  timeoutSeconds: z.number().int().min(1).max(600).default(CONNECTION_PROFILE_DEFAULT_TIMEOUT_SECONDS),
-  retryCount: z.number().int().min(0).max(5).default(CONNECTION_PROFILE_DEFAULT_RETRY_COUNT),
+  timeoutSeconds: z.number().int().min(1).max(600).default(CONNECTION_DEFAULT_TIMEOUT_SECONDS),
+  retryCount: z.number().int().min(0).max(5).default(CONNECTION_DEFAULT_RETRY_COUNT),
   responseFormat: z.literal("wav").default("wav")
 }).strict();
-export type ConnectionProfileAuthoring = z.input<typeof ConnectionProfileAuthoringSchema>;
+export type SpeachesConnectionAuthoring = z.input<typeof SpeachesConnectionAuthoringSchema>;
 
-export const CredentialMutationSchema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("keep") }).strict(),
-  z.object({ action: z.literal("clear") }).strict(),
-  z.object({
-    action: z.literal("replace"),
-    apiKey: z.string().min(1).max(8_192).refine((value) => !hasCredentialControlLineBreak(value), "API keys cannot contain control line breaks.")
-  }).strict()
-]);
-export type CredentialMutation = z.infer<typeof CredentialMutationSchema>;
-
-export const ConnectionProfileMutationSchema = z.object({
-  profile: ConnectionProfileAuthoringSchema,
-  credential: CredentialMutationSchema.default({ action: "keep" })
+export const SpeachesCatalogDiscoveryInputSchema = z.object({
+  baseUrl: z.url({ protocol: /^https?$/u }),
+  timeoutSeconds: z.number().int().min(1).max(600).default(CONNECTION_DEFAULT_TIMEOUT_SECONDS),
+  retryCount: z.number().int().min(0).max(5).default(CONNECTION_DEFAULT_RETRY_COUNT)
 }).strict();
-export type ConnectionProfileMutation = z.input<typeof ConnectionProfileMutationSchema>;
+export type SpeachesCatalogDiscoveryInput = z.input<typeof SpeachesCatalogDiscoveryInputSchema>;
 
-export const ConnectionProfileSchema = z.object({
-  id: z.string().min(1).max(128),
-  name: z.string().min(1).max(200),
+export const SpeachesConnectionSchema = z.object({
   baseUrl: z.url({ protocol: /^https?$/u }).nullable(),
   suppliedUrlForm: z.enum(["root", "v1", "unconfigured"]),
-  source: ConnectionProfileSourceSchema,
-  editable: z.boolean(),
-  credentialEntryAllowed: z.boolean(),
   configured: z.boolean(),
-  apiKeyConfigured: z.boolean(),
   defaultModelId: z.string().min(1).max(500).nullable(),
   defaultVoiceId: z.string().min(1).max(500).nullable(),
   timeoutSeconds: z.number().int().min(1).max(600),
@@ -123,24 +82,13 @@ export const ConnectionProfileSchema = z.object({
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema
 }).strict();
-export type ConnectionProfile = z.infer<typeof ConnectionProfileSchema>;
-export const ConnectionProfileCollectionSchema = z.array(ConnectionProfileSchema);
+export type SpeachesConnection = z.infer<typeof SpeachesConnectionSchema>;
 
 export const ConnectionSetupStateSchema = z.object({
-  activeProfileId: z.string().min(1).max(128).nullable(),
-  activeProfileLocked: z.boolean(),
   onboardingCompletedAt: NullableTimestampSchema,
   client: z.enum(["web", "electron"])
 }).strict();
 export type ConnectionSetupState = z.infer<typeof ConnectionSetupStateSchema>;
-
-export const ConnectionProfileIdInputSchema = z.object({ profileId: z.string().min(1).max(128) }).strict();
-export const ConnectionProfileMutationRequestSchema = z.object({
-  profileId: z.string().min(1).max(128),
-  mutation: ConnectionProfileMutationSchema
-}).strict();
-export const ActiveConnectionProfileInputSchema = z.object({ profileId: z.string().min(1).max(128).nullable() }).strict();
-export const VoiceCatalogModelInputSchema = z.object({ modelId: z.string().trim().min(1).max(500) }).strict();
 
 export const SpeechCatalogVoiceSchema = z.object({
   voiceId: z.string().trim().min(1).max(500),
@@ -164,7 +112,6 @@ export type SpeechCatalogModel = z.infer<typeof SpeechCatalogModelSchema>;
 
 export const SpeechCatalogSchema = z.object({
   schemaVersion: z.literal(1),
-  profileId: z.string().min(1).max(128),
   models: z.array(SpeechCatalogModelSchema).max(2_000)
 }).strict().superRefine((catalog, context) => {
   const seen = new Set<string>();
@@ -178,50 +125,36 @@ export type SpeechCatalog = z.infer<typeof SpeechCatalogSchema>;
 export const RedactedConnectionDiagnosticsSchema = z.object({
   schemaVersion: z.literal(CONNECTION_DIAGNOSTIC_SCHEMA_VERSION),
   applicationVersion: z.string().min(1),
-  runtimeVersions: z.object({
-    node: z.string().min(1),
-    electron: z.string().min(1).nullable()
-  }).strict(),
-  profileId: z.string().min(1),
-  profileSource: ConnectionProfileSourceSchema,
+  runtimeVersions: z.object({ node: z.string().min(1), electron: z.string().min(1).nullable() }).strict(),
   endpointClass: z.enum(["loopback", "private", "public", "unconfigured"]),
   suppliedUrlForm: z.enum(["root", "v1", "unconfigured"]),
   modelId: z.string().nullable(),
   voiceId: z.string().nullable(),
-  apiKeyConfigured: z.boolean(),
   requestCounts: z.object({
-    health: z.number().int().nonnegative(),
-    models: z.number().int().nonnegative(),
-    voices: z.number().int().nonnegative(),
-    speech: z.number().int().nonnegative()
+    health: z.number().int().nonnegative(), models: z.number().int().nonnegative(),
+    voices: z.number().int().nonnegative(), speech: z.number().int().nonnegative()
   }).strict(),
   result: ConnectionTestSummarySchema
 }).strict();
 export type RedactedConnectionDiagnostics = z.infer<typeof RedactedConnectionDiagnosticsSchema>;
 
-export interface ConnectionsClient {
-  list(): Promise<ConnectionProfile[]>;
-  create(input: ConnectionProfileMutation): Promise<ConnectionProfile>;
-  replace(profileId: string, input: ConnectionProfileMutation): Promise<ConnectionProfile>;
-  delete(profileId: string): Promise<void>;
-  test(profileId: string): Promise<ConnectionTestSummary>;
-  discoverSpeechCatalog(profileId: string, signal?: AbortSignal): Promise<SpeechCatalog>;
-  exportDiagnostics(profileId: string): Promise<RedactedConnectionDiagnostics>;
+export interface SpeachesConnectionClient {
+  get(): Promise<SpeachesConnection>;
+  update(input: SpeachesConnectionAuthoring): Promise<SpeachesConnection>;
+  test(): Promise<ConnectionTestSummary>;
+  discoverSpeechCatalog(input: SpeachesCatalogDiscoveryInput, signal?: AbortSignal): Promise<SpeechCatalog>;
+  exportDiagnostics(): Promise<RedactedConnectionDiagnostics>;
   getSetupState(): Promise<ConnectionSetupState>;
-  setActiveProfile(profileId: string | null): Promise<ConnectionSetupState>;
   completeOnboarding(): Promise<ConnectionSetupState>;
 }
 
+export const VoiceCatalogModelInputSchema = z.object({ modelId: z.string().trim().min(1).max(500) }).strict();
+
 export const VoiceCatalogEntrySchema = z.object({
-  voiceId: z.string().trim().min(1).max(500),
-  label: z.string().trim().min(1).max(200),
-  enabled: z.boolean().default(true),
-  language: z.string().trim().min(1).max(100).nullable().default(null),
-  locale: z.string().trim().min(1).max(50).nullable().default(null),
-  accent: z.string().trim().min(1).max(100).nullable().default(null),
-  category: z.string().trim().min(1).max(100).nullable().default(null),
-  style: z.string().trim().min(1).max(200).nullable().default(null),
-  sampleText: z.string().max(2_000).nullable().default(null)
+  voiceId: z.string().trim().min(1).max(500), label: z.string().trim().min(1).max(200), enabled: z.boolean().default(true), favorite: z.boolean().default(false),
+  language: z.string().trim().min(1).max(100).nullable().default(null), locale: z.string().trim().min(1).max(50).nullable().default(null),
+  accent: z.string().trim().min(1).max(100).nullable().default(null), category: z.string().trim().min(1).max(100).nullable().default(null),
+  style: z.string().trim().min(1).max(200).nullable().default(null), sampleText: z.string().max(2_000).nullable().default(null)
 }).strict();
 export type VoiceCatalogEntry = z.infer<typeof VoiceCatalogEntrySchema>;
 

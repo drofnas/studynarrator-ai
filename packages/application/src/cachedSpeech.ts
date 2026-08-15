@@ -19,13 +19,12 @@ import {
   type SpeachesSynthesisInput,
   type SpeachesSynthesisResult
 } from "@studynarrator/speaches-adapter";
-import type { ConnectionRepository, CredentialStore } from "./connections.js";
+import type { ConnectionRepository } from "./connections.js";
 
 export const SPEACHES_CACHE_ADAPTER_ID = "speaches-openai-compatible";
 export const SPEACHES_CACHE_ADAPTER_VERSION = 1;
 
 export interface CachedSpeechSynthesisInput {
-  connectionProfileId: string;
   modelId: string;
   voiceId: string;
   speed: number;
@@ -53,23 +52,20 @@ export function createApplicationSpeechCache(dataDirectory: string): SpeechCache
 }
 
 export function createCachedSpeechSynthesis(dependencies: {
-  repository: Pick<ConnectionRepository, "getConnectionProfile" | "getConnectionCredentialReference">;
-  credentials: CredentialStore;
+  repository: Pick<ConnectionRepository, "getSpeachesConnection">;
   cache: SpeechCache;
   synthesize?: CachedSpeechSynthesisRunner;
 }): CachedSpeechSynthesis {
   const runSynthesis = dependencies.synthesize ?? ((input) => synthesizeSpeech(input));
   return {
     async synthesize(input) {
-      const profile = dependencies.repository.getConnectionProfile(input.connectionProfileId);
-      if (!profile.baseUrl) throw new Error("The selected connection profile needs a Speaches URL.");
-      const reference = dependencies.repository.getConnectionCredentialReference(profile.id);
-      const apiKey = reference ? await dependencies.credentials.read(reference) : null;
+      const connection = dependencies.repository.getSpeachesConnection();
+      if (!connection.baseUrl) throw new Error("The Speaches connection needs a server address.");
       return await dependencies.cache.getOrCreate({
         adapterId: SPEACHES_CACHE_ADAPTER_ID,
         adapterVersion: SPEACHES_CACHE_ADAPTER_VERSION,
-        serverIdentity: profile.baseUrl,
-        profileId: profile.id,
+        serverIdentity: connection.baseUrl,
+        profileId: connection.id,
         modelId: input.modelId,
         voiceId: input.voiceId,
         speed: input.speed,
@@ -77,14 +73,13 @@ export function createCachedSpeechSynthesis(dependencies: {
         responseFormat: "wav"
       }, input.usage, async (normalizedText, signal) => {
         const result = await runSynthesis({
-          baseUrl: profile.baseUrl!,
+          baseUrl: connection.baseUrl!,
           modelId: input.modelId,
           voiceId: input.voiceId,
           speed: input.speed,
           text: normalizedText,
-          ...(apiKey === null ? {} : { apiKey }),
-          timeoutSeconds: profile.timeoutSeconds,
-          retryCount: profile.retryCount,
+          timeoutSeconds: connection.timeoutSeconds,
+          retryCount: connection.retryCount,
           signal
         });
         return result.bytes;

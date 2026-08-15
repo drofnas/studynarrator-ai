@@ -17,7 +17,6 @@ const DatabaseAdapter = Database as unknown as DatabaseConstructor;
 const projectId = "00000000-0000-4000-8000-000000000001";
 const secondProjectId = "00000000-0000-4000-8000-000000000002";
 const lexiconId = "00000000-0000-4000-8000-000000000003";
-const profileId = "00000000-0000-4000-8000-000000000004";
 const duplicateProjectId = "00000000-0000-4000-8000-000000000005";
 const duplicateLexiconId = "00000000-0000-4000-8000-000000000006";
 const legacySchemaSql = `
@@ -45,21 +44,39 @@ describe("database migrations", () => {
       { version: 3, name: "speaches-connections" },
       { version: 4, name: "project-transition-pauses" },
       { version: 5, name: "render-execution" },
-      { version: 6, name: "render-review-media" }
+      { version: 6, name: "render-review-media" },
+      { version: 7, name: "single-speaches-connection" },
+      { version: 8, name: "simplified-global-lexicon" },
+      { version: 9, name: "voice-catalog-favorites" },
+      { version: 10, name: "simplified-project-lexicon-and-global-model" },
+      { version: 11, name: "global-timing" },
+      { version: 12, name: "named-transition-pauses" }
     ]);
   });
 
-  it("creates schema version 6 and reruns without duplicate migrations or backups", async () => {
+  it("creates schema version 12 with ordered starter pronunciations and reruns without reseeding", async () => {
     const databasePath = await temporaryDatabase("studynarrator-migration-fresh-");
     const first = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-12T12:00:00.000Z") });
-    expect(first.appliedVersions).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(first.appliedVersions).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
     expect(first.backupPath).toBeNull();
+    expect(first.database.prepare("SELECT display_text, spoken_text, enabled FROM lexicon_entries WHERE scope = 'global' ORDER BY ordinal").all()).toEqual([
+      { display_text: "API", spoken_text: "A P I", enabled: 1 },
+      { display_text: "URL", spoken_text: "U R L", enabled: 1 },
+      { display_text: "HTTP", spoken_text: "H T T P", enabled: 1 },
+      { display_text: "HTTPS", spoken_text: "H T T P S", enabled: 1 },
+      { display_text: "JSON", spoken_text: "jay son", enabled: 1 },
+      { display_text: "SQL", spoken_text: "S Q L", enabled: 1 },
+      { display_text: "PostgreSQL", spoken_text: "post gres Q L", enabled: 1 },
+      { display_text: "GitHub", spoken_text: "git hub", enabled: 1 }
+    ]);
+    first.database.prepare("DELETE FROM lexicon_entries WHERE scope = 'global'").run();
     first.database.close();
 
     const second = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-13T12:00:00.000Z") });
     expect(second.appliedVersions).toEqual([]);
     expect(second.backupPath).toBeNull();
-    expect(second.database.prepare("SELECT count(*) AS count FROM schema_migrations").get()).toEqual({ count: 6 });
+    expect(second.database.prepare("SELECT count(*) AS count FROM schema_migrations").get()).toEqual({ count: 12 });
+    expect(second.database.prepare("SELECT count(*) AS count FROM lexicon_entries WHERE scope = 'global'").get()).toEqual({ count: 0 });
     second.database.close();
   });
 
@@ -70,8 +87,8 @@ describe("database migrations", () => {
     old.close();
 
     const upgraded = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-12T12:00:00.000Z") });
-    expect(upgraded.appliedVersions).toEqual([2, 3, 4, 5, 6]);
-    expect(upgraded.backupPath).toContain("-v1-to-v6-");
+    expect(upgraded.appliedVersions).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    expect(upgraded.backupPath).toContain("-v1-to-v12-");
     expect((await stat(upgraded.backupPath!)).mode & 0o777).toBe(0o600);
     expect(upgraded.database.prepare("SELECT value FROM diagnostic_kv WHERE key = 'fixture'").get()).toEqual({ value: "preserved" });
     const backup = new Database(upgraded.backupPath!, { readonly: true });
@@ -98,10 +115,221 @@ describe("database migrations", () => {
     previous.database.close();
 
     const upgraded = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-13T12:00:00.000Z") });
-    expect(upgraded.appliedVersions).toEqual([3, 4, 5, 6]);
-    expect(upgraded.backupPath).toContain("-v2-to-v6-");
+    expect(upgraded.appliedVersions).toEqual([3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    expect(upgraded.backupPath).toContain("-v2-to-v12-");
     expect(upgraded.database.prepare("SELECT name, model_id, paragraph_transition_mode, paragraph_transition_pause_id FROM projects WHERE id = ?").get(projectId))
-      .toEqual({ name: "V2 project", model_id: null, paragraph_transition_mode: "preset", paragraph_transition_pause_id: "pause_medium" });
+      .toEqual({ name: "V2 project", model_id: null, paragraph_transition_mode: "none", paragraph_transition_pause_id: null });
+    upgraded.database.close();
+  });
+
+  it("collapses legacy profiles to the configured active connection and remaps projects", async () => {
+    const databasePath = await temporaryDatabase("studynarrator-migration-single-connection-");
+    const legacy = await migrateDatabase({
+      Database: DatabaseAdapter,
+      databasePath,
+      migrations: STUDYNARRATOR_MIGRATIONS.slice(0, 6),
+      now: () => new Date("2026-08-12T12:00:00.000Z")
+    });
+    const insertProfile = legacy.database.prepare(`
+      INSERT INTO connection_profiles (
+        id, ordinal, name, base_url, default_model_id, default_voice_id, source,
+        api_key_reference, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    insertProfile.run("saved-first", 0, "Saved first", "http://127.0.0.1:8001", "model-a", "voice-a", "saved", "safe-storage:saved-first", "2026-08-12T12:00:00.000Z", "2026-08-12T12:00:00.000Z");
+    insertProfile.run("active-environment", 1, "Environment Speaches", "http://127.0.0.1:8002", "model-b", "voice-b", "environment", "environment:SPEACHES_API_KEY", "2026-08-12T12:00:00.000Z", "2026-08-12T12:00:00.000Z");
+    legacy.database.prepare("INSERT INTO connection_setup (singleton_id, active_profile_id, onboarding_completed_at, updated_at) VALUES (1, ?, ?, ?)")
+      .run("active-environment", "2026-08-12T12:00:00.000Z", "2026-08-12T12:00:00.000Z");
+    legacy.database.prepare(`
+      INSERT INTO projects (
+        id, config_version, name, description, script_source, script_hash, connection_profile_id,
+        paragraph_pause_enabled, paragraph_pause_id, paragraph_pause_duration_ms, created_at, updated_at
+      ) VALUES (?, 1, 'Legacy project', '', 'SQL', ?, ?, 1, 'pause_medium', 750, ?, ?)
+    `).run(projectId, "a".repeat(64), "saved-first", "2026-08-12T12:00:00.000Z", "2026-08-12T12:00:00.000Z");
+    legacy.database.close();
+
+    const upgraded = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-13T12:00:00.000Z") });
+    expect(upgraded.appliedVersions).toEqual([7, 8, 9, 10, 11, 12]);
+    expect(upgraded.database.prepare("SELECT id, name, source, api_key_reference FROM connection_profiles").all()).toEqual([
+      { id: "active-environment", name: "Speaches", source: "saved", api_key_reference: null }
+    ]);
+    expect(upgraded.database.prepare("SELECT active_profile_id, onboarding_completed_at FROM connection_setup WHERE singleton_id = 1").get())
+      .toEqual({ active_profile_id: "active-environment", onboarding_completed_at: "2026-08-12T12:00:00.000Z" });
+    expect(upgraded.database.prepare("SELECT connection_profile_id FROM projects WHERE id = ?").get(projectId))
+      .toEqual({ connection_profile_id: "active-environment" });
+    upgraded.database.close();
+  });
+
+  it("normalizes global and project rules, disables later duplicates, and clears project model overrides", async () => {
+    const databasePath = await temporaryDatabase("studynarrator-migration-global-lexicon-");
+    const legacy = await migrateDatabase({
+      Database: DatabaseAdapter,
+      databasePath,
+      migrations: STUDYNARRATOR_MIGRATIONS.slice(0, 7),
+      now: () => new Date("2026-08-12T12:00:00.000Z")
+    });
+    legacy.database.prepare(`
+      INSERT INTO projects (
+        id, config_version, name, description, script_source, script_hash, connection_profile_id,
+        paragraph_pause_enabled, paragraph_pause_id, paragraph_pause_duration_ms,
+        paragraph_transition_mode, paragraph_transition_pause_id,
+        speaker_change_transition_mode, speaker_change_transition_pause_id, speaker_change_transition_duration_ms,
+        section_transition_mode, section_transition_pause_id, section_transition_duration_ms,
+        created_at, updated_at
+      ) VALUES (?, 1, 'Lexicon migration', '', '', ?, 'speaches', 1, 'pause_medium', 750,
+        'preset', 'pause_medium', 'none', NULL, NULL, 'none', NULL, NULL, ?, ?)
+    `).run(projectId, "a".repeat(64), "2026-08-12T12:00:00.000Z", "2026-08-12T12:00:00.000Z");
+    const insert = legacy.database.prepare(`
+      INSERT INTO lexicon_entries (
+        id, scope, project_id, ordinal, entry_type, display_text, sense_id, spoken_text,
+        case_sensitive, whole_word, priority, enabled, notes, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const createdAt = "2026-08-12T12:00:00.000Z";
+    insert.run("legacy-global-first", "global", null, 0, "namedSense", "Resume", "cv", "rez oo may", 1, 0, 20, 1, "advanced", createdAt, createdAt);
+    insert.run("legacy-global-duplicate", "global", null, 1, "exactPhrase", "resume", null, "ree zoom", 1, 0, 10, 1, "duplicate", createdAt, createdAt);
+    insert.run("legacy-project", "project", projectId, 0, "namedSense", "resume", "process", "ree zoom", 1, 0, 10, 1, "project stays advanced", createdAt, createdAt);
+    insert.run("legacy-project-duplicate", "project", projectId, 1, "exactPhrase", "Resume", null, "rez oo may", 1, 0, 5, 1, "duplicate project rule", createdAt, createdAt);
+    legacy.database.prepare("UPDATE projects SET model_id = 'project-model' WHERE id = ?").run(projectId);
+    legacy.database.close();
+
+    const upgraded = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-13T12:00:00.000Z") });
+    expect(upgraded.appliedVersions).toEqual([8, 9, 10, 11, 12]);
+    expect(upgraded.backupPath).toContain("-v7-to-v12-");
+    expect(upgraded.database.prepare(`
+      SELECT id, entry_type, sense_id, case_sensitive, whole_word, priority, enabled, notes
+      FROM lexicon_entries WHERE scope = 'global' ORDER BY ordinal
+    `).all()).toEqual([
+      { id: "legacy-global-first", entry_type: "exactTerm", sense_id: null, case_sensitive: 0, whole_word: 1, priority: 0, enabled: 1, notes: "" },
+      { id: "legacy-global-duplicate", entry_type: "exactTerm", sense_id: null, case_sensitive: 0, whole_word: 1, priority: 0, enabled: 0, notes: "" }
+    ]);
+    expect(upgraded.database.prepare(`
+      SELECT id, entry_type, sense_id, case_sensitive, whole_word, priority, enabled, notes
+      FROM lexicon_entries WHERE scope = 'project' ORDER BY ordinal
+    `).all()).toEqual([
+      { id: "legacy-project", entry_type: "exactTerm", sense_id: null, case_sensitive: 0, whole_word: 1, priority: 0, enabled: 1, notes: "" },
+      { id: "legacy-project-duplicate", entry_type: "exactTerm", sense_id: null, case_sensitive: 0, whole_word: 1, priority: 0, enabled: 0, notes: "" }
+    ]);
+    expect(upgraded.database.prepare("SELECT model_id FROM projects WHERE id = ?").get(projectId)).toEqual({ model_id: null });
+    upgraded.database.close();
+  });
+
+  it("adds unfavorited voice state when upgrading a complete v8 database", async () => {
+    const databasePath = await temporaryDatabase("studynarrator-migration-voice-favorites-");
+    const legacy = await migrateDatabase({
+      Database: DatabaseAdapter,
+      databasePath,
+      migrations: STUDYNARRATOR_MIGRATIONS.slice(0, 8),
+      now: () => new Date("2026-08-12T12:00:00.000Z")
+    });
+    legacy.database.prepare(`
+      INSERT INTO voice_catalog_overrides (
+        model_id, voice_id, ordinal, label, enabled, language, locale, accent, category, style, sample_text
+      ) VALUES ('model', 'voice', 0, 'Voice', 1, 'English', 'en-US', NULL, NULL, NULL, NULL)
+    `).run();
+    legacy.database.close();
+
+    const upgraded = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-13T12:00:00.000Z") });
+    expect(upgraded.appliedVersions).toEqual([9, 10, 11, 12]);
+    expect(upgraded.backupPath).toContain("-v8-to-v12-");
+    expect(upgraded.database.prepare("SELECT voice_id, favorite FROM voice_catalog_overrides").all())
+      .toEqual([{ voice_id: "voice", favorite: 0 }]);
+    upgraded.database.close();
+  });
+
+  it("migrates the newest project timing globally and converts custom transition presets", async () => {
+    const databasePath = await temporaryDatabase("studynarrator-migration-global-timing-");
+    const legacy = await migrateDatabase({
+      Database: DatabaseAdapter,
+      databasePath,
+      migrations: STUDYNARRATOR_MIGRATIONS.slice(0, 10),
+      now: () => new Date("2026-08-12T12:00:00.000Z")
+    });
+    legacy.database.prepare(`
+      INSERT INTO system_pacing_defaults (singleton_id, paragraph_pause_enabled, paragraph_pause_duration_ms, updated_at)
+      VALUES (1, 1, 700, '2026-08-12T12:00:00.000Z')
+    `).run();
+    const insertProject = legacy.database.prepare(`
+      INSERT INTO projects (
+        id, name, description, script_source, script_hash, connection_profile_id,
+        paragraph_pause_enabled, paragraph_pause_id, paragraph_pause_duration_ms,
+        paragraph_transition_mode, paragraph_transition_pause_id, paragraph_transition_duration_ms,
+        speaker_change_transition_mode, speaker_change_transition_pause_id, speaker_change_transition_duration_ms,
+        section_transition_mode, section_transition_pause_id, section_transition_duration_ms,
+        created_at, updated_at
+      ) VALUES (?, ?, '', '', ?, 'speaches', 1, 'pause_medium', 750, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    insertProject.run(projectId, "Older", "a".repeat(64), "preset", "pause_medium", null, "none", null, null, "none", null, null, "2026-08-11T12:00:00.000Z", "2026-08-11T12:00:00.000Z");
+    insertProject.run(secondProjectId, "Newest", "b".repeat(64), "duration", null, 600, "preset", "pause_short", null, "preset", "pause_custom", null, "2026-08-12T12:00:00.000Z", "2026-08-12T12:00:00.000Z");
+    const insertPause = legacy.database.prepare("INSERT INTO pause_presets (project_id, pause_id, ordinal, duration_ms, description) VALUES (?, ?, ?, ?, ?)");
+    insertPause.run(projectId, "pause_short", 0, 300, "Older short");
+    insertPause.run(projectId, "pause_long", 1, 1_400, "Older long");
+    insertPause.run(secondProjectId, "pause_medium", 0, 800, "Newest medium");
+    insertPause.run(secondProjectId, "pause_custom", 1, 975, "Legacy custom");
+    legacy.database.close();
+
+    const upgraded = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-14T12:00:00.000Z") });
+    expect(upgraded.appliedVersions).toEqual([11, 12]);
+    expect(upgraded.backupPath).toContain("-v10-to-v12-");
+    expect(upgraded.database.prepare("SELECT pause_id, duration_ms, description FROM system_pause_presets ORDER BY ordinal").all()).toEqual([
+      { pause_id: "pause_short", duration_ms: 300, description: "Older short" },
+      { pause_id: "pause_medium", duration_ms: 800, description: "Newest medium" },
+      { pause_id: "pause_long", duration_ms: 1_400, description: "Older long" }
+    ]);
+    expect(upgraded.database.prepare(`
+      SELECT paragraph_transition_mode, paragraph_transition_pause_id, paragraph_transition_duration_ms,
+        speaker_change_transition_mode, speaker_change_transition_pause_id,
+        section_transition_mode, section_transition_pause_id, section_transition_duration_ms
+      FROM system_pacing_defaults WHERE singleton_id = 1
+    `).get()).toEqual({
+      paragraph_transition_mode: "preset", paragraph_transition_pause_id: "pause_medium", paragraph_transition_duration_ms: null,
+      speaker_change_transition_mode: "preset", speaker_change_transition_pause_id: "pause_short",
+      section_transition_mode: "preset", section_transition_pause_id: "pause_medium", section_transition_duration_ms: null
+    });
+    expect(upgraded.database.prepare("SELECT count(*) AS count FROM pause_presets").get()).toEqual({ count: 0 });
+    expect(upgraded.database.prepare("SELECT count(*) AS count FROM projects WHERE paragraph_transition_mode != 'none' OR speaker_change_transition_mode != 'none' OR section_transition_mode != 'none'").get()).toEqual({ count: 0 });
+    upgraded.database.close();
+  });
+
+  it("migrates direct global durations to exact or nearest named pauses with stable ties", async () => {
+    const databasePath = await temporaryDatabase("studynarrator-migration-named-timing-");
+    const legacy = await migrateDatabase({
+      Database: DatabaseAdapter,
+      databasePath,
+      migrations: STUDYNARRATOR_MIGRATIONS.slice(0, 11),
+      now: () => new Date("2026-08-12T12:00:00.000Z")
+    });
+    legacy.database.prepare(`
+      INSERT INTO system_pacing_defaults (
+        singleton_id, paragraph_pause_enabled, paragraph_pause_duration_ms,
+        paragraph_transition_mode, paragraph_transition_pause_id, paragraph_transition_duration_ms,
+        speaker_change_transition_mode, speaker_change_transition_pause_id, speaker_change_transition_duration_ms,
+        section_transition_mode, section_transition_pause_id, section_transition_duration_ms, updated_at
+      ) VALUES (1, 1, 750, 'preset', 'pause_medium', NULL, 'none', NULL, NULL, 'none', NULL, NULL, '2026-08-12T12:00:00.000Z')
+    `).run();
+    legacy.database.prepare("UPDATE system_pause_presets SET duration_ms = CASE pause_id WHEN 'pause_short' THEN 300 WHEN 'pause_medium' THEN 900 ELSE 1500 END").run();
+    legacy.database.prepare(`
+      UPDATE system_pacing_defaults SET
+        paragraph_transition_mode = 'duration', paragraph_transition_pause_id = NULL, paragraph_transition_duration_ms = 300,
+        speaker_change_transition_mode = 'duration', speaker_change_transition_pause_id = NULL, speaker_change_transition_duration_ms = 1200,
+        section_transition_mode = 'none', section_transition_pause_id = NULL, section_transition_duration_ms = NULL
+      WHERE singleton_id = 1
+    `).run();
+    legacy.database.close();
+
+    const upgraded = await migrateDatabase({ Database: DatabaseAdapter, databasePath, now: () => new Date("2026-08-13T12:00:00.000Z") });
+    expect(upgraded.appliedVersions).toEqual([12]);
+    expect(upgraded.backupPath).toContain("-v11-to-v12-");
+    expect(upgraded.database.prepare(`
+      SELECT paragraph_transition_mode, paragraph_transition_pause_id, paragraph_transition_duration_ms,
+        speaker_change_transition_mode, speaker_change_transition_pause_id, speaker_change_transition_duration_ms,
+        section_transition_mode, section_transition_pause_id, section_transition_duration_ms
+      FROM system_pacing_defaults WHERE singleton_id = 1
+    `).get()).toEqual({
+      paragraph_transition_mode: "preset", paragraph_transition_pause_id: "pause_short", paragraph_transition_duration_ms: null,
+      speaker_change_transition_mode: "preset", speaker_change_transition_pause_id: "pause_medium", speaker_change_transition_duration_ms: null,
+      section_transition_mode: "none", section_transition_pause_id: null, section_transition_duration_ms: null
+    });
     upgraded.database.close();
   });
 
@@ -168,23 +396,17 @@ describe("StudyNarratorRepository", () => {
       idFactory: ids(projectId, lexiconId)
     });
     const created = first.createProject({ name: "Persistence restart proof", description: "Restart proof" });
-    expect(created.transitionPauses).toEqual({ paragraph: { mode: "preset", pauseId: "pause_medium" }, speakerChange: { mode: "none" }, section: { mode: "none" } });
-    expect(created.pausePresets).toEqual([{ pauseId: "pause_medium", durationMs: 750, description: "Paragraph or subtopic separation." }]);
+    expect(created).not.toHaveProperty("transitionPauses");
+    expect(created).not.toHaveProperty("pausePresets");
     const source = "Résumé line\r\n\r\nSQL line 🧠";
     first.replaceProject(created.id, {
       name: created.name,
       description: created.description,
       scriptSource: source,
-      connectionProfileId: null,
       speakerMappings: [{
         speakerId: "narrator", displayName: "Narrator", voiceId: null, speed: 1,
         gainDb: 0, roleDescription: "", sampleText: "Preview"
       }],
-      pausePresets: [
-        { pauseId: "pause_medium", durationMs: 750, description: "Paragraph" },
-        { pauseId: "pause_short", durationMs: 350, description: "Brief" }
-      ],
-      transitionPauses: { paragraph: { mode: "preset", pauseId: "pause_medium" }, speakerChange: { mode: "duration", durationMs: 350 }, section: { mode: "preset", pauseId: "pause_short" } },
       lexiconEntries: [{ id: lexiconId, scope: "project", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel" }]
     });
     first.close();
@@ -194,12 +416,6 @@ describe("StudyNarratorRepository", () => {
     expect(reopened.scriptSource).toBe(source);
     expect(reopened.scriptHash).toMatch(/^[a-f0-9]{64}$/u);
     expect(reopened.speakerMappings.map((item) => item.speakerId)).toEqual(["narrator"]);
-    expect(reopened.pausePresets.map((item) => item.pauseId)).toEqual(["pause_medium", "pause_short"]);
-    expect(reopened.transitionPauses).toEqual({
-      paragraph: { mode: "preset", pauseId: "pause_medium" },
-      speakerChange: { mode: "duration", durationMs: 350 },
-      section: { mode: "preset", pauseId: "pause_short" }
-    });
     expect(reopened.lexiconEntries[0]).toMatchObject({ id: lexiconId, createdAt: "2026-08-12T12:00:00.000Z" });
     second.close();
 
@@ -209,17 +425,24 @@ describe("StudyNarratorRepository", () => {
     third.close();
   });
 
-  it("copies changed system defaults only into later projects", async () => {
+  it("persists one global timing configuration without copying it into projects", async () => {
     const repository = await openStudyNarratorRepository({
       Database: DatabaseAdapter,
       databasePath: await temporaryDatabase("studynarrator-defaults-"),
       idFactory: ids(projectId, secondProjectId)
     });
     const first = repository.createProject({ name: "First" });
-    repository.updateSystemPacing({ enabled: false, durationMs: 1200 });
+    const current = repository.getSystemPacing();
+    repository.updateSystemPacing({
+      ...current,
+      pausePresets: current.pausePresets.map((preset) => preset.pauseId === "pause_medium" ? { ...preset, durationMs: 1_200 } : preset) as typeof current.pausePresets,
+      transitionPauses: { ...current.transitionPauses, paragraph: { mode: "none" } }
+    });
     const second = repository.createProject({ name: "Second" });
-    expect(repository.getProject(first.id).transitionPauses.paragraph).toEqual({ mode: "preset", pauseId: "pause_medium" });
-    expect(second.transitionPauses.paragraph).toEqual({ mode: "none" });
+    expect(repository.getSystemPacing()).toMatchObject({ transitionPauses: { paragraph: { mode: "none" } } });
+    expect(repository.getSystemPacing().pausePresets[1].durationMs).toBe(1_200);
+    expect(repository.getProject(first.id)).not.toHaveProperty("pausePresets");
+    expect(second).not.toHaveProperty("transitionPauses");
     repository.close();
   });
 
@@ -235,10 +458,7 @@ describe("StudyNarratorRepository", () => {
       name: source.name,
       description: source.description,
       scriptSource: "[speaker_teacher] SQL",
-      connectionProfileId: null,
       speakerMappings: [{ speakerId: "teacher", displayName: "Teacher", voiceId: "voice_teacher", speed: 1, gainDb: 0, roleDescription: "Guide", sampleText: "SQL" }],
-      pausePresets: source.pausePresets,
-      transitionPauses: source.transitionPauses,
       lexiconEntries: [{ id: lexiconId, scope: "project", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel" }]
     });
 
@@ -249,10 +469,7 @@ describe("StudyNarratorRepository", () => {
       description: configured.description,
       scriptSource: configured.scriptSource,
       scriptHash: configured.scriptHash,
-      connectionProfileId: configured.connectionProfileId,
-      speakerMappings: configured.speakerMappings,
-      pausePresets: configured.pausePresets,
-      transitionPauses: configured.transitionPauses
+      speakerMappings: configured.speakerMappings
     });
     expect(duplicate.lexiconEntries).toHaveLength(1);
     expect(duplicate.lexiconEntries[0]).toMatchObject({ id: duplicateLexiconId, displayText: "SQL", spokenText: "sequel" });
@@ -262,28 +479,29 @@ describe("StudyNarratorRepository", () => {
     repository.close();
   });
 
-  it("keeps installation data when deleting a project and nulls deleted profile references", async () => {
+  it("keeps installation data and the singleton connection when deleting a project", async () => {
     const repository = await openStudyNarratorRepository({
       Database: DatabaseAdapter,
       databasePath: await temporaryDatabase("studynarrator-boundaries-"),
-      idFactory: ids(profileId, projectId, lexiconId)
+      idFactory: ids(projectId, lexiconId)
     });
-    const profile = repository.createConnectionProfile({ id: profileId, name: "Placeholder", baseUrl: "http://127.0.0.1:8000", defaultModelId: null, defaultVoiceId: null });
+    repository.replaceSpeachesConnection({
+      baseUrl: "http://127.0.0.1:8000", defaultModelId: "model", defaultVoiceId: "voice"
+    }, "root");
     const project = repository.createProject({ name: "Owned" });
     repository.replaceGlobalLexicon([{ id: lexiconId, scope: "global", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel" }]);
     repository.replaceProject(project.id, {
-      name: project.name, description: "", scriptSource: "SQL", connectionProfileId: profile.id,
-      speakerMappings: [], pausePresets: project.pausePresets, transitionPauses: project.transitionPauses, lexiconEntries: []
+      name: project.name, description: "", scriptSource: "SQL",
+      speakerMappings: [], lexiconEntries: []
     });
-    repository.deleteConnectionProfile(profile.id);
-    expect(repository.getProject(project.id).connectionProfileId).toBeNull();
     repository.deleteProject(project.id);
     expect(repository.listProjects()).toEqual([]);
     expect(repository.listGlobalLexicon()).toHaveLength(1);
+    expect(repository.getSpeachesConnection()).toMatchObject({ baseUrl: "http://127.0.0.1:8000", configured: true });
     repository.close();
   });
 
-  it("preserves ordered personal preferences and rejects missing transition presets atomically", async () => {
+  it("preserves ordered personal preferences and rejects project-owned timing atomically", async () => {
     const repository = await openStudyNarratorRepository({
       Database: DatabaseAdapter,
       databasePath: await temporaryDatabase("studynarrator-atomic-"),
@@ -296,50 +514,46 @@ describe("StudyNarratorRepository", () => {
     expect(repository.getIgnoredDiagnostics().map((item) => item.code)).toEqual(["SECOND", "FIRST"]);
     const project = repository.createProject({ name: "Atomic" });
     expect(() => repository.replaceProject(project.id, {
-      name: "Changed", description: "", scriptSource: "lost", connectionProfileId: null,
-      speakerMappings: [], pausePresets: project.pausePresets,
-      transitionPauses: { ...project.transitionPauses, paragraph: { mode: "preset", pauseId: "pause_missing" } }, lexiconEntries: []
-    })).toThrow();
+      name: "Changed", description: "", scriptSource: "lost", speakerMappings: [], lexiconEntries: [], pausePresets: []
+    } as never)).toThrow();
     expect(repository.getProject(project.id)).toMatchObject({ name: "Atomic", scriptSource: "" });
     repository.close();
   });
 
-  it("persists safe connection state and voice overrides without exposing credential values", async () => {
+  it("persists the singleton connection and voice overrides", async () => {
+    const databasePath = await temporaryDatabase("studynarrator-connections-");
     const repository = await openStudyNarratorRepository({
       Database: DatabaseAdapter,
-      databasePath: await temporaryDatabase("studynarrator-connections-"),
+      databasePath,
       now: () => new Date("2026-08-12T12:00:00.000Z"),
-      idFactory: ids(profileId)
     });
-    const profile = repository.createConnectionProfile({
-      id: profileId,
-      name: "LAN Speaches",
+    const connection = repository.replaceSpeachesConnection({
       baseUrl: "http://127.0.0.1:18080",
       defaultModelId: "speaches-ai/Kokoro-82M-v1.0-ONNX",
       defaultVoiceId: "af_heart"
-    });
-    expect(profile).toMatchObject({ timeoutSeconds: 120, retryCount: 2, apiKeyConfigured: false, source: "saved" });
-    repository.setConnectionCredentialReference(profile.id, "vault:opaque-reference");
-    expect(repository.getConnectionProfile(profile.id).apiKeyConfigured).toBe(true);
-    expect(JSON.stringify(repository.getConnectionProfile(profile.id))).not.toContain("opaque-reference");
+    }, "root");
+    expect(connection).toMatchObject({ timeoutSeconds: 120, retryCount: 2, configured: true });
+    expect(JSON.stringify(connection)).not.toContain("apiKey");
 
-    repository.setActiveConnectionProfile(profile.id);
     repository.completeConnectionOnboarding();
     expect(repository.getConnectionSetup()).toEqual({
-      activeProfileId: profile.id,
       onboardingCompletedAt: "2026-08-12T12:00:00.000Z"
     });
 
     const catalog = repository.replaceVoiceCatalogOverrides({
       schemaVersion: 1,
       modelId: "speaches-ai/Kokoro-82M-v1.0-ONNX",
-      entries: [{ voiceId: "af_heart", label: "Heart", enabled: false }]
+      entries: [{ voiceId: "af_heart", label: "Heart", enabled: false, favorite: true }]
     });
     expect(catalog.entries).toEqual([{
-      voiceId: "af_heart", label: "Heart", enabled: false, language: null, locale: null,
+      voiceId: "af_heart", label: "Heart", enabled: false, favorite: true, language: null, locale: null,
       accent: null, category: null, style: null, sampleText: null
     }]);
     repository.close();
+
+    const reopened = await openStudyNarratorRepository({ Database: DatabaseAdapter, databasePath });
+    expect(reopened.getVoiceCatalogOverrides("speaches-ai/Kokoro-82M-v1.0-ONNX").entries[0]?.favorite).toBe(true);
+    reopened.close();
   });
 
   it("persists durable render jobs, segment progress, retry links, and artifact metadata", async () => {

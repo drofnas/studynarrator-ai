@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createDesktopServices, resolveDesktopDataDirectory } from "./bootstrap.js";
+import { ElectronCredentialVault } from "./credentialVault.js";
 
 describe("desktop data directory", () => {
   it("resolves a relative configured directory from the initiating workspace", () => {
@@ -13,8 +14,8 @@ describe("desktop data directory", () => {
   });
 });
 
-describe("desktop connection credential bootstrap", () => {
-  it("keeps the credential out of SQLite, responses, and encrypted vault text", async () => {
+describe("desktop connection bootstrap", () => {
+  it("removes orphaned legacy vault credentials and ignores Speaches environment settings", async () => {
     const dataDirectory = await mkdtemp(join(tmpdir(), "studynarrator-desktop-"));
     const safeStorage = {
       isEncryptionAvailable: () => true,
@@ -22,16 +23,18 @@ describe("desktop connection credential bootstrap", () => {
       encryptString: (value: string) => Buffer.from([...value].reverse().join("")),
       decryptString: (value: Buffer) => [...value.toString()].reverse().join("")
     };
-    const runtime = await createDesktopServices({ defaultDataDirectory: dataDirectory, environment: {}, safeStorage });
+    const legacyVault = new ElectronCredentialVault(safeStorage, dataDirectory);
+    await legacyVault.write("old-profile", "test-secret-must-not-appear");
+    const runtime = await createDesktopServices({
+      defaultDataDirectory: dataDirectory,
+      environment: { SPEACHES_BASE_URL: "http://private-environment.invalid" },
+      safeStorage
+    });
     try {
-      if (!runtime.connections || !runtime.credentialVault) throw new Error("Expected desktop connection services.");
-      const profile = await runtime.connections.create({
-        profile: { id: "desktop-secret", name: "Desktop", baseUrl: "http://127.0.0.1:8000", defaultModelId: "model", defaultVoiceId: "voice" },
-        credential: { action: "replace", apiKey: "test-secret-must-not-appear" }
-      });
-      expect(JSON.stringify(profile)).not.toContain("test-secret-must-not-appear");
+      if (!runtime.connection) throw new Error("Expected the desktop connection service.");
+      expect(await runtime.connection.get()).toMatchObject({ baseUrl: null, configured: false });
       expect((await readFile(join(dataDirectory, "studynarrator.sqlite"))).toString("latin1")).not.toContain("test-secret-must-not-appear");
-      expect(await readFile(runtime.credentialVault.filePath, "utf8")).not.toContain("test-secret-must-not-appear");
+      expect(await readFile(legacyVault.filePath, "utf8")).not.toContain("old-profile");
     } finally {
       runtime.service.close();
     }

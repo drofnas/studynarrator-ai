@@ -6,9 +6,8 @@ import Database from "better-sqlite3";
 import request from "supertest";
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  createConnectionsService,
+  createConnectionService,
   createPersistenceService,
-  createRoutedCredentialStore,
   createScriptGenerationService,
   createSystemService,
   createUnavailablePersistenceService,
@@ -18,6 +17,7 @@ import {
 import { openStudyNarratorRepository, type DatabaseConstructor } from "@studynarrator/persistence";
 import {
   BoundaryErrorSchema,
+  DEFAULT_SYSTEM_TIMING,
   HealthSchema,
   ProjectDetailSchema,
   ProjectPreviewResultSchema,
@@ -80,21 +80,23 @@ async function fixture() {
     ffmpegProbe: { run: async () => ({ status: "pass", executable: "ffmpeg", version: "ffmpeg version test" }) }
   });
   const persistence = createPersistenceService(repository);
-  const connections = createConnectionsService({
+  const connection = createConnectionService({
     repository,
-    credentials: createRoutedCredentialStore({ environmentApiKey: null }),
-    context: { client: "web", nodeVersion: "26.7.0", electronVersion: null, activeProfileLocked: false },
-    discoverCatalog: async ({ profileId }) => ({ schemaVersion: 1, profileId, models: [{ modelId: "model", voices: [{ voiceId: "voice", name: "Voice", language: null, gender: null }] }] })
+    context: { client: "web", nodeVersion: "26.7.0", electronVersion: null },
+    diagnose: async () => ({ normalizedUrl: null, summary: {
+      schemaVersion: 1, overall: "connected", testedAt: "2026-08-12T12:00:00.000Z", httpStatus: 200,
+      stages: ["url", "dns", "tcp", "http", "authentication", "model", "voice", "audio"].map((stage) => ({ stage: stage as "url", status: "pass" as const, code: `${stage}-pass`, message: "Passed.", durationMs: 1 })),
+      availableModelIds: ["model"], availableVoiceIds: ["voice"]
+    } }),
+    discoverCatalog: async () => ({ schemaVersion: 1, models: [{ modelId: "model", voices: [{ voiceId: "voice", name: "Voice", language: null, gender: null }] }] })
   });
   const voiceCatalog = createVoiceCatalogService({ repository, bundledCatalogs: new Map() });
   const scriptGeneration = createScriptGenerationService({ repository });
   const scratchpad = {
-    preview: async (input: { connectionProfileId: string; modelId: string; voiceId: string; speed: number; text: string; applyGlobalLexicon: boolean }) => ({
-      schemaVersion: 2 as const,
+    preview: async (input: { modelId: string; voiceId: string; speed: number; text: string; applyGlobalLexicon: boolean }) => ({
+      schemaVersion: 3 as const,
       id: "00000000-0000-4000-8000-000000000099",
       createdAt: "2026-08-12T12:00:00.000Z",
-      connectionProfileId: input.connectionProfileId,
-      connectionProfileName: "Manifest",
       modelId: input.modelId,
       voiceId: input.voiceId,
       voiceLabel: "Voice",
@@ -113,7 +115,7 @@ async function fixture() {
   };
   const projectPreview = {
     preview: async (requestedProjectId: string, input: { mode: "segment" | "pronunciation" }) => ({
-      schemaVersion: 1 as const,
+      schemaVersion: 2 as const,
       id: "00000000-0000-4000-8000-000000000098",
       createdAt: "2026-08-12T12:00:00.000Z",
       projectId: requestedProjectId,
@@ -122,8 +124,6 @@ async function fixture() {
       sourceRange: input.mode === "segment"
         ? { start: { line: 1, column: 1 }, end: { line: 1, column: 17 } }
         : null,
-      connectionProfileId: "manifest-profile",
-      connectionProfileName: "Manifest",
       modelId: "model",
       speakerId: "narrator" as const,
       voiceId: "voice",
@@ -201,8 +201,8 @@ async function fixture() {
   };
   openServices.add(service);
   return {
-    service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache, renderPlans, renders, scriptGeneration,
-    app: await listen(createExpressApp({ service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache, renderPlans, renders, scriptGeneration, context }))
+    service, persistence, connection, voiceCatalog, scratchpad, projectPreview, speechCache, renderPlans, renders, scriptGeneration,
+    app: await listen(createExpressApp({ service, persistence, connection, voiceCatalog, scratchpad, projectPreview, speechCache, renderPlans, renders, scriptGeneration, context }))
   };
 }
 
@@ -280,7 +280,7 @@ describe("Express Scratchpad cancellation", () => {
     const pending = fetch(`http://127.0.0.1:${String(address.port)}/api/scratchpad/preview`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ connectionProfileId: "profile", modelId: "model", voiceId: "voice", speed: 1, text: "Speech.", applyGlobalLexicon: false }),
+      body: JSON.stringify({ modelId: "model", voiceId: "voice", speed: 1, text: "Speech.", applyGlobalLexicon: false }),
       signal: controller.signal
     });
     await started;
@@ -294,17 +294,15 @@ describe("Express persistence API", () => {
   it("creates, replaces, reads, lists, and deletes complete project aggregates", async () => {
     const { app } = await fixture();
     const created = ProjectDetailSchema.parse((await request(app).post("/api/projects").send({ name: "REST study" }).expect(201)).body as unknown);
-    expect(created).toMatchObject({ name: "REST study", transitionPauses: { paragraph: { mode: "preset", pauseId: "pause_medium" } } });
+    expect(created).toMatchObject({ name: "REST study" });
+    expect(created).not.toHaveProperty("transitionPauses");
 
     const source = "Résumé\r\n\r\nSQL 🧠";
     const replaced = ProjectDetailSchema.parse((await request(app).put(`/api/projects/${created.id}`).send({
       name: "REST study",
       description: "Restart-safe",
       scriptSource: source,
-      connectionProfileId: null,
       speakerMappings: [],
-      pausePresets: created.pausePresets,
-      transitionPauses: created.transitionPauses,
       lexiconEntries: [{ scope: "project", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel" }]
     }).expect(200)).body as unknown);
     expect(replaced.scriptSource).toBe(source);
@@ -327,19 +325,16 @@ describe("Express persistence API", () => {
     expect(invalid.error.issues?.some((issue) => issue.path.startsWith("$.") && issue.message.length > 0)).toBe(true);
     expect(JSON.stringify(invalid)).not.toContain("must-not-leak");
 
-    const profile = { profile: { id: "safe-profile", name: "Local placeholder", baseUrl: "http://127.0.0.1:8000", defaultModelId: null, defaultVoiceId: null }, credential: { action: "keep" } };
-    await request(app).post("/api/connections").send(profile).expect(201);
-    const conflict = BoundaryErrorSchema.parse((await request(app).post("/api/connections").send(profile).expect(409)).body as unknown);
-    expect(conflict).toEqual({ error: { code: "CONFLICT", message: "The persistence operation conflicts with existing data." } });
+    await request(app).put("/api/connection").send({ baseUrl: "javascript:unsafe", defaultModelId: null, defaultVoiceId: null }).expect(400);
   });
 
   it("keeps diagnostics status available while degraded writes return 503", async () => {
     const { service } = await fixture();
     const persistence = createUnavailablePersistenceService({
-      contractVersion: 4,
+      contractVersion: 9,
       state: "unavailable",
       databaseSchemaVersion: 1,
-      targetDatabaseSchemaVersion: 6,
+      targetDatabaseSchemaVersion: 12,
       databasePath: "/tmp/studynarrator.sqlite",
       latestBackupPath: "/tmp/backups/recovery.sqlite",
       code: "MIGRATION_FAILED",
@@ -353,23 +348,21 @@ describe("Express persistence API", () => {
 });
 
 describe("Express connection API", () => {
-  it("uses managed connection routes and rejects Web credential entry without echoing it", async () => {
+  it("uses singular managed connection routes and rejects credential-shaped input", async () => {
     const { app } = await fixture();
     const secret = "test-secret-must-not-appear";
-    const rejected = BoundaryErrorSchema.parse((await request(app).post("/api/connections").send({
-      profile: { id: "web-profile", name: "Web", baseUrl: "http://127.0.0.1:8000", defaultModelId: "model", defaultVoiceId: "voice" },
-      credential: { action: "replace", apiKey: secret }
-    }).expect(409)).body as unknown);
-    expect(rejected.error.code).toBe("CONNECTION_POLICY");
+    const rejected = BoundaryErrorSchema.parse((await request(app).put("/api/connection").send({
+      baseUrl: "http://127.0.0.1:8000", defaultModelId: "model", defaultVoiceId: "voice", apiKey: secret
+    }).expect(400)).body as unknown);
+    expect(rejected.error.code).toBe("VALIDATION_ERROR");
     expect(JSON.stringify(rejected)).not.toContain(secret);
-    await request(app).get("/api/connection-profiles").expect(404);
-
-    await request(app).post("/api/connections").send({
-      profile: { id: "web-profile", name: "Web", baseUrl: "http://127.0.0.1:8000/v1", defaultModelId: "model", defaultVoiceId: "voice" },
-      credential: { action: "keep" }
-    }).expect(201);
-    const profiles = await request(app).get("/api/connections").expect(200);
-    expect(profiles.body).toEqual([expect.objectContaining({ id: "web-profile", baseUrl: "http://127.0.0.1:8000", credentialEntryAllowed: false })]);
+    await request(app).put("/api/connection").send({
+      baseUrl: "http://127.0.0.1:8000/v1", defaultModelId: "model", defaultVoiceId: "voice"
+    }).expect(200);
+    const connection = await request(app).get("/api/connection").expect(200);
+    expect(connection.body).toEqual(expect.objectContaining({ baseUrl: "http://127.0.0.1:8000", configured: true }));
+    expect(connection.body).not.toHaveProperty("id");
+    await request(app).get("/api/connections").expect(404);
   });
 });
 
@@ -400,8 +393,8 @@ interface ExpressRouteLayer {
 
 describe("REST API operation manifest", () => {
   it("matches every registered method and path exactly", async () => {
-    const { service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache, renderPlans, renders, scriptGeneration } = await fixture();
-    const application = createExpressApp({ service, persistence, connections, voiceCatalog, scratchpad, projectPreview, speechCache, renderPlans, renders, scriptGeneration, context });
+    const { service, persistence, connection, voiceCatalog, scratchpad, projectPreview, speechCache, renderPlans, renders, scriptGeneration } = await fixture();
+    const application = createExpressApp({ service, persistence, connection, voiceCatalog, scratchpad, projectPreview, speechCache, renderPlans, renders, scriptGeneration, context });
     const layers = (application as unknown as { router: { stack: ExpressRouteLayer[] } }).router.stack;
     const registered = layers.flatMap((layer) => layer.route
       ? Object.entries(layer.route.methods)
@@ -410,10 +403,10 @@ describe("REST API operation manifest", () => {
       : []);
     const declared = REST_API_MANIFEST.map(({ method, path }) => `${method} ${path}`);
     expect(registered.sort()).toEqual([...declared].sort());
-    expect(new Set(declared).size).toBe(55);
+    expect(new Set(declared).size).toBe(52);
   });
 
-  it("exercises a successful schema-valid response for all 55 operations", async () => {
+  it("exercises a successful schema-valid response for all 52 operations", async () => {
     const { app } = await fixture();
     const covered = new Set<string>();
     const call = async (method: string, path: string, expected: number, body?: string | object) => {
@@ -424,7 +417,6 @@ describe("REST API operation manifest", () => {
         .replace(/^\/api\/renders\/[0-9a-f-]{36}(?=\/|$)/u, "/api/renders/:renderId")
         .replace(/\/segments\/\d+(?=\/|$)/u, "/segments/:ordinal")
         .replace(/\/[0-9a-f-]{36}(?=\/|$)/gu, "/:projectId")
-        .replace(/\/manifest-profile(?=\/|$)/gu, "/:profileId")
         .replace(/\/[a-f0-9]{64}(?=\/|$)/gu, "/:cacheKey")}`);
       const agent = request(app)[method.toLowerCase() as "get"](path);
       if (body !== undefined) agent.send(body);
@@ -442,40 +434,30 @@ describe("REST API operation manifest", () => {
       name: created.name,
       description: "manifest",
       scriptSource: "Manifest source",
-      connectionProfileId: null,
-      modelId: null,
       speakerMappings: [],
-      pausePresets: created.pausePresets,
-      transitionPauses: created.transitionPauses,
       lexiconEntries: []
     };
     ProjectDetailSchema.parse((await call("PUT", `/api/projects/${created.id}`, 200, replacement)).body as unknown);
     ProjectDetailSchema.parse((await call("POST", `/api/projects/${created.id}/duplicate`, 201, { name: "Manifest copy" })).body as unknown);
     await call("GET", "/api/settings/pacing", 200);
-    await call("PUT", "/api/settings/pacing", 200, { enabled: false, durationMs: 900 });
+    await call("PUT", "/api/settings/pacing", 200, DEFAULT_SYSTEM_TIMING);
     await call("GET", "/api/preferences/ignored-diagnostics", 200);
     await call("PUT", "/api/preferences/ignored-diagnostics", 200, []);
     await call("GET", "/api/lexicon/global", 200);
     await call("PUT", "/api/lexicon/global", 200, []);
-    await call("GET", "/api/connections", 200);
-    const profileMutation = {
-      profile: { id: "manifest-profile", name: "Manifest", baseUrl: "http://127.0.0.1:1/v1", defaultModelId: "model", defaultVoiceId: "voice" },
-      credential: { action: "keep" }
-    };
-    await call("POST", "/api/connections", 201, profileMutation);
-    await call("PUT", "/api/connections/manifest-profile", 200, { ...profileMutation, profile: { ...profileMutation.profile, name: "Updated manifest" } });
-    await call("POST", "/api/connections/manifest-profile/test", 200);
-    SpeechCatalogSchema.parse((await call("GET", "/api/connections/manifest-profile/speech-catalog", 200)).body as unknown);
-    await call("GET", "/api/connections/manifest-profile/diagnostics", 200);
+    await call("GET", "/api/connection", 200);
+    await call("PUT", "/api/connection", 200, { baseUrl: "http://127.0.0.1:1/v1", defaultModelId: "model", defaultVoiceId: "voice" });
+    SpeechCatalogSchema.parse((await call("POST", "/api/connection/speech-catalog", 200, { baseUrl: "http://127.0.0.1:1/v1" })).body as unknown);
+    await call("POST", "/api/connection/test", 200);
+    await call("GET", "/api/connection/diagnostics", 200);
     await call("GET", "/api/setup", 200);
-    await call("PUT", "/api/setup/active-profile", 200, { profileId: "manifest-profile" });
     await call("POST", "/api/setup/complete", 200);
     await call("GET", "/api/voice-catalog?modelId=model", 200);
     covered.delete("GET /api/voice-catalog?modelId=model");
     covered.add("GET /api/voice-catalog");
     await call("PUT", "/api/voice-catalog", 200, { schemaVersion: 1, modelId: "model", entries: [] });
     await call("POST", "/api/scratchpad/preview", 200, {
-      connectionProfileId: "manifest-profile", modelId: "model", voiceId: "voice", speed: 1,
+      modelId: "model", voiceId: "voice", speed: 1,
       text: "Manifest speech.", applyGlobalLexicon: false
     });
     ProjectPreviewResultSchema.parse((await call("POST", `/api/projects/${created.id}/preview`, 200, {
@@ -506,7 +488,6 @@ describe("REST API operation manifest", () => {
     SpeechCacheCleanupResultSchema.parse((await call("DELETE", `/api/projects/${created.id}/speech-cache`, 200)).body as unknown);
     SpeechCacheCleanupResultSchema.parse((await call("DELETE", `/api/speech-cache/${"a".repeat(64)}`, 200)).body as unknown);
     SpeechCacheCleanupResultSchema.parse((await call("DELETE", "/api/speech-cache", 200)).body as unknown);
-    await call("DELETE", "/api/connections/manifest-profile", 204);
     await call("DELETE", `/api/projects/${created.id}`, 204);
 
     expect([...covered].sort()).toEqual(REST_API_MANIFEST.map(({ method, path }) => `${method} ${path}`).sort());
@@ -524,15 +505,11 @@ describe("REST API operation manifest", () => {
       request(app).put("/api/settings/pacing").send({ durationMs: -1 }).expect(400),
       request(app).put("/api/preferences/ignored-diagnostics").send({}).expect(400),
       request(app).put("/api/lexicon/global").send({}).expect(400),
-      request(app).post("/api/connections").send({ profile: {}, credential: { action: "replace", apiKey: secret } }).expect(400),
-      request(app).put("/api/connections/not-found").send({}).expect(400),
-      request(app).delete("/api/connections/not-found").expect(404),
-      request(app).post("/api/connections/not-found/test").expect(404),
-      request(app).get("/api/connections/not-found/diagnostics").expect(404),
-      request(app).put("/api/setup/active-profile").send({ profileId: 12 }).expect(400),
+      request(app).put("/api/connection").send({ baseUrl: "http://127.0.0.1:8000", apiKey: secret }).expect(400),
+      request(app).post("/api/connection/speech-catalog").send({ baseUrl: "file:///tmp/private" }).expect(400),
       request(app).get("/api/voice-catalog").expect(400),
       request(app).put("/api/voice-catalog").send({ schemaVersion: 1, modelId: "model", entries: [{ voiceId: "same", label: secret, apiKey: secret }] }).expect(400),
-      request(app).post("/api/scratchpad/preview").send({ connectionProfileId: "x", text: secret }).expect(400),
+      request(app).post("/api/scratchpad/preview").send({ text: secret }).expect(400),
       request(app).post("/api/projects/not-a-uuid/preview").send({ mode: "segment", nodeOrdinal: 1 }).expect(400),
       request(app).post("/api/projects/00000000-0000-4000-8000-000000000001/preview").send({ mode: "pronunciation", text: "" }).expect(400),
       request(app).post("/api/script-generation/prompt-preview").send({ kind: "invalid", apiKey: secret }).expect(400),
@@ -562,7 +539,7 @@ describe("REST API operation manifest", () => {
     expect(JSON.stringify(responses.map((response) => response.body as unknown))).not.toContain(secret);
 
     const unavailable = createUnavailablePersistenceService({
-      contractVersion: 4, state: "unavailable", databaseSchemaVersion: 2, targetDatabaseSchemaVersion: 6,
+      contractVersion: 9, state: "unavailable", databaseSchemaVersion: 2, targetDatabaseSchemaVersion: 12,
       databasePath: "/redacted/data.sqlite", latestBackupPath: null, code: "MIGRATION_FAILED", message: "Unavailable."
     });
     const degraded = await listen(createExpressApp({ service, persistence: unavailable, context }));

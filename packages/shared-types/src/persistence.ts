@@ -2,21 +2,15 @@ import {
   DEFAULT_PARAGRAPH_PAUSE_DURATION_MS,
   DEFAULT_PARAGRAPH_PAUSE_ID,
   IgnoredDiagnosticSchema,
-  LexiconEntryAuthoringSchema,
   LexiconEntrySchema,
   PauseIdSchema,
-  SpeakerIdSchema
+  SpeakerIdSchema,
+  SupportedPauseIdSchema
 } from "@studynarrator/core";
 import { z } from "zod";
-import {
-  ConnectionProfileAuthoringSchema,
-  ConnectionProfileCollectionSchema,
-  ConnectionProfileIdInputSchema,
-  type ConnectionProfile
-} from "./connections.js";
 
-export const DATABASE_SCHEMA_VERSION = 6;
-export const PERSISTENCE_CONTRACT_VERSION = 4;
+export const DATABASE_SCHEMA_VERSION = 12;
+export const PERSISTENCE_CONTRACT_VERSION = 9;
 export const PERSISTENCE_CHANNELS = Object.freeze({
   status: "persistence.status",
   projectsList: "projects.list",
@@ -69,28 +63,65 @@ export const TransitionPauseConfigurationSchema = z.object({
 }).strict();
 export type TransitionPauseConfiguration = z.infer<typeof TransitionPauseConfigurationSchema>;
 
-export const SystemPacingDefaultsSchema = z.object({
-  enabled: z.boolean(),
-  durationMs: z.number().int().min(0).max(30_000)
+const fixedPausePreset = <TId extends "pause_short" | "pause_medium" | "pause_long">(pauseId: TId) => z.object({
+  pauseId: z.literal(pauseId),
+  durationMs: z.number().int().min(0).max(30_000),
+  description: z.string().max(500)
 }).strict();
-export type SystemPacingDefaults = z.infer<typeof SystemPacingDefaultsSchema>;
 
-export const DEFAULT_SYSTEM_PACING: SystemPacingDefaults = Object.freeze({
-  enabled: true,
-  durationMs: DEFAULT_PARAGRAPH_PAUSE_DURATION_MS
-});
+export const SystemPausePresetCollectionSchema = z.tuple([
+  fixedPausePreset("pause_short"),
+  fixedPausePreset("pause_medium"),
+  fixedPausePreset("pause_long")
+]);
+export const SystemTransitionPauseSettingSchema = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("none") }).strict(),
+  z.object({ mode: z.literal("preset"), pauseId: SupportedPauseIdSchema }).strict(),
+  z.object({ mode: z.literal("duration"), durationMs: z.number().int().min(0).max(30_000) }).strict()
+]);
+export type SystemTransitionPauseSetting = z.infer<typeof SystemTransitionPauseSettingSchema>;
+export const SystemTransitionPauseConfigurationSchema = z.object({
+  paragraph: SystemTransitionPauseSettingSchema,
+  speakerChange: SystemTransitionPauseSettingSchema,
+  section: SystemTransitionPauseSettingSchema
+}).strict();
+export type SystemTransitionPauseConfiguration = z.infer<typeof SystemTransitionPauseConfigurationSchema>;
+export const SystemTimingConfigurationSchema = z.object({
+  pausePresets: SystemPausePresetCollectionSchema,
+  transitionPauses: SystemTransitionPauseConfigurationSchema
+}).strict();
+export type SystemTimingConfiguration = z.infer<typeof SystemTimingConfigurationSchema>;
 
-const ProjectLexiconAuthoringSchema = LexiconEntryAuthoringSchema.superRefine((entry, context) => {
-  if (entry.scope !== "project") {
-    context.addIssue({ code: "custom", message: "Project lexicon entries must use project scope.", path: ["scope"] });
+export const DEFAULT_SYSTEM_TIMING: SystemTimingConfiguration = Object.freeze({
+  pausePresets: [
+    { pauseId: "pause_short", durationMs: 350, description: "Brief thinking beat or speaker handoff." },
+    { pauseId: "pause_medium", durationMs: DEFAULT_PARAGRAPH_PAUSE_DURATION_MS, description: "Paragraph or subtopic separation." },
+    { pauseId: "pause_long", durationMs: 1_500, description: "Major subject or section separation." }
+  ],
+  transitionPauses: {
+    paragraph: { mode: "preset", pauseId: DEFAULT_PARAGRAPH_PAUSE_ID },
+    speakerChange: { mode: "none" },
+    section: { mode: "none" }
   }
 });
 
-const GlobalLexiconAuthoringSchema = LexiconEntryAuthoringSchema.superRefine((entry, context) => {
-  if (entry.scope !== "global") {
-    context.addIssue({ code: "custom", message: "Global lexicon entries must use global scope.", path: ["scope"] });
-  }
-});
+function simplifiedLexiconAuthoringSchema<TScope extends "global" | "project">(scope: TScope) {
+  return z.object({
+  id: z.string().min(1).optional(),
+  scope: z.literal(scope),
+  entryType: z.literal("exactTerm").default("exactTerm"),
+  displayText: z.string().trim().min(1),
+  spokenText: z.string().trim().min(1),
+  caseSensitive: z.literal(false).default(false),
+  wholeWord: z.literal(true).default(true),
+  priority: z.literal(0).default(0),
+  enabled: z.boolean().default(true),
+  notes: z.literal("").default("")
+  }).strict();
+}
+
+const ProjectLexiconAuthoringSchema = simplifiedLexiconAuthoringSchema("project");
+const GlobalLexiconAuthoringSchema = simplifiedLexiconAuthoringSchema("global");
 
 export const SpeakerMappingCollectionSchema = z.array(SpeakerMappingSchema).superRefine((items, context) => {
   const seen = new Set<string>();
@@ -129,9 +160,21 @@ export const GlobalLexiconAuthoringCollectionSchema = z.array(GlobalLexiconAutho
 
 const ProjectLexiconEntrySchema = LexiconEntrySchema.superRefine((entry, context) => {
   if (entry.scope !== "project") context.addIssue({ code: "custom", message: "Project lexicon entries must use project scope.", path: ["scope"] });
+  if (entry.entryType !== "exactTerm") context.addIssue({ code: "custom", message: "Project lexicon entries must use exact-term matching.", path: ["entryType"] });
+  if (entry.senseId !== undefined) context.addIssue({ code: "custom", message: "Project lexicon entries cannot define a sense ID.", path: ["senseId"] });
+  if (entry.caseSensitive) context.addIssue({ code: "custom", message: "Project lexicon entries must be case insensitive.", path: ["caseSensitive"] });
+  if (!entry.wholeWord) context.addIssue({ code: "custom", message: "Project lexicon entries must match whole words.", path: ["wholeWord"] });
+  if (entry.priority !== 0) context.addIssue({ code: "custom", message: "Project lexicon entries use fixed priority.", path: ["priority"] });
+  if (entry.notes !== "") context.addIssue({ code: "custom", message: "Project lexicon entries do not store notes.", path: ["notes"] });
 });
 const GlobalLexiconEntrySchema = LexiconEntrySchema.superRefine((entry, context) => {
   if (entry.scope !== "global") context.addIssue({ code: "custom", message: "Global lexicon entries must use global scope.", path: ["scope"] });
+  if (entry.entryType !== "exactTerm") context.addIssue({ code: "custom", message: "Global lexicon entries must use exact-term matching.", path: ["entryType"] });
+  if (entry.senseId !== undefined) context.addIssue({ code: "custom", message: "Global lexicon entries cannot define a sense ID.", path: ["senseId"] });
+  if (entry.caseSensitive) context.addIssue({ code: "custom", message: "Global lexicon entries must be case insensitive.", path: ["caseSensitive"] });
+  if (!entry.wholeWord) context.addIssue({ code: "custom", message: "Global lexicon entries must match whole words.", path: ["wholeWord"] });
+  if (entry.priority !== 0) context.addIssue({ code: "custom", message: "Global lexicon entries use fixed priority.", path: ["priority"] });
+  if (entry.notes !== "") context.addIssue({ code: "custom", message: "Global lexicon entries do not store notes.", path: ["notes"] });
 });
 
 export const ProjectCreateInputSchema = z.object({
@@ -149,33 +192,13 @@ const ProjectAggregateShape = {
   name: z.string().trim().min(1).max(200),
   description: z.string().max(10_000),
   scriptSource: z.string().max(5_000_000),
-  connectionProfileId: DurableIdSchema.nullable(),
-  modelId: z.string().trim().min(1).max(500).nullable().default(null),
-  speakerMappings: SpeakerMappingCollectionSchema,
-  pausePresets: PausePresetCollectionSchema,
-  transitionPauses: TransitionPauseConfigurationSchema
+  speakerMappings: SpeakerMappingCollectionSchema
 } as const;
-
-function validateTransitionPresets(
-  project: { pausePresets: PausePreset[]; transitionPauses: TransitionPauseConfiguration },
-  context: z.RefinementCtx
-) {
-  for (const [boundary, setting] of Object.entries(project.transitionPauses)) {
-    if (setting.mode !== "preset") continue;
-    if (!project.pausePresets.some((candidate) => candidate.pauseId === setting.pauseId)) {
-      context.addIssue({
-        code: "custom",
-        message: `${boundary} transition pacing must reference a project pause preset.`,
-        path: ["transitionPauses", boundary, "pauseId"]
-      });
-    }
-  }
-}
 
 export const ProjectReplaceInputSchema = z.object({
   ...ProjectAggregateShape,
   lexiconEntries: ProjectLexiconAuthoringCollectionSchema
-}).strict().superRefine(validateTransitionPresets);
+}).strict();
 export type ProjectReplaceInput = z.input<typeof ProjectReplaceInputSchema>;
 
 export const ProjectSummarySchema = z.object({
@@ -196,13 +219,24 @@ export const ProjectDetailSchema = z.object({
   lexiconEntries: z.array(ProjectLexiconEntrySchema),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema
-}).strict().superRefine(validateTransitionPresets);
+}).strict();
 export type ProjectDetail = z.infer<typeof ProjectDetailSchema>;
 
 export const ProjectSummaryCollectionSchema = z.array(ProjectSummarySchema);
 export const GlobalLexiconEntryCollectionSchema = z.array(GlobalLexiconEntrySchema);
 export const GlobalLexiconReplaceInputSchema = GlobalLexiconAuthoringCollectionSchema;
 export type GlobalLexiconReplaceInput = z.input<typeof GlobalLexiconReplaceInputSchema>;
+
+export const DEFAULT_GLOBAL_LEXICON = Object.freeze([
+  { id: "10000000-0000-4000-8000-000000000001", scope: "global", entryType: "exactTerm", displayText: "API", spokenText: "A P I", caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: "" },
+  { id: "10000000-0000-4000-8000-000000000002", scope: "global", entryType: "exactTerm", displayText: "URL", spokenText: "U R L", caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: "" },
+  { id: "10000000-0000-4000-8000-000000000003", scope: "global", entryType: "exactTerm", displayText: "HTTP", spokenText: "H T T P", caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: "" },
+  { id: "10000000-0000-4000-8000-000000000004", scope: "global", entryType: "exactTerm", displayText: "HTTPS", spokenText: "H T T P S", caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: "" },
+  { id: "10000000-0000-4000-8000-000000000005", scope: "global", entryType: "exactTerm", displayText: "JSON", spokenText: "jay son", caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: "" },
+  { id: "10000000-0000-4000-8000-000000000006", scope: "global", entryType: "exactTerm", displayText: "SQL", spokenText: "S Q L", caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: "" },
+  { id: "10000000-0000-4000-8000-000000000007", scope: "global", entryType: "exactTerm", displayText: "PostgreSQL", spokenText: "post gres Q L", caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: "" },
+  { id: "10000000-0000-4000-8000-000000000008", scope: "global", entryType: "exactTerm", displayText: "GitHub", spokenText: "git hub", caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: "" }
+]) satisfies Readonly<GlobalLexiconReplaceInput>;
 
 export const IgnoredDiagnosticCollectionSchema = z.array(IgnoredDiagnosticSchema).superRefine((items, context) => {
   const seen = new Set<string>();
@@ -214,18 +248,9 @@ export const IgnoredDiagnosticCollectionSchema = z.array(IgnoredDiagnosticSchema
 });
 export type IgnoredDiagnosticCollection = z.infer<typeof IgnoredDiagnosticCollectionSchema>;
 
-export const ConnectionProfileAuthoringCollectionSchema = z.array(ConnectionProfileAuthoringSchema)
-  .superRefine((items, context) => enforceUniqueOptionalIds(items, context, "connection profile"));
-export const ConnectionProfilePlaceholderSchema = ConnectionProfileCollectionSchema.element;
-export type ConnectionProfilePlaceholder = ConnectionProfile;
 export const ProjectIdInputSchema = z.object({ projectId: ProjectIdSchema }).strict();
 export const ProjectReplaceRequestSchema = z.object({ projectId: ProjectIdSchema, project: ProjectReplaceInputSchema }).strict();
 export const ProjectDuplicateRequestSchema = z.object({ projectId: ProjectIdSchema, duplicate: ProjectDuplicateInputSchema }).strict();
-export const ConnectionProfileReplaceRequestSchema = z.object({
-  profileId: DurableIdSchema,
-  profile: ConnectionProfileAuthoringSchema
-}).strict();
-export { ConnectionProfileAuthoringSchema, ConnectionProfileCollectionSchema, ConnectionProfileIdInputSchema };
 export const EmptyResponseSchema = z.object({}).strict();
 
 export const PersistenceReadyStatusSchema = z.object({
@@ -261,8 +286,8 @@ export interface ProjectsClient {
 }
 
 export interface PersistenceSettingsClient {
-  getPacing(): Promise<SystemPacingDefaults>;
-  updatePacing(input: SystemPacingDefaults): Promise<SystemPacingDefaults>;
+  getPacing(): Promise<SystemTimingConfiguration>;
+  updatePacing(input: SystemTimingConfiguration): Promise<SystemTimingConfiguration>;
 }
 
 export interface PreferencesClient {
@@ -284,7 +309,7 @@ export interface PersistenceClient {
 }
 
 export const DEFAULT_PROJECT_PARAGRAPH_PAUSE = Object.freeze({
-  enabled: DEFAULT_SYSTEM_PACING.enabled,
+  enabled: DEFAULT_SYSTEM_TIMING.transitionPauses.paragraph.mode !== "none",
   pauseId: DEFAULT_PARAGRAPH_PAUSE_ID,
-  durationMs: DEFAULT_SYSTEM_PACING.durationMs
+  durationMs: DEFAULT_PARAGRAPH_PAUSE_DURATION_MS
 });

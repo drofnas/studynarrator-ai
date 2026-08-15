@@ -7,7 +7,7 @@ import {
   type ScratchpadPreviewResult
 } from "@studynarrator/shared-types";
 import { SpeachesSynthesisError } from "@studynarrator/speaches-adapter";
-import type { ConnectionRepository, CredentialStore } from "./connections.js";
+import type { ConnectionRepository } from "./connections.js";
 import type { PersistenceRepository } from "./persistence.js";
 import { createCachedSpeechSynthesis, type CachedSpeechSynthesisRunner } from "./cachedSpeech.js";
 import type { SpeechCache } from "@studynarrator/rendering";
@@ -38,8 +38,8 @@ function safeSynthesisError(error: unknown): ScratchpadServiceError {
     switch (error.code) {
       case "aborted": return new ScratchpadServiceError("SCRATCHPAD_ABORTED", "Speech synthesis was cancelled.");
       case "audioTooLarge": return new ScratchpadServiceError("SCRATCHPAD_INVALID_AUDIO", "The generated WAV exceeded the 5 MiB Scratchpad limit. Shorten the passage and retry.");
-      case "authenticationRequired": return new ScratchpadServiceError("SCRATCHPAD_AUTHENTICATION", "Speaches rejected authentication. Test the profile and update its API key.");
-      case "configurationError": return new ScratchpadServiceError("SCRATCHPAD_CONFIGURATION", "The selected connection profile or synthesis settings are incomplete.");
+      case "authenticationRequired": return new ScratchpadServiceError("SCRATCHPAD_AUTHENTICATION", "This Speaches server requires authentication, which StudyNarrator does not support.");
+      case "configurationError": return new ScratchpadServiceError("SCRATCHPAD_CONFIGURATION", "The Speaches connection or synthesis settings are incomplete.");
       case "invalidAudio": return new ScratchpadServiceError("SCRATCHPAD_INVALID_AUDIO", "Speaches returned WAV audio that StudyNarrator could not validate.");
       case "selectionRejected": return new ScratchpadServiceError("SCRATCHPAD_SELECTION_REJECTED", "Speaches rejected the selected model or voice. Check both selections and retry.");
       case "unavailable": return new ScratchpadServiceError("SCRATCHPAD_UNAVAILABLE", "The configured Speaches service is unavailable. Check the connection and retry.");
@@ -47,14 +47,13 @@ function safeSynthesisError(error: unknown): ScratchpadServiceError {
   }
   const code = typeof error === "object" && error !== null && "code" in error ? error.code : undefined;
   if (code === "PERSISTENCE_NOT_FOUND") {
-    return new ScratchpadServiceError("SCRATCHPAD_CONFIGURATION", "The selected connection profile no longer exists.");
+    return new ScratchpadServiceError("SCRATCHPAD_CONFIGURATION", "The Speaches connection is unavailable.");
   }
   return new ScratchpadServiceError("SCRATCHPAD_UNAVAILABLE", "StudyNarrator could not complete speech synthesis.");
 }
 
 export function createScratchpadService(dependencies: {
   repository: ScratchpadRepository;
-  credentials: CredentialStore;
   cache: SpeechCache;
   synthesize?: ScratchpadSynthesisRunner;
   createId?: () => string;
@@ -67,9 +66,9 @@ export function createScratchpadService(dependencies: {
     async preview(inputValue, signal) {
       try {
         const input = ScratchpadPreviewInputSchema.parse(inputValue);
-        const profile = dependencies.repository.getConnectionProfile(input.connectionProfileId);
-        if (!profile.baseUrl) {
-          throw new ScratchpadServiceError("SCRATCHPAD_CONFIGURATION", "The selected connection profile needs a Speaches URL.");
+        const connection = dependencies.repository.getSpeachesConnection();
+        if (!connection.baseUrl) {
+          throw new ScratchpadServiceError("SCRATCHPAD_CONFIGURATION", "The Speaches connection needs a server address.");
         }
         const projection = transformScratchpadPassage({
           text: input.text,
@@ -77,7 +76,6 @@ export function createScratchpadService(dependencies: {
           applyGlobalLexicon: input.applyGlobalLexicon
         });
         const synthesized = await speech.synthesize({
-          connectionProfileId: profile.id,
           modelId: input.modelId,
           voiceId: input.voiceId,
           speed: input.speed,
@@ -85,16 +83,15 @@ export function createScratchpadService(dependencies: {
           usage: { scratchpad: true },
           ...(signal === undefined ? {} : { signal })
         });
+        await dependencies.cache.retainScratchpad(synthesized.key);
         const voiceLabel = dependencies.repository.getVoiceCatalogOverrides(input.modelId).entries
           .find((entry) => entry.voiceId === input.voiceId)?.label
           ?? BUNDLED_VOICE_CATALOGS.get(input.modelId)?.entries.find((entry) => entry.voiceId === input.voiceId)?.label
           ?? input.voiceId;
         const result: ScratchpadPreviewResult = {
-          schemaVersion: 2,
+          schemaVersion: 3,
           id: createId(),
           createdAt: now().toISOString(),
-          connectionProfileId: profile.id,
-          connectionProfileName: profile.name,
           modelId: input.modelId,
           voiceId: input.voiceId,
           voiceLabel,

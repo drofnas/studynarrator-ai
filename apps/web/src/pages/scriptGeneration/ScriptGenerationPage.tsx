@@ -110,7 +110,7 @@ export function ScriptGenerationPage({ persistence, generation }: {
         <h3 id="included-heading">Included automatically</h3>
         <dl>
           <div><dt>Speakers</dt><dd>{project?.speakerMappings.length || 1}</dd></div>
-          <div><dt>Pauses</dt><dd>{project ? project.pausePresets.length : 1}</dd></div>
+          <div><dt>Pauses</dt><dd>3 global presets</dd></div>
           <div><dt>Lexicon</dt><dd>{enabledProjectLexicon + globalLexiconCount}</dd></div>
         </dl>
         <p>{project ? "This kit uses the project’s format plus enabled project and global lexicon entries." : "This kit uses StudyNarrator’s default narrator and pause commands plus enabled global lexicon entries."} You do not need to configure them again here.</p>

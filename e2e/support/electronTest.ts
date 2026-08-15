@@ -86,4 +86,36 @@ export async function continueElectronOffline(page: Page): Promise<void> {
   await expect(projects).toBeVisible();
 }
 
+export async function configureElectronConnection(page: Page, application: StudyNarratorTestApplication): Promise<void> {
+  const onboarding = page.getByRole("heading", { name: "Connect the voice workshop" });
+  const projects = page.getByRole("heading", { name: "Projects", exact: true });
+  await expect(onboarding).toBeVisible();
+  await page.getByLabel("Speaches address").fill(application.fakeSpeaches.baseUrl);
+  await page.getByRole("button", { name: "Load catalog" }).click();
+  await expect(page.getByLabel("Model")).toHaveValue("speaches-ai/Kokoro-82M-v1.0-ONNX");
+  await expect(page.getByLabel("Default Voice")).toHaveValue("af_heart");
+  await expect(page.getByRole("option", { name: "Heart (af_heart | en-US)" })).toBeAttached();
+  await page.getByRole("button", { name: "Save and Test" }).click();
+  await expect(projects).toBeVisible();
+  await page.evaluate(async () => {
+    const bridge = (window as typeof window & { studyNarrator: {
+      connection: {
+        get(): Promise<{ baseUrl: string | null }>;
+        update(input: Record<string, unknown>): Promise<unknown>;
+      };
+    } }).studyNarrator;
+    const connection = await bridge.connection.get();
+    await bridge.connection.update({
+      baseUrl: connection.baseUrl,
+      defaultModelId: "speaches-ai/Kokoro-82M-v1.0-ONNX",
+      defaultVoiceId: "af_heart",
+      timeoutSeconds: 2,
+      retryCount: 0,
+      responseFormat: "wav"
+    });
+  });
+  await page.reload();
+  await expect(projects).toBeVisible();
+}
+
 export { expect };

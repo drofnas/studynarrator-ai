@@ -4,9 +4,9 @@ import type { VoiceCatalogEntry } from "@studynarrator/shared-types";
 import { MAX_SCRIPT_CHARACTERS, readUtf8TextFile, replaceLiteral, resolveProjectSpeakerVoiceId, stripSingleSurroundingCodeFence, supportedProjectVoices } from "./projectAuthoring.js";
 
 const voices: VoiceCatalogEntry[] = [
-  { voiceId: "voice-disabled", label: "Disabled", enabled: false, language: null, locale: null, accent: null, category: null, style: null, sampleText: null },
-  { voiceId: "voice-first", label: "First", enabled: true, language: null, locale: null, accent: null, category: null, style: null, sampleText: null },
-  { voiceId: "voice-default", label: "Default", enabled: true, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }
+  { voiceId: "voice-disabled", label: "Disabled", enabled: false, favorite: false, language: null, locale: null, accent: null, category: null, style: null, sampleText: null },
+  { voiceId: "voice-first", label: "First", enabled: true, favorite: false, language: null, locale: null, accent: null, category: null, style: null, sampleText: null },
+  { voiceId: "voice-default", label: "Default", enabled: true, favorite: false, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }
 ];
 
 describe("authoring input helpers", () => {

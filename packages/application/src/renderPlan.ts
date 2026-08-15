@@ -15,11 +15,11 @@ import {
   RENDER_PLAN_SCHEMA_VERSION,
   ProjectIdSchema,
   RenderPlanIdSchema,
-  type ProjectDetail,
   type RenderPlan,
   type RenderPlanClient,
   type RenderPlanEntry,
-  type TransitionPauseSetting
+  type SystemTimingConfiguration,
+  type SystemTransitionPauseSetting
 } from "@studynarrator/shared-types";
 import {
   SPEECH_CACHE_SCHEMA_VERSION,
@@ -46,7 +46,7 @@ export class RenderPlanServiceError extends Error {
 }
 
 export interface RenderPlanRepository extends ConnectionRepository, Pick<PersistenceRepository,
-  "getProject" | "listGlobalLexicon" | "getIgnoredDiagnostics"> {}
+  "getProject" | "getSystemPacing" | "listGlobalLexicon" | "getIgnoredDiagnostics"> {}
 
 function sha256(value: string): string { return createHash("sha256").update(value).digest("hex"); }
 
@@ -59,16 +59,16 @@ function safeError(error: unknown): RenderPlanServiceError {
   return new RenderPlanServiceError("RENDER_PLAN_STORAGE", "StudyNarrator could not create or read the render plan.");
 }
 
-function transitionDuration(project: ProjectDetail, setting: TransitionPauseSetting): { pauseId: string | null; durationMs: number } | null {
+function transitionDuration(timing: SystemTimingConfiguration, setting: SystemTransitionPauseSetting): { pauseId: string | null; durationMs: number } | null {
   if (setting.mode === "none") return null;
   if (setting.mode === "duration") return { pauseId: null, durationMs: setting.durationMs };
-  const preset = project.pausePresets.find(({ pauseId }) => pauseId === setting.pauseId);
+  const preset = timing.pausePresets.find(({ pauseId }) => pauseId === setting.pauseId);
   if (!preset) throw new RenderPlanServiceError("RENDER_PLAN_CONFIGURATION", `Pause preset ${setting.pauseId} is missing.`);
   return { pauseId: setting.pauseId, durationMs: preset.durationMs };
 }
 
-function explicitDuration(project: ProjectDetail, pauseId: string): number {
-  const preset = project.pausePresets.find((candidate) => candidate.pauseId === pauseId);
+function explicitDuration(timing: SystemTimingConfiguration, pauseId: string): number {
+  const preset = timing.pausePresets.find((candidate) => candidate.pauseId === pauseId);
   if (!preset) throw new RenderPlanServiceError("RENDER_PLAN_CONFIGURATION", `Pause preset ${pauseId} is missing.`);
   return preset.durationMs;
 }
@@ -88,10 +88,10 @@ export function createRenderPlanService(dependencies: {
       try {
         const projectId = ProjectIdSchema.parse(projectIdInput);
         const project = dependencies.repository.getProject(projectId);
-        if (!project.connectionProfileId) throw new RenderPlanServiceError("RENDER_PLAN_CONFIGURATION", "Choose a connection profile before freezing a render plan.");
-        const profile = dependencies.repository.getConnectionProfile(project.connectionProfileId);
-        if (!profile.baseUrl) throw new RenderPlanServiceError("RENDER_PLAN_CONFIGURATION", "The connection profile needs a Speaches URL.");
-        const modelId = project.modelId ?? profile.defaultModelId;
+        const timing = dependencies.repository.getSystemPacing();
+        const connection = dependencies.repository.getSpeachesConnection();
+        if (!connection.baseUrl) throw new RenderPlanServiceError("RENDER_PLAN_CONFIGURATION", "The Speaches connection needs a server address.");
+        const modelId = connection.defaultModelId;
         if (!modelId) throw new RenderPlanServiceError("RENDER_PLAN_CONFIGURATION", "Choose a speech model before freezing a render plan.");
         const globalLexiconEntries = dependencies.repository.listGlobalLexicon();
         const ignoredDiagnostics = dependencies.repository.getIgnoredDiagnostics();
@@ -106,14 +106,12 @@ export function createRenderPlanService(dependencies: {
           schemaVersion: PROJECT_SNAPSHOT_SCHEMA_VERSION,
           capturedAt,
           project,
+          timing,
           globalLexiconEntries,
           ignoredDiagnostics,
           connection: {
-            profileId: profile.id,
-            profileName: profile.name,
-            profileSource: profile.source,
             modelId,
-            serverIdentityHash: sha256(profile.baseUrl)
+            serverIdentityHash: sha256(connection.baseUrl)
           },
           versions: {
             scriptGrammar: SCRIPT_GRAMMAR_VERSION,
@@ -158,20 +156,20 @@ export function createRenderPlanService(dependencies: {
             continue;
           }
           if (node.type === "pause") {
-            pushPause({ pauseKind: "explicit", reason: "explicit", pauseId: node.pauseId, durationMs: explicitDuration(project, node.pauseId), sourceRange: node.range, sectionTitle: activeSectionTitle });
+            pushPause({ pauseKind: "explicit", reason: "explicit", pauseId: node.pauseId, durationMs: explicitDuration(timing, node.pauseId), sourceRange: node.range, sectionTitle: activeSectionTitle });
             boundary.explicit = true;
             continue;
           }
           if (previousSpeech && !boundary.explicit) {
             const automatic = boundary.section
-              ? { reason: "section" as const, setting: project.transitionPauses.section }
+              ? { reason: "section" as const, setting: timing.transitionPauses.section }
               : previousSpeech.speakerId !== node.speakerId
-                ? { reason: "speakerChange" as const, setting: project.transitionPauses.speakerChange }
+                ? { reason: "speakerChange" as const, setting: timing.transitionPauses.speakerChange }
                 : boundary.paragraph
-                  ? { reason: "paragraph" as const, setting: project.transitionPauses.paragraph }
+                  ? { reason: "paragraph" as const, setting: timing.transitionPauses.paragraph }
                   : null;
             if (automatic) {
-              const resolved = transitionDuration(project, automatic.setting);
+              const resolved = transitionDuration(timing, automatic.setting);
               if (resolved) pushPause({ pauseKind: "automatic", reason: automatic.reason, ...resolved, sourceRange: null, sectionTitle: activeSectionTitle });
             }
           }
@@ -181,8 +179,8 @@ export function createRenderPlanService(dependencies: {
           const cache = await dependencies.cache.inspect({
             adapterId: SPEACHES_CACHE_ADAPTER_ID,
             adapterVersion: SPEACHES_CACHE_ADAPTER_VERSION,
-            serverIdentity: profile.baseUrl,
-            profileId: profile.id,
+            serverIdentity: connection.baseUrl,
+            profileId: connection.id,
             modelId,
             voiceId: speaker.voiceId,
             speed: speaker.speed,
