@@ -274,7 +274,7 @@ describe("Projects workbench", () => {
     await openProjectTab("Settings");
     expect(screen.queryByLabelText("Connection profile")).not.toBeInTheDocument();
     await waitFor(() => expect(analyze).toHaveBeenCalled());
-    expect(await screen.findByLabelText("Voice for speaker teacher")).toHaveValue("af_heart");
+    await waitFor(() => expect(screen.getByLabelText("Voice for speaker teacher")).toHaveValue("af_heart"));
     const speakers = screen.getByRole("region", { name: "Project speakers" });
     expect(within(speakers).getByRole("table")).toBeInTheDocument();
     expect(within(speakers).getAllByRole("columnheader").map(({ textContent }) => textContent)).toEqual(["Name", "Voice", "Speed", "Gain dB"]);
