@@ -5,14 +5,13 @@ test.describe("Frozen render plans", () => {
     await configureConnection(page, studyNarrator);
     await page.getByRole("link", { name: "Settings", exact: true }).click();
     const paragraphTiming = page.getByRole("group", { name: "Paragraph" });
-    await paragraphTiming.getByLabel("Behavior").selectOption("duration");
-    await paragraphTiming.getByRole("textbox", { name: "Duration", exact: true }).fill("600 ms");
+    expect(await paragraphTiming.getByRole("option").allTextContents()).toEqual(["None", "pause_short", "pause_medium", "pause_long"]);
+    await paragraphTiming.getByLabel("Pause").selectOption("pause_medium");
+    await page.getByLabel("pause_medium duration").fill("600 ms");
     const speakerChangeTiming = page.getByRole("group", { name: "Speaker change" });
-    await speakerChangeTiming.getByLabel("Behavior").selectOption("preset");
-    await speakerChangeTiming.getByRole("combobox", { name: "Preset", exact: true }).selectOption("pause_short");
+    await speakerChangeTiming.getByLabel("Pause").selectOption("pause_short");
     const sectionTiming = page.getByRole("group", { name: "Section" });
-    await sectionTiming.getByLabel("Behavior").selectOption("duration");
-    await sectionTiming.getByRole("textbox", { name: "Duration", exact: true }).fill("1500 ms");
+    await sectionTiming.getByLabel("Pause").selectOption("pause_long");
     await page.getByRole("button", { name: "Save timing" }).click();
     await expect(page.getByText("Global timing saved.")).toBeVisible();
     await page.getByRole("link", { name: "Projects" }).click();
@@ -57,7 +56,7 @@ test.describe("Frozen render plans", () => {
     expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/speech"] ?? 0).toBe(0);
 
     await page.getByRole("link", { name: "Settings", exact: true }).click();
-    await page.getByRole("group", { name: "Paragraph" }).getByRole("textbox", { name: "Duration", exact: true }).fill("900 ms");
+    await page.getByLabel("pause_medium duration").fill("900 ms");
     await page.getByRole("button", { name: "Save timing" }).click();
     await expect(page.getByText("Global timing saved.")).toBeVisible();
     await page.getByRole("link", { name: "Projects" }).click();

@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_SYSTEM_TIMING } from "@studynarrator/shared-types";
-import type { ConnectionTestOverall, GlobalLexiconReplaceInput, PersistenceClient, ScratchpadClient, SpeachesConnection, SpeachesConnectionClient } from "@studynarrator/shared-types";
+import type { ConnectionTestOverall, GlobalLexiconReplaceInput, PersistenceClient, ScratchpadClient, SpeachesConnection, SpeachesConnectionClient, SystemTimingConfiguration } from "@studynarrator/shared-types";
 import { SettingsPage } from "./SettingsPage.js";
 import { ConnectionProvider } from "@/features/connections/ConnectionProvider.js";
 
@@ -178,11 +178,19 @@ describe("System Settings", () => {
     expect(screen.queryByText("Saved")).not.toBeInTheDocument();
   });
 
-  it("normalizes and saves global timing without touching projects", async () => {
-    const updatePacing = vi.fn(async (input: typeof DEFAULT_SYSTEM_TIMING) => input);
+  it("offers only named transition pauses and saves them without touching projects", async () => {
+    const loaded = {
+      ...DEFAULT_SYSTEM_TIMING,
+      transitionPauses: {
+        paragraph: { mode: "duration", durationMs: 600 },
+        speakerChange: { mode: "none" },
+        section: { mode: "preset", pauseId: "pause_long" }
+      }
+    } satisfies SystemTimingConfiguration;
+    const updatePacing = vi.fn(async (input: SystemTimingConfiguration) => input);
     const replaceProject = vi.fn();
     const client = {
-      settings: { getPacing: vi.fn(async () => DEFAULT_SYSTEM_TIMING), updatePacing },
+      settings: { getPacing: vi.fn(async () => loaded), updatePacing },
       globalLexicon: { list: vi.fn(async () => []), replace: vi.fn(async (entries: GlobalLexiconReplaceInput) => entries) },
       projects: { replace: replaceProject }
     } as unknown as PersistenceClient;
@@ -190,14 +198,26 @@ describe("System Settings", () => {
     const input = await screen.findByLabelText("pause_medium duration");
     expect(screen.getByRole("table")).toHaveTextContent("pause_short");
     expect(screen.getByRole("table")).toHaveTextContent("pause_long");
+    for (const label of ["Paragraph", "Speaker change", "Section"]) {
+      const group = within(screen.getByRole("group", { name: label }));
+      expect(group.getAllByRole("combobox")).toHaveLength(1);
+      expect(group.getAllByRole("option").map((option) => option.textContent)).toEqual(["None", "pause_short", "pause_medium", "pause_long"]);
+    }
+    expect(within(screen.getByRole("group", { name: "Paragraph" })).getByLabelText("Pause")).toHaveValue("pause_medium");
+    expect(screen.queryByText("Direct duration")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Duration", { exact: true })).not.toBeInTheDocument();
     fireEvent.change(input, { target: { value: "1.5 s" } });
-    await userEvent.selectOptions(screen.getAllByLabelText("Behavior")[1]!, "duration");
-    fireEvent.change(screen.getByLabelText("Duration"), { target: { value: "0.5 s" } });
+    await userEvent.selectOptions(within(screen.getByRole("group", { name: "Speaker change" })).getByLabelText("Pause"), "pause_short");
+    await userEvent.selectOptions(within(screen.getByRole("group", { name: "Section" })).getByLabelText("Pause"), "none");
     fireEvent.click(screen.getByRole("button", { name: "Save timing" }));
     expect(await screen.findByText("Global timing saved.")).toBeInTheDocument();
     const saved = updatePacing.mock.calls[0]?.[0];
     expect(saved?.pausePresets.find(({ pauseId }) => pauseId === "pause_medium")?.durationMs).toBe(1_500);
-    expect(saved?.transitionPauses.speakerChange).toEqual({ mode: "duration", durationMs: 500 });
+    expect(saved?.transitionPauses).toEqual({
+      paragraph: { mode: "preset", pauseId: "pause_medium" },
+      speakerChange: { mode: "preset", pauseId: "pause_short" },
+      section: { mode: "none" }
+    });
     expect(replaceProject).not.toHaveBeenCalled();
   });
 

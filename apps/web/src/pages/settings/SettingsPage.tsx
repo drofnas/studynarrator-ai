@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { parsePauseDuration, type LexiconEntryAuthoring } from "@studynarrator/core";
+import { parsePauseDuration, SUPPORTED_PAUSE_IDS, type LexiconEntryAuthoring, type SupportedPauseId } from "@studynarrator/core";
 import {
   type SpeachesConnection,
   type ScratchpadClient,
@@ -36,23 +36,37 @@ const VOICE_TEST_SCRIPT = "This short sample lets you hear how this voice handle
 
 type AuditionState = { voiceId: string; phase: "processing" | "playing" } | null;
 type LexiconRowState = "saving" | "saved" | "error";
-type TransitionKey = keyof SystemTimingConfiguration["transitionPauses"];
 
-function TimingTransitionEditor({ label, setting, duration, onSettingChange, onDurationChange }: {
+function nearestNamedTransition(setting: SystemTransitionPauseSetting, timing: SystemTimingConfiguration): SystemTransitionPauseSetting {
+  if (setting.mode !== "duration") return setting;
+  const nearest = timing.pausePresets.reduce((closest, candidate) =>
+    Math.abs(candidate.durationMs - setting.durationMs) < Math.abs(closest.durationMs - setting.durationMs) ? candidate : closest
+  );
+  return { mode: "preset", pauseId: nearest.pauseId };
+}
+
+function timingWithNamedTransitions(timing: SystemTimingConfiguration): SystemTimingConfiguration {
+  return {
+    ...timing,
+    transitionPauses: {
+      paragraph: nearestNamedTransition(timing.transitionPauses.paragraph, timing),
+      speakerChange: nearestNamedTransition(timing.transitionPauses.speakerChange, timing),
+      section: nearestNamedTransition(timing.transitionPauses.section, timing)
+    }
+  };
+}
+
+function TimingTransitionEditor({ label, setting, onSettingChange }: {
   label: string;
   setting: SystemTransitionPauseSetting;
-  duration: string;
   onSettingChange: (setting: SystemTransitionPauseSetting) => void;
-  onDurationChange: (value: string) => void;
 }) {
   return <fieldset className={styles.transitionField}>
     <legend>{label}</legend>
-    <label>Behavior<select value={setting.mode} onChange={(event) => {
-      const mode = event.target.value;
-      onSettingChange(mode === "none" ? { mode } : mode === "preset" ? { mode, pauseId: "pause_medium" } : { mode: "duration", durationMs: 750 });
-    }}><option value="none">None</option><option value="preset">Named preset</option><option value="duration">Direct duration</option></select></label>
-    {setting.mode === "preset" ? <label>Preset<select value={setting.pauseId} onChange={(event) => onSettingChange({ mode: "preset", pauseId: event.target.value as "pause_short" | "pause_medium" | "pause_long" })}><option value="pause_short">pause_short</option><option value="pause_medium">pause_medium</option><option value="pause_long">pause_long</option></select></label> : null}
-    {setting.mode === "duration" ? <label>Duration<input value={duration} onChange={(event) => onDurationChange(event.target.value)} /></label> : null}
+    <label>Pause<select value={setting.mode === "preset" ? setting.pauseId : "none"} onChange={(event) => {
+      const pauseId = event.target.value;
+      onSettingChange(pauseId === "none" ? { mode: "none" } : { mode: "preset", pauseId: pauseId as SupportedPauseId });
+    }}><option value="none">None</option>{SUPPORTED_PAUSE_IDS.map((pauseId) => <option key={pauseId} value={pauseId}>{pauseId}</option>)}</select></label>
   </fieldset>;
 }
 
@@ -98,7 +112,6 @@ export function SettingsPage({ client, cacheClient, scratchpadClient }: { client
   const workspace = useConnections();
   const [timing, setTiming] = useState<SystemTimingConfiguration>(DEFAULT_SYSTEM_TIMING);
   const [pauseInputs, setPauseInputs] = useState<Record<string, string>>(() => Object.fromEntries(DEFAULT_SYSTEM_TIMING.pausePresets.map((preset) => [preset.pauseId, `${String(preset.durationMs)} ms`])));
-  const [transitionInputs, setTransitionInputs] = useState<Record<TransitionKey, string>>({ paragraph: "750 ms", speakerChange: "750 ms", section: "750 ms" });
   const [status, setStatus] = useState("Loading settings…");
   const [error, setError] = useState("");
   const [draft, setDraft] = useState(EMPTY_CONNECTION);
@@ -133,9 +146,8 @@ export function SettingsPage({ client, cacheClient, scratchpadClient }: { client
     let active = true;
     void client.settings.getPacing().then((loaded) => {
       if (!active) return;
-      setTiming(loaded);
+      setTiming(timingWithNamedTransitions(loaded));
       setPauseInputs(Object.fromEntries(loaded.pausePresets.map((preset) => [preset.pauseId, `${String(preset.durationMs)} ms`])));
-      setTransitionInputs(Object.fromEntries(Object.entries(loaded.transitionPauses).map(([key, setting]) => [key, setting.mode === "duration" ? `${String(setting.durationMs)} ms` : "750 ms"])) as Record<TransitionKey, string>);
       setStatus("Timing settings apply to every editable project.");
     }).catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : "Settings could not be loaded."); });
     return () => { active = false; };
@@ -201,20 +213,12 @@ export function SettingsPage({ client, cacheClient, scratchpadClient }: { client
     const parsedPresets = timing.pausePresets.map((preset) => ({ preset, parsed: parsePauseDuration(pauseInputs[preset.pauseId] ?? "") }));
     const invalidPreset = parsedPresets.find(({ parsed }) => !parsed.ok);
     if (invalidPreset && !invalidPreset.parsed.ok) { setError(`${invalidPreset.preset.pauseId}: ${invalidPreset.parsed.message}`); return; }
-    const transitions = { ...timing.transitionPauses };
-    for (const key of Object.keys(transitions) as TransitionKey[]) {
-      const setting = transitions[key];
-      if (setting.mode !== "duration") continue;
-      const parsed = parsePauseDuration(transitionInputs[key]);
-      if (!parsed.ok) { setError(`${key}: ${parsed.message}`); return; }
-      transitions[key] = { mode: "duration", durationMs: parsed.durationMs };
-    }
     try {
       const saved = await client.settings.updatePacing({
         pausePresets: parsedPresets.map(({ preset, parsed }) => ({ ...preset, durationMs: parsed.ok ? parsed.durationMs : preset.durationMs })) as SystemTimingConfiguration["pausePresets"],
-        transitionPauses: transitions
+        transitionPauses: timing.transitionPauses
       });
-      setTiming(saved);
+      setTiming(timingWithNamedTransitions(saved));
       setPauseInputs(Object.fromEntries(saved.pausePresets.map((preset) => [preset.pauseId, `${String(preset.durationMs)} ms`])));
       setError("");
       setStatus("Global timing saved.");
@@ -492,7 +496,7 @@ export function SettingsPage({ client, cacheClient, scratchpadClient }: { client
         <div><p>Shared render rhythm</p><h3 id="timing-heading">Global timing</h3></div>
         <p>Saved changes affect every project and newly frozen render plan. Existing frozen plans keep their captured timing.</p>
         <div className={styles.pauseTableScroll}><table className={styles.pauseTable}><thead><tr><th scope="col">Directive</th><th scope="col">Duration</th><th scope="col">Description</th></tr></thead><tbody>{timing.pausePresets.map((preset, index) => <tr key={preset.pauseId}><th scope="row"><code>{preset.pauseId}</code></th><td><label><span className={styles.srOnly}>{preset.pauseId} duration</span><input value={pauseInputs[preset.pauseId] ?? ""} onChange={(event) => { setPauseInputs((current) => ({ ...current, [preset.pauseId]: event.target.value })); setError(""); }} /></label></td><td><label><span className={styles.srOnly}>{preset.pauseId} description</span><input value={preset.description} onChange={(event) => setTiming((current) => ({ ...current, pausePresets: current.pausePresets.map((item, itemIndex) => itemIndex === index ? { ...item, description: event.target.value } : item) as SystemTimingConfiguration["pausePresets"] }))} /></label></td></tr>)}</tbody></table></div>
-        <div className={styles.transitionGrid}>{(["paragraph", "speakerChange", "section"] as const).map((key) => <TimingTransitionEditor key={key} label={key === "speakerChange" ? "Speaker change" : key[0]!.toUpperCase() + key.slice(1)} setting={timing.transitionPauses[key]} duration={transitionInputs[key]} onDurationChange={(value) => { setTransitionInputs((current) => ({ ...current, [key]: value })); setError(""); }} onSettingChange={(setting) => setTiming((current) => ({ ...current, transitionPauses: { ...current.transitionPauses, [key]: setting } }))} />)}</div>
+        <div className={styles.transitionGrid}>{(["paragraph", "speakerChange", "section"] as const).map((key) => <TimingTransitionEditor key={key} label={key === "speakerChange" ? "Speaker change" : key[0]!.toUpperCase() + key.slice(1)} setting={timing.transitionPauses[key]} onSettingChange={(setting) => setTiming((current) => ({ ...current, transitionPauses: { ...current.transitionPauses, [key]: setting } }))} />)}</div>
         <button type="button" onClick={() => void saveTiming()}>Save timing</button>
       </section>
 

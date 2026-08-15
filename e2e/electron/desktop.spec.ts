@@ -123,8 +123,8 @@ test.describe("Electron acceptance", () => {
     await configureElectronConnection(page, studyNarrator);
     await page.getByRole("link", { name: "Settings", exact: true }).click();
     const paragraphTiming = page.getByRole("group", { name: "Paragraph" });
-    await paragraphTiming.getByLabel("Behavior").selectOption("duration");
-    await paragraphTiming.getByRole("textbox", { name: "Duration", exact: true }).fill("350 ms");
+    await paragraphTiming.getByLabel("Pause").selectOption("pause_short");
+    await page.getByLabel("pause_short duration").fill("350 ms");
     await page.getByRole("button", { name: "Save timing" }).click();
     await expect(page.getByText("Global timing saved.")).toBeVisible();
     await page.getByRole("link", { name: "Projects" }).click();
@@ -151,7 +151,7 @@ test.describe("Electron acceptance", () => {
     await expect(table).toContainText("350 ms");
 
     await page.getByRole("link", { name: "Settings", exact: true }).click();
-    await page.getByRole("group", { name: "Paragraph" }).getByRole("textbox", { name: "Duration", exact: true }).fill("750 ms");
+    await page.getByLabel("pause_short duration").fill("750 ms");
     await page.getByRole("button", { name: "Save timing" }).click();
     await expect(page.getByText("Global timing saved.")).toBeVisible();
     await page.getByRole("link", { name: "Projects" }).click();

@@ -606,7 +606,7 @@ The readable transcript removes only the escape character. This also prevents an
 
 Blank lines preserve paragraph boundaries in the parsed representation. The parser itself never inserts silence. The default transition configuration resolves eligible boundaries between speech segments to `pause_medium`, initially 750 milliseconds, without changing the source, CIR, or transcripts.
 
-The user may disable this behavior or override its duration. An explicit pause directive anywhere between the neighboring speech segments wins and suppresses the automatic paragraph pause.
+The user may disable this behavior or select `pause_short`, `pause_medium`, or `pause_long`; each named preset's duration remains editable globally. An explicit pause directive anywhere between the neighboring speech segments wins and suppresses the automatic paragraph pause.
 
 ### 9.8 Unknown directives
 
@@ -927,11 +927,7 @@ The project may define automatic pauses for:
 - Paragraph boundaries.
 - Section boundaries.
 
-Each transition may be set to:
-
-- None.
-- A named project pause preset.
-- A direct duration.
+Each transition is set with one dropdown containing None or the named system presets `pause_short`, `pause_medium`, and `pause_long`. Direct per-transition durations are not offered; their equivalent timing is configured by editing the named preset durations. Existing saved direct durations are migrated to the nearest named preset, while frozen render plans retain their captured historical timing.
 
 Automatic paragraph pauses are enabled by default and use `pause_medium`, initially 750 milliseconds. System Settings supplies this default for projectless analysis and new projects. Project creation copies the effective value so existing projects remain reproducible when the system default later changes.
 
@@ -1317,7 +1313,7 @@ Selecting the indicator opens diagnostics containing the endpoint, HTTP result, 
 A Settings area must provide:
 
 - The singleton Speaches connection and catalog refresh controls.
-- Pacing defaults, including whether new projects pause at paragraph breaks and the editable `pause_medium` duration.
+- Pacing defaults, including the named preset selected for each automatic transition and the editable durations for `pause_short`, `pause_medium`, and `pause_long`.
 - Client and application-version information.
 - Data, cache, and output locations.
 - FFmpeg status.
