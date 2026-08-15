@@ -3,7 +3,7 @@ import { configureConnection, expect, test } from "../support/studyNarratorTest.
 test.describe("Frozen render plans", () => {
   test("creates and reopens immutable plans without synthesizing speech", async ({ page, studyNarrator }) => {
     await configureConnection(page, studyNarrator);
-    await page.getByRole("link", { name: "Settings", exact: true }).click();
+    await page.getByRole("link", { name: "Timings" }).click();
     const paragraphTiming = page.getByRole("group", { name: "Paragraph" });
     expect(await paragraphTiming.getByRole("option").allTextContents()).toEqual(["None", "pause_short", "pause_medium", "pause_long"]);
     await paragraphTiming.getByLabel("Pause").selectOption("pause_medium");
@@ -55,7 +55,7 @@ test.describe("Frozen render plans", () => {
     await expect(page.getByText("Matches current project").first()).toBeVisible();
     expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/speech"] ?? 0).toBe(0);
 
-    await page.getByRole("link", { name: "Settings", exact: true }).click();
+    await page.getByRole("link", { name: "Timings" }).click();
     await page.getByLabel("pause_medium duration").fill("900 ms");
     await page.getByRole("button", { name: "Save timing" }).click();
     await expect(page.getByText("Global timing saved.")).toBeVisible();

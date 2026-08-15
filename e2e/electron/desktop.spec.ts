@@ -88,7 +88,7 @@ test.describe("Electron acceptance", () => {
     expect(studyNarrator.fakeSpeaches.getState().requests.filter(({ path }) => path === "/v1/audio/speech")).toHaveLength(2);
 
     await page.getByRole("link", { name: "Settings", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "General" })).toBeVisible();
     await page.getByRole("link", { name: "System diagnostics" }).click();
     await page.getByRole("button", { name: "Run self-test" }).click();
     await expect(page.getByText("IPC", { exact: true })).toBeVisible();
@@ -121,7 +121,7 @@ test.describe("Electron acceptance", () => {
   test("freezes and reopens immutable plans through typed IPC without TTS", async ({ electronStudyNarrator, studyNarrator }) => {
     let page = electronStudyNarrator.page;
     await configureElectronConnection(page, studyNarrator);
-    await page.getByRole("link", { name: "Settings", exact: true }).click();
+    await page.getByRole("link", { name: "Timings" }).click();
     const paragraphTiming = page.getByRole("group", { name: "Paragraph" });
     await paragraphTiming.getByLabel("Pause").selectOption("pause_short");
     await page.getByLabel("pause_short duration").fill("350 ms");
@@ -150,7 +150,7 @@ test.describe("Electron acceptance", () => {
     const table = page.getByRole("table", { name: "Frozen render plan ordered entries" });
     await expect(table).toContainText("350 ms");
 
-    await page.getByRole("link", { name: "Settings", exact: true }).click();
+    await page.getByRole("link", { name: "Timings" }).click();
     await page.getByLabel("pause_short duration").fill("750 ms");
     await page.getByRole("button", { name: "Save timing" }).click();
     await expect(page.getByText("Global timing saved.")).toBeVisible();
@@ -254,6 +254,7 @@ test.describe("Electron acceptance", () => {
     await expect(page.getByLabel("Default Voice")).toHaveValue("af_heart");
     await expect(page.getByRole("option", { name: "Heart (af_heart | en-US)" })).toBeAttached();
     await expect(page.getByText(/New saved profile|Active profile|API key|Environment Speaches/u)).toHaveCount(0);
+    await page.getByRole("link", { name: "Voices" }).click();
     await page.getByLabel("Search voice catalog").fill("en-US");
     await expect(page.getByLabel("en-US voices")).toBeVisible();
     await page.getByRole("button", { name: "Add Heart to favorites" }).click();
@@ -277,6 +278,7 @@ test.describe("Electron acceptance", () => {
     await page.getByRole("link", { name: "Settings", exact: true }).click();
     await expect(page.getByLabel("Address")).toHaveValue(studyNarrator.fakeSpeaches.baseUrl);
     await expect(page.getByLabel("Model")).toHaveValue("speaches-ai/Kokoro-82M-v1.0-ONNX");
+    await page.getByRole("link", { name: "Voices" }).click();
     await expect(page.getByLabel("Favorites voices")).toContainText("Heart");
     await expect(page.getByRole("button", { name: "Remove Heart from favorites" })).toHaveAttribute("aria-pressed", "true");
   });
