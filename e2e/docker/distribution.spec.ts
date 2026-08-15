@@ -115,6 +115,8 @@ test("Docker Web remains authorable offline and renders after Speaches reconnect
     lexiconEntries: []
   });
   const plan = await jsonRequest(request, "post", `/api/projects/${created.id}/render-plans`) as { id: string };
+  const planDetail = await jsonRequest(request, "get", `/api/render-plans/${plan.id}`) as { entries: Array<{ type: string; durationMs?: number }> };
+  expect(planDetail.entries).toContainEqual(expect.objectContaining({ type: "pause", durationMs: 625 }));
   const started = await jsonRequest(request, "post", `/api/render-plans/${plan.id}/renders`) as { id: string };
   const completed = await pollRender(request, started.id);
   expect(completed.state).toBe("complete");
@@ -127,7 +129,6 @@ test("Docker Web remains authorable offline and renders after Speaches reconnect
   await expect(page.getByText(String(runtime.sourceRevision), { exact: true })).toBeVisible();
   await page.goto(`/#/projects/${created.id}?tab=render`);
   await expect(page.getByText(/Phase: complete/u)).toBeVisible();
-  await expect(page.getByRole("table", { name: "Frozen render plan ordered entries" })).toContainText("625 ms");
 
   const diagnostics = await jsonRequest(request, "get", "/api/diagnostics");
   const connectionDiagnostics = await jsonRequest(request, "get", "/api/connection/diagnostics");
