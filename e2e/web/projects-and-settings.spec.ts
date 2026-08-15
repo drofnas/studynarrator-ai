@@ -14,8 +14,8 @@ const modelId = "speaches-ai/Kokoro-82M-v1.0-ONNX";
 
 async function openConnectionSettings(page: Page, application: StudyNarratorTestApplication): Promise<void> {
   await configureConnection(page, application);
-  await openRoute(page, application, "/settings");
-  await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+  await openRoute(page, application, "/settings/general");
+  await expect(page.getByRole("heading", { name: "General" })).toBeVisible();
 }
 
 async function createProject(page: Page, name: string, description = ""): Promise<void> {
@@ -37,7 +37,6 @@ test.describe("Settings and connection diagnostics", () => {
     await expect(page.getByLabel("Model")).toHaveValue(modelId);
     await expect(page.getByLabel("Default Voice")).toHaveValue("af_heart");
     await expect(page.getByRole("option", { name: "Heart (af_heart | en-US)" })).toBeAttached();
-    await expect(page.getByText("Default model")).toBeVisible();
     const testButton = page.getByRole("button", { name: "Save and Test" });
 
     await testButton.click();
@@ -101,12 +100,17 @@ test.describe("Settings and connection diagnostics", () => {
     });
     await page.getByRole("button", { name: "Refresh catalog" }).click();
     await expect(page.getByRole("option", { name: "Heart (af_heart | en-US)" })).toBeAttached();
+    await openRoute(page, studyNarrator, "/settings/voices");
+    await expect(page.getByText("Default model")).toBeVisible();
     const heartVoice = page.getByRole("article").filter({ hasText: "af_heart" });
     await expect(heartVoice.getByText("Heart", { exact: true })).toBeVisible();
     await expect(heartVoice.getByText("af_heart | en-US", { exact: true })).toBeVisible();
     await expect(heartVoice).not.toContainText(/\b(?:enabled|disabled)\b/u);
     await expect.poll(() => page.locator("section[aria-label$=' voices']").evaluateAll((groups) => groups.slice(0, 2).map((group) => group.getAttribute("aria-label")))).toEqual(["en-US voices", "en-GB voices"]);
-    await openRoute(page, studyNarrator, "/settings");
+    const voiceResults = page.getByRole("region", { name: "Voice catalog results" });
+    await expect(voiceResults).toBeVisible();
+    expect(await voiceResults.evaluate((element) => ({ maxHeight: getComputedStyle(element).maxHeight, overflowY: getComputedStyle(element).overflowY }))).toEqual({ maxHeight: "none", overflowY: "visible" });
+    await openRoute(page, studyNarrator, "/settings/voices");
     await page.getByLabel("Search voice catalog").fill("en-US");
     await expect(page.getByLabel("en-US voices")).toBeVisible();
     await expect(page.getByRole("article").filter({ hasText: "af_heart" })).toBeVisible();
@@ -115,8 +119,10 @@ test.describe("Settings and connection diagnostics", () => {
     await page.getByRole("button", { name: "Add Heart to favorites" }).click();
     await expect(page.getByLabel("Favorites voices")).toContainText("Heart");
     await expect(page.getByRole("button", { name: "Remove Heart from favorites" })).toHaveAttribute("aria-pressed", "true");
+    await openRoute(page, studyNarrator, "/settings/general");
     await expect(page.getByLabel("Default Voice").locator('optgroup[label="Favorites"]')).toBeAttached();
     await expect.poll(() => page.getByLabel("Default Voice").locator("optgroup").evaluateAll((groups) => groups.map((group) => group.getAttribute("label")))).toEqual(["Favorites", "en-US"]);
+    await openRoute(page, studyNarrator, "/settings/voices");
     const script = "A precise browser voice audition.";
     await page.getByLabel("Voice test script").fill(script);
     studyNarrator.fakeSpeaches.reset();
@@ -132,17 +138,19 @@ test.describe("Settings and connection diagnostics", () => {
     await expect(page.locator("audio")).toHaveCount(0);
     await expect(page.getByRole("button", { name: /^Test Heart/u })).toBeVisible({ timeout: 5_000 });
 
+    await openRoute(page, studyNarrator, "/settings/timings");
     await page.getByLabel("pause_medium duration").fill("1.25 s");
     await page.getByRole("button", { name: "Save timing" }).click();
     await expect(page.getByText("Global timing saved.")).toBeVisible();
     await page.reload();
     await expect(page.getByLabel("pause_medium duration")).toHaveValue("1250 ms");
+    await openRoute(page, studyNarrator, "/settings/voices");
     await expect(page.getByLabel("Favorites voices")).toContainText("Heart");
     await expect(page.getByRole("button", { name: "Remove Heart from favorites" })).toHaveAttribute("aria-pressed", "true");
   });
 
   test("manages the fixed-scope global lexicon with validation and persistence", async ({ page, studyNarrator }) => {
-    await openRoute(page, studyNarrator, "/settings#global-lexicon");
+    await openRoute(page, studyNarrator, "/settings/lexicon");
     const lexicon = page.getByRole("region", { name: "Global lexicon" });
     await expect(lexicon).toBeVisible();
     await expect(lexicon.getByLabel("Script Text").nth(1)).toHaveValue("API");

@@ -102,7 +102,7 @@ test.describe("project preview cache", () => {
     await expect(page.getByRole("button", { name: "Clear project cache" })).toHaveCount(0);
     await expect(page.getByLabel("Pronunciation test")).toHaveCount(0);
 
-    await openRoute(page, studyNarrator, "/settings");
+    await openRoute(page, studyNarrator, "/settings/general");
     await expect(page.getByRole("heading", { name: "Speech cache" })).toBeVisible();
     await expect(page.getByText(/Clear them here when you want every future preview/u)).toBeVisible();
     await expect(page.getByText(/entries/u).first()).toBeVisible();

@@ -13,7 +13,8 @@ test.describe("shell, onboarding, and runtime routes", () => {
     await page.reload();
     await expect(page.getByRole("heading", { name: "Projects", exact: true })).toBeVisible();
     await page.getByRole("link", { name: /^Configuration error\./u }).click();
-    await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "General" })).toBeVisible();
+    await expect(page).toHaveURL(/\/settings\/general$/u);
   });
 
   test("discovers, reviews, saves, and tests the singleton from onboarding", async ({ page, studyNarrator }) => {
@@ -39,13 +40,16 @@ test.describe("shell, onboarding, and runtime routes", () => {
     await continueOffline(page, studyNarrator);
     const navigation = page.getByRole("navigation", { name: "StudyNarrator tools" });
 
-    await expect(navigation.getByRole("link").allTextContents()).resolves.toEqual(["Prompt Kit", "Projects", "Quick Scratchpad", "Settings", "System diagnostics"]);
+    await expect(navigation.getByRole("link").allTextContents()).resolves.toEqual(["Prompt Kit", "Projects", "Quick Scratchpad", "Settings", "General", "Voices", "Lexicon", "Timings", "System diagnostics"]);
     await navigation.getByRole("link", { name: "Prompt Kit" }).click();
     await expect(page.getByRole("heading", { name: "Script prompt kit" })).toBeVisible();
     await navigation.getByRole("link", { name: "Quick Scratchpad" }).click();
     await expect(page.getByRole("heading", { name: "Quick Scratchpad" })).toBeVisible();
-    await navigation.getByRole("link", { name: "Settings" }).click();
-    await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+    await navigation.getByRole("link", { name: "Settings", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "General" })).toBeVisible();
+    await expect(navigation.getByRole("link", { name: "Settings", exact: true })).not.toHaveAttribute("aria-current");
+    await expect(navigation.getByRole("link", { name: "General" })).toHaveAttribute("aria-current", "page");
+    for (const child of ["General", "Voices", "Lexicon", "Timings"]) await expect(navigation.getByRole("link", { name: child })).toBeVisible();
     await expect(navigation.getByText("Review tools")).toHaveCount(0);
     await navigation.getByRole("link", { name: "System diagnostics" }).click();
     await expect(page.getByRole("heading", { name: "Runtime self-test" })).toBeVisible();
@@ -72,8 +76,8 @@ test.describe("shell, onboarding, and runtime routes", () => {
     await expect(menu).toBeFocused();
 
     await menu.click();
-    await page.getByRole("link", { name: "Settings" }).click();
-    await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+    await page.getByRole("link", { name: "Settings", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "General" })).toBeVisible();
     await expect(menu).toHaveAttribute("aria-expanded", "false");
 
     await menu.click();

@@ -3,7 +3,10 @@ import type { PersistenceClient, ProjectPreviewClient, RenderClient, RenderPlanC
 import { DiagnosticsPage } from "@/pages/diagnostics/DiagnosticsPage.js";
 import { ProjectsPage } from "@/pages/projects/ProjectsPage.js";
 import { OnboardingPage } from "@/pages/onboarding/OnboardingPage.js";
-import { SettingsPage } from "@/pages/settings/SettingsPage.js";
+import { GeneralSettingsPage } from "@/pages/settings/GeneralSettingsPage.js";
+import { LexiconSettingsPage } from "@/pages/settings/LexiconSettingsPage.js";
+import { TimingsSettingsPage } from "@/pages/settings/TimingsSettingsPage.js";
+import { VoicesSettingsPage } from "@/pages/settings/VoicesSettingsPage.js";
 import { ScratchpadPage } from "@/pages/scratchpad/ScratchpadPage.js";
 import { ScriptGenerationPage } from "@/pages/scriptGeneration/ScriptGenerationPage.js";
 import type { ScriptAnalyzer } from "@/workers/parser/parserClient.js";
@@ -13,6 +16,10 @@ import { useConnections } from "@/features/connections/ConnectionProvider.js";
 export const APP_PATHS = {
   projects: "/projects",
   settings: "/settings",
+  settingsGeneral: "/settings/general",
+  settingsVoices: "/settings/voices",
+  settingsLexicon: "/settings/lexicon",
+  settingsTimings: "/settings/timings",
   diagnostics: "/diagnostics",
   onboarding: "/onboarding",
   scratchpad: "/scratchpad",
@@ -46,7 +53,11 @@ export function AppRoutes({ analyzer, client, persistence, scratchpad, projectPr
         <Route path={`${APP_PATHS.projects}/:projectId`} element={<ProjectsPage analyzer={analyzer} client={persistence} previewClient={projectPreview} renderPlanClient={renderPlans} {...(renders ? { renderClient: renders } : {})} />} />
         <Route path={`${APP_PATHS.projects}/:projectId/script-generation`} element={<ScriptGenerationPage persistence={persistence} generation={scriptGeneration} />} />
         <Route path={APP_PATHS.scriptPrompts} element={<ScriptGenerationPage persistence={persistence} generation={scriptGeneration} />} />
-        <Route path={APP_PATHS.settings} element={<SettingsPage client={persistence} cacheClient={speechCache} scratchpadClient={scratchpad} />} />
+        <Route path={APP_PATHS.settings} element={<Navigate to={APP_PATHS.settingsGeneral} replace />} />
+        <Route path={APP_PATHS.settingsGeneral} element={<GeneralSettingsPage cacheClient={speechCache} />} />
+        <Route path={APP_PATHS.settingsVoices} element={<VoicesSettingsPage scratchpadClient={scratchpad} />} />
+        <Route path={APP_PATHS.settingsLexicon} element={<LexiconSettingsPage client={persistence} />} />
+        <Route path={APP_PATHS.settingsTimings} element={<TimingsSettingsPage client={persistence} />} />
         <Route path={APP_PATHS.scratchpad} element={<ScratchpadPage client={scratchpad} persistence={persistence} />} />
         <Route path={APP_PATHS.diagnostics} element={<DiagnosticsPage client={client} />} />
         <Route path="*" element={<Navigate to={APP_PATHS.projects} replace />} />

@@ -1,4 +1,5 @@
 .page { display: grid; min-width: 0; grid-template-columns: minmax(0, 1.4fr) minmax(300px, 0.6fr); gap: 20px; }
+.singleColumnPage { grid-template-columns: minmax(0, 1fr); }
 .page > header { grid-column: 1 / -1; padding-bottom: 22px; border-bottom: 2px solid var(--ink); }
 .page > header p, .sectionHeading p, .pacing > div p, .diagnosticHeader p { margin: 0 0 7px; color: var(--signal); font: 800 0.68rem ui-monospace, monospace; letter-spacing: 0.12em; text-transform: uppercase; }
 .page > header h2 { margin: 0; font: 700 clamp(2.7rem, 6vw, 5.2rem)/0.9 "Avenir Next Condensed", "Arial Narrow", sans-serif; letter-spacing: -0.045em; }
@@ -42,7 +43,7 @@
 .diagnostics li div { display: grid; gap: 5px; margin-top: 8px; }
 .diagnostics li strong { text-transform: capitalize; }
 .diagnostics li code, .diagnostics li span { overflow-wrap: anywhere; font-size: 0.62rem; }
-.voiceList { display: grid; gap: 12px; max-height: 520px; margin: 12px 0; padding-right: 3px; overflow: auto; }
+.voiceList { display: grid; gap: 12px; margin: 12px 0; }
 .voiceTestScript { margin-bottom: 12px; }
 .voiceTestScript textarea { min-height: 76px; resize: vertical; font-family: inherit; line-height: 1.5; }
 .auditionError, .favoriteError { margin: -3px 0 12px; color: var(--fault); font-size: 0.75rem; font-weight: 800; }

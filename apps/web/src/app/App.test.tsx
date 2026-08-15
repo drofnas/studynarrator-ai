@@ -58,7 +58,7 @@ describe("application routing", () => {
     renderApp(route, { diagnostics });
     expect(await screen.findByRole("heading", { name: "Projects" })).toBeInTheDocument();
     const navigation = within(screen.getByRole("navigation"));
-    expect(navigation.getAllByRole("link").map((link) => link.textContent)).toEqual(["Prompt Kit", "Projects", "Quick Scratchpad", "Settings", "System diagnostics"]);
+    expect(navigation.getAllByRole("link").map((link) => link.textContent)).toEqual(["Prompt Kit", "Projects", "Quick Scratchpad", "Settings", "General", "Voices", "Lexicon", "Timings", "System diagnostics"]);
     expect(navigation.getByRole("link", { name: "Projects" })).toHaveAttribute("aria-current", "page");
     expect(diagnostics).not.toHaveBeenCalled();
   });
@@ -78,6 +78,30 @@ describe("application routing", () => {
     await user.click(screen.getByRole("link", { name: "Quick Scratchpad" }));
     expect(await screen.findByRole("heading", { name: "Quick Scratchpad" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Quick Scratchpad" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("opens General from the Settings parent without activating the parent", async () => {
+    const user = userEvent.setup();
+    renderApp("/projects");
+    const navigation = within(screen.getByRole("navigation"));
+    await user.click(navigation.getByRole("link", { name: "Settings" }));
+    expect(screen.getByRole("heading", { name: "General" })).toBeInTheDocument();
+    expect(navigation.getByRole("link", { name: "Settings" })).not.toHaveAttribute("aria-current");
+    expect(navigation.getByRole("link", { name: "General" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it.each([
+    ["/settings", "General"],
+    ["/settings/general", "General"],
+    ["/settings/voices", "Voices"],
+    ["/settings/lexicon", "Lexicon"],
+    ["/settings/timings", "Timings"]
+  ])("routes %s to the %s settings page", async (route, pageName) => {
+    renderApp(route);
+    expect(await screen.findByRole("heading", { name: pageName })).toBeInTheDocument();
+    const navigation = within(screen.getByRole("navigation"));
+    expect(navigation.getByRole("link", { name: pageName })).toHaveAttribute("aria-current", "page");
+    expect(navigation.getByRole("link", { name: "Settings" })).not.toHaveAttribute("aria-current");
   });
 
   it("reaches the project-free script prompt kit through primary navigation", async () => {
@@ -136,6 +160,6 @@ describe("application routing", () => {
     renderApp("/projects", { diagnostics: vi.fn() }, connections as never);
     const monitor = await screen.findByRole("link", { name: new RegExp(`^${label}\\. 127\\.0\\.0\\.1:8000\\. Manage connection\\.$`, "u") });
     expect(monitor).toHaveAttribute("data-state", overall);
-    expect(monitor).toHaveAttribute("href", "/settings");
+    expect(monitor).toHaveAttribute("href", "/settings/general");
   });
 });

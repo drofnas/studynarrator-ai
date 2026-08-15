@@ -41,7 +41,7 @@ export function AppShell() {
   const promptActive = location.pathname === APP_PATHS.scriptPrompts || /\/projects\/[^/]+\/script-generation$/u.test(location.pathname);
   const projectsActive = location.pathname.startsWith(APP_PATHS.projects) && !promptActive;
   const onboardingComplete = connections.setup?.onboardingCompletedAt != null;
-  const connectionPath = onboardingComplete ? APP_PATHS.settings : APP_PATHS.onboarding;
+  const connectionPath = onboardingComplete ? APP_PATHS.settingsGeneral : APP_PATHS.onboarding;
   const connectionLabel = connections.loading ? "Checking connection" : connectionLabels[connections.shellState];
   const connectionState = connections.loading ? "loading" : connections.shellState;
 
@@ -102,6 +102,11 @@ export function AppShell() {
     </Link>
   );
 
+  const settingsNavigationLink = (to: string, label: string) => {
+    const active = location.pathname === to;
+    return <Link className={styles.settingsNavItem} data-active={active} aria-current={active ? "page" : undefined} to={to}>{label}</Link>;
+  };
+
   return (
     <div className={styles.shell}>
       <header className={styles.mobileBar}>
@@ -133,7 +138,15 @@ export function AppShell() {
           <div className={styles.navLinks}>
             {navigationLink(APP_PATHS.projects, "Projects", "projects", projectsActive)}
             {navigationLink(APP_PATHS.scratchpad, "Quick Scratchpad", "scratchpad", location.pathname === APP_PATHS.scratchpad)}
-            {navigationLink(APP_PATHS.settings, "Settings", "settings", location.pathname === APP_PATHS.settings)}
+            <div className={styles.settingsGroup}>
+              <Link className={styles.navItem} to={APP_PATHS.settingsGeneral}><Icon name="settings" /><span>Settings</span></Link>
+              <div className={styles.settingsSubnav} aria-label="Settings pages">
+                {settingsNavigationLink(APP_PATHS.settingsGeneral, "General")}
+                {settingsNavigationLink(APP_PATHS.settingsVoices, "Voices")}
+                {settingsNavigationLink(APP_PATHS.settingsLexicon, "Lexicon")}
+                {settingsNavigationLink(APP_PATHS.settingsTimings, "Timings")}
+              </div>
+            </div>
             {navigationLink(APP_PATHS.diagnostics, "System diagnostics", "diagnostics", location.pathname === APP_PATHS.diagnostics)}
           </div>
         </nav>
