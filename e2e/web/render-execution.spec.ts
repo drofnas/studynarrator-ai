@@ -109,6 +109,15 @@ test.describe("render execution", () => {
     await page.getByRole("button", { name: "Retry render" }).click();
     await expect(page.getByText(/Phase: complete/u)).toBeVisible({ timeout: 20_000 });
 
+    const connectionResponse = await request.put(`${studyNarrator.baseUrl}/api/connection`, { data: {
+      baseUrl: studyNarrator.fakeSpeaches.baseUrl,
+      defaultModelId: "speaches-ai/Kokoro-82M-v1.0-ONNX",
+      defaultVoiceId: "af_heart",
+      timeoutSeconds: 30,
+      retryCount: 0,
+      responseFormat: "wav"
+    } });
+    expect(connectionResponse.ok()).toBe(true);
     studyNarrator.fakeSpeaches.setScenario("timeout");
     await request.delete(`${studyNarrator.baseUrl}/api/speech-cache`);
     await page.getByRole("button", { name: "Render this frozen plan" }).click();
