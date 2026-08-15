@@ -20,7 +20,7 @@ test.describe("Frozen render plans", () => {
     ].join("\n"));
     await page.getByRole("tab", { name: "Settings" }).click();
     await expect(page.getByLabel("Connection profile")).toHaveCount(0);
-    await page.getByLabel("Optional model override").fill("speaches-ai/Kokoro-82M-v1.0-ONNX");
+    await expect(page.getByLabel("Optional model override")).toHaveCount(0);
     await expect(page.getByLabel("Voices").first()).toHaveValue("af_heart");
 
     await page.getByLabel("Paragraph transition mode").selectOption("duration");

@@ -96,7 +96,6 @@ test("Docker Web remains authorable offline and renders after Speaches reconnect
     name,
     description: "Created offline and rendered after reconnecting without a container restart.",
     scriptSource: `[speaker_teacher] Deterministic Docker render from ${browserName}.`,
-    modelId: "speaches-ai/Kokoro-82M-v1.0-ONNX",
     speakerMappings: [{
       speakerId: "teacher",
       displayName: "Teacher",

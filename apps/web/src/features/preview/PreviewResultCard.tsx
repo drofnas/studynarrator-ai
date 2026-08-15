@@ -10,10 +10,7 @@ function createAudioUrl(result: ProjectPreviewResult): string {
   return URL.createObjectURL(new Blob([bytes], { type: result.audio.mimeType }));
 }
 
-export function PreviewResultCard({ result, onClearEntry }: {
-  result: ProjectPreviewResult;
-  onClearEntry: () => Promise<void>;
-}) {
+export function PreviewResultCard({ result }: { result: ProjectPreviewResult }) {
   const [audioUrl, setAudioUrl] = useState("");
   useEffect(() => {
     const next = createAudioUrl(result);
@@ -25,6 +22,6 @@ export function PreviewResultCard({ result, onClearEntry }: {
     <div className={styles.identity}><strong>{result.voiceLabel}</strong><code>{result.voiceId}</code><span>{result.modelId} · {String(result.speed)}× · {result.audio.byteLength.toLocaleString()} bytes</span></div>
     <div className={styles.projections}><article><span>Original</span><p>{result.originalText}</p></article><article><span>Readable</span><p>{result.readableText}</p></article><article><span>TTS text</span><p>{result.transformedText}</p></article></div>
     {audioUrl ? <SharedAudioPlayer label={`${result.voiceLabel} · ${result.voiceId}`} src={audioUrl} /> : null}
-    <footer><code>{result.cache.key}</code><button type="button" onClick={() => void onClearEntry()}>Clear this cached entry</button></footer>
+    <footer><code>{result.cache.key}</code></footer>
   </section>;
 }

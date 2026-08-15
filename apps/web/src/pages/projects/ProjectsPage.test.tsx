@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { Link, MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseScript, resolveParagraphPauses, transformScript } from "@studynarrator/core";
-import type { IgnoredDiagnosticCollection, PersistenceClient, ProjectDetail, ProjectPreviewResult, ProjectReplaceInput, ProjectPreviewClient, RenderClient, RenderPlan, RenderPlanClient, RenderPlanSummary, SpeachesConnection, SpeechCacheClient, SpeechCatalog, VoiceCatalog } from "@studynarrator/shared-types";
+import type { IgnoredDiagnosticCollection, PersistenceClient, ProjectDetail, ProjectPreviewResult, ProjectReplaceInput, ProjectPreviewClient, RenderClient, RenderPlan, RenderPlanClient, RenderPlanSummary, SpeachesConnection, SpeechCatalog, VoiceCatalog } from "@studynarrator/shared-types";
 import type { ScriptAnalyzer } from "@/workers/parser/parserClient.js";
 import type { ScriptAnalysisInput } from "@/workers/parser/parserWorkerProtocol.js";
 import { GLOBAL_VOICE_CATALOG_MODEL_ID } from "@/features/projects/projectAuthoring.js";
@@ -13,13 +13,12 @@ import { ProjectsPage } from "./ProjectsPage.js";
 import { ConnectionProvider } from "@/features/connections/ConnectionProvider.js";
 
 const project: ProjectDetail = {
-  contractVersion: 7,
+  contractVersion: 8,
   id: "00000000-0000-4000-8000-000000000001",
   name: "Authoring study",
   description: "Offline fixture",
   scriptSource: "[speaker_teacher] SQL.\n[pause_short]\nContinue.",
   scriptHash: "a".repeat(64),
-  modelId: null,
   speakerMappings: [{ speakerId: "teacher", displayName: "Teacher", voiceId: "voice_teacher", speed: 1, gainDb: 0, roleDescription: "", sampleText: "" }],
   pausePresets: [
     { pauseId: "pause_short", durationMs: 350, description: "Brief" },
@@ -28,7 +27,7 @@ const project: ProjectDetail = {
   transitionPauses: { paragraph: { mode: "preset", pauseId: "pause_medium" }, speakerChange: { mode: "none" }, section: { mode: "none" } },
   lexiconEntries: [{
     id: "project-sql", scope: "project", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel",
-    caseSensitive: true, wholeWord: true, priority: 0, enabled: true, notes: "", createdAt: "2026-08-12T12:00:00.000Z", updatedAt: "2026-08-12T12:00:00.000Z"
+    caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: "", createdAt: "2026-08-12T12:00:00.000Z", updatedAt: "2026-08-12T12:00:00.000Z"
   }],
   createdAt: "2026-08-12T12:00:00.000Z",
   updatedAt: "2026-08-12T12:00:00.000Z"
@@ -96,7 +95,7 @@ function fixture(sourceProject = project) {
   let stored = structuredClone(sourceProject);
   let ignoredDiagnostics: Array<{ code: string; pattern: string }> = [];
   const replace = vi.fn(async (_id: string, input: ProjectReplaceInput) => {
-    stored = { ...stored, ...input, modelId: input.modelId ?? stored.modelId, scriptHash: "b".repeat(64), updatedAt: "2026-08-12T13:00:00.000Z", lexiconEntries: stored.lexiconEntries };
+    stored = { ...stored, ...input, scriptHash: "b".repeat(64), updatedAt: "2026-08-12T13:00:00.000Z", lexiconEntries: stored.lexiconEntries };
     return structuredClone(stored);
   });
   const duplicate = vi.fn(async () => structuredClone(stored));
@@ -144,7 +143,6 @@ function renderPage(client: PersistenceClient, analyze: ScriptAnalyzer["analyze"
   speechCatalog?: SpeechCatalog;
   discovery?: () => Promise<SpeechCatalog>;
   previewClient?: ProjectPreviewClient;
-  cacheClient?: SpeechCacheClient;
   renderPlanClient?: RenderPlanClient;
   renderClient?: RenderClient;
   path?: string;
@@ -169,14 +167,9 @@ function renderPage(client: PersistenceClient, analyze: ScriptAnalyzer["analyze"
   };
   const voiceCatalog = { get: vi.fn(async (modelId: string) => options.catalog ?? ({ schemaVersion: 1 as const, modelId, entries: [] })), replace: vi.fn() };
   const previewClient = options.previewClient ?? { preview: vi.fn() } as unknown as ProjectPreviewClient;
-  const cacheClient = options.cacheClient ?? {
-    status: vi.fn(), clearAll: vi.fn(),
-    clearProject: vi.fn(async () => ({ contractVersion: 1 as const, entriesRemoved: 0, bytesFreed: 0 })),
-    clearEntry: vi.fn(async () => ({ contractVersion: 1 as const, entriesRemoved: 0, bytesFreed: 0 }))
-  } as unknown as SpeechCacheClient;
   const renderPlanClient = options.renderPlanClient ?? { create: vi.fn(), list: vi.fn(async () => []), get: vi.fn() } as unknown as RenderPlanClient;
-  const page = <ProjectsPage client={client} analyzer={{ analyze }} previewClient={previewClient} cacheClient={cacheClient} renderPlanClient={renderPlanClient} {...(options.renderClient ? { renderClient: options.renderClient } : {})} />;
-  return { ...render(<ConnectionProvider connectionClient={connections} voiceCatalog={voiceCatalog}><MemoryRouter initialEntries={[options.path ?? `/projects/${project.id}`]}><Link to="/settings">Settings test link</Link><Routes><Route path="/projects" element={page} /><Route path="/projects/:projectId" element={page} /><Route path="/settings" element={<p>Settings destination</p>} /></Routes></MemoryRouter></ConnectionProvider>), connections, voiceCatalog, previewClient, cacheClient, renderPlanClient };
+  const page = <ProjectsPage client={client} analyzer={{ analyze }} previewClient={previewClient} renderPlanClient={renderPlanClient} {...(options.renderClient ? { renderClient: options.renderClient } : {})} />;
+  return { ...render(<ConnectionProvider connectionClient={connections} voiceCatalog={voiceCatalog}><MemoryRouter initialEntries={[options.path ?? `/projects/${project.id}`]}><Link to="/settings">Settings test link</Link><Routes><Route path="/projects" element={page} /><Route path="/projects/:projectId" element={page} /><Route path="/settings" element={<p>Settings destination</p>} /></Routes></MemoryRouter></ConnectionProvider>), connections, voiceCatalog, previewClient, renderPlanClient };
 }
 
 function deferred<T>() {
@@ -241,13 +234,27 @@ describe("Projects workbench", () => {
   });
 
   it("keeps project lexicon changes isolated from global entries", async () => {
-    const { client, analyze, replaceGlobalLexicon } = fixture();
+    const { client, analyze, replace, replaceGlobalLexicon } = fixture();
     renderPage(client, analyze);
     await openProjectTab("Settings");
     const lexicon = (await screen.findByRole("heading", { name: "Project lexicon" })).closest("section");
     expect(lexicon).not.toBeNull();
-    await userEvent.click(within(lexicon!).getByRole("button", { name: "Disable" }));
-    expect(within(lexicon!).getByText(/project · exactTerm · disabled/u)).toBeInTheDocument();
+    await userEvent.click(within(lexicon!).getByLabelText("Enabled"));
+    expect(within(lexicon!).getByLabelText("Enabled")).not.toBeChecked();
+    await userEvent.type(within(lexicon!).getAllByLabelText("Script Text")[0]!, "GraphQL");
+    await userEvent.type(within(lexicon!).getAllByLabelText("Spoken Text")[0]!, "graph Q L");
+    await userEvent.click(within(lexicon!).getByRole("button", { name: "Add" }));
+    await waitFor(() => expect(replace).toHaveBeenCalled(), { timeout: 2_000 });
+    expect(replace.mock.calls.at(-1)?.[1].lexiconEntries).toContainEqual(expect.objectContaining({
+      displayText: "GraphQL",
+      spokenText: "graph Q L",
+      entryType: "exactTerm",
+      caseSensitive: false,
+      wholeWord: true,
+      priority: 0,
+      enabled: true,
+      notes: ""
+    }));
     expect(replaceGlobalLexicon).not.toHaveBeenCalled();
   });
 
@@ -271,14 +278,15 @@ describe("Projects workbench", () => {
     await openProjectTab("Settings");
     expect(screen.queryByLabelText("Connection profile")).not.toBeInTheDocument();
     await waitFor(() => expect(analyze).toHaveBeenCalled());
-    expect((await screen.findAllByText("Heart — American English — af_heart")).length).toBeGreaterThan(0);
     expect(await screen.findByLabelText("Voices")).toHaveValue("af_heart");
     expect(screen.getByRole("option", { name: "Heart (af_heart | en-US)" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Sky (af_sky | en-US)" })).toBeInTheDocument();
     expect([...screen.getByLabelText("Voices").querySelectorAll("optgroup")].map(({ label }) => label)).toEqual(["Favorites", "en-US"]);
-    expect(await screen.findByText("available")).toBeInTheDocument();
+    expect(screen.queryByText("Heart — American English — af_heart")).not.toBeInTheDocument();
+    expect(screen.queryByText("available")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Project connection" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Optional model override")).not.toBeInTheDocument();
     await waitFor(() => expect(replace).toHaveBeenCalledWith(project.id, expect.objectContaining({
-      modelId: null,
       speakerMappings: [expect.objectContaining({ speakerId: "teacher", voiceId: "af_heart" })]
     })));
     await userEvent.selectOptions(screen.getByLabelText("Voices"), "af_sky");
@@ -291,7 +299,7 @@ describe("Projects workbench", () => {
       timeoutSeconds: 120, retryCount: 2, responseFormat: "wav", lastTestedAt: null, lastSuccessfulTestAt: null, lastTestSummary: null,
       createdAt: "2026-08-12T12:00:00.000Z", updatedAt: "2026-08-12T12:00:00.000Z"
     };
-    const connected = { ...project, modelId: "model-a", speakerMappings: [{ ...project.speakerMappings[0]!, voiceId: "voice-a" }] };
+    const connected = { ...project, speakerMappings: [{ ...project.speakerMappings[0]!, voiceId: "voice-a" }] };
     const { client, analyze, replace } = fixture(connected);
     const catalog: VoiceCatalog = { schemaVersion: 1, modelId: "model-a", entries: [
       { voiceId: "voice-a", label: "Catalog A", enabled: true, favorite: false, language: null, locale: null, accent: null, category: null, style: null, sampleText: null },
@@ -315,15 +323,9 @@ describe("Projects workbench", () => {
     expect(screen.queryByRole("option", { name: "Disabled" })).not.toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "Catalog B" })).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Optional model override"), { target: { value: "model-b" } });
-    await waitFor(() => expect(screen.getByLabelText("Voices")).toHaveValue("voice-b"));
-    expect(screen.getByRole("option", { name: "Server B (voice-b | Locale unavailable)" })).toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: "Server A (voice-a | Locale unavailable)" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Server B (voice-b | Locale unavailable)" })).not.toBeInTheDocument();
     expect(connections.discoverSpeechCatalog).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(replace).toHaveBeenCalledWith(project.id, expect.objectContaining({
-      modelId: "model-b",
-      speakerMappings: [expect.objectContaining({ voiceId: "voice-b" })]
-    })));
+    expect(replace).not.toHaveBeenCalled();
   });
 
   it("preserves the saved voice on discovery failure and retries without a synthesis request", async () => {
@@ -332,7 +334,7 @@ describe("Projects workbench", () => {
       timeoutSeconds: 120, retryCount: 2, responseFormat: "wav", lastTestedAt: null, lastSuccessfulTestAt: null, lastTestSummary: null,
       createdAt: "2026-08-12T12:00:00.000Z", updatedAt: "2026-08-12T12:00:00.000Z"
     };
-    const connected = { ...project, modelId: "model-a", speakerMappings: [{ ...project.speakerMappings[0]!, voiceId: "voice-a" }] };
+    const connected = { ...project, speakerMappings: [{ ...project.speakerMappings[0]!, voiceId: "voice-a" }] };
     const { client, analyze, replace } = fixture(connected);
     const catalog: VoiceCatalog = { schemaVersion: 1, modelId: "model-a", entries: [
       { voiceId: "voice-a", label: "Catalog A", enabled: true, favorite: false, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }
@@ -347,11 +349,11 @@ describe("Projects workbench", () => {
 
     expect(await screen.findByLabelText("Voices")).toBeDisabled();
     expect(screen.getByText("Supported voices are temporarily unavailable.")).toBeInTheDocument();
-    expect(screen.getByText("voice-a")).toBeInTheDocument();
+    expect(screen.queryByText("voice-a")).not.toBeInTheDocument();
     expect(replace).not.toHaveBeenCalled();
     await userEvent.click(await screen.findByRole("button", { name: "Retry supported voices" }));
     await waitFor(() => expect(screen.getByLabelText("Voices")).toHaveValue("voice-a"));
-    expect(screen.getByText("voice-a")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Voice A (voice-a | Locale unavailable)" })).toBeInTheDocument();
     expect(connections.discoverSpeechCatalog).toHaveBeenCalledTimes(2);
     expect(replace).not.toHaveBeenCalled();
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -368,7 +370,6 @@ describe("Projects workbench", () => {
     expect(screen.getByRole("option", { name: "Sky (af_sky | en-US)" })).toBeInTheDocument();
     expect(voiceCatalog.get).toHaveBeenCalledWith(GLOBAL_VOICE_CATALOG_MODEL_ID);
     await waitFor(() => expect(replace).toHaveBeenCalledWith(project.id, expect.objectContaining({
-      modelId: null,
       speakerMappings: [expect.objectContaining({ speakerId: "teacher", voiceId: "af_heart" })]
     })));
     await waitFor(() => expect(screen.queryByText("MISSING_VOICE_MAPPING")).not.toBeInTheDocument());
@@ -397,8 +398,8 @@ describe("Projects workbench", () => {
     ]);
     expect(score).toHaveTextContent("sequel");
     await openProjectTab("Settings");
-    expect(screen.getByText(/project · exactTerm · enabled · 1 matches/u)).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: /Line 1/u }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("article", { name: "Lexicon entry SQL" })).toBeInTheDocument();
+    expect(screen.queryByText(/1 matches/u)).not.toBeInTheDocument();
     expect(fetchSpy).not.toHaveBeenCalled();
 
     const projectName = screen.getByLabelText("Project name");
@@ -406,7 +407,7 @@ describe("Projects workbench", () => {
     expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
     await waitFor(() => expect(replace).toHaveBeenCalled(), { timeout: 2_000 });
     expect(replace.mock.calls.at(-1)?.[1]).toMatchObject({ name: "Autosaved study" });
-    await waitFor(() => expect(screen.getByText("Saved")).toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText(/^Saved$/u)).not.toBeInTheDocument());
   });
 
   it("persists and restores exact diagnostic suppressions", async () => {
@@ -451,7 +452,8 @@ describe("Projects workbench", () => {
     expect(replace).toHaveBeenCalledWith(project.id, expect.objectContaining({ scriptSource: pastedSource }));
 
     pendingSave.resolve({ ...project, scriptSource: pastedSource, updatedAt: "2026-08-12T13:30:00.000Z" });
-    await waitFor(() => expect(screen.getByText("Saved")).toBeInTheDocument());
+    await waitFor(() => expect(replace).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(/^Saved$/u)).not.toBeInTheDocument();
   });
 
   it("does not autosave discovery reconciliation when the user has not edited the project", async () => {
@@ -467,7 +469,7 @@ describe("Projects workbench", () => {
     expect(screen.getByText("The global voice catalog has no enabled voices.")).toBeInTheDocument();
     expect(timerSpy.mock.calls.filter(([, delay]) => delay === 800)).toHaveLength(0);
     expect(replace).not.toHaveBeenCalled();
-    expect(screen.getByText("Saved")).toBeInTheDocument();
+    expect(screen.queryByText(/^Saved$/u)).not.toBeInTheDocument();
   });
 
   it("retains an invalid custom pause draft and blocks Save now", async () => {
@@ -500,7 +502,6 @@ describe("Projects workbench", () => {
     replace.mockImplementationOnce(async (_id, input) => ({
       ...project,
       ...input,
-      modelId: input.modelId ?? project.modelId,
       lexiconEntries: project.lexiconEntries,
       updatedAt: "2026-08-12T14:00:00.000Z"
     }));
@@ -515,7 +516,8 @@ describe("Projects workbench", () => {
 
     await waitFor(() => expect(replace).toHaveBeenCalledTimes(2), { timeout: 2_000 });
     expect(replace.mock.calls.map((call) => call[1].name)).toEqual(["Revision one", "Revision two"]);
-    await waitFor(() => expect(screen.getByText("Saved")).toBeInTheDocument());
+    await waitFor(() => expect(replace).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText(/^Saved$/u)).not.toBeInTheDocument();
     expect(projectName).toHaveValue("Revision two");
   });
 
@@ -533,13 +535,12 @@ describe("Projects workbench", () => {
     expect(replace.mock.invocationCallOrder[0]).toBeLessThan(duplicate.mock.invocationCallOrder[0]!);
   });
 
-  it("flushes pending edits before segment and pronunciation previews and scopes cache cleanup", async () => {
+  it("flushes pending edits before segment previews and exposes no project cache or pronunciation controls", async () => {
     vi.stubGlobal("atob", (value: string) => Buffer.from(value, "base64").toString("binary"));
     vi.stubGlobal("URL", { createObjectURL: vi.fn(() => "blob:project-preview"), revokeObjectURL: vi.fn() });
     vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => undefined);
     vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => undefined);
-    const connectedProject = { ...project, modelId: "model" };
-    const { client, analyze, replace } = fixture(connectedProject);
+    const { client, analyze, replace } = fixture(project);
     const connection: SpeachesConnection = {
       baseUrl: "http://127.0.0.1:8000", suppliedUrlForm: "root", configured: true, defaultModelId: "model", defaultVoiceId: "voice_teacher",
       timeoutSeconds: 120, retryCount: 0, responseFormat: "wav", lastTestedAt: null, lastSuccessfulTestAt: null, lastTestSummary: null,
@@ -549,14 +550,10 @@ describe("Projects workbench", () => {
       voiceId: "voice_teacher", label: "Teacher Voice", enabled: true, favorite: false, language: null, locale: null, accent: null, category: null, style: null, sampleText: null
     }] };
     const preview = vi.fn(async (_projectId: string, input: { mode: "segment" | "pronunciation" }) => projectPreviewResult(input.mode));
-    const clearProject = vi.fn(async () => ({ contractVersion: 1 as const, entriesRemoved: 2, bytesFreed: 6 }));
-    const clearEntry = vi.fn(async () => ({ contractVersion: 1 as const, entriesRemoved: 1, bytesFreed: 3 }));
-    const cacheClient = { status: vi.fn(), clearAll: vi.fn(), clearProject, clearEntry } as unknown as SpeechCacheClient;
     renderPage(client, analyze, {
       connection, catalog,
       speechCatalog: { schemaVersion: 1, models: [{ modelId: "model", voices: [{ voiceId: "voice_teacher", name: "Teacher Voice", language: null, gender: null }] }] },
-      previewClient: { preview } as unknown as ProjectPreviewClient,
-      cacheClient
+      previewClient: { preview } as unknown as ProjectPreviewClient
     });
 
     fireEvent.change(await screen.findByDisplayValue("Offline fixture"), { target: { value: "Pending preview edit" } });
@@ -567,18 +564,13 @@ describe("Projects workbench", () => {
     expect(screen.getByRole("region", { name: "Project preview result" })).toHaveTextContent("Cache miss");
     expect(replace).toHaveBeenCalledWith(project.id, expect.objectContaining({ description: "Pending preview edit" }));
     expect(replace.mock.invocationCallOrder[0]).toBeLessThan(preview.mock.invocationCallOrder[0]!);
+    expect(screen.queryByRole("button", { name: "Clear this cached entry" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Clear project cache" })).not.toBeInTheDocument();
 
     await openProjectTab("Settings");
-    await userEvent.type(screen.getByLabelText("Pronunciation test"), "SQL sample.");
-    await userEvent.click(screen.getByRole("button", { name: "Preview pronunciation" }));
-    await waitFor(() => expect(preview).toHaveBeenLastCalledWith(project.id, { mode: "pronunciation", text: "SQL sample." }, expect.any(AbortSignal)));
-
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
-    await userEvent.click(screen.getByRole("button", { name: "Clear this cached entry" }));
-    expect(clearEntry).toHaveBeenCalledWith("a".repeat(64));
-    await userEvent.click(screen.getByRole("button", { name: "Clear project cache" }));
-    expect(clearProject).toHaveBeenCalledWith(project.id);
-    expect(confirm.mock.calls.flat().join(" ")).toContain("shared with Scratchpad or other projects");
+    expect(screen.queryByLabelText("Pronunciation test")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Preview pronunciation" })).not.toBeInTheDocument();
+    expect(preview).toHaveBeenCalledTimes(1);
   });
 
   it("configures every transition and creates, reopens, and replaces immutable plans", async () => {
@@ -628,7 +620,7 @@ describe("Projects workbench", () => {
     expect(screen.getAllByText("Matches current project").length).toBeGreaterThan(0);
 
     replace.mockImplementationOnce(async (_id, input) => ({
-      ...project, ...input, modelId: input.modelId ?? project.modelId, scriptHash: "c".repeat(64), lexiconEntries: project.lexiconEntries,
+      ...project, ...input, scriptHash: "c".repeat(64), lexiconEntries: project.lexiconEntries,
       updatedAt: "2026-08-12T15:00:00.000Z"
     }));
     await openProjectTab("Script Editor");

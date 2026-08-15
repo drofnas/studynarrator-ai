@@ -3,9 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import {
   buildAuthoringDryRun,
   parsePauseDuration,
-  parseScript,
   reconcileDiscoveredConfiguration,
-  transformScript,
   type AuthoringDryRunResult,
   type AuthoringPauseRow,
   type AuthoringSpeakerRow,
@@ -25,7 +23,6 @@ import {
   type RenderClient,
   type RenderJob,
   type ProjectSummary,
-  type SpeechCacheClient,
   type TransitionPauseSetting,
   type VoiceCatalog
 } from "@studynarrator/shared-types";
@@ -49,6 +46,7 @@ import styles from "./ProjectsPage.module.css";
 import { useConnections } from "@/features/connections/ConnectionProvider.js";
 import { VoiceSelect } from "@/features/connections/VoiceSelect.js";
 import { presentVoices } from "@/features/connections/voicePresentation.js";
+import { LexiconEditor, type LexiconEditorValue } from "@/features/lexicon/LexiconEditor.js";
 import { PreviewResultCard } from "@/features/preview/PreviewResultCard.js";
 import { RenderHistory } from "@/features/renders/RenderHistory.js";
 
@@ -65,24 +63,11 @@ const projectTabs: Array<{ id: ProjectTab; label: string }> = [
   { id: "render", label: "Render" }
 ];
 
-const emptyLexiconDraft: LexiconEntryAuthoring = {
-  scope: "project",
-  entryType: "exactTerm",
-  displayText: "",
-  spokenText: "",
-  caseSensitive: true,
-  wholeWord: true,
-  priority: 0,
-  enabled: true,
-  notes: ""
-};
-
 function same(left: unknown, right: unknown): boolean { return JSON.stringify(left) === JSON.stringify(right); }
 function sameDraft(left: ProjectDraft, right: ProjectDraft): boolean {
   return left.name === right.name
     && left.description === right.description
     && left.scriptSource === right.scriptSource
-    && left.modelId === right.modelId
     && left.speakerMappings === right.speakerMappings
     && left.pausePresets === right.pausePresets
     && same(left.transitionPauses, right.transitionPauses)
@@ -110,11 +95,10 @@ function TransitionPauseEditor({ label, setting, pausePresets, onChange }: {
   </fieldset>;
 }
 
-export function ProjectsPage({ client, analyzer, previewClient, cacheClient, renderPlanClient, renderClient }: {
+export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient, renderClient }: {
   client: PersistenceClient;
   analyzer: ScriptAnalyzer;
   previewClient: ProjectPreviewClient;
-  cacheClient: SpeechCacheClient;
   renderPlanClient: RenderPlanClient;
   renderClient?: RenderClient;
 }) {
@@ -147,12 +131,6 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
   const [replacement, setReplacement] = useState("");
   const [caseSensitive, setCaseSensitive] = useState(true);
   const [cleanupUndo, setCleanupUndo] = useState<string>();
-  const [lexiconDraft, setLexiconDraft] = useState<LexiconEntryAuthoring>(emptyLexiconDraft);
-  const [editingLexicon, setEditingLexicon] = useState<string>();
-  const [lexiconSearch, setLexiconSearch] = useState("");
-  const [lexiconType, setLexiconType] = useState<"all" | LexiconEntryAuthoring["entryType"]>("all");
-  const [sample, setSample] = useState("");
-  const [sampleSpeaker, setSampleSpeaker] = useState("");
   const [copySource, setCopySource] = useState<Record<string, string>>({});
   const [voiceCatalog, setVoiceCatalog] = useState<VoiceCatalog | null>(null);
   const [voiceCatalogState, setVoiceCatalogState] = useState<VoiceCatalogState>("idle");
@@ -180,7 +158,7 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
   draftRef.current = draft;
   const isDirty = saveState === "unsaved" || saveState === "saving" || saveState === "invalid" || saveState === "failed";
   const selectedConnection = connections.connection;
-  const effectiveModelId = draft?.modelId ?? selectedConnection?.defaultModelId ?? null;
+  const effectiveModelId = selectedConnection?.defaultModelId ?? null;
   const voiceCatalogModelId = effectiveModelId ?? GLOBAL_VOICE_CATALOG_MODEL_ID;
   const voiceDefaultId = selectedConnection?.defaultVoiceId ?? GLOBAL_VOICE_CATALOG_DEFAULT_VOICE_ID;
   const speechCatalogState = connections.catalog;
@@ -222,12 +200,6 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
     const selectableIds = new Set(enabledVoices.map(({ voiceId }) => voiceId));
     return presentVoices(speechModel?.voices.filter(({ voiceId }) => selectableIds.has(voiceId)) ?? [], enabledVoices);
   }, [enabledVoices, speechModel]);
-  const voiceById = useMemo(() => new Map(enabledVoices.map((entry) => [entry.voiceId, entry])), [enabledVoices]);
-  const supportedVoiceIds = useMemo(() => new Set(enabledVoices.map(({ voiceId }) => voiceId)), [enabledVoices]);
-  const availability = useCallback((voiceId: string | null): "available" | "unavailable" | "unverified" => {
-    if (!selectedConnection || voiceSelectionState !== "ready" || !voiceId) return "unverified";
-    return supportedVoiceIds.has(voiceId) ? "available" : "unavailable";
-  }, [selectedConnection, supportedVoiceIds, voiceSelectionState]);
 
   const reloadProjects = useCallback(async () => setProjects(await client.projects.list()), [client]);
 
@@ -492,12 +464,6 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
   const lineNumbers = useMemo(() => deferredScriptSource.split(/\r?\n/u).map((_line, index) => index + 1).join("\n") || "1", [deferredScriptSource]);
   const cleanedFencedSource = useMemo(() => draft ? stripSingleSurroundingCodeFence(draft.scriptSource) : undefined, [draft?.scriptSource]);
 
-  const sampleResult = useMemo(() => {
-    if (!sample.trim()) return undefined;
-    const parsed = parseScript({ source: sample, ...(sampleSpeaker ? { defaultSpeakerId: sampleSpeaker } : {}) });
-    return transformScript({ parsedScript: parsed, entries: materializeLexicon([...globalLexicon, ...(draft?.lexiconEntries ?? [])], "sample") });
-  }, [sample, sampleSpeaker, globalLexicon, draft?.lexiconEntries]);
-
   const createProject = async () => {
     if (!newName.trim()) return;
     setBusy(true);
@@ -617,18 +583,23 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
     catch (error) { setErrors([message(error)]); }
   };
 
-  const saveLexicon = () => {
-    const candidate: LexiconEntryAuthoring = { ...lexiconDraft, scope: "project", ...(editingLexicon ? { id: editingLexicon } : {}) };
-    if (!candidate.displayText.trim() || !candidate.spokenText.trim()) { setErrors(["Display text and spoken text are required."]); return; }
-    updateDraft((current) => ({ ...current, lexiconEntries: editingLexicon
-      ? current.lexiconEntries.map((entry) => entry.id === editingLexicon ? candidate : entry)
-      : [...current.lexiconEntries, candidate] }));
-    setLexiconDraft(emptyLexiconDraft); setEditingLexicon(undefined);
-  };
-
-  const removeLexicon = (id: string | undefined) => {
-    if (!id) return;
-    updateDraft((current) => ({ ...current, lexiconEntries: current.lexiconEntries.filter((entry) => entry.id !== id) }));
+  const changeProjectLexicon = (value: LexiconEditorValue[]) => {
+    updateDraft((current) => ({
+      ...current,
+      lexiconEntries: value.map((entry) => ({
+        ...(entry.id ? { id: entry.id } : {}),
+        scope: "project" as const,
+        entryType: "exactTerm" as const,
+        displayText: entry.displayText,
+        spokenText: entry.spokenText,
+        caseSensitive: false as const,
+        wholeWord: true as const,
+        priority: 0 as const,
+        enabled: entry.enabled,
+        notes: "" as const
+      }))
+    }));
+    return true;
   };
 
   const replaceIgnoredDiagnostics = async (next: IgnoredDiagnosticCollection, successMessage: string) => {
@@ -746,28 +717,7 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
     } catch (error) { setRenderError(message(error)); }
   };
 
-  const clearProjectCache = async () => {
-    if (!project || !window.confirm(`Clear every cached speech entry associated with ${project.name}? Identical speech shared with Scratchpad or other projects will also be deleted.`)) return;
-    try {
-      const removed = await cacheClient.clearProject(project.id);
-      setNotice(`Cleared ${String(removed.entriesRemoved)} project-associated cache ${removed.entriesRemoved === 1 ? "entry" : "entries"} and freed ${removed.bytesFreed.toLocaleString()} bytes.`);
-      setPreviewResult(undefined);
-    } catch (error) { setPreviewError(message(error)); }
-  };
-
-  const clearPreviewEntry = async () => {
-    if (!previewResult || !window.confirm("Clear this cached speech entry? A future equivalent preview will contact Speaches again.")) return;
-    try {
-      const removed = await cacheClient.clearEntry(previewResult.cache.key);
-      setNotice(`Cleared ${String(removed.entriesRemoved)} selected cache ${removed.entriesRemoved === 1 ? "entry" : "entries"}.`);
-      setPreviewResult(undefined);
-    } catch (error) { setPreviewError(message(error)); }
-  };
-
   const projectLexicon = draft?.lexiconEntries ?? [];
-  const filteredLexicon = projectLexicon.filter((entry) =>
-    (lexiconType === "all" || entry.entryType === lexiconType)
-    && (!lexiconSearch || `${entry.displayText} ${entry.senseId ?? ""} ${entry.spokenText}`.toLocaleLowerCase().includes(lexiconSearch.toLocaleLowerCase())));
   const activeDiagnostics: IgnoredDiagnostic[] = analysis ? [
     ...analysis.parseResult.errors,
     ...analysis.parseResult.warnings,
@@ -814,7 +764,7 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
         <section className={styles.projectIdentity} aria-label="Project details">
           <label>Project name<input value={draft.name} onChange={(event) => updateDraft((current) => ({ ...current, name: event.target.value }))} /></label>
           <label>Description<input value={draft.description} onChange={(event) => updateDraft((current) => ({ ...current, description: event.target.value }))} /></label>
-          <div className={styles.projectActions}><div className={styles.actionRow}><button type="button" onClick={() => void saveNow()} disabled={saveState === "saving"}>Save now</button><button type="button" className={styles.secondary} onClick={() => void duplicateProject()}>Duplicate</button><button type="button" className={styles.secondary} onClick={() => void clearProjectCache()}>Clear project cache</button><button type="button" className={styles.danger} onClick={() => void deleteProject()}>Delete</button></div><span className={styles.saveState} data-state={saveState} aria-live="polite">{saveState === "saved" ? "Saved" : saveState === "saving" ? "Saving…" : saveState === "invalid" ? "Invalid changes" : saveState === "failed" ? "Save failed" : "Unsaved changes"}</span></div>
+          <div className={styles.projectActions}><div className={styles.actionRow}><button type="button" onClick={() => void saveNow()} disabled={saveState === "saving"}>Save now</button><button type="button" className={styles.secondary} onClick={() => void duplicateProject()}>Duplicate</button><button type="button" className={styles.danger} onClick={() => void deleteProject()}>Delete</button></div><span className={styles.saveState} data-state={saveState} aria-live="polite">{saveState === "saved" ? "" : saveState === "saving" ? "Saving…" : saveState === "invalid" ? "Invalid changes" : saveState === "failed" ? "Save failed" : "Unsaved changes"}</span></div>
         </section>
         <div className={styles.tabList} role="tablist" aria-label="Project workspace">
           {projectTabs.map(({ id, label }) => <button ref={(element) => { tabRefs.current[id] = element; }} type="button" role="tab" id={`project-tab-${id}`} aria-controls={`project-panel-${id}`} aria-selected={activeTab === id} tabIndex={activeTab === id ? 0 : -1} key={id} onClick={() => selectTab(id)} onKeyDown={(event) => moveTabFocus(event, id)}>{label}</button>)}
@@ -824,15 +774,7 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
       <div className={styles.tabPanel} role={draft && project ? "tabpanel" : undefined} id={draft && project ? `project-panel-${activeTab}` : undefined} aria-labelledby={draft && project ? `project-tab-${activeTab}` : undefined}>
       <div className={styles.workspace}>
         {!draft || !project ? <section className={styles.empty}><h3>{busy ? "Loading project" : "Project unavailable"}</h3><p>{busy ? "Opening the saved project workspace…" : "Return to the project index and choose another project."}</p></section> : <>
-          {activeTab === "script" || activeTab === "settings" ? <main className={styles.editorColumn}>
-            {activeTab === "settings" ? <section className={styles.connectionPanel}>
-              <div><span>Voice backend</span><h3>Project connection</h3></div>
-              <label>Speaches server<input value={selectedConnection?.baseUrl ?? "Not configured"} readOnly /></label>
-              <label>Optional model override<input list="project-models" value={draft.modelId ?? ""} placeholder={selectedConnection?.defaultModelId ?? "Use connection default"} onChange={(event) => updateDraft((current) => ({ ...current, modelId: event.target.value || null }))} /></label>
-              <datalist id="project-models">{speechCatalogState?.status === "ready" ? speechCatalogState.catalog.models.map(({ modelId }) => <option key={modelId} value={modelId} />) : null}</datalist>
-              <p data-state={selectedConnection?.lastTestSummary?.overall ?? "unverified"}>{selectedConnection?.configured ? `${selectedConnection.lastTestSummary?.overall ?? "unverified"} · ${effectiveModelId ?? "no model"}` : "Offline · connection not configured"}</p>
-            </section> : null}
-
+          {activeTab === "script" ? <main className={styles.editorColumn}>
             {activeTab === "script" ? <section className={styles.scriptPanel} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void importFile(event.dataTransfer.files[0]); }}>
               <div className={styles.sectionHeading}><div><span>Source</span><h3>Script editor</h3></div><label className={styles.fileButton}>Upload .txt<input type="file" accept=".txt,text/plain" onChange={(event) => void importFile(event.target.files?.[0])} /></label></div>
               <div className={styles.panelScrollBody} role="region" aria-label="Script editor content" tabIndex={0}>
@@ -852,7 +794,6 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
                 <label>Display name<input value={row.displayName} onChange={(event) => updateSpeaker(row.speakerId, { displayName: event.target.value })} /></label>
                 <label>Voices<VoiceSelect disabled={enabledVoices.length === 0} value={enabledVoices.some(({ voiceId }) => voiceId === row.voiceId) ? row.voiceId ?? "" : ""} voices={presentedEnabledVoices} emptyOption={enabledVoices.length === 0 ? voiceSelectionState === "loading" ? "Loading supported voices…" : "No supported voices" : undefined} onChange={(voiceId) => updateSpeaker(row.speakerId, { voiceId })} /></label>
                 {enabledVoices.length === 0 ? <p className={styles.voiceFieldMessage}>{!selectedConnection?.configured && voiceSelectionState === "ready" ? "The global voice catalog has no enabled voices." : voiceSelectionState === "failed" ? speechCatalogState?.status === "failed" ? speechCatalogState.error : "The global voice catalog could not be loaded." : voiceSelectionState === "modelUnavailable" ? "The selected model was not reported by Speaches." : voiceSelectionState === "noSupportedVoices" ? "Speaches reported no voices for the selected model." : voiceSelectionState === "ready" ? "The supported voices are disabled in Settings." : "Loading the selected model's supported voices."} {selectedConnection?.baseUrl ? <button type="button" onClick={() => void connections.discover({ baseUrl: selectedConnection.baseUrl!, timeoutSeconds: selectedConnection.timeoutSeconds, retryCount: selectedConnection.retryCount }).catch(() => undefined)}>Retry supported voices</button> : null} <button type="button" onClick={() => void navigate("/settings")}>Open Settings</button></p> : null}
-                <div className={styles.voiceMeta}><strong>{voiceById.get(row.voiceId ?? "")?.label ?? "Voice unavailable"}</strong><code>{row.voiceId || "no raw ID"}</code><span data-state={availability(row.voiceId)}>{availability(row.voiceId)}</span></div>
                 <div className={styles.inlineFields}><label>Speed<input type="number" step="0.05" min="0.01" max="4" value={row.speed} onChange={(event) => updateSpeaker(row.speakerId, { speed: Number(event.target.value) })} /></label><label>Gain dB<input type="number" min="-60" max="24" value={row.gainDb} onChange={(event) => updateSpeaker(row.speakerId, { gainDb: Number(event.target.value) })} /></label></div>
                 <div className={styles.copyRow}><select aria-label={`Copy settings for ${row.speakerId}`} value={copySource[row.speakerId] ?? ""} onChange={(event) => setCopySource((current) => ({ ...current, [row.speakerId]: event.target.value }))}><option value="">Copy another speaker…</option>{configuration.speakers.filter((item) => item.speakerId !== row.speakerId).map((item) => <option key={item.speakerId} value={item.speakerId}>{item.speakerId}</option>)}</select><button type="button" className={styles.secondary} onClick={() => { const source = draft.speakerMappings.find((item) => item.speakerId === copySource[row.speakerId]); if (source) { setConfiguration((current) => ({ ...current, speakers: current.speakers.map((item) => item.speakerId === row.speakerId ? { ...item, voiceId: source.voiceId, speed: source.speed, gainDb: source.gainDb, roleDescription: source.roleDescription, sampleText: source.sampleText } : item) })); updateDraft((current) => ({ ...current, speakerMappings: current.speakerMappings.map((item) => item.speakerId === row.speakerId ? { ...source, speakerId: row.speakerId, displayName: item.displayName } : item) })); } }}>Copy</button></div>
               </article>)}
@@ -875,16 +816,14 @@ export function ProjectsPage({ client, analyzer, previewClient, cacheClient, ren
       </div>
 
       {draft && project ? <>
-        {activeTab === "settings" ? <section className={styles.lexiconPanel}>
-          <div className={styles.sectionHeading}><div><span>Project pronunciation</span><h3>Project lexicon</h3></div><b>{projectLexicon.length} entries</b></div>
-          <p className={styles.lexiconNote}>These pronunciations apply only to this project. <Link to="/settings#global-lexicon">Manage global lexicon in application Settings.</Link></p>
-          <div className={styles.lexiconFilters}><input aria-label="Search project lexicon" placeholder="Search terms and replacements" value={lexiconSearch} onChange={(event) => setLexiconSearch(event.target.value)} /><select aria-label="Project lexicon type filter" value={lexiconType} onChange={(event) => setLexiconType(event.target.value as typeof lexiconType)}><option value="all">All types</option><option value="exactTerm">Exact terms</option><option value="exactPhrase">Exact phrases</option><option value="namedSense">Named senses</option></select></div>
-          <div className={styles.lexiconGrid}><form onSubmit={(event) => { event.preventDefault(); saveLexicon(); }}><label>Type<select value={lexiconDraft.entryType} onChange={(event) => setLexiconDraft((current) => ({ ...current, entryType: event.target.value as LexiconEntryAuthoring["entryType"] }))}><option value="exactTerm">Exact term</option><option value="exactPhrase">Exact phrase</option><option value="namedSense">Named sense</option></select></label><label>Display text<input value={lexiconDraft.displayText} onChange={(event) => setLexiconDraft((current) => ({ ...current, displayText: event.target.value }))} /></label>{lexiconDraft.entryType === "namedSense" ? <label>Sense ID<input value={lexiconDraft.senseId ?? ""} onChange={(event) => setLexiconDraft((current) => ({ ...current, senseId: event.target.value }))} /></label> : null}<label>Spoken text<input value={lexiconDraft.spokenText} onChange={(event) => setLexiconDraft((current) => ({ ...current, spokenText: event.target.value }))} /></label><label>Notes<input value={lexiconDraft.notes ?? ""} onChange={(event) => setLexiconDraft((current) => ({ ...current, notes: event.target.value }))} /></label><div className={styles.checks}><label><input type="checkbox" checked={lexiconDraft.caseSensitive ?? true} onChange={(event) => setLexiconDraft((current) => ({ ...current, caseSensitive: event.target.checked }))} />Case sensitive</label><label><input type="checkbox" checked={lexiconDraft.wholeWord ?? true} onChange={(event) => setLexiconDraft((current) => ({ ...current, wholeWord: event.target.checked }))} />Whole word</label><label><input type="checkbox" checked={lexiconDraft.enabled ?? true} onChange={(event) => setLexiconDraft((current) => ({ ...current, enabled: event.target.checked }))} />Enabled</label></div><div className={styles.actionRow}><button type="submit">{editingLexicon ? "Save entry" : "Add entry"}</button>{editingLexicon ? <button type="button" className={styles.secondary} onClick={() => { setEditingLexicon(undefined); setLexiconDraft(emptyLexiconDraft); }}>Cancel</button> : null}</div></form><div className={styles.lexiconEntries}>{filteredLexicon.length === 0 ? <p>No matching project lexicon entries.</p> : filteredLexicon.map((entry, index) => { const matches = analysis?.transformResult.matches.filter(({ entryId }) => entryId === entry.id) ?? []; return <article key={entry.id ?? `project-${String(index)}`}><div><strong>{entry.displayText}{entry.senseId ? ` + ${entry.senseId}` : ""}</strong><span>→ {entry.spokenText}</span></div><code>project · {entry.entryType} · {entry.enabled === false ? "disabled" : "enabled"} · {matches.length} matches</code><div className={styles.sourceLinks}>{matches.map((match) => <button type="button" className={styles.sourceLink} key={`${match.entryId}:${String(match.sourceStartOffset)}`} onClick={() => focusLine(match.range.start.line)}>Line {match.range.start.line}:{match.range.start.column}</button>)}</div><div className={styles.actionRow}><button type="button" className={styles.secondary} onClick={() => { setEditingLexicon(entry.id ?? ""); setLexiconDraft({ ...entry, scope: "project", caseSensitive: entry.caseSensitive ?? true, wholeWord: entry.wholeWord ?? true, priority: entry.priority ?? 0, enabled: entry.enabled ?? true, notes: entry.notes ?? "" }); }}>Edit</button><button type="button" className={styles.secondary} onClick={() => updateDraft((current) => ({ ...current, lexiconEntries: current.lexiconEntries.map((item) => item.id === entry.id ? { ...item, enabled: !(item.enabled ?? true) } : item) }))}>{entry.enabled === false ? "Enable" : "Disable"}</button><button type="button" className={styles.danger} onClick={() => removeLexicon(entry.id)}>Delete</button></div></article>; })}</div></div>
-          <div className={styles.sample}><label>Pronunciation test<textarea value={sample} onChange={(event) => setSample(event.target.value)} placeholder="Enter a word, phrase, or sentence." /></label><label>Speaker<select value={sampleSpeaker} onChange={(event) => setSampleSpeaker(event.target.value)}><option value="">System narrator</option>{configuration.speakers.map((row) => <option key={row.speakerId} value={row.speakerId}>{row.displayName} — {row.voiceId || "unmapped"}</option>)}</select><button type="button" disabled={previewBusy || !sample.trim() || !sampleResult?.synthesisReady} onClick={() => void runPreview({ mode: "pronunciation", text: sample, ...(sampleSpeaker ? { speakerId: sampleSpeaker } : {}) })}>{previewBusy ? "Previewing…" : "Preview pronunciation"}</button></label><div><span>Original</span><p>{sample || "—"}</p><span>Readable</span><p>{sampleResult?.readableTranscript || "—"}</p><span>TTS text</span><p>{sampleResult?.ttsTranscript || "—"}</p></div></div>
+        {activeTab === "settings" ? <section className={styles.lexiconPanel} aria-labelledby="project-lexicon-heading">
+          <div className={styles.sectionHeading}><div><span>Project pronunciation</span><h3 id="project-lexicon-heading">Project lexicon</h3></div><b>{projectLexicon.length} entries</b></div>
+          <p className={styles.lexiconNote}>Script Text matches complete words regardless of capitalization. These pronunciations apply only to this project. <Link to="/settings#global-lexicon">Manage global lexicon in application Settings.</Link></p>
+          <LexiconEditor value={projectLexicon.map(({ id, displayText, spokenText, enabled }) => ({ ...(id ? { id } : {}), displayText, spokenText, enabled: enabled ?? true }))} onChange={changeProjectLexicon} searchLabel="Search project lexicon" emptyMessage="No matching project lexicon entries." />
         </section> : null}
 
-        {previewError && (activeTab === "settings" || activeTab === "details") ? <p className={styles.previewError} role="alert">{previewError} Your project and preview selection are unchanged.</p> : null}
-        {previewResult && ((previewResult.mode === "pronunciation" && activeTab === "settings") || (previewResult.mode === "segment" && activeTab === "details")) ? <PreviewResultCard result={previewResult} onClearEntry={clearPreviewEntry} /> : null}
+        {previewError && activeTab === "details" ? <p className={styles.previewError} role="alert">{previewError} Your project and preview selection are unchanged.</p> : null}
+        {previewResult?.mode === "segment" && activeTab === "details" ? <PreviewResultCard result={previewResult} /> : null}
 
         {activeTab === "render" ? <section className={styles.renderPlansPanel} aria-labelledby="render-plans-heading">
           <div className={styles.sectionHeading}>

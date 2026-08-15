@@ -11,13 +11,12 @@ test.describe("render execution", () => {
       name: created.name,
       description: "End-to-end render fixture.",
       scriptSource: "[section: Opening]\n[speaker_teacher] SQL renders this sentence.\n[pause_medium]\n[speaker_teacher] Finish this render.",
-      modelId: "speaches-ai/Kokoro-82M-v1.0-ONNX",
       speakerMappings: [{ speakerId: "teacher", displayName: "Teacher", voiceId: "af_heart", speed: 1, gainDb: 0, roleDescription: "", sampleText: "" }],
       pausePresets: created.pausePresets,
       transitionPauses: created.transitionPauses,
       lexiconEntries: [{
         scope: "project", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel",
-        caseSensitive: true, wholeWord: true, priority: 0, enabled: true, notes: ""
+        caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: ""
       }]
     } });
     studyNarrator.fakeSpeaches.reset();
@@ -97,7 +96,6 @@ test.describe("render execution", () => {
     const created = await (await request.post(`${studyNarrator.baseUrl}/api/projects`, { data: { name: "Render recovery" } })).json() as { id: string; name: string; pausePresets: unknown[]; transitionPauses: unknown };
     await request.put(`${studyNarrator.baseUrl}/api/projects/${created.id}`, { data: {
       name: created.name, description: "Failure fixture.", scriptSource: "[speaker_teacher] Recover this render.",
-      modelId: "speaches-ai/Kokoro-82M-v1.0-ONNX",
       speakerMappings: [{ speakerId: "teacher", displayName: "Teacher", voiceId: "af_heart", speed: 1, gainDb: 0, roleDescription: "", sampleText: "" }],
       pausePresets: created.pausePresets, transitionPauses: created.transitionPauses, lexiconEntries: []
     } });

@@ -4,7 +4,6 @@ import { resolve } from "node:path";
 import { strFromU8, unzipSync } from "fflate";
 import type { Page } from "@playwright/test";
 import type { StudyNarratorBridge } from "@studynarrator/shared-types";
-import { FAKE_SPEACHES_SECONDARY_MODEL_ID, FAKE_SPEACHES_SECONDARY_VOICE_ID } from "@studynarrator/fake-speaches";
 import { configureElectronConnection, continueElectronOffline, expect, test } from "../support/electronTest.js";
 
 interface ElectronEvaluationApi {
@@ -76,13 +75,14 @@ test.describe("Electron acceptance", () => {
     expect(studyNarrator.fakeSpeaches.getState().requests.filter(({ path }) => path === "/v1/audio/speech")).toHaveLength(2);
 
     await page.getByRole("link", { name: "Projects" }).click();
-    await createProject(page, "Desktop model voices");
-    await page.getByLabel("Script source").fill("[speaker_narrator] Model scoped voice.");
+    await createProject(page, "Desktop global model voices");
+    await page.getByLabel("Script source").fill("[speaker_narrator] Globally configured model voice.");
     await page.getByRole("tab", { name: "Settings" }).click();
     await expect(page.getByLabel("Connection profile")).toHaveCount(0);
-    await page.getByLabel("Optional model override").fill(FAKE_SPEACHES_SECONDARY_MODEL_ID);
-    await expect(page.getByLabel("Voices")).toHaveValue(FAKE_SPEACHES_SECONDARY_VOICE_ID);
-    await expect(page.getByLabel("Voices").getByRole("option", { name: `Lessac (${FAKE_SPEACHES_SECONDARY_VOICE_ID} | Locale unavailable)` })).toBeAttached();
+    await expect(page.getByLabel("Optional model override")).toHaveCount(0);
+    await expect(page.getByLabel("Voices")).toHaveValue("af_heart");
+    await expect(page.getByLabel("Voices").getByRole("option", { name: "Heart (af_heart | en-US)" })).toBeAttached();
+    await expect(page.locator("strong").filter({ hasText: "Heart — American English — af_heart" })).toHaveCount(0);
     await page.getByRole("button", { name: "Save now" }).click();
     await expect(page.getByText("All changes saved.")).toBeVisible();
     expect(studyNarrator.fakeSpeaches.getState().requests.filter(({ path }) => path === "/v1/audio/speech")).toHaveLength(2);
@@ -101,6 +101,12 @@ test.describe("Electron acceptance", () => {
     await createProject(page, "Desktop durable project");
     await expect(page.getByRole("heading", { name: "Script editor" })).toBeVisible();
     await page.getByLabel("Script source").fill("[speaker_teacher] Persist through relaunch.");
+    await page.getByRole("tab", { name: "Settings" }).click();
+    const lexicon = page.getByRole("region", { name: "Project lexicon" });
+    await lexicon.getByLabel("Script Text").first().fill("CLI");
+    await lexicon.getByLabel("Spoken Text").first().fill("C L I");
+    await lexicon.getByRole("button", { name: "Add" }).click();
+    await expect(lexicon.getByRole("article", { name: "Lexicon entry CLI" })).toBeVisible();
     await page.getByRole("button", { name: "Save now" }).click();
     await expect(page.getByText("All changes saved.")).toBeVisible();
 
@@ -108,6 +114,8 @@ test.describe("Electron acceptance", () => {
     await expect(page.getByRole("heading", { name: "Projects", exact: true })).toBeVisible();
     await openProject(page, "Desktop durable project");
     await expect(page.getByLabel("Script source")).toHaveValue("[speaker_teacher] Persist through relaunch.");
+    await page.getByRole("tab", { name: "Settings" }).click();
+    await expect(page.getByRole("region", { name: "Project lexicon" }).getByRole("article", { name: "Lexicon entry CLI" })).toBeVisible();
   });
 
   test("freezes and reopens immutable plans through typed IPC without TTS", async ({ electronStudyNarrator, studyNarrator }) => {
@@ -118,7 +126,7 @@ test.describe("Electron acceptance", () => {
     await page.getByLabel("Script source").fill("[speaker_teacher] First.\n\n[speaker_teacher] Second.");
     await page.getByRole("tab", { name: "Settings" }).click();
     await expect(page.getByLabel("Connection profile")).toHaveCount(0);
-    await page.getByLabel("Optional model override").fill("speaches-ai/Kokoro-82M-v1.0-ONNX");
+    await expect(page.getByLabel("Optional model override")).toHaveCount(0);
     await expect(page.getByLabel("Voices")).toHaveValue("af_heart");
     await page.getByLabel("Paragraph transition mode").selectOption("duration");
     await page.getByLabel("Paragraph transition duration (ms)").fill("350");
@@ -155,7 +163,7 @@ test.describe("Electron acceptance", () => {
     await page.getByLabel("Script source").fill("[speaker_teacher] Resume this render.");
     await page.getByRole("tab", { name: "Settings" }).click();
     await expect(page.getByLabel("Connection profile")).toHaveCount(0);
-    await page.getByLabel("Optional model override").fill("speaches-ai/Kokoro-82M-v1.0-ONNX");
+    await expect(page.getByLabel("Optional model override")).toHaveCount(0);
     await expect(page.getByLabel("Voices")).toHaveValue("af_heart");
     await page.getByRole("tab", { name: "Render" }).click();
     await page.getByRole("button", { name: "Freeze render plan" }).click();

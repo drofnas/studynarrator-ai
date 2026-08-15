@@ -42,8 +42,8 @@ export function AppRoutes({ analyzer, client, persistence, scratchpad, projectPr
       <Route element={<AppShell />}>
         <Route index element={<Navigate to={APP_PATHS.projects} replace />} />
         <Route path={APP_PATHS.onboarding} element={<OnboardingPage />} />
-        <Route path={APP_PATHS.projects} element={<ProjectsPage analyzer={analyzer} client={persistence} previewClient={projectPreview} cacheClient={speechCache} renderPlanClient={renderPlans} {...(renders ? { renderClient: renders } : {})} />} />
-        <Route path={`${APP_PATHS.projects}/:projectId`} element={<ProjectsPage analyzer={analyzer} client={persistence} previewClient={projectPreview} cacheClient={speechCache} renderPlanClient={renderPlans} {...(renders ? { renderClient: renders } : {})} />} />
+        <Route path={APP_PATHS.projects} element={<ProjectsPage analyzer={analyzer} client={persistence} previewClient={projectPreview} renderPlanClient={renderPlans} {...(renders ? { renderClient: renders } : {})} />} />
+        <Route path={`${APP_PATHS.projects}/:projectId`} element={<ProjectsPage analyzer={analyzer} client={persistence} previewClient={projectPreview} renderPlanClient={renderPlans} {...(renders ? { renderClient: renders } : {})} />} />
         <Route path={`${APP_PATHS.projects}/:projectId/script-generation`} element={<ScriptGenerationPage persistence={persistence} generation={scriptGeneration} />} />
         <Route path={APP_PATHS.scriptPrompts} element={<ScriptGenerationPage persistence={persistence} generation={scriptGeneration} />} />
         <Route path={APP_PATHS.settings} element={<SettingsPage client={persistence} cacheClient={speechCache} scratchpadClient={scratchpad} />} />

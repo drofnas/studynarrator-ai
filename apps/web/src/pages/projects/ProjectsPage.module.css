@@ -9,7 +9,7 @@
 .alert { display: grid; grid-template-columns: 1fr auto; gap: 8px 20px; padding: 16px 18px; color: #701f2c; background: #fae8e8; border-left: 5px solid var(--fault); }
 .alert ul { grid-column: 1; margin: 0; padding-left: 20px; }
 .alert button { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
-.newProjectForm, .projectIndex, .configRail > section, .projectIdentity, .connectionPanel, .scriptPanel, .lexiconPanel, .renderPlansPanel, .validationPanel, .empty { background: #f8fbfb; border: 1px solid var(--line); }
+.newProjectForm, .projectIndex, .configRail > section, .projectIdentity, .scriptPanel, .lexiconPanel, .renderPlansPanel, .validationPanel, .empty { background: #f8fbfb; border: 1px solid var(--line); }
 .newProjectForm { display: grid; grid-template-columns: 0.65fr 1fr 1.5fr auto; gap: 14px; align-items: end; padding: 18px; border-top: 5px solid var(--copper); }
 .newProjectForm h3 { margin: 0; }
 .newProjectForm label { display: grid; gap: 5px; font-size: 0.72rem; font-weight: 800; }
@@ -31,17 +31,10 @@
 .workspace { grid-template-columns: minmax(0, 1fr); align-items: start; }
 .workspace:empty { display: none; }
 .configRail h3, .scriptPanel h3, .lexiconPanel h3, .validationPanel h3, .empty h3 { margin: 0; font-size: 1.05rem; }
-.projectIdentity label, .configRail label, .lexiconPanel label, .sample label { display: grid; gap: 5px; margin-top: 12px; font-size: 0.72rem; font-weight: 800; }
+.projectIdentity label, .configRail label, .lexiconPanel label { display: grid; gap: 5px; margin-top: 12px; font-size: 0.72rem; font-weight: 800; }
 .projectIdentity input, .configRail input, .configRail select, .lexiconPanel input, .lexiconPanel select, .lexiconPanel textarea, .searchBar input { width: 100%; padding: 9px 10px; color: var(--ink); background: white; border: 1px solid #91a9b2; border-radius: 0; }
 .projectIdentity input:focus, .configRail input:focus, .configRail select:focus, .lexiconPanel input:focus, .lexiconPanel select:focus, .lexiconPanel textarea:focus, .searchBar input:focus { outline: 3px solid var(--signal-pale); border-color: var(--signal); }
 .editorColumn { display: grid; gap: 18px; min-width: 0; }
-.connectionPanel { display: grid; grid-template-columns: 0.7fr 1fr 1fr auto; gap: 12px; align-items: end; padding: 15px; border-top: 5px solid var(--copper); }
-.connectionPanel h3 { margin: 0; }
-.connectionPanel > div > span { color: var(--signal); font: 800 0.62rem ui-monospace, monospace; letter-spacing: 0.1em; text-transform: uppercase; }
-.connectionPanel label { display: grid; gap: 5px; font-size: 0.72rem; font-weight: 800; }
-.connectionPanel input, .connectionPanel select { width: 100%; padding: 9px; background: white; border: 1px solid #91a9b2; }
-.connectionPanel > p { margin: 0; padding: 9px; background: var(--mist); font-size: 0.68rem; font-weight: 800; }
-.connectionPanel > p[data-state="connected"] { color: #075e59; background: var(--signal-pale); }
 .projectIdentity { display: grid; grid-template-columns: minmax(180px, 0.8fr) minmax(260px, 1.4fr) auto; gap: 12px; align-items: end; padding: 16px; border-top: 5px solid var(--signal); }
 .projectIdentity label { margin: 0; }
 .projectActions { display: grid; gap: 8px; justify-items: end; }
@@ -89,12 +82,6 @@
 .inlineFields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .copyRow { display: grid; grid-template-columns: 1fr auto; gap: 6px; margin-top: 10px; }
 .copyRow button { min-height: 37px; padding: 0 10px; }
-.voiceMeta { display: grid; gap: 3px; margin-top: 7px; padding: 8px; background: var(--mist); }
-.voiceMeta strong { font-size: 0.68rem; }
-.voiceMeta code { overflow-wrap: anywhere; }
-.voiceMeta span { justify-self: start; padding: 3px 6px; color: #557080; background: white; font-size: 0.6rem; font-weight: 800; text-transform: uppercase; }
-.voiceMeta span[data-state="available"] { color: #075e59; background: var(--signal-pale); }
-.voiceMeta span[data-state="unavailable"] { color: var(--fault); background: #fae8e8; }
 .voiceFieldMessage { margin: 8px 0 0; color: #557080; font-size: 0.68rem; line-height: 1.45; }
 .voiceFieldMessage button { min-height: 28px; padding: 0 7px; font-size: 0.65rem; }
 .check { display: flex !important; grid-template-columns: auto 1fr; align-items: center; gap: 7px !important; margin-bottom: 12px; }
@@ -111,26 +98,6 @@
 .empty p { max-width: 540px; color: #557080; line-height: 1.6; }
 .lexiconNote { margin: -4px 0 14px; color: #557080; font-size: 0.76rem; }
 .lexiconNote a { color: var(--signal); font-weight: 800; }
-.lexiconFilters { display: grid; grid-template-columns: 1fr 220px; gap: 8px; }
-.lexiconGrid { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 18px; margin-top: 14px; }
-.lexiconGrid form { padding: 15px; background: #e4edef; }
-.lexiconGrid form label:first-child { margin-top: 0; }
-.checks { display: grid; gap: 5px; margin: 12px 0; }
-.checks label { display: flex; gap: 6px; align-items: center; margin: 0; }
-.checks input { width: auto; }
-.lexiconEntries { display: grid; gap: 8px; align-content: start; }
-.lexiconEntries article { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px 14px; padding: 12px 14px; background: white; border-left: 4px solid var(--signal); }
-.lexiconEntries article > div:first-child { display: flex; gap: 10px; }
-.lexiconEntries article code { grid-column: 1; }
-.lexiconEntries article .sourceLinks { grid-column: 1; }
-.lexiconEntries article .actionRow { grid-column: 2; grid-row: 1 / span 3; align-items: center; }
-.sample { display: grid; grid-template-columns: 1.2fr 0.7fr 1.5fr; gap: 12px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
-.sample label { margin: 0; }
-.sample textarea { min-height: 120px; resize: vertical; }
-.sample div { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; align-content: start; padding: 12px; background: #e4edef; }
-.sample div span { color: var(--signal); font-size: 0.63rem; font-weight: 800; text-transform: uppercase; }
-.sample div p { margin: 0; font-size: 0.78rem; line-height: 1.45; }
-.sample label button { justify-self: start; min-height: 36px; margin-top: 8px; padding: 0 11px; }
 .previewError { margin: 0; padding: 12px 15px; color: var(--fault); background: #fae8e8; border-left: 5px solid var(--fault); font-size: 0.76rem; font-weight: 800; }
 .renderPlansPanel { border-top-color: var(--copper); }
 .renderPlansPanel > p { max-width: 820px; color: #557080; font-size: 0.78rem; }
@@ -188,9 +155,9 @@
   .newProjectForm { grid-template-columns: 1fr; }
   .newProjectForm > div:first-child, .newProjectForm .actionRow { grid-column: 1; }
   .configRail { grid-template-columns: 1fr; }
-  .projectIdentity, .connectionPanel { grid-template-columns: 1fr; }
+  .projectIdentity { grid-template-columns: 1fr; }
   .projectActions { justify-items: start; }
-  .lexiconFilters, .lexiconGrid, .sample, .renderPlanWorkspace { grid-template-columns: 1fr; }
+  .renderPlanWorkspace { grid-template-columns: 1fr; }
   .score { overflow-x: auto; }
   .scoreHeader, .scoreRow { min-width: 970px; }
   .scoreRow[data-type="section"], .scoreRow[data-type="pause"] { min-width: 560px; }

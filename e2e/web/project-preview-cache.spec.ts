@@ -2,12 +2,11 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { configureConnection, expect, openRoute, test } from "../support/studyNarratorTest.js";
 
-const modelId = "speaches-ai/Kokoro-82M-v1.0-ONNX";
 const originalScript = "[speaker_teacher] Cache this exact sentence.";
 const changedScript = "[speaker_teacher] Cache this changed sentence.";
 
 test.describe("project preview cache", () => {
-  test("accounts for keys, cross-workflow reuse, corruption replacement, and every cleanup scope", async ({ page, request, studyNarrator }) => {
+  test("accounts for keys, cross-workflow reuse, corruption replacement, and system-only cleanup", async ({ page, request, studyNarrator }) => {
     await configureConnection(page, studyNarrator);
     const createdResponse = await request.post(`${studyNarrator.baseUrl}/api/projects`, { data: { name: "Preview cache fixture" } });
     expect(createdResponse.status()).toBe(201);
@@ -22,7 +21,6 @@ test.describe("project preview cache", () => {
       name: created.name,
       description: "Isolated Playwright request-accounting fixture.",
       scriptSource: originalScript,
-      modelId,
       speakerMappings: [{ speakerId: "teacher", displayName: "Teacher", voiceId: "af_heart", speed: 1, gainDb: 0, roleDescription: "", sampleText: "" }],
       pausePresets: created.pausePresets,
       transitionPauses: created.transitionPauses,
@@ -94,15 +92,6 @@ test.describe("project preview cache", () => {
     await expect(result.getByText("Cache hit")).toBeVisible();
     expect(speechRequests()).toHaveLength(3);
 
-    await page.getByRole("tab", { name: "Settings" }).click();
-    await page.getByLabel("Pronunciation test").fill("A pronunciation cache sample.");
-    await page.getByRole("button", { name: "Preview pronunciation" }).click();
-    await expect(result.getByText("Cache miss")).toBeVisible();
-    expect(speechRequests()).toHaveLength(4);
-    await page.getByRole("button", { name: "Preview pronunciation" }).click();
-    await expect(result.getByText("Cache hit")).toBeVisible();
-    expect(speechRequests()).toHaveLength(4);
-
     await page.getByRole("tab", { name: "Details" }).click();
     await previewFirstSegment();
     const cacheKey = (await result.locator("footer code").innerText()).trim();
@@ -111,26 +100,23 @@ test.describe("project preview cache", () => {
     await writeFile(cacheFile, "isolated corrupt fixture");
     await previewFirstSegment();
     await expect(result.getByText("Cache miss")).toBeVisible();
-    expect(speechRequests()).toHaveLength(5);
+    expect(speechRequests()).toHaveLength(4);
 
-    page.on("dialog", (dialog) => dialog.accept());
-    await page.getByRole("button", { name: "Clear this cached entry" }).click();
-    await expect(result).toHaveCount(0);
-    await previewFirstSegment();
-    expect(speechRequests()).toHaveLength(6);
+    await expect(page.getByRole("button", { name: "Clear this cached entry" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Clear project cache" })).toHaveCount(0);
+    await expect(page.getByLabel("Pronunciation test")).toHaveCount(0);
 
     await openRoute(page, studyNarrator, "/settings");
     await expect(page.getByRole("heading", { name: "Speech cache" })).toBeVisible();
+    await expect(page.getByText(/Clear them here when you want every future preview/u)).toBeVisible();
     await expect(page.getByText(/entries/u).first()).toBeVisible();
+    page.on("dialog", (dialog) => dialog.accept());
     await page.getByRole("button", { name: "Clear all cached speech" }).click();
     await expect(page.getByText(/Cleared \d+ cached speech/u)).toBeVisible();
 
     await openRoute(page, studyNarrator, `/projects/${created.id}?tab=details`);
     await previewFirstSegment();
-    expect(speechRequests()).toHaveLength(7);
-    await page.getByRole("button", { name: "Clear project cache" }).click();
-    await expect(page.getByText(/Cleared 1 project-associated cache entry/u)).toBeVisible();
-    await previewFirstSegment();
-    expect(speechRequests()).toHaveLength(8);
+    expect(speechRequests()).toHaveLength(5);
+    await expect(page.getByRole("button", { name: "Clear project cache" })).toHaveCount(0);
   });
 });
