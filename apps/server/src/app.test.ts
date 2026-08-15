@@ -344,6 +344,17 @@ describe("Express persistence API", () => {
     await request(app).get("/api/persistence/status").expect(200);
     const response = BoundaryErrorSchema.parse((await request(app).post("/api/projects").send({ name: "Unavailable" }).expect(503)).body as unknown);
     expect(response).toEqual({ error: { code: "PERSISTENCE_UNAVAILABLE", message: "Persistence is unavailable until the database migration is repaired." } });
+
+    const catalogResponse = BoundaryErrorSchema.parse((await request(app)
+      .post("/api/connection/speech-catalog")
+      .send({ baseUrl: "http://127.0.0.1:8000" })
+      .expect(503)).body as unknown);
+    expect(catalogResponse).toEqual({
+      error: {
+        code: "PERSISTENCE_UNAVAILABLE",
+        message: "Persistence is unavailable until the database migration is repaired."
+      }
+    });
   });
 });
 

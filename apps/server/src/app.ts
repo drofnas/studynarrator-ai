@@ -115,6 +115,9 @@ export function createExpressApp(options: {
   const app = express();
   app.disable("x-powered-by");
   app.use(express.json({ limit: "6mb", strict: true }));
+  const persistenceUnavailable = (_request: Request, _response: Response, next: NextFunction) => {
+    next(Object.assign(new Error("Persistence is unavailable."), { code: "PERSISTENCE_UNAVAILABLE" }));
+  };
 
   app.get("/api/health", (_request, response) => {
     response.json(options.service.health());
@@ -194,9 +197,8 @@ export function createExpressApp(options: {
     });
   }
 
-  if (options.connection && options.voiceCatalog) {
+  if (options.connection) {
     const connection = options.connection;
-    const voiceCatalog = options.voiceCatalog;
     app.get("/api/connection", async (_request, response, next) => {
       try { response.json(SpeachesConnectionSchema.parse(await connection.get())); } catch (error) { next(error); }
     });
@@ -231,6 +233,18 @@ export function createExpressApp(options: {
     app.post("/api/setup/complete", async (_request, response, next) => {
       try { response.json(ConnectionSetupStateSchema.parse(await connection.completeOnboarding())); } catch (error) { next(error); }
     });
+  } else {
+    app.get("/api/connection", persistenceUnavailable);
+    app.put("/api/connection", persistenceUnavailable);
+    app.post("/api/connection/test", persistenceUnavailable);
+    app.post("/api/connection/speech-catalog", persistenceUnavailable);
+    app.get("/api/connection/diagnostics", persistenceUnavailable);
+    app.get("/api/setup", persistenceUnavailable);
+    app.post("/api/setup/complete", persistenceUnavailable);
+  }
+
+  if (options.voiceCatalog) {
+    const voiceCatalog = options.voiceCatalog;
     app.get("/api/voice-catalog", async (request, response, next) => {
       try {
         const { modelId } = VoiceCatalogModelInputSchema.parse(request.query);
@@ -240,6 +254,9 @@ export function createExpressApp(options: {
     app.put("/api/voice-catalog", async (request, response, next) => {
       try { response.json(VoiceCatalogSchema.parse(await voiceCatalog.replace(VoiceCatalogSchema.parse(request.body)))); } catch (error) { next(error); }
     });
+  } else {
+    app.get("/api/voice-catalog", persistenceUnavailable);
+    app.put("/api/voice-catalog", persistenceUnavailable);
   }
 
   if (options.scratchpad) {
