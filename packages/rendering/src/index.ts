@@ -563,7 +563,7 @@ export function createSpeechCache(options: {
       if (!projectId.trim()) throw new Error("Project ID is required for cache cleanup.");
       const key = assertCacheKey(keyValue);
       if (flights.has(key) || cleanups.has(key)) return { entriesRemoved: 0, bytesFreed: 0, deferred: true };
-      let finishCleanup = () => undefined;
+      let finishCleanup: () => void = () => undefined;
       const cleanup = new Promise<void>((resolveCleanup) => { finishCleanup = resolveCleanup; });
       cleanups.set(key, cleanup);
       try {
