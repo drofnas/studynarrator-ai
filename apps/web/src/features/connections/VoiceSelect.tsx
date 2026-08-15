@@ -1,6 +1,6 @@
 import { groupPresentedVoices, voiceOptionLabel, type PresentedVoice } from "./voicePresentation.js";
 
-export interface VoiceSelectProps {
+interface VoiceSelectProps {
   id?: string;
   "aria-label"?: string;
   value: string;

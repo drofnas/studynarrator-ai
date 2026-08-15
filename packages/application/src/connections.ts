@@ -1,6 +1,7 @@
 import { isIP } from "node:net";
 import {
   APPLICATION_VERSION,
+  CONNECTION_DIAGNOSTIC_SCHEMA_VERSION,
   ConnectionSetupStateSchema,
   ConnectionTestSummarySchema,
   RedactedConnectionDiagnosticsSchema,
@@ -28,29 +29,27 @@ import {
   type SpeachesDiagnosticResult
 } from "@studynarrator/speaches-adapter";
 
-export interface StoredSpeachesConnection extends SpeachesConnection { id: string }
-
 export interface ConnectionRepository {
-  getSpeachesConnection(): StoredSpeachesConnection;
-  replaceSpeachesConnection(input: SpeachesConnectionAuthoring, suppliedUrlForm: "root" | "v1" | "unconfigured"): StoredSpeachesConnection;
-  recordConnectionTest(summary: ConnectionTestSummary): StoredSpeachesConnection;
+  getSpeachesConnection(): SpeachesConnection;
+  replaceSpeachesConnection(input: SpeachesConnectionAuthoring, suppliedUrlForm: "root" | "v1" | "unconfigured"): SpeachesConnection;
+  recordConnectionTest(summary: ConnectionTestSummary): SpeachesConnection;
   getConnectionSetup(): { onboardingCompletedAt: string | null };
   completeConnectionOnboarding(): { onboardingCompletedAt: string | null };
   getVoiceCatalogOverrides(modelId: string): VoiceCatalog;
   replaceVoiceCatalogOverrides(input: VoiceCatalogAuthoring): VoiceCatalog;
 }
 
-export interface ConnectionRuntimeContext {
+interface ConnectionRuntimeContext {
   client: "web" | "electron";
   nodeVersion: string;
   electronVersion: string | null;
 }
 
-export interface ConnectionDiagnosticRunner { (input: Parameters<typeof diagnoseSpeaches>[0]): Promise<SpeachesDiagnosticResult> }
+interface ConnectionDiagnosticRunner { (input: Parameters<typeof diagnoseSpeaches>[0]): Promise<SpeachesDiagnosticResult> }
 export interface ConnectionCatalogRunner { (input: SpeachesCatalogInput): Promise<SpeechCatalog> }
 
-export class ConnectionConfigurationError extends Error { readonly code = "CONNECTION_CONFIGURATION" }
-export type ConnectionCatalogErrorCode =
+class ConnectionConfigurationError extends Error { readonly code = "CONNECTION_CONFIGURATION" }
+type ConnectionCatalogErrorCode =
   | "CONNECTION_CATALOG_ABORTED"
   | "CONNECTION_CATALOG_AUTHENTICATION"
   | "CONNECTION_CATALOG_CONFIGURATION"
@@ -90,12 +89,6 @@ function normalizeAuthoring(inputValue: SpeachesConnectionAuthoring) {
     },
     suppliedUrlForm: normalized?.suppliedForm ?? "unconfigured"
   } as const;
-}
-
-function publicConnection(connection: StoredSpeachesConnection): SpeachesConnection {
-  const { id, ...value } = connection;
-  void id;
-  return value;
 }
 
 function setupState(state: { onboardingCompletedAt: string | null }, context: ConnectionRuntimeContext): ConnectionSetupState {
@@ -139,11 +132,11 @@ export function createConnectionService(dependencies: {
   const diagnose = dependencies.diagnose ?? ((input) => diagnoseSpeaches(input));
   const discoverCatalog = dependencies.discoverCatalog ?? ((input) => discoverSpeachesSpeechCatalog(input));
   return {
-    get: () => Promise.resolve(publicConnection(dependencies.repository.getSpeachesConnection())),
+    get: () => Promise.resolve(dependencies.repository.getSpeachesConnection()),
     update(inputValue) {
       return Promise.resolve().then(() => {
         const normalized = normalizeAuthoring(inputValue);
-        return publicConnection(dependencies.repository.replaceSpeachesConnection(normalized.connection, normalized.suppliedUrlForm));
+        return dependencies.repository.replaceSpeachesConnection(normalized.connection, normalized.suppliedUrlForm);
       });
     },
     async test() {
@@ -177,7 +170,7 @@ export function createConnectionService(dependencies: {
         const connection = dependencies.repository.getSpeachesConnection();
         if (!connection.lastTestSummary) throw new ConnectionConfigurationError("Test this connection before exporting diagnostics.");
         return RedactedConnectionDiagnosticsSchema.parse({
-          schemaVersion: 1,
+          schemaVersion: CONNECTION_DIAGNOSTIC_SCHEMA_VERSION,
           applicationVersion: APPLICATION_VERSION,
           runtimeVersions: { node: dependencies.context.nodeVersion, electron: dependencies.context.electronVersion },
           endpointClass: classifyEndpoint(connection.baseUrl),
@@ -201,11 +194,11 @@ export function createVoiceCatalogService(dependencies: {
   bundledCatalogs: ReadonlyMap<string, VoiceCatalog>;
 }): VoiceCatalogClient {
   const merge = (modelId: string): VoiceCatalog => {
-    const bundled = dependencies.bundledCatalogs.get(modelId) ?? VoiceCatalogSchema.parse({ schemaVersion: 1, modelId, entries: [] });
+    const bundled = dependencies.bundledCatalogs.get(modelId) ?? VoiceCatalogSchema.parse({ schemaVersion: CONNECTION_DIAGNOSTIC_SCHEMA_VERSION, modelId, entries: [] });
     const overrides = dependencies.repository.getVoiceCatalogOverrides(modelId);
     const entries = new Map(bundled.entries.map((entry) => [entry.voiceId, entry]));
     for (const entry of overrides.entries) entries.set(entry.voiceId, entry);
-    return VoiceCatalogSchema.parse({ schemaVersion: 1, modelId, entries: [...entries.values()] });
+    return VoiceCatalogSchema.parse({ schemaVersion: CONNECTION_DIAGNOSTIC_SCHEMA_VERSION, modelId, entries: [...entries.values()] });
   };
   return {
     get(modelId) { return Promise.resolve(merge(modelId)); },

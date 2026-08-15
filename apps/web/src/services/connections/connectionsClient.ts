@@ -14,7 +14,7 @@ import {
 declare global { interface Window { studyNarrator?: StudyNarratorBridge } }
 interface RuntimeSchema<T> { parse(value: unknown): T }
 
-export class ConnectionClientError extends Error {
+class ConnectionClientError extends Error {
   constructor(message: string, readonly code: string, readonly status: number) { super(message); }
 }
 

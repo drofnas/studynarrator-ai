@@ -35,13 +35,13 @@ import type { ConnectionRepository } from "./connections.js";
 import type { PersistenceRepository } from "./persistence.js";
 import { SPEACHES_CACHE_ADAPTER_ID, SPEACHES_CACHE_ADAPTER_VERSION } from "./cachedSpeech.js";
 
-export type RenderPlanServiceErrorCode =
+type RenderPlanServiceErrorCode =
   | "RENDER_PLAN_CONFIGURATION"
   | "RENDER_PLAN_INVALID_PROJECT"
   | "RENDER_PLAN_NOT_FOUND"
   | "RENDER_PLAN_STORAGE";
 
-export class RenderPlanServiceError extends Error {
+class RenderPlanServiceError extends Error {
   constructor(readonly code: RenderPlanServiceErrorCode, message: string) { super(message); }
 }
 
@@ -180,7 +180,6 @@ export function createRenderPlanService(dependencies: {
             adapterId: SPEACHES_CACHE_ADAPTER_ID,
             adapterVersion: SPEACHES_CACHE_ADAPTER_VERSION,
             serverIdentity: connection.baseUrl,
-            profileId: connection.id,
             modelId,
             voiceId: speaker.voiceId,
             speed: speaker.speed,

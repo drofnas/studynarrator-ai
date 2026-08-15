@@ -19,15 +19,15 @@ import {
 } from "@studynarrator/shared-types";
 import type { PersistenceRepository } from "./persistence.js";
 
-export type ScriptGenerationServiceErrorCode = "SCRIPT_GENERATION_NOT_FOUND" | "SCRIPT_GENERATION_STORAGE";
+type ScriptGenerationServiceErrorCode = "SCRIPT_GENERATION_NOT_FOUND" | "SCRIPT_GENERATION_STORAGE";
 
-export class ScriptGenerationServiceError extends Error {
+class ScriptGenerationServiceError extends Error {
   constructor(readonly code: ScriptGenerationServiceErrorCode, message: string) { super(message); }
 }
 
 export type ScriptGenerationRepository = Pick<PersistenceRepository, "getProject" | "getSystemPacing" | "listGlobalLexicon">;
 
-export interface ResolvedGeneratedFile {
+interface ResolvedGeneratedFile {
   fileName: string;
   mimeType: "text/markdown; charset=utf-8" | "application/zip";
   bytes: Uint8Array;

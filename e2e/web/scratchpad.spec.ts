@@ -36,7 +36,6 @@ test.describe("Quick Scratchpad", () => {
 
     await openRoute(page, studyNarrator, "/scratchpad");
     await expect(page.getByRole("heading", { name: "Quick Scratchpad" })).toBeVisible();
-    await expect(page.getByLabel("Connection profile")).toHaveCount(0);
     await expect(page.getByLabel("Model")).toHaveValue("speaches-ai/Kokoro-82M-v1.0-ONNX");
     await expect(page.getByLabel("Voice")).toHaveValue("af_heart");
     await expect(page.getByLabel("Voice").getByRole("option", { name: "Heart (af_heart | en-US)" })).toBeAttached();

@@ -1,5 +1,5 @@
 import { join, resolve } from "node:path";
-import { app, BrowserWindow, dialog, ipcMain, protocol, safeStorage, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, protocol, shell } from "electron";
 import { createDesktopServices } from "./bootstrap.js";
 import {
   registerConnectionHandlers,
@@ -56,7 +56,7 @@ async function createWindow() {
 }
 
 void app.whenReady().then(async () => {
-  runtime = await createDesktopServices({ defaultDataDirectory: app.getPath("userData"), safeStorage });
+  runtime = await createDesktopServices({ defaultDataDirectory: app.getPath("userData") });
   registerDiagnosticsHandler(ipcMain, runtime.service, runtime.context);
   registerPersistenceHandlers(ipcMain, runtime.persistence);
   if (runtime.connection && runtime.voiceCatalog) registerConnectionHandlers(ipcMain, runtime.connection, runtime.voiceCatalog);

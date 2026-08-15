@@ -15,7 +15,7 @@ export type LexiconEditorChange =
   | { kind: "add"; id: string }
   | { kind: "delete"; id: string };
 
-export interface LexiconEditorProps {
+interface LexiconEditorProps {
   value: readonly LexiconEditorValue[];
   onChange: (next: LexiconEditorValue[], change: LexiconEditorChange) => boolean | void | Promise<boolean | void>;
   searchLabel: string;

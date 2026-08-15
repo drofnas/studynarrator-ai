@@ -6,14 +6,14 @@ import {
   type LexiconEntryAuthoring
 } from "./schemas.js";
 
-export interface NormalizeLexiconEntriesOptions {
+interface NormalizeLexiconEntriesOptions {
   existingEntries?: readonly LexiconEntry[];
   idPrefix?: string;
   nextId: number;
   timestamp: string;
 }
 
-export interface NormalizeLexiconEntriesResult {
+interface NormalizeLexiconEntriesResult {
   entries: LexiconEntry[];
   nextId: number;
 }

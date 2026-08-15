@@ -14,7 +14,7 @@ import type {
 } from "@studynarrator/shared-types";
 
 export type ShellConnectionState = ConnectionTestOverall | "testing";
-export type SpeechCatalogLoadState =
+type SpeechCatalogLoadState =
   | { status: "idle" | "loading"; catalog: null; error: "" }
   | { status: "ready"; catalog: SpeechCatalog; error: "" }
   | { status: "failed"; catalog: null; error: string };

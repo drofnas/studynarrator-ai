@@ -4,9 +4,8 @@ const TimestampSchema = z.iso.datetime({ offset: true });
 const NullableTimestampSchema = TimestampSchema.nullable();
 
 export const CONNECTION_DIAGNOSTIC_SCHEMA_VERSION = 1;
-export const CONNECTION_DEFAULT_TIMEOUT_SECONDS = 120;
-export const CONNECTION_DEFAULT_RETRY_COUNT = 2;
-export const SPEACHES_CONNECTION_ID = "speaches";
+const CONNECTION_DEFAULT_TIMEOUT_SECONDS = 120;
+const CONNECTION_DEFAULT_RETRY_COUNT = 2;
 
 export const CONNECTION_CHANNELS = Object.freeze({
   get: "connection.get",
@@ -20,17 +19,17 @@ export const CONNECTION_CHANNELS = Object.freeze({
   voiceCatalogReplace: "voice-catalog.replace"
 } as const);
 
-export const ConnectionTestOverallSchema = z.enum([
+const ConnectionTestOverallSchema = z.enum([
   "connected", "configurationError", "disconnected", "authenticationRequired",
   "modelUnavailable", "voiceUnavailable", "invalidAudio"
 ]);
 export type ConnectionTestOverall = z.infer<typeof ConnectionTestOverallSchema>;
 
-export const ConnectionDiagnosticStageNameSchema = z.enum([
+const ConnectionDiagnosticStageNameSchema = z.enum([
   "url", "dns", "tcp", "http", "authentication", "model", "voice", "audio"
 ]);
 
-export const ConnectionDiagnosticStageSchema = z.object({
+const ConnectionDiagnosticStageSchema = z.object({
   stage: ConnectionDiagnosticStageNameSchema,
   status: z.enum(["pass", "fail", "skipped"]),
   code: z.string().min(1).max(100),
@@ -90,7 +89,7 @@ export const ConnectionSetupStateSchema = z.object({
 }).strict();
 export type ConnectionSetupState = z.infer<typeof ConnectionSetupStateSchema>;
 
-export const SpeechCatalogVoiceSchema = z.object({
+const SpeechCatalogVoiceSchema = z.object({
   voiceId: z.string().trim().min(1).max(500),
   name: z.string().trim().min(1).max(200).nullable(),
   language: z.string().trim().min(1).max(100).nullable(),
@@ -98,7 +97,7 @@ export const SpeechCatalogVoiceSchema = z.object({
 }).strict();
 export type SpeechCatalogVoice = z.infer<typeof SpeechCatalogVoiceSchema>;
 
-export const SpeechCatalogModelSchema = z.object({
+const SpeechCatalogModelSchema = z.object({
   modelId: z.string().trim().min(1).max(500),
   voices: z.array(SpeechCatalogVoiceSchema).max(10_000)
 }).strict().superRefine((model, context) => {
@@ -108,10 +107,9 @@ export const SpeechCatalogModelSchema = z.object({
     seen.add(voice.voiceId);
   });
 });
-export type SpeechCatalogModel = z.infer<typeof SpeechCatalogModelSchema>;
 
 export const SpeechCatalogSchema = z.object({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(CONNECTION_DIAGNOSTIC_SCHEMA_VERSION),
   models: z.array(SpeechCatalogModelSchema).max(2_000)
 }).strict().superRefine((catalog, context) => {
   const seen = new Set<string>();
@@ -150,7 +148,7 @@ export interface SpeachesConnectionClient {
 
 export const VoiceCatalogModelInputSchema = z.object({ modelId: z.string().trim().min(1).max(500) }).strict();
 
-export const VoiceCatalogEntrySchema = z.object({
+const VoiceCatalogEntrySchema = z.object({
   voiceId: z.string().trim().min(1).max(500), label: z.string().trim().min(1).max(200), enabled: z.boolean().default(true), favorite: z.boolean().default(false),
   language: z.string().trim().min(1).max(100).nullable().default(null), locale: z.string().trim().min(1).max(50).nullable().default(null),
   accent: z.string().trim().min(1).max(100).nullable().default(null), category: z.string().trim().min(1).max(100).nullable().default(null),
@@ -159,7 +157,7 @@ export const VoiceCatalogEntrySchema = z.object({
 export type VoiceCatalogEntry = z.infer<typeof VoiceCatalogEntrySchema>;
 
 export const VoiceCatalogSchema = z.object({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(CONNECTION_DIAGNOSTIC_SCHEMA_VERSION),
   modelId: z.string().trim().min(1).max(500),
   entries: z.array(VoiceCatalogEntrySchema).max(10_000)
 }).strict().superRefine((catalog, context) => {

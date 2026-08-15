@@ -28,7 +28,7 @@ if (Number(process.versions.node.split(".")[0]) !== 26) {
   fail(`verification requires Node 26; current runtime is ${process.versions.node}`);
 }
 
-run("node", ["scripts/audit-naming.mjs"]);
+run("npm", ["run", "audit:dead-code"]);
 run("npm", ["run", "lint"]);
 run("npm", ["run", "typecheck"]);
 run("npm", ["test"]);

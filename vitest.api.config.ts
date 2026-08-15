@@ -5,7 +5,6 @@ export default defineConfig({
     include: [
       "apps/server/src/**/*.test.ts",
       "apps/desktop/src/bridge.test.ts",
-      "apps/desktop/src/credentialVault.test.ts",
       "apps/desktop/src/bootstrap.test.ts",
       "packages/application/src/**/*.test.ts"
     ],

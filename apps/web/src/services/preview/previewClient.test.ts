@@ -12,7 +12,7 @@ const cache = {
   createdAt: timestamp, lastUsedAt: timestamp
 };
 const preview = {
-  schemaVersion: 2 as const,
+  schemaVersion: 1 as const,
   id: "00000000-0000-4000-8000-000000000002",
   createdAt: timestamp,
   projectId: "00000000-0000-4000-8000-000000000001",

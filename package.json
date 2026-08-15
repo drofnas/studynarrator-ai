@@ -22,6 +22,7 @@
     "fake:speaches:reset": "node scripts/fake-speaches/control.mjs reset",
     "fake:speaches:scenario": "node scripts/fake-speaches/control.mjs scenario",
     "e2e:install": "playwright install chromium",
+    "audit:dead-code": "node scripts/audit-dead-code.mjs",
     "lint": "eslint . --max-warnings 0",
     "test": "vitest run",
     "test:api": "vitest run --config vitest.api.config.ts",

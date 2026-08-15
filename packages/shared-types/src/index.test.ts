@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import { SystemDiagnosticsSchema } from "./index.js";
 
 const validDiagnostics = {
-  schemaVersion: 4,
+  schemaVersion: 1,
   overall: "pass",
   client: "web",
   transport: "rest",
   runtime: {
-    schemaVersion: 4,
+    schemaVersion: 1,
     applicationVersion: "0.1.0",
     runtimeName: "node",
     runtimeVersion: "26.7.0",
@@ -24,7 +24,7 @@ const validDiagnostics = {
       status: "pass",
       driver: "better-sqlite3",
       sqliteVersion: "3.50.0",
-      migrationVersion: 12,
+      migrationVersion: 1,
       databasePath: "/tmp/studynarrator/studynarrator.sqlite",
       latestBackupPath: null,
       markerKey: "runtime.storage-self-test",

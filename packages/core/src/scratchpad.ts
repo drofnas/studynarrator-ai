@@ -3,7 +3,7 @@ import { LexiconEntrySchema, type LexiconEntry } from "./schemas.js";
 import { parseScript } from "./parser.js";
 import { transformScript } from "./transformer.js";
 
-export const SCRATCHPAD_PASSAGE_MAX_CHARACTERS = 1_200;
+const SCRATCHPAD_PASSAGE_MAX_CHARACTERS = 1_200;
 
 const ScratchpadPassageInputSchema = z.object({
   text: z.string().max(SCRATCHPAD_PASSAGE_MAX_CHARACTERS).refine((value) => value.trim().length > 0, "Enter a passage to synthesize."),
@@ -11,7 +11,7 @@ const ScratchpadPassageInputSchema = z.object({
   applyGlobalLexicon: z.boolean()
 }).strict();
 
-export interface ScratchpadPassageProjection {
+interface ScratchpadPassageProjection {
   originalText: string;
   readableText: string;
   transformedText: string;

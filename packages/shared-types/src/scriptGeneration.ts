@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SCRIPT_GENERATION_SCHEMA_VERSION, ScriptGenerationContextSchema, ScriptPromptKindSchema } from "@studynarrator/core";
+import { ScriptPromptKindSchema } from "@studynarrator/core";
 import { ProjectIdSchema } from "./persistence.js";
 
 export const SCRIPT_GENERATION_CHANNELS = Object.freeze({
@@ -21,7 +21,7 @@ export const FileExportResultSchema = z.object({
   disposition: z.enum(["download", "saved", "canceled"]),
   fileName: z.string().min(1).max(255)
 }).strict();
-export type FileExportResult = z.infer<typeof FileExportResultSchema>;
+type FileExportResult = z.infer<typeof FileExportResultSchema>;
 
 export const ScriptGenerationPromptRequestSchema = z.object({
   projectId: ProjectIdSchema.nullable(),
@@ -39,5 +39,5 @@ export interface ScriptGenerationClient {
   exportSkillPackage(projectId: string | null): Promise<FileExportResult>;
 }
 
-export { SCRIPT_GENERATION_SCHEMA_VERSION, ScriptGenerationContextSchema, ScriptPromptKindSchema };
-export type { ScriptGenerationContext, ScriptGenerationPause, ScriptGenerationSpeaker, ScriptPromptKind } from "@studynarrator/core";
+export { ScriptPromptKindSchema };
+export type { ScriptPromptKind } from "@studynarrator/core";

@@ -17,7 +17,7 @@ describe("scratchpad contracts", () => {
 
   it("validates portable base64 audio and its decoded byte count", () => {
     const result = {
-      schemaVersion: 3,
+      schemaVersion: 1,
       id: "00000000-0000-4000-8000-000000000001",
       createdAt: "2026-08-12T12:00:00.000Z",
       modelId: "model",

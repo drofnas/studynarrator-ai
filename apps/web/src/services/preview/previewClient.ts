@@ -14,7 +14,7 @@ declare global {
   }
 }
 
-export class PreviewClientError extends Error {
+class PreviewClientError extends Error {
   constructor(message: string, readonly code: string, readonly status: number) {
     super(message);
   }

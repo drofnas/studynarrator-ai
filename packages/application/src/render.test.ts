@@ -23,8 +23,8 @@ class MemoryRepository implements RenderRepository {
   artifacts = new Map<string, RenderArtifact & { path: string }>();
   segments = new Map<string, RenderSegment>();
   segmentPaths = new Map<string, string | null>();
-  constructor(readonly profile: SpeachesConnection & { id: string }) {}
-  getSpeachesConnection() { return this.profile; }
+  constructor(readonly connection: SpeachesConnection) {}
+  getSpeachesConnection() { return this.connection; }
   createRenderJob(job: RenderJob, segments: RenderSegment[]) { this.jobs.set(job.id, job); segments.forEach((item) => this.segments.set(`${item.renderId}:${String(item.ordinal)}`, item)); return job; }
   getRenderJob(id: string) { const job = this.jobs.get(id); if (!job) throw new Error("missing"); return job; }
   listRenderJobs(projectId: string) { return [...this.jobs.values()].filter((job) => job.projectId === projectId); }
@@ -39,54 +39,27 @@ class MemoryRepository implements RenderRepository {
   getRenderArtifactPath(id: string) { const item = this.artifacts.get(id); if (!item) throw new Error("missing"); const { path, ...artifact } = item; return { artifact, path }; }
 }
 
-async function fixture(options: { legacyProfileId?: string; previousProject?: boolean; previousSingular?: boolean } = {}) {
+async function fixture() {
   const dataDirectory = await mkdtemp(join(tmpdir(), "studynarrator-render-"));
   roots.push(dataDirectory);
   const projectId = "00000000-0000-4000-8000-000000000001";
   const planId = "00000000-0000-4000-8000-000000000002";
-  const profileId = "00000000-0000-4000-8000-000000000003";
   const baseUrl = "http://127.0.0.1:8765";
   const timestamp = "2026-08-13T12:00:00.000Z";
-  const historicalProject = {
-    contractVersion: 8 as const, id: projectId, name: "Render fixture", description: "", scriptSource: "narrator: Render me.",
+  const project = {
+    contractVersion: 1 as const, id: projectId, name: "Render fixture", description: "", scriptSource: "narrator: Render me.",
     scriptHash: sha("narrator: Render me."),
     speakerMappings: [{ speakerId: "narrator", displayName: "Narrator", voiceId: "voice", speed: 1, gainDb: 0, roleDescription: "", sampleText: "" }],
-    pausePresets: [], transitionPauses: { paragraph: { mode: "none" as const }, speakerChange: { mode: "none" as const }, section: { mode: "none" as const } },
     lexiconEntries: [], createdAt: timestamp, updatedAt: timestamp
   };
-  const transitionPauses = historicalProject.transitionPauses;
-  const currentProjectData = {
-    id: historicalProject.id,
-    name: historicalProject.name,
-    description: historicalProject.description,
-    scriptSource: historicalProject.scriptSource,
-    scriptHash: historicalProject.scriptHash,
-    speakerMappings: historicalProject.speakerMappings,
-    lexiconEntries: historicalProject.lexiconEntries,
-    createdAt: historicalProject.createdAt,
-    updatedAt: historicalProject.updatedAt
-  };
-  const project = { ...currentProjectData, contractVersion: 9 as const };
-  const historicalVersions = { scriptGrammar: 1 as const, cirSchema: 1 as const, lexiconTransform: 1 as const, pacing: 1 as const, speechCacheSchema: 1, speechNormalization: 1, speechChunking: 1, speechAdapter: 1 };
-  const snapshot = options.legacyProfileId ? withProjectSnapshotHash({
+  const snapshot = withProjectSnapshotHash({
     schemaVersion: 1,
-    capturedAt: timestamp,
-    project: { ...historicalProject, contractVersion: 4, modelId: "model", connectionProfileId: options.legacyProfileId },
-    globalLexiconEntries: [], ignoredDiagnostics: [],
-    connection: { profileId: options.legacyProfileId, profileName: "Legacy", profileSource: "saved", modelId: "model", serverIdentityHash: sha(baseUrl) },
-    versions: historicalVersions
-  }) : options.previousProject ? withProjectSnapshotHash({
-    schemaVersion: 3, capturedAt: timestamp, project: historicalProject, globalLexiconEntries: [], ignoredDiagnostics: [],
-    connection: { modelId: "model", serverIdentityHash: sha(baseUrl) }, versions: historicalVersions
-  }) : options.previousSingular ? withProjectSnapshotHash({
-    schemaVersion: 2, capturedAt: timestamp, project: { ...historicalProject, contractVersion: 7, modelId: "model" }, globalLexiconEntries: [], ignoredDiagnostics: [],
-    connection: { modelId: "model", serverIdentityHash: sha(baseUrl) }, versions: historicalVersions
-  }) : withProjectSnapshotHash({
-    schemaVersion: 4, capturedAt: timestamp, project, timing: {
+    capturedAt: timestamp, project, timing: {
       pausePresets: [{ pauseId: "pause_short", durationMs: 350, description: "Short" }, { pauseId: "pause_medium", durationMs: 750, description: "Medium" }, { pauseId: "pause_long", durationMs: 1_500, description: "Long" }],
-      transitionPauses
+      transitionPauses: { paragraph: { mode: "none" }, speakerChange: { mode: "none" }, section: { mode: "none" } }
     }, globalLexiconEntries: [], ignoredDiagnostics: [],
-    connection: { modelId: "model", serverIdentityHash: sha(baseUrl) }, versions: { ...historicalVersions, scriptGrammar: 2 }
+    connection: { modelId: "model", serverIdentityHash: sha(baseUrl) },
+    versions: { scriptGrammar: 1, cirSchema: 1, lexiconTransform: 1, pacing: 1, speechCacheSchema: 1, speechNormalization: 1, speechChunking: 1, speechAdapter: 1 }
   });
   const cacheKey = "a".repeat(64);
   const plan = withRenderPlanHash({
@@ -105,7 +78,7 @@ async function fixture(options: { legacyProfileId?: string; previousProject?: bo
     async load() { return { snapshot, plan, silenceAssets: new Map() }; }
   };
   const repository = new MemoryRepository({
-    id: profileId, baseUrl, suppliedUrlForm: "root", configured: true, defaultModelId: "model", defaultVoiceId: "voice",
+    baseUrl, suppliedUrlForm: "root", configured: true, defaultModelId: "model", defaultVoiceId: "voice",
     timeoutSeconds: 120, retryCount: 0, responseFormat: "wav", lastTestedAt: null, lastSuccessfulTestAt: null,
     lastTestSummary: null, createdAt: timestamp, updatedAt: timestamp
   });
@@ -118,7 +91,7 @@ async function fixture(options: { legacyProfileId?: string; previousProject?: bo
         key: cacheKey, status: "miss", bytes: wav,
         metadata: {
           schemaVersion: 1, normalizationVersion: 1, chunkingVersion: 1, adapterId: "test", adapterVersion: 1,
-          serverIdentityHash: sha(baseUrl), profileId, modelId: "model", voiceId: "voice", speed: 1,
+          serverIdentityHash: sha(baseUrl), modelId: "model", voiceId: "voice", speed: 1,
           textHash: sha("Render me."), responseFormat: "wav", key: cacheKey, audioChecksum: sha(wav), byteLength: wav.byteLength,
           createdAt: timestamp, lastUsedAt: timestamp, projectIds: [projectId], scratchpadUsed: false
         }
@@ -183,46 +156,11 @@ describe("render coordinator", () => {
 
   it("fails safely when the frozen endpoint identity changes", async () => {
     const { service, repository, plan } = await fixture();
-    repository.profile.baseUrl = "http://127.0.0.1:9999";
+    repository.connection.baseUrl = "http://127.0.0.1:9999";
     const job = await terminal(service, (await service.start(plan.id)).id);
     expect(job).toMatchObject({ state: "failed", error: { code: "RENDER_VALIDATION_FAILED", retryable: false } });
     expect(await service.listArtifacts(job.id)).toEqual([]);
     await service.close();
   });
 
-  it("renders a legacy plan when its preserved connection and endpoint still match", async () => {
-    const preservedProfileId = "00000000-0000-4000-8000-000000000003";
-    const { service, plan } = await fixture({ legacyProfileId: preservedProfileId });
-    const job = await terminal(service, (await service.start(plan.id)).id);
-    expect(job.state).toBe("complete");
-    await service.close();
-  });
-
-  it("renders a previous singular snapshot with its captured model", async () => {
-    const { service, plan } = await fixture({ previousSingular: true });
-    const job = await terminal(service, (await service.start(plan.id)).id);
-    expect(job.state).toBe("complete");
-    await service.close();
-  });
-
-  it("renders a version 3 snapshot with its captured project timing", async () => {
-    const { service, plan } = await fixture({ previousProject: true });
-    const job = await terminal(service, (await service.start(plan.id)).id);
-    expect(job.state).toBe("complete");
-    await service.close();
-  });
-
-  it("requires a new freeze when a legacy plan references a discarded connection", async () => {
-    const { service, plan } = await fixture({ legacyProfileId: "discarded-profile" });
-    const job = await terminal(service, (await service.start(plan.id)).id);
-    expect(job).toMatchObject({
-      state: "failed",
-      error: {
-        code: "RENDER_LEGACY_CONNECTION_UNAVAILABLE",
-        message: "This frozen plan uses a legacy connection that is no longer available. Freeze the project again.",
-        retryable: false
-      }
-    });
-    await service.close();
-  });
 });

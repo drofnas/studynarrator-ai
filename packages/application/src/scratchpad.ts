@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { transformScratchpadPassage, ScratchpadPassageError } from "@studynarrator/core";
 import {
+  SCRATCHPAD_SCHEMA_VERSION,
   ScratchpadPreviewInputSchema,
   ScratchpadPreviewResultSchema,
   type ScratchpadClient,
@@ -13,7 +14,7 @@ import { createCachedSpeechSynthesis, type CachedSpeechSynthesisRunner } from ".
 import type { SpeechCache } from "@studynarrator/rendering";
 import { BUNDLED_VOICE_CATALOGS } from "./kokoroCatalog.js";
 
-export type ScratchpadServiceErrorCode =
+type ScratchpadServiceErrorCode =
   | "SCRATCHPAD_ABORTED"
   | "SCRATCHPAD_AUTHENTICATION"
   | "SCRATCHPAD_CONFIGURATION"
@@ -21,7 +22,7 @@ export type ScratchpadServiceErrorCode =
   | "SCRATCHPAD_SELECTION_REJECTED"
   | "SCRATCHPAD_UNAVAILABLE";
 
-export class ScratchpadServiceError extends Error {
+class ScratchpadServiceError extends Error {
   constructor(readonly code: ScratchpadServiceErrorCode, message: string) {
     super(message);
   }
@@ -29,7 +30,7 @@ export class ScratchpadServiceError extends Error {
 
 export interface ScratchpadRepository extends ConnectionRepository, Pick<PersistenceRepository, "listGlobalLexicon"> {}
 
-export type ScratchpadSynthesisRunner = CachedSpeechSynthesisRunner;
+type ScratchpadSynthesisRunner = CachedSpeechSynthesisRunner;
 
 function safeSynthesisError(error: unknown): ScratchpadServiceError {
   if (error instanceof ScratchpadServiceError) return error;
@@ -89,7 +90,7 @@ export function createScratchpadService(dependencies: {
           ?? BUNDLED_VOICE_CATALOGS.get(input.modelId)?.entries.find((entry) => entry.voiceId === input.voiceId)?.label
           ?? input.voiceId;
         const result: ScratchpadPreviewResult = {
-          schemaVersion: 3,
+          schemaVersion: SCRATCHPAD_SCHEMA_VERSION,
           id: createId(),
           createdAt: now().toISOString(),
           modelId: input.modelId,

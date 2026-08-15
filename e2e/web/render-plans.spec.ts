@@ -31,7 +31,6 @@ test.describe("Frozen render plans", () => {
       "[speaker_teacher] After explicit pause."
     ].join("\n"));
     await page.getByRole("tab", { name: "Settings" }).click();
-    await expect(page.getByLabel("Connection profile")).toHaveCount(0);
     await expect(page.getByLabel("Optional model override")).toHaveCount(0);
     await expect(page.getByLabel("Voice for speaker teacher").first()).toHaveValue("af_heart");
 

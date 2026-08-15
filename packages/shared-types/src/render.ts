@@ -18,14 +18,12 @@ export const RENDER_CHANNELS = Object.freeze({
 
 export const RenderIdSchema = z.uuid();
 export const RenderArtifactIdSchema = z.uuid();
-export const RenderStateSchema = z.enum([
+const RenderStateSchema = z.enum([
   "queued", "validating", "synthesizing", "assembling", "normalizing",
   "encoding", "writing_artifacts", "complete", "failed", "canceled"
 ]);
-export type RenderState = z.infer<typeof RenderStateSchema>;
-export const RenderTerminalStateSchema = z.enum(["complete", "failed", "canceled"]);
 
-export const RenderErrorSchema = z.object({
+const RenderErrorSchema = z.object({
   code: z.string().min(1),
   message: z.string().min(1).max(500),
   retryable: z.boolean(),
@@ -41,7 +39,7 @@ export const RenderErrorSchema = z.object({
 }).strict();
 export type RenderError = z.infer<typeof RenderErrorSchema>;
 
-export const RenderProgressSchema = z.object({
+const RenderProgressSchema = z.object({
   phase: RenderStateSchema,
   sectionTitle: z.string().min(1).nullable(),
   sectionOrdinal: z.number().int().nonnegative(),
@@ -124,7 +122,7 @@ const RenderHistorySegmentBaseSchema = z.object({
   error: RenderErrorSchema.nullable()
 });
 
-export const RenderHistorySegmentSchema = z.discriminatedUnion("type", [
+const RenderHistorySegmentSchema = z.discriminatedUnion("type", [
   RenderHistorySegmentBaseSchema.extend({
     type: z.literal("section"),
     title: z.string().min(1),
@@ -168,7 +166,7 @@ export const RenderWaveformSchema = z.discriminatedUnion("status", [
 ]);
 export type RenderWaveform = z.infer<typeof RenderWaveformSchema>;
 
-export const RenderArtifactTypeSchema = z.enum([
+const RenderArtifactTypeSchema = z.enum([
   "mp3", "originalScript", "readableTranscript", "ttsTranscript",
   "manifest", "projectSnapshot", "checksums"
 ]);
@@ -198,7 +196,7 @@ export const RenderArtifactExportResultSchema = z.object({
   disposition: z.enum(["download", "saved", "canceled"]),
   fileName: z.string().min(1)
 }).strict();
-export type RenderArtifactExportResult = z.infer<typeof RenderArtifactExportResultSchema>;
+type RenderArtifactExportResult = z.infer<typeof RenderArtifactExportResultSchema>;
 
 export interface RenderClient {
   start(planId: string): Promise<RenderJob>;

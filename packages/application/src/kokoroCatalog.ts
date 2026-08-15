@@ -1,4 +1,4 @@
-import { VoiceCatalogSchema, type VoiceCatalog, type VoiceCatalogEntry } from "@studynarrator/shared-types";
+import { CONNECTION_DIAGNOSTIC_SCHEMA_VERSION, VoiceCatalogSchema, type VoiceCatalog, type VoiceCatalogEntry } from "@studynarrator/shared-types";
 
 export const KOKORO_V1_MODEL_ID = "speaches-ai/Kokoro-82M-v1.0-ONNX";
 export const KOKORO_VOICE_CATALOG_SOURCE = "https://huggingface.co/hexgrad/Kokoro-82M/blob/main/VOICES.md";
@@ -35,7 +35,7 @@ const entries: VoiceCatalogEntry[] = groups.flatMap((group) => group.ids.map((vo
 })));
 
 export const KOKORO_V1_VOICE_CATALOG: VoiceCatalog = VoiceCatalogSchema.parse({
-  schemaVersion: 1,
+  schemaVersion: CONNECTION_DIAGNOSTIC_SCHEMA_VERSION,
   modelId: KOKORO_V1_MODEL_ID,
   entries
 });

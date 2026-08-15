@@ -24,7 +24,7 @@ import type { ConnectionRepository } from "./connections.js";
 export const SPEACHES_CACHE_ADAPTER_ID = "speaches-openai-compatible";
 export const SPEACHES_CACHE_ADAPTER_VERSION = 1;
 
-export interface CachedSpeechSynthesisInput {
+interface CachedSpeechSynthesisInput {
   modelId: string;
   voiceId: string;
   speed: number;
@@ -65,7 +65,6 @@ export function createCachedSpeechSynthesis(dependencies: {
         adapterId: SPEACHES_CACHE_ADAPTER_ID,
         adapterVersion: SPEACHES_CACHE_ADAPTER_VERSION,
         serverIdentity: connection.baseUrl,
-        profileId: connection.id,
         modelId: input.modelId,
         voiceId: input.voiceId,
         speed: input.speed,

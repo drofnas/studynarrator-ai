@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createRestScratchpadClient, resolveScratchpadClient } from "./scratchpadClient.js";
 
 const result = {
-  schemaVersion: 3 as const,
+  schemaVersion: 1 as const,
   id: "00000000-0000-4000-8000-000000000099",
   createdAt: "2026-08-12T12:00:00.000Z",
   modelId: "model",

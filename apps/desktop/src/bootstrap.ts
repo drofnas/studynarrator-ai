@@ -24,7 +24,6 @@ import { MigrationFailureError, openStudyNarratorRepository } from "@studynarrat
 import { DATABASE_SCHEMA_VERSION, PERSISTENCE_CONTRACT_VERSION, type PersistenceClient } from "@studynarrator/shared-types";
 import { createFfmpegProbe } from "@studynarrator/runtime";
 import { createRenderPlanStore } from "@studynarrator/rendering";
-import { CredentialEncryptionUnavailableError, ElectronCredentialVault, type SafeStorageLike } from "./credentialVault.js";
 
 export function resolveDesktopDataDirectory(defaultDataDirectory: string, environment: NodeJS.ProcessEnv): string {
   return environment.STUDYNARRATOR_DATA_DIR
@@ -35,7 +34,6 @@ export function resolveDesktopDataDirectory(defaultDataDirectory: string, enviro
 export async function createDesktopServices(options: {
   defaultDataDirectory: string;
   environment?: NodeJS.ProcessEnv;
-  safeStorage?: SafeStorageLike;
 }) {
   const environment = options.environment ?? process.env;
   const dataDirectory = resolveDesktopDataDirectory(options.defaultDataDirectory, environment);
@@ -56,14 +54,6 @@ export async function createDesktopServices(options: {
     const openedRepository = await openStudyNarratorRepository({ Database, databasePath });
     repository = openedRepository;
     persistence = createPersistenceService(openedRepository);
-    if (options.safeStorage) {
-      const credentialVault = new ElectronCredentialVault(options.safeStorage, dataDirectory);
-      try {
-        await credentialVault.cleanup(new Set());
-      } catch (error) {
-        if (!(error instanceof CredentialEncryptionUnavailableError)) throw error;
-      }
-    }
     const context = {
       client: "electron" as const,
       nodeVersion: process.versions.node,

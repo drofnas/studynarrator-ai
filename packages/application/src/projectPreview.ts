@@ -16,7 +16,7 @@ import type { PersistenceRepository } from "./persistence.js";
 import type { CachedSpeechSynthesis } from "./cachedSpeech.js";
 import { BUNDLED_VOICE_CATALOGS } from "./kokoroCatalog.js";
 
-export type ProjectPreviewServiceErrorCode =
+type ProjectPreviewServiceErrorCode =
   | "PROJECT_PREVIEW_ABORTED"
   | "PROJECT_PREVIEW_AUTHENTICATION"
   | "PROJECT_PREVIEW_CONFIGURATION"
@@ -25,7 +25,7 @@ export type ProjectPreviewServiceErrorCode =
   | "PROJECT_PREVIEW_SELECTION_REJECTED"
   | "PROJECT_PREVIEW_UNAVAILABLE";
 
-export class ProjectPreviewServiceError extends Error {
+class ProjectPreviewServiceError extends Error {
   constructor(readonly code: ProjectPreviewServiceErrorCode, message: string) {
     super(message);
   }

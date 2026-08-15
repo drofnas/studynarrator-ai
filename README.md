@@ -205,6 +205,18 @@ Use the URL that the StudyNarrator backend can reach. Your browser may use a dif
 
 StudyNarrator accepts a Speaches root URL or a URL ending in `/v1`; it normalizes the address before making API calls. Cross-origin browser access to Speaches is not required because the Node or Electron backend makes the requests.
 
+The connection is a singleton owned by the application installation. Projects do not contain a connection ID, and neither runtime reads connection profiles or credentials from environment variables. StudyNarrator does not have an API-key field, credential vault, or operating-system credential-store integration; authenticated Speaches servers are rejected by the connection test.
+
+## Application surfaces
+
+The primary navigation is **Prompt Kit**, **Projects**, **Quick Scratchpad**, and **Settings**, with **General**, **Voices**, **Lexicon**, **Timings**, and **System diagnostics** beneath Settings. Web requests use the manifest-backed `/api` surface for runtime diagnostics, projects, prompt export, previews, render plans and renders, pacing, preferences, the global lexicon, the singleton connection, setup, voice catalogs, Scratchpad, and speech-cache controls. Electron exposes the same operations through its validated public IPC manifest; operation names are contract-tested in both transports.
+
+## Pre-release data reset
+
+All persisted contracts are at schema version 1: SQLite, project snapshots, diagnostics, parser grammar, script generation, preview, Scratchpad, and render plans. The repository intentionally supports only the current v1 shapes. Development databases, frozen plans, and cache metadata produced by earlier builds are rejected or treated as cache misses; the application never deletes or converts them automatically.
+
+Before starting a current build, stop StudyNarrator and explicitly remove the disposable data directory if it contains pre-v1 data. For source Web development, remove `.tmp/dev/web`. For a custom Node data location, remove the directory named by `STUDYNARRATOR_DATA_DIR`. For Electron, remove the StudyNarrator application-data directory reported by System diagnostics. For Docker Web, `docker compose down --volumes` deletes the `studynarrator-data` volume and is irreversible; use it only when a complete reset is intended. Back up anything you need first.
+
 ## Docker environment reference
 
 The checked-in [.env.example](.env.example) documents the complete Compose-facing configuration. Common settings are:
@@ -256,6 +268,7 @@ Run focused checks while developing:
 ```sh
 npm run lint
 npm run typecheck
+npm run audit:dead-code
 npm test
 npm run test:api
 ```

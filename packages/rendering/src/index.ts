@@ -17,13 +17,13 @@ import {
 export const SPEECH_CACHE_SCHEMA_VERSION = 1;
 export const SPEECH_NORMALIZATION_VERSION = 1;
 export const SPEECH_CHUNKING_VERSION = 1;
-export const MAX_CACHED_SPEECH_BYTES = 5 * 1024 * 1024;
+const MAX_CACHED_SPEECH_BYTES = 5 * 1024 * 1024;
 const CACHE_KEY_PATTERN = /^[a-f0-9]{64}$/u;
 const SHARD_PATTERN = /^[a-f0-9]{2}$/u;
 const MAX_CACHE_METADATA_BYTES = 64 * 1024;
 const METADATA_KEYS = new Set([
   "schemaVersion", "normalizationVersion", "chunkingVersion", "adapterId", "adapterVersion",
-  "serverIdentityHash", "profileId", "modelId", "voiceId", "speed", "textHash", "responseFormat",
+  "serverIdentityHash", "modelId", "voiceId", "speed", "textHash", "responseFormat",
   "key", "audioChecksum", "byteLength", "createdAt", "lastUsedAt", "projectIds", "scratchpadUsed"
 ]);
 
@@ -31,7 +31,6 @@ export interface SpeechCacheKeyInput {
   adapterId: string;
   adapterVersion: number;
   serverIdentity: string;
-  profileId: string;
   modelId: string;
   voiceId: string;
   speed: number;
@@ -39,7 +38,7 @@ export interface SpeechCacheKeyInput {
   responseFormat: "wav";
 }
 
-export interface NormalizedSpeechCacheInput extends Omit<SpeechCacheKeyInput, "serverIdentity" | "text"> {
+interface NormalizedSpeechCacheInput extends Omit<SpeechCacheKeyInput, "serverIdentity" | "text"> {
   serverIdentityHash: string;
   normalizedText: string;
   textHash: string;
@@ -50,7 +49,7 @@ export interface SpeechCacheUsage {
   scratchpad?: boolean;
 }
 
-export interface SpeechCacheEntryMetadata extends Omit<NormalizedSpeechCacheInput, "normalizedText"> {
+interface SpeechCacheEntryMetadata extends Omit<NormalizedSpeechCacheInput, "normalizedText"> {
   schemaVersion: typeof SPEECH_CACHE_SCHEMA_VERSION;
   normalizationVersion: typeof SPEECH_NORMALIZATION_VERSION;
   chunkingVersion: typeof SPEECH_CHUNKING_VERSION;
@@ -70,7 +69,7 @@ export interface CachedSpeechResult {
   metadata: SpeechCacheEntryMetadata;
 }
 
-export interface SpeechCacheStatus {
+interface SpeechCacheStatus {
   entryCount: number;
   totalBytes: number;
   lastUsedAt: string | null;
@@ -81,7 +80,7 @@ export interface SpeechCacheStatus {
   inFlight: number;
 }
 
-export interface SpeechCacheCleanupResult {
+interface SpeechCacheCleanupResult {
   entriesRemoved: number;
   bytesFreed: number;
 }
@@ -101,7 +100,7 @@ export interface SpeechCache {
   retainScratchpad(key: string): Promise<SpeechCacheCleanupResult>;
 }
 
-export type CachedAudioValidator = (bytes: Uint8Array, signal?: AbortSignal) => Promise<boolean>;
+type CachedAudioValidator = (bytes: Uint8Array, signal?: AbortSignal) => Promise<boolean>;
 
 interface SessionCounters {
   hits: number;
@@ -126,12 +125,12 @@ export function normalizeSpeechText(value: string): string {
   return value.normalize("NFC").replace(/\r\n?/gu, "\n").trim();
 }
 
-export function normalizeSpeechCacheInput(input: SpeechCacheKeyInput): NormalizedSpeechCacheInput {
+function normalizeSpeechCacheInput(input: SpeechCacheKeyInput): NormalizedSpeechCacheInput {
   const normalizedText = normalizeSpeechText(input.text);
   if (!input.adapterId.trim() || !Number.isInteger(input.adapterVersion) || input.adapterVersion < 1) {
     throw new Error("Speech cache adapter identity is invalid.");
   }
-  if (!input.serverIdentity.trim() || !input.profileId.trim() || !input.modelId.trim() || !input.voiceId.trim()) {
+  if (!input.serverIdentity.trim() || !input.modelId.trim() || !input.voiceId.trim()) {
     throw new Error("Speech cache synthesis identity is incomplete.");
   }
   if (!Number.isFinite(input.speed) || input.speed <= 0 || input.speed > 4 || !normalizedText) {
@@ -141,7 +140,6 @@ export function normalizeSpeechCacheInput(input: SpeechCacheKeyInput): Normalize
     adapterId: input.adapterId.trim(),
     adapterVersion: input.adapterVersion,
     serverIdentityHash: sha256(input.serverIdentity.trim()),
-    profileId: input.profileId.trim(),
     modelId: input.modelId.trim(),
     voiceId: input.voiceId.trim(),
     speed: input.speed,
@@ -160,7 +158,6 @@ export function createSpeechCacheKey(input: SpeechCacheKeyInput): string {
     adapterId: normalized.adapterId,
     adapterVersion: normalized.adapterVersion,
     serverIdentityHash: normalized.serverIdentityHash,
-    profileId: normalized.profileId,
     modelId: normalized.modelId,
     voiceId: normalized.voiceId,
     speed: normalized.speed,
@@ -189,7 +186,6 @@ function parseMetadata(value: unknown): SpeechCacheEntryMetadata | null {
     || typeof item.adapterId !== "string" || !item.adapterId
     || typeof item.adapterVersion !== "number" || !Number.isInteger(item.adapterVersion)
     || typeof item.serverIdentityHash !== "string" || !CACHE_KEY_PATTERN.test(item.serverIdentityHash)
-    || typeof item.profileId !== "string" || !item.profileId
     || typeof item.modelId !== "string" || !item.modelId
     || typeof item.voiceId !== "string" || !item.voiceId
     || typeof item.speed !== "number" || !Number.isFinite(item.speed)
@@ -208,7 +204,6 @@ function metadataMatchesInput(metadata: SpeechCacheEntryMetadata, input: Normali
   return metadata.adapterId === input.adapterId
     && metadata.adapterVersion === input.adapterVersion
     && metadata.serverIdentityHash === input.serverIdentityHash
-    && metadata.profileId === input.profileId
     && metadata.modelId === input.modelId
     && metadata.voiceId === input.voiceId
     && metadata.speed === input.speed
@@ -403,7 +398,6 @@ export function createSpeechCache(options: {
       adapterId: normalized.adapterId,
       adapterVersion: normalized.adapterVersion,
       serverIdentityHash: normalized.serverIdentityHash,
-      profileId: normalized.profileId,
       modelId: normalized.modelId,
       voiceId: normalized.voiceId,
       speed: normalized.speed,
@@ -602,19 +596,19 @@ export function createSpeechCache(options: {
   return cache;
 }
 
-export const RENDER_PLAN_SAMPLE_RATE = 24_000;
-export const RENDER_PLAN_CHANNELS = 1;
-export const RENDER_PLAN_BITS_PER_SAMPLE = 16;
+const RENDER_PLAN_SAMPLE_RATE = 24_000;
+const RENDER_PLAN_CHANNELS = 1;
+const RENDER_PLAN_BITS_PER_SAMPLE = 16;
 const MAX_RENDER_PLAN_JSON_BYTES = 12 * 1024 * 1024;
 
-export interface AudioProbeMetadata {
+interface AudioProbeMetadata {
   decodable: boolean;
   durationMs: number;
   bitRate: number | null;
   formatName: string | null;
 }
 
-export interface WaveformPeaks {
+interface WaveformPeaks {
   durationMs: number;
   sampleRate: number;
   peaks: number[];
@@ -785,7 +779,7 @@ export async function probeAudioFile(options: {
   }
 }
 
-export function hashJson(value: unknown): string {
+function hashJson(value: unknown): string {
   return sha256(JSON.stringify(value));
 }
 

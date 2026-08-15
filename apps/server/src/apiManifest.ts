@@ -52,5 +52,3 @@ export const REST_API_MANIFEST = [
   { method: "DELETE", path: "/api/speech-cache" },
   { method: "DELETE", path: "/api/speech-cache/:cacheKey" }
 ] as const;
-
-export type RestApiOperation = (typeof REST_API_MANIFEST)[number];

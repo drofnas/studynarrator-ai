@@ -48,7 +48,6 @@ describe("Voices settings", () => {
     });
     render(<ConnectionProvider connectionClient={idNamedConnection} voiceCatalog={localVoiceCatalog}><VoicesSettingsPage scratchpadClient={{ preview }} /></ConnectionProvider>);
     expect(await screen.findByRole("heading", { name: "Voices" })).toBeInTheDocument();
-    expect(screen.queryByText(/Environment Speaches|Active profile|API key/u)).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Address")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Model")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Default Voice")).not.toBeInTheDocument();

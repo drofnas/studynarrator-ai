@@ -3,10 +3,10 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 
 export const FAKE_SPEACHES_MODEL_ID = "speaches-ai/Kokoro-82M-v1.0-ONNX";
 export const FAKE_SPEACHES_VOICE_ID = "af_heart";
-export const FAKE_SPEACHES_ALTERNATE_VOICE_ID = "af_sky";
+const FAKE_SPEACHES_ALTERNATE_VOICE_ID = "af_sky";
 export const FAKE_SPEACHES_SECONDARY_MODEL_ID = "speaches-ai/Piper-en_US-lessac-medium";
 export const FAKE_SPEACHES_SECONDARY_VOICE_ID = "en_US-lessac-medium";
-export const FAKE_SPEACHES_SCENARIOS = [
+const FAKE_SPEACHES_SCENARIOS = [
   "healthy",
   "timeout",
   "unauthorized",
@@ -18,7 +18,7 @@ export const FAKE_SPEACHES_SCENARIOS = [
 ] as const;
 export type FakeSpeachesScenario = (typeof FAKE_SPEACHES_SCENARIOS)[number];
 
-export interface FakeSpeachesRequestLog {
+interface FakeSpeachesRequestLog {
   method: string;
   path: string;
   status: number;
@@ -29,7 +29,7 @@ export interface FakeSpeachesRequestLog {
   inputHash: string | null;
 }
 
-export interface FakeSpeachesState {
+interface FakeSpeachesState {
   scenario: FakeSpeachesScenario;
   counters: Readonly<Record<string, number>>;
   requests: readonly FakeSpeachesRequestLog[];

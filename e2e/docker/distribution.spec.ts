@@ -42,7 +42,7 @@ async function assertBrowserStorageRedacted(page: Page): Promise<void> {
 
 test("Docker Web remains authorable offline and renders after Speaches reconnects", async ({ browserName, page, request }) => {
   const runtime = await jsonRequest(request, "get", "/api/runtime") as Record<string, unknown>;
-  expect(runtime).toMatchObject({ schemaVersion: 4, distribution: "docker-web" });
+  expect(runtime).toMatchObject({ schemaVersion: 1, distribution: "docker-web" });
   expect(runtime.sourceRevision).toBe(process.env.STUDYNARRATOR_EXPECTED_SOURCE_REVISION);
 
   const initialConnection = await jsonRequest(request, "get", "/api/connection") as Record<string, unknown>;

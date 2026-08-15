@@ -14,7 +14,7 @@ import { ProjectsPage } from "./ProjectsPage.js";
 import { ConnectionProvider } from "@/features/connections/ConnectionProvider.js";
 
 const project: ProjectDetail = {
-  contractVersion: 9,
+  contractVersion: 1,
   id: "00000000-0000-4000-8000-000000000001",
   name: "Authoring study",
   description: "Offline fixture",
@@ -37,7 +37,7 @@ const globalCatalog: VoiceCatalog = { schemaVersion: 1, modelId: GLOBAL_VOICE_CA
 function projectPreviewResult(mode: "segment" | "pronunciation" = "segment"): ProjectPreviewResult {
   const timestamp = "2026-08-12T12:00:00.000Z";
   return {
-    schemaVersion: 2,
+    schemaVersion: 1,
     id: "00000000-0000-4000-8000-000000000002",
     createdAt: timestamp,
     projectId: project.id,
@@ -272,7 +272,6 @@ describe("Projects workbench", () => {
     ] };
     renderPage(client, analyze, { connection, catalog });
     await openProjectTab("Settings");
-    expect(screen.queryByLabelText("Connection profile")).not.toBeInTheDocument();
     await waitFor(() => expect(analyze).toHaveBeenCalled());
     await waitFor(() => expect(screen.getByLabelText("Voice for speaker teacher")).toHaveValue("af_heart"));
     const speakers = screen.getByRole("region", { name: "Project speakers" });

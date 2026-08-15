@@ -11,15 +11,15 @@ import { createRenderPlanService, type RenderPlanRepository } from "./renderPlan
 const projectId = "00000000-0000-4000-8000-000000000001";
 const planId = "00000000-0000-4000-8000-000000000002";
 const timestamp = "2026-08-13T12:00:00.000Z";
-const profile = {
-  id: "profile", baseUrl: "http://127.0.0.1:8000", suppliedUrlForm: "root" as const, configured: true,
+const connection = {
+  baseUrl: "http://127.0.0.1:8000", suppliedUrlForm: "root" as const, configured: true,
   defaultModelId: "model", defaultVoiceId: "voice-teacher", timeoutSeconds: 120, retryCount: 2, responseFormat: "wav" as const,
   lastTestedAt: null, lastSuccessfulTestAt: null, lastTestSummary: null, createdAt: timestamp, updatedAt: timestamp
 };
 
 function project(): ProjectDetail {
   return {
-    contractVersion: 9,
+    contractVersion: 1,
     id: projectId,
     name: "Render plan fixture",
     description: "",
@@ -55,7 +55,7 @@ function repository(current: { project: ProjectDetail; timing?: SystemTimingConf
       caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: "", createdAt: timestamp, updatedAt: timestamp
     }]),
     getIgnoredDiagnostics: vi.fn(() => []),
-    getSpeachesConnection: vi.fn(() => profile),
+    getSpeachesConnection: vi.fn(() => connection),
     getVoiceCatalogOverrides: vi.fn(() => ({ schemaVersion: 1, modelId: "model", entries: [] }))
   } as unknown as RenderPlanRepository;
 }
@@ -86,12 +86,10 @@ describe("render plan application service", () => {
     });
     const plan = await service.create(projectId);
     const frozen = await store.load(planId);
-    expect(frozen.snapshot.schemaVersion).toBe(4);
-    if (frozen.snapshot.schemaVersion !== 4) throw new Error("Expected a global timing snapshot.");
+    expect(frozen.snapshot.schemaVersion).toBe(1);
     expect(frozen.snapshot.timing.transitionPauses.section).toEqual({ mode: "preset", pauseId: "pause_long" });
     expect(frozen.snapshot.connection.modelId).toBe("model");
     expect(frozen.snapshot.connection.serverIdentityHash).toMatch(/^[a-f0-9]{64}$/u);
-    expect(frozen.snapshot.connection).not.toHaveProperty("profileId");
     expect(plan.entries.map((entry) => entry.type === "pause" ? `${entry.type}:${entry.reason}:${String(entry.durationMs)}` : entry.type)).toEqual([
       "section", "speech", "pause:speakerChange:500", "speech", "section", "pause:section:1500", "speech",
       "pause:paragraph:750", "speech", "pause:explicit:1500", "speech", "pause:explicit:350"
@@ -105,7 +103,7 @@ describe("render plan application service", () => {
     expect(firstSpeech.chunks[0]?.cacheKey).toBe(createSpeechCacheKey({
       adapterId: SPEACHES_CACHE_ADAPTER_ID,
       adapterVersion: SPEACHES_CACHE_ADAPTER_VERSION,
-      serverIdentity: profile.baseUrl!, profileId: profile.id, modelId: "model", voiceId: "voice-teacher", speed: 1,
+      serverIdentity: connection.baseUrl!, modelId: "model", voiceId: "voice-teacher", speed: 1,
       text: "sequel one.", responseFormat: "wav"
     }));
     expect((speechCache as SpeechCache & { inspectMock: ReturnType<typeof vi.fn> }).inspectMock).toHaveBeenCalledTimes(5);

@@ -6,12 +6,13 @@ import {
 } from "@studynarrator/core";
 import {
   ConnectionTestSummarySchema,
+  CONNECTION_DIAGNOSTIC_SCHEMA_VERSION,
   DATABASE_SCHEMA_VERSION,
-  DEFAULT_SYSTEM_TIMING,
   GlobalLexiconEntryCollectionSchema,
   GlobalLexiconReplaceInputSchema,
   IgnoredDiagnosticCollectionSchema,
   PERSISTENCE_CONTRACT_VERSION,
+  RENDER_CONTRACT_VERSION,
   PersistenceReadyStatusSchema,
   ProjectCreateInputSchema,
   ProjectDetailSchema,
@@ -56,9 +57,9 @@ import {
   type Migration
 } from "./migrations.js";
 
-export const STORAGE_SELF_TEST_KEY = "runtime.storage-self-test";
-export const STORAGE_SELF_TEST_VALUE = "study-narrator-storage-ok";
-export const CURRENT_MIGRATION_VERSION = DATABASE_SCHEMA_VERSION;
+const STORAGE_SELF_TEST_KEY = "runtime.storage-self-test";
+const STORAGE_SELF_TEST_VALUE = "study-narrator-storage-ok";
+const CURRENT_MIGRATION_VERSION = DATABASE_SCHEMA_VERSION;
 
 interface ProjectRow {
   id: string;
@@ -66,20 +67,6 @@ interface ProjectRow {
   description: string;
   script_source: string;
   script_hash: string;
-  connection_profile_id: string | null;
-  model_id: string | null;
-  paragraph_pause_enabled: number;
-  paragraph_pause_id: string;
-  paragraph_pause_duration_ms: number;
-  paragraph_transition_mode: "none" | "preset" | "duration";
-  paragraph_transition_pause_id: string | null;
-  paragraph_transition_duration_ms: number | null;
-  speaker_change_transition_mode: "none" | "preset" | "duration";
-  speaker_change_transition_pause_id: string | null;
-  speaker_change_transition_duration_ms: number | null;
-  section_transition_mode: "none" | "preset" | "duration";
-  section_transition_pause_id: string | null;
-  section_transition_duration_ms: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -124,14 +111,10 @@ interface LexiconRow {
   updated_at: string;
 }
 
-interface ProfileRow {
-  id: string;
-  name: string;
+interface ConnectionRow {
   base_url: string | null;
   default_model_id: string | null;
   default_voice_id: string | null;
-  source: "saved" | "environment";
-  api_key_reference: string | null;
   timeout_seconds: number;
   retry_count: number;
   response_format: "wav";
@@ -146,16 +129,11 @@ interface ProfileRow {
 interface MarkerRow { key: string; value: string; created_at: string }
 interface VersionRow { version: string }
 
-export interface ConnectionSetupRecord {
+interface ConnectionSetupRecord {
   onboardingCompletedAt: string | null;
 }
 
-export interface StoredSpeachesConnection extends SpeachesConnection {
-  /** Internal compatibility identity retained for caches and legacy frozen plans. */
-  id: string;
-}
-
-export interface MarkerEvidence {
+interface MarkerEvidence {
   status: "pass";
   driver: "better-sqlite3";
   sqliteVersion: string;
@@ -182,10 +160,9 @@ export interface StudyNarratorRepository {
   replaceIgnoredDiagnostics(input: IgnoredDiagnosticCollection): IgnoredDiagnosticCollection;
   listGlobalLexicon(): LexiconEntry[];
   replaceGlobalLexicon(input: GlobalLexiconReplaceInput): LexiconEntry[];
-  getSpeachesConnection(): StoredSpeachesConnection;
-  replaceSpeachesConnection(input: SpeachesConnectionAuthoring, suppliedUrlForm: "root" | "v1" | "unconfigured"): StoredSpeachesConnection;
-  recordConnectionTest(summary: ConnectionTestSummary): StoredSpeachesConnection;
-  getProjectConnectionId(projectId: string): string;
+  getSpeachesConnection(): SpeachesConnection;
+  replaceSpeachesConnection(input: SpeachesConnectionAuthoring, suppliedUrlForm: "root" | "v1" | "unconfigured"): SpeachesConnection;
+  recordConnectionTest(summary: ConnectionTestSummary): SpeachesConnection;
   getConnectionSetup(): ConnectionSetupRecord;
   completeConnectionOnboarding(): ConnectionSetupRecord;
   getVoiceCatalogOverrides(modelId: string): VoiceCatalog;
@@ -223,7 +200,7 @@ interface RenderSegmentRow {
 
 function renderJobFromRow(row: RenderJobRow): RenderJob {
   return RenderJobSchema.parse({
-    contractVersion: 1, id: row.id, projectId: row.project_id, planId: row.plan_id,
+    contractVersion: RENDER_CONTRACT_VERSION, id: row.id, projectId: row.project_id, planId: row.plan_id,
     retryOfRenderId: row.retry_of_render_id, state: row.state,
     progress: JSON.parse(row.progress_json) as unknown,
     error: row.error_json === null ? null : JSON.parse(row.error_json) as unknown,
@@ -233,7 +210,7 @@ function renderJobFromRow(row: RenderJobRow): RenderJob {
 
 function renderArtifactFromRow(row: RenderArtifactRow): RenderArtifact {
   return RenderArtifactSchema.parse({
-    contractVersion: 1, id: row.id, renderId: row.render_id, type: row.artifact_type,
+    contractVersion: RENDER_CONTRACT_VERSION, id: row.id, renderId: row.render_id, type: row.artifact_type,
     fileName: row.file_name, sizeBytes: row.size_bytes, checksum: row.checksum,
     durationMs: row.duration_ms, createdAt: row.created_at
   });
@@ -262,7 +239,7 @@ function booleanFromSql(value: number): boolean { return value === 1; }
 function booleanToSql(value: boolean): number { return value ? 1 : 0; }
 
 function transitionFromRow(
-  mode: ProjectRow["paragraph_transition_mode"],
+  mode: SystemTimingRow["paragraph_transition_mode"],
   pauseId: string | null,
   durationMs: number | null
 ): SystemTransitionPauseSetting {
@@ -304,10 +281,8 @@ function lexiconFromRow(row: LexiconRow): LexiconEntry {
   });
 }
 
-function connectionFromRow(row: ProfileRow): StoredSpeachesConnection {
-  return {
-    id: row.id,
-    ...SpeachesConnectionSchema.parse({
+function connectionFromRow(row: ConnectionRow): SpeachesConnection {
+  return SpeachesConnectionSchema.parse({
     baseUrl: row.base_url,
     configured: row.base_url !== null && row.default_model_id !== null && row.default_voice_id !== null,
     defaultModelId: row.default_model_id,
@@ -321,8 +296,7 @@ function connectionFromRow(row: ProfileRow): StoredSpeachesConnection {
     lastTestSummary: row.last_test_summary_json === null ? null : JSON.parse(row.last_test_summary_json) as unknown,
     createdAt: row.created_at,
     updatedAt: row.updated_at
-    })
-  };
+  });
 }
 
 function lexiconBehaviorMatches(existing: LexiconEntry, authored: LexiconEntryAuthoring): boolean {
@@ -367,8 +341,8 @@ function createRepository(options: {
   const nextId = (): string => {
     for (let attempt = 0; attempt < 100; attempt += 1) {
       const candidate = options.idFactory();
-      if (!database.prepare("SELECT id FROM projects WHERE id = ? UNION ALL SELECT id FROM lexicon_entries WHERE id = ? UNION ALL SELECT id FROM connection_profiles WHERE id = ?")
-        .get(candidate, candidate, candidate)) return candidate;
+      if (!database.prepare("SELECT id FROM projects WHERE id = ? UNION ALL SELECT id FROM lexicon_entries WHERE id = ?")
+        .get(candidate, candidate)) return candidate;
     }
     throw new PersistenceConflictError("StudyNarrator could not allocate a collision-free durable ID.");
   };
@@ -449,24 +423,17 @@ function createRepository(options: {
     });
   };
 
-  const getSpeachesConnection = (): StoredSpeachesConnection => {
+  const getSpeachesConnection = (): SpeachesConnection => {
     assertOpen();
-    const row = database.prepare(`
-      SELECT profile.* FROM connection_profiles profile
-      LEFT JOIN connection_setup setup ON setup.singleton_id = 1
-      ORDER BY CASE WHEN profile.id = setup.active_profile_id THEN 0 ELSE 1 END, profile.ordinal ASC, profile.id ASC
-      LIMIT 1
-    `).get() as ProfileRow | undefined;
+    const row = database.prepare("SELECT * FROM speaches_connection WHERE singleton_id = 1").get() as ConnectionRow | undefined;
     if (!row) throw new PersistenceNotFoundError("The Speaches connection was not found.");
     return connectionFromRow(row);
   };
 
-  const getConnectionId = (): string => getSpeachesConnection().id;
-
   const getConnectionSetup = (): ConnectionSetupRecord => {
     assertOpen();
-    const row = database.prepare("SELECT active_profile_id, onboarding_completed_at FROM connection_setup WHERE singleton_id = 1")
-      .get() as { active_profile_id: string | null; onboarding_completed_at: string | null };
+    const row = database.prepare("SELECT onboarding_completed_at FROM connection_setup WHERE singleton_id = 1")
+      .get() as { onboarding_completed_at: string | null };
     return { onboardingCompletedAt: row.onboarding_completed_at };
   };
 
@@ -480,7 +447,7 @@ function createRepository(options: {
       accent: string | null; category: string | null; style: string | null; sample_text: string | null;
     }>;
     return VoiceCatalogSchema.parse({
-      schemaVersion: 1,
+      schemaVersion: CONNECTION_DIAGNOSTIC_SCHEMA_VERSION,
       modelId,
       entries: rows.map((row) => ({
         voiceId: row.voice_id,
@@ -546,15 +513,10 @@ function createRepository(options: {
       transaction(() => {
         database.prepare(`
           INSERT INTO projects (
-            id, name, description, script_source, script_hash, connection_profile_id, model_id,
-            paragraph_pause_enabled, paragraph_pause_id, paragraph_pause_duration_ms,
-            paragraph_transition_mode, paragraph_transition_pause_id, paragraph_transition_duration_ms,
-            speaker_change_transition_mode, speaker_change_transition_pause_id, speaker_change_transition_duration_ms,
-            section_transition_mode, section_transition_pause_id, section_transition_duration_ms,
-            created_at, updated_at
-          ) VALUES (?, ?, ?, '', ?, ?, NULL, 0, 'pause_medium', 0, 'none', NULL, NULL, 'none', NULL, NULL, 'none', NULL, NULL, ?, ?)
+            id, name, description, script_source, script_hash, created_at, updated_at
+          ) VALUES (?, ?, ?, '', ?, ?, ?)
         `).run(
-          id, input.name, input.description, scriptHash(""), getConnectionId(), timestamp, timestamp
+          id, input.name, input.description, scriptHash(""), timestamp, timestamp
         );
       });
       return getProject(id);
@@ -568,10 +530,9 @@ function createRepository(options: {
       const timestamp = options.now().toISOString();
       transaction(() => {
         const result = database.prepare(`
-          UPDATE projects SET name = ?, description = ?, script_source = ?, script_hash = ?,
-            connection_profile_id = ?, model_id = NULL, updated_at = ? WHERE id = ?
+          UPDATE projects SET name = ?, description = ?, script_source = ?, script_hash = ?, updated_at = ? WHERE id = ?
         `).run(
-          input.name, input.description, input.scriptSource, scriptHash(input.scriptSource), getConnectionId(), timestamp, projectId
+          input.name, input.description, input.scriptSource, scriptHash(input.scriptSource), timestamp, projectId
         );
         if (Number(result.changes ?? 0) !== 1) throw new PersistenceNotFoundError(`Project ${projectId} was not found.`);
         database.prepare("DELETE FROM speaker_mappings WHERE project_id = ?").run(projectId);
@@ -600,16 +561,10 @@ function createRepository(options: {
       transaction(() => {
         database.prepare(`
           INSERT INTO projects (
-            id, name, description, script_source, script_hash, connection_profile_id, model_id,
-            paragraph_pause_enabled, paragraph_pause_id, paragraph_pause_duration_ms,
-            paragraph_transition_mode, paragraph_transition_pause_id, paragraph_transition_duration_ms,
-            speaker_change_transition_mode, speaker_change_transition_pause_id, speaker_change_transition_duration_ms,
-            section_transition_mode, section_transition_pause_id, section_transition_duration_ms,
-            created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            id, name, description, script_source, script_hash, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)
         `).run(
-          duplicateId, input.name, source.description, source.scriptSource, source.scriptHash, getConnectionId(), null,
-          0, "pause_medium", 0, "none", null, null, "none", null, null, "none", null, null, timestamp, timestamp
+          duplicateId, input.name, source.description, source.scriptSource, source.scriptHash, timestamp, timestamp
         );
         const insertSpeaker = database.prepare(`
           INSERT INTO speaker_mappings (
@@ -643,7 +598,7 @@ function createRepository(options: {
     },
     getSystemPacing() {
       assertOpen();
-      const row = database.prepare("SELECT * FROM system_pacing_defaults WHERE singleton_id = 1").get() as SystemTimingRow;
+      const row = database.prepare("SELECT * FROM system_timing WHERE singleton_id = 1").get() as SystemTimingRow;
       const pauses = database.prepare("SELECT pause_id, duration_ms, description FROM system_pause_presets ORDER BY ordinal ASC")
         .all() as PauseRow[];
       return SystemTimingConfigurationSchema.parse({
@@ -654,24 +609,17 @@ function createRepository(options: {
     updateSystemPacing(inputValue) {
       assertOpen();
       const input = SystemTimingConfigurationSchema.parse(inputValue);
-      const paragraphSetting = input.transitionPauses.paragraph;
-      const paragraph = transitionParameters(paragraphSetting);
+      const paragraph = transitionParameters(input.transitionPauses.paragraph);
       const speakerChange = transitionParameters(input.transitionPauses.speakerChange);
       const section = transitionParameters(input.transitionPauses.section);
       transaction(() => {
-        const paragraphDuration = paragraphSetting.mode === "duration"
-          ? paragraphSetting.durationMs
-          : paragraphSetting.mode === "preset"
-            ? input.pausePresets.find(({ pauseId }) => pauseId === paragraphSetting.pauseId)!.durationMs
-            : 0;
         database.prepare(`
-          UPDATE system_pacing_defaults SET paragraph_pause_enabled = ?, paragraph_pause_duration_ms = ?,
+          UPDATE system_timing SET
             paragraph_transition_mode = ?, paragraph_transition_pause_id = ?, paragraph_transition_duration_ms = ?,
             speaker_change_transition_mode = ?, speaker_change_transition_pause_id = ?, speaker_change_transition_duration_ms = ?,
             section_transition_mode = ?, section_transition_pause_id = ?, section_transition_duration_ms = ?, updated_at = ?
           WHERE singleton_id = 1
         `).run(
-          booleanToSql(input.transitionPauses.paragraph.mode !== "none"), paragraphDuration,
           ...paragraph, ...speakerChange, ...section, options.now().toISOString()
         );
         database.prepare("DELETE FROM system_pause_presets").run();
@@ -715,12 +663,12 @@ function createRepository(options: {
         && existing.timeoutSeconds === input.timeoutSeconds && existing.retryCount === input.retryCount
         && existing.suppliedUrlForm === suppliedUrlForm;
       database.prepare(`
-        UPDATE connection_profiles SET name = 'Speaches', base_url = ?, default_model_id = ?, default_voice_id = ?,
-          source = 'saved', api_key_reference = NULL, timeout_seconds = ?, retry_count = ?, response_format = ?,
-          supplied_url_form = ?, updated_at = ? WHERE id = ?
+        UPDATE speaches_connection SET base_url = ?, default_model_id = ?, default_voice_id = ?,
+          timeout_seconds = ?, retry_count = ?, response_format = ?, supplied_url_form = ?, updated_at = ?
+        WHERE singleton_id = 1
       `).run(
         input.baseUrl, input.defaultModelId, input.defaultVoiceId, input.timeoutSeconds, input.retryCount,
-        input.responseFormat, suppliedUrlForm, unchanged ? existing.updatedAt : options.now().toISOString(), existing.id
+        input.responseFormat, suppliedUrlForm, unchanged ? existing.updatedAt : options.now().toISOString()
       );
       return getSpeachesConnection();
     },
@@ -729,24 +677,16 @@ function createRepository(options: {
       const summary = ConnectionTestSummarySchema.parse(summaryValue);
       const connection = getSpeachesConnection();
       const result = database.prepare(`
-        UPDATE connection_profiles SET last_tested_at = ?, last_successful_test_at = ?,
-          last_test_summary_json = ?, updated_at = ? WHERE id = ?
+        UPDATE speaches_connection SET last_tested_at = ?, last_successful_test_at = ?,
+          last_test_summary_json = ?, updated_at = ? WHERE singleton_id = 1
       `).run(
         summary.testedAt,
         summary.overall === "connected" ? summary.testedAt : connection.lastSuccessfulTestAt,
         JSON.stringify(summary),
-        options.now().toISOString(),
-        connection.id
+        options.now().toISOString()
       );
       if (Number(result.changes ?? 0) !== 1) throw new PersistenceNotFoundError("The Speaches connection was not found.");
       return getSpeachesConnection();
-    },
-    getProjectConnectionId(projectIdInput) {
-      assertOpen();
-      const projectId = ProjectIdSchema.parse(projectIdInput);
-      const row = database.prepare("SELECT connection_profile_id FROM projects WHERE id = ?").get(projectId) as { connection_profile_id: string | null } | undefined;
-      if (!row) throw new PersistenceNotFoundError(`Project ${projectId} was not found.`);
-      return row.connection_profile_id ?? getConnectionId();
     },
     getConnectionSetup,
     completeConnectionOnboarding() {
@@ -920,19 +860,6 @@ export async function openStudyNarratorRepository(options: {
     now,
     ...(options.migrations === undefined ? {} : { migrations: options.migrations })
   });
-  const timestamp = now().toISOString();
-  migrated.database.prepare(`
-    INSERT OR IGNORE INTO system_pacing_defaults (
-      singleton_id, paragraph_pause_enabled, paragraph_pause_duration_ms,
-      paragraph_transition_mode, paragraph_transition_pause_id, paragraph_transition_duration_ms,
-      speaker_change_transition_mode, speaker_change_transition_pause_id, speaker_change_transition_duration_ms,
-      section_transition_mode, section_transition_pause_id, section_transition_duration_ms, updated_at
-    ) VALUES (1, 1, ?, 'preset', 'pause_medium', NULL, 'none', NULL, NULL, 'none', NULL, NULL, ?)
-  `).run(DEFAULT_SYSTEM_TIMING.pausePresets[1].durationMs, timestamp);
-  migrated.database.prepare(`
-    INSERT OR IGNORE INTO connection_setup (singleton_id, active_profile_id, onboarding_completed_at, updated_at)
-    VALUES (1, NULL, NULL, ?)
-  `).run(timestamp);
   return createRepository({
     database: migrated.database,
     databasePath: migrated.databasePath,

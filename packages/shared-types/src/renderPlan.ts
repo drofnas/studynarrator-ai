@@ -1,20 +1,14 @@
-import { CIR_SCHEMA_VERSION, LEXICON_TRANSFORM_VERSION, LexiconEntrySchema, PARAGRAPH_PACING_VERSION, SCRIPT_GRAMMAR_VERSION, SourceRangeSchema } from "@studynarrator/core";
+import { CIR_SCHEMA_VERSION, LEXICON_TRANSFORM_VERSION, PARAGRAPH_PACING_VERSION, SCRIPT_GRAMMAR_VERSION, SourceRangeSchema } from "@studynarrator/core";
 import { z } from "zod";
 import {
-  DurableIdSchema,
   GlobalLexiconEntryCollectionSchema,
   IgnoredDiagnosticCollectionSchema,
-  PausePresetCollectionSchema,
   ProjectDetailSchema,
   ProjectIdSchema,
-  SystemTimingConfigurationSchema,
-  TransitionPauseConfigurationSchema
+  SystemTimingConfigurationSchema
 } from "./persistence.js";
 
-export const PROJECT_SNAPSHOT_SCHEMA_VERSION = 4;
-export const PREVIOUS_PROJECT_SNAPSHOT_SCHEMA_VERSION = 3;
-export const PREVIOUS_SINGULAR_PROJECT_SNAPSHOT_SCHEMA_VERSION = 2;
-export const LEGACY_PROJECT_SNAPSHOT_SCHEMA_VERSION = 1;
+export const PROJECT_SNAPSHOT_SCHEMA_VERSION = 1;
 export const RENDER_PLAN_SCHEMA_VERSION = 1;
 export const RENDER_PLAN_CHANNELS = Object.freeze({
   create: "renderPlans.create",
@@ -38,10 +32,6 @@ const SnapshotVersionsSchema = z.object({
   speechAdapter: z.number().int().positive()
 }).strict();
 
-const HistoricalSnapshotVersionsSchema = SnapshotVersionsSchema.extend({
-  scriptGrammar: z.literal(1)
-}).strict();
-
 const SnapshotBaseShape = {
   snapshotHash: HashSchema,
   capturedAt: z.iso.datetime({ offset: true }),
@@ -50,12 +40,7 @@ const SnapshotBaseShape = {
   versions: SnapshotVersionsSchema
 } as const;
 
-const HistoricalSnapshotBaseShape = {
-  ...SnapshotBaseShape,
-  versions: HistoricalSnapshotVersionsSchema
-} as const;
-
-export const SingularProjectSnapshotSchema = z.object({
+export const ProjectSnapshotSchema = z.object({
   schemaVersion: z.literal(PROJECT_SNAPSHOT_SCHEMA_VERSION),
   ...SnapshotBaseShape,
   project: ProjectDetailSchema,
@@ -66,70 +51,6 @@ export const SingularProjectSnapshotSchema = z.object({
   }).strict()
 }).strict();
 
-const HistoricalProjectDetailShape = {
-  ...ProjectDetailSchema.shape,
-  modelId: z.string().trim().min(1).max(500).nullable(),
-  pausePresets: PausePresetCollectionSchema,
-  transitionPauses: TransitionPauseConfigurationSchema,
-  lexiconEntries: z.array(LexiconEntrySchema)
-} as const;
-
-const PreviousProjectDetailSchema = z.object({
-  ...HistoricalProjectDetailShape,
-  contractVersion: z.literal(8),
-  modelId: z.never().optional()
-}).strict();
-
-export const PreviousProjectSnapshotSchema = z.object({
-  schemaVersion: z.literal(PREVIOUS_PROJECT_SNAPSHOT_SCHEMA_VERSION),
-  ...HistoricalSnapshotBaseShape,
-  project: PreviousProjectDetailSchema,
-  connection: z.object({
-    modelId: z.string().min(1),
-    serverIdentityHash: HashSchema
-  }).strict()
-}).strict();
-
-const PreviousSingularProjectDetailSchema = z.object({
-  ...HistoricalProjectDetailShape,
-  contractVersion: z.literal(7)
-}).strict();
-
-export const PreviousSingularProjectSnapshotSchema = z.object({
-  schemaVersion: z.literal(PREVIOUS_SINGULAR_PROJECT_SNAPSHOT_SCHEMA_VERSION),
-  ...HistoricalSnapshotBaseShape,
-  project: PreviousSingularProjectDetailSchema,
-  connection: z.object({
-    modelId: z.string().min(1),
-    serverIdentityHash: HashSchema
-  }).strict()
-}).strict();
-
-const LegacyProjectDetailSchema = z.object({
-  ...HistoricalProjectDetailShape,
-  contractVersion: z.literal(4),
-  connectionProfileId: DurableIdSchema.nullable()
-}).strict();
-
-export const LegacyProjectSnapshotSchema = z.object({
-  schemaVersion: z.literal(LEGACY_PROJECT_SNAPSHOT_SCHEMA_VERSION),
-  ...HistoricalSnapshotBaseShape,
-  project: LegacyProjectDetailSchema,
-  connection: z.object({
-    profileId: DurableIdSchema,
-    profileName: z.string().min(1),
-    profileSource: z.enum(["saved", "environment"]),
-    modelId: z.string().min(1),
-    serverIdentityHash: HashSchema
-  }).strict()
-}).strict();
-
-export const ProjectSnapshotSchema = z.union([
-  SingularProjectSnapshotSchema,
-  PreviousProjectSnapshotSchema,
-  PreviousSingularProjectSnapshotSchema,
-  LegacyProjectSnapshotSchema
-]);
 export type ProjectSnapshot = z.infer<typeof ProjectSnapshotSchema>;
 
 const RenderEntryBaseSchema = z.object({
@@ -138,20 +59,20 @@ const RenderEntryBaseSchema = z.object({
   sourceRange: SourceRangeSchema.nullable()
 });
 
-export const RenderSectionEntrySchema = RenderEntryBaseSchema.extend({
+const RenderSectionEntrySchema = RenderEntryBaseSchema.extend({
   type: z.literal("section"),
   nodeOrdinal: z.number().int().positive(),
   title: z.string().min(1)
 }).strict();
 
-export const RenderSpeechChunkSchema = z.object({
+const RenderSpeechChunkSchema = z.object({
   ordinal: z.number().int().positive(),
   text: z.string().min(1),
   cacheKey: HashSchema,
   cacheStatus: z.enum(["hit", "miss"])
 }).strict();
 
-export const RenderSpeechEntrySchema = RenderEntryBaseSchema.extend({
+const RenderSpeechEntrySchema = RenderEntryBaseSchema.extend({
   type: z.literal("speech"),
   nodeOrdinal: z.number().int().positive(),
   speakerId: z.string().min(1),
@@ -164,7 +85,7 @@ export const RenderSpeechEntrySchema = RenderEntryBaseSchema.extend({
   chunks: z.array(RenderSpeechChunkSchema).length(1)
 }).strict();
 
-export const SilenceAssetSchema = z.object({
+const SilenceAssetSchema = z.object({
   relativePath: z.string().regex(/^silence\/[a-f0-9]{64}\.wav$/u),
   checksum: HashSchema,
   byteLength: z.number().int().positive(),
@@ -175,7 +96,7 @@ export const SilenceAssetSchema = z.object({
 }).strict();
 export type SilenceAsset = z.infer<typeof SilenceAssetSchema>;
 
-export const RenderPauseEntrySchema = RenderEntryBaseSchema.extend({
+const RenderPauseEntrySchema = RenderEntryBaseSchema.extend({
   type: z.literal("pause"),
   pauseKind: z.enum(["explicit", "automatic"]),
   reason: z.enum(["explicit", "paragraph", "speakerChange", "section"]),
@@ -184,7 +105,7 @@ export const RenderPauseEntrySchema = RenderEntryBaseSchema.extend({
   silence: SilenceAssetSchema.nullable()
 }).strict();
 
-export const RenderPlanEntrySchema = z.discriminatedUnion("type", [
+const RenderPlanEntrySchema = z.discriminatedUnion("type", [
   RenderSectionEntrySchema,
   RenderSpeechEntrySchema,
   RenderPauseEntrySchema
@@ -217,7 +138,7 @@ export const RenderPlanSchema = z.object({
 });
 export type RenderPlan = z.infer<typeof RenderPlanSchema>;
 
-export const RenderPlanSummarySchema = z.object({
+const RenderPlanSummarySchema = z.object({
   id: RenderPlanIdSchema,
   projectId: ProjectIdSchema,
   createdAt: z.iso.datetime({ offset: true }),

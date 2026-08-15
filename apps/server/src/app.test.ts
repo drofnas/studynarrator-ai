@@ -94,7 +94,7 @@ async function fixture() {
   const scriptGeneration = createScriptGenerationService({ repository });
   const scratchpad = {
     preview: async (input: { modelId: string; voiceId: string; speed: number; text: string; applyGlobalLexicon: boolean }) => ({
-      schemaVersion: 3 as const,
+      schemaVersion: 1 as const,
       id: "00000000-0000-4000-8000-000000000099",
       createdAt: "2026-08-12T12:00:00.000Z",
       modelId: input.modelId,
@@ -115,7 +115,7 @@ async function fixture() {
   };
   const projectPreview = {
     preview: async (requestedProjectId: string, input: { mode: "segment" | "pronunciation" }) => ({
-      schemaVersion: 2 as const,
+      schemaVersion: 1 as const,
       id: "00000000-0000-4000-8000-000000000098",
       createdAt: "2026-08-12T12:00:00.000Z",
       projectId: requestedProjectId,
@@ -224,7 +224,7 @@ describe("Express diagnostics API", () => {
   it("sanitizes an invalid boundary result", async () => {
     const service = {
       health: () => ({ status: "ok", applicationVersion: "0.1.0" } as const),
-      runtime: () => ({ ...context, schemaVersion: 4, applicationVersion: "0.1.0" } as never),
+      runtime: () => ({ ...context, schemaVersion: 1, applicationVersion: "0.1.0" } as never),
       diagnostics: async () => ({ secret: "must-not-leak" } as never),
       close: () => undefined
     };
@@ -331,10 +331,10 @@ describe("Express persistence API", () => {
   it("keeps diagnostics status available while degraded writes return 503", async () => {
     const { service } = await fixture();
     const persistence = createUnavailablePersistenceService({
-      contractVersion: 9,
+      contractVersion: 1,
       state: "unavailable",
       databaseSchemaVersion: 1,
-      targetDatabaseSchemaVersion: 12,
+      targetDatabaseSchemaVersion: 1,
       databasePath: "/tmp/studynarrator.sqlite",
       latestBackupPath: "/tmp/backups/recovery.sqlite",
       code: "MIGRATION_FAILED",
@@ -344,6 +344,17 @@ describe("Express persistence API", () => {
     await request(app).get("/api/persistence/status").expect(200);
     const response = BoundaryErrorSchema.parse((await request(app).post("/api/projects").send({ name: "Unavailable" }).expect(503)).body as unknown);
     expect(response).toEqual({ error: { code: "PERSISTENCE_UNAVAILABLE", message: "Persistence is unavailable until the database migration is repaired." } });
+
+    const catalogResponse = BoundaryErrorSchema.parse((await request(app)
+      .post("/api/connection/speech-catalog")
+      .send({ baseUrl: "http://127.0.0.1:8000" })
+      .expect(503)).body as unknown);
+    expect(catalogResponse).toEqual({
+      error: {
+        code: "PERSISTENCE_UNAVAILABLE",
+        message: "Persistence is unavailable until the database migration is repaired."
+      }
+    });
   });
 });
 
@@ -539,7 +550,7 @@ describe("REST API operation manifest", () => {
     expect(JSON.stringify(responses.map((response) => response.body as unknown))).not.toContain(secret);
 
     const unavailable = createUnavailablePersistenceService({
-      contractVersion: 9, state: "unavailable", databaseSchemaVersion: 2, targetDatabaseSchemaVersion: 12,
+      contractVersion: 1, state: "unavailable", databaseSchemaVersion: 2, targetDatabaseSchemaVersion: 1,
       databasePath: "/redacted/data.sqlite", latestBackupPath: null, code: "MIGRATION_FAILED", message: "Unavailable."
     });
     const degraded = await listen(createExpressApp({ service, persistence: unavailable, context }));

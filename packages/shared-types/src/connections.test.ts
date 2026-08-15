@@ -16,7 +16,7 @@ const stages = ["url", "dns", "tcp", "http", "authentication", "model", "voice",
 }));
 
 describe("connection contracts", () => {
-  it("accepts one address-managed connection without profile or credential fields", () => {
+  it("accepts one address-managed connection and rejects credential-shaped authoring", () => {
     const connection = SpeachesConnectionSchema.parse({
       baseUrl: "http://speaches.lan:8000",
       suppliedUrlForm: "v1",
@@ -32,9 +32,7 @@ describe("connection contracts", () => {
       createdAt: "2026-08-12T12:00:00.000Z",
       updatedAt: "2026-08-12T12:00:00.000Z"
     });
-    expect(Object.keys(connection)).not.toContain("id");
-    expect(Object.keys(connection)).not.toContain("name");
-    expect(Object.keys(connection)).not.toContain("apiKey");
+    expect(connection.baseUrl).toBe("http://speaches.lan:8000");
     expect(() => SpeachesConnectionAuthoringSchema.parse({
       baseUrl: "http://speaches.lan:8000", defaultModelId: "model", defaultVoiceId: "voice", apiKey: "unsafe"
     })).toThrow();

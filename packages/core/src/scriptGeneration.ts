@@ -1,22 +1,20 @@
 import { z } from "zod";
 import { LexiconEntrySchema, PauseIdSchema, SpeakerIdSchema, type LexiconEntry } from "./schemas.js";
 
-export const SCRIPT_GENERATION_SCHEMA_VERSION = 2;
+export const SCRIPT_GENERATION_SCHEMA_VERSION = 1;
 
 export const ScriptPromptKindSchema = z.enum(["creation", "update"]);
 export type ScriptPromptKind = z.infer<typeof ScriptPromptKindSchema>;
 
-export const ScriptGenerationSpeakerSchema = z.object({
+const ScriptGenerationSpeakerSchema = z.object({
   speakerId: SpeakerIdSchema,
   roleDescription: z.string().trim().min(1).max(5_000)
 }).strict();
-export type ScriptGenerationSpeaker = z.infer<typeof ScriptGenerationSpeakerSchema>;
 
-export const ScriptGenerationPauseSchema = z.object({
+const ScriptGenerationPauseSchema = z.object({
   pauseId: PauseIdSchema,
   description: z.string().trim().min(1).max(500)
 }).strict();
-export type ScriptGenerationPause = z.infer<typeof ScriptGenerationPauseSchema>;
 
 const ScriptGenerationContextBaseSchema = z.object({
   schemaVersion: z.literal(SCRIPT_GENERATION_SCHEMA_VERSION),
@@ -38,9 +36,9 @@ export const ScriptGenerationContextSchema = ScriptGenerationContextBaseSchema.s
 });
 export type ScriptGenerationContext = z.infer<typeof ScriptGenerationContextSchema>;
 
-export const ScriptGenerationLexiconSchema = z.array(LexiconEntrySchema).max(20_000);
+const ScriptGenerationLexiconSchema = z.array(LexiconEntrySchema).max(20_000);
 
-export interface GeneratedTextFile {
+interface GeneratedTextFile {
   path: string;
   content: string;
 }
