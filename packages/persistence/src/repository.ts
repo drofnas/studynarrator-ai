@@ -1,6 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
-  DEFAULT_PARAGRAPH_PAUSE_ID,
   LexiconEntrySchema,
   type LexiconEntry,
   type LexiconEntryAuthoring
@@ -8,7 +7,7 @@ import {
 import {
   ConnectionTestSummarySchema,
   DATABASE_SCHEMA_VERSION,
-  DEFAULT_SYSTEM_PACING,
+  DEFAULT_SYSTEM_TIMING,
   GlobalLexiconEntryCollectionSchema,
   GlobalLexiconReplaceInputSchema,
   IgnoredDiagnosticCollectionSchema,
@@ -20,7 +19,7 @@ import {
   ProjectIdSchema,
   ProjectReplaceInputSchema,
   ProjectSummaryCollectionSchema,
-  SystemPacingDefaultsSchema,
+  SystemTimingConfigurationSchema,
   SpeachesConnectionAuthoringSchema,
   SpeachesConnectionSchema,
   VoiceCatalogSchema,
@@ -38,11 +37,11 @@ import {
   type ProjectDuplicateInput,
   type ProjectReplaceInput,
   type ProjectSummary,
-  type SystemPacingDefaults,
+  type SystemTimingConfiguration,
+  type SystemTransitionPauseConfiguration,
+  type SystemTransitionPauseSetting,
   type SpeachesConnection,
   type SpeachesConnectionAuthoring,
-  type TransitionPauseConfiguration,
-  type TransitionPauseSetting,
   type VoiceCatalog,
   type VoiceCatalogAuthoring,
   type RenderArtifact,
@@ -95,7 +94,19 @@ interface SpeakerRow {
   sample_text: string;
 }
 
-interface PauseRow { pause_id: string; duration_ms: number; description: string }
+interface PauseRow { pause_id: "pause_short" | "pause_medium" | "pause_long"; duration_ms: number; description: string }
+
+interface SystemTimingRow {
+  paragraph_transition_mode: "none" | "preset" | "duration";
+  paragraph_transition_pause_id: string | null;
+  paragraph_transition_duration_ms: number | null;
+  speaker_change_transition_mode: "none" | "preset" | "duration";
+  speaker_change_transition_pause_id: string | null;
+  speaker_change_transition_duration_ms: number | null;
+  section_transition_mode: "none" | "preset" | "duration";
+  section_transition_pause_id: string | null;
+  section_transition_duration_ms: number | null;
+}
 
 interface LexiconRow {
   id: string;
@@ -165,8 +176,8 @@ export interface StudyNarratorRepository {
   replaceProject(projectId: string, input: ProjectReplaceInput): ProjectDetail;
   duplicateProject(projectId: string, input: ProjectDuplicateInput): ProjectDetail;
   deleteProject(projectId: string): void;
-  getSystemPacing(): SystemPacingDefaults;
-  updateSystemPacing(input: SystemPacingDefaults): SystemPacingDefaults;
+  getSystemPacing(): SystemTimingConfiguration;
+  updateSystemPacing(input: SystemTimingConfiguration): SystemTimingConfiguration;
   getIgnoredDiagnostics(): IgnoredDiagnosticCollection;
   replaceIgnoredDiagnostics(input: IgnoredDiagnosticCollection): IgnoredDiagnosticCollection;
   listGlobalLexicon(): LexiconEntry[];
@@ -254,20 +265,20 @@ function transitionFromRow(
   mode: ProjectRow["paragraph_transition_mode"],
   pauseId: string | null,
   durationMs: number | null
-): TransitionPauseSetting {
+): SystemTransitionPauseSetting {
   if (mode === "none") return { mode };
-  if (mode === "preset" && pauseId) return { mode, pauseId };
+  if (mode === "preset" && (pauseId === "pause_short" || pauseId === "pause_medium" || pauseId === "pause_long")) return { mode, pauseId };
   if (mode === "duration" && durationMs !== null) return { mode, durationMs };
   throw new Error("Stored transition pause configuration is invalid.");
 }
 
-function transitionParameters(setting: TransitionPauseSetting): [string, string | null, number | null] {
+function transitionParameters(setting: SystemTransitionPauseSetting): [string, string | null, number | null] {
   if (setting.mode === "none") return [setting.mode, null, null];
   if (setting.mode === "preset") return [setting.mode, setting.pauseId, null];
   return [setting.mode, null, setting.durationMs];
 }
 
-function transitionConfiguration(row: ProjectRow): TransitionPauseConfiguration {
+function transitionConfiguration(row: SystemTimingRow): SystemTransitionPauseConfiguration {
   return {
     paragraph: transitionFromRow(row.paragraph_transition_mode, row.paragraph_transition_pause_id, row.paragraph_transition_duration_ms),
     speakerChange: transitionFromRow(row.speaker_change_transition_mode, row.speaker_change_transition_pause_id, row.speaker_change_transition_duration_ms),
@@ -416,8 +427,6 @@ function createRepository(options: {
     if (!row) throw new PersistenceNotFoundError(`Project ${projectId} was not found.`);
     const speakers = database.prepare("SELECT * FROM speaker_mappings WHERE project_id = ? ORDER BY ordinal ASC, speaker_id ASC")
       .all(projectId) as SpeakerRow[];
-    const pauses = database.prepare("SELECT * FROM pause_presets WHERE project_id = ? ORDER BY ordinal ASC, pause_id ASC")
-      .all(projectId) as PauseRow[];
     return ProjectDetailSchema.parse({
       contractVersion: PERSISTENCE_CONTRACT_VERSION,
       id: row.id,
@@ -434,8 +443,6 @@ function createRepository(options: {
         roleDescription: speaker.role_description,
         sampleText: speaker.sample_text
       })),
-      pausePresets: pauses.map((pause) => ({ pauseId: pause.pause_id, durationMs: pause.duration_ms, description: pause.description })),
-      transitionPauses: transitionConfiguration(row),
       lexiconEntries: readLexicon("project", projectId),
       createdAt: row.created_at,
       updatedAt: row.updated_at
@@ -536,7 +543,6 @@ function createRepository(options: {
       const input = ProjectCreateInputSchema.parse(inputValue);
       const id = ProjectIdSchema.parse(nextId());
       const timestamp = options.now().toISOString();
-      const pacing = this.getSystemPacing();
       transaction(() => {
         database.prepare(`
           INSERT INTO projects (
@@ -546,14 +552,10 @@ function createRepository(options: {
             speaker_change_transition_mode, speaker_change_transition_pause_id, speaker_change_transition_duration_ms,
             section_transition_mode, section_transition_pause_id, section_transition_duration_ms,
             created_at, updated_at
-          ) VALUES (?, ?, ?, '', ?, ?, NULL, ?, ?, ?, ?, ?, NULL, 'none', NULL, NULL, 'none', NULL, NULL, ?, ?)
+          ) VALUES (?, ?, ?, '', ?, ?, NULL, 0, 'pause_medium', 0, 'none', NULL, NULL, 'none', NULL, NULL, 'none', NULL, NULL, ?, ?)
         `).run(
-          id, input.name, input.description, scriptHash(""), getConnectionId(), booleanToSql(pacing.enabled),
-          DEFAULT_PARAGRAPH_PAUSE_ID, pacing.durationMs, pacing.enabled ? "preset" : "none",
-          pacing.enabled ? DEFAULT_PARAGRAPH_PAUSE_ID : null, timestamp, timestamp
+          id, input.name, input.description, scriptHash(""), getConnectionId(), timestamp, timestamp
         );
-        database.prepare("INSERT INTO pause_presets (project_id, pause_id, ordinal, duration_ms, description) VALUES (?, ?, 0, ?, ?)")
-          .run(id, DEFAULT_PARAGRAPH_PAUSE_ID, pacing.durationMs, "Paragraph or subtopic separation.");
       });
       return getProject(id);
     },
@@ -564,35 +566,15 @@ function createRepository(options: {
       const input = ProjectReplaceInputSchema.parse(inputValue);
       const prior = getProject(projectId);
       const timestamp = options.now().toISOString();
-      const paragraphSetting = input.transitionPauses.paragraph;
-      const paragraph = transitionParameters(paragraphSetting);
-      const speakerChange = transitionParameters(input.transitionPauses.speakerChange);
-      const section = transitionParameters(input.transitionPauses.section);
-      const legacyParagraphPauseId = paragraphSetting.mode === "preset"
-        ? paragraphSetting.pauseId
-        : DEFAULT_PARAGRAPH_PAUSE_ID;
-      const legacyParagraphDuration = paragraphSetting.mode === "duration"
-        ? paragraphSetting.durationMs
-        : paragraphSetting.mode === "preset"
-          ? input.pausePresets.find(({ pauseId }) => pauseId === paragraphSetting.pauseId)?.durationMs ?? 0
-          : 0;
       transaction(() => {
         const result = database.prepare(`
           UPDATE projects SET name = ?, description = ?, script_source = ?, script_hash = ?,
-            connection_profile_id = ?, model_id = NULL, paragraph_pause_enabled = ?, paragraph_pause_id = ?,
-            paragraph_pause_duration_ms = ?,
-            paragraph_transition_mode = ?, paragraph_transition_pause_id = ?, paragraph_transition_duration_ms = ?,
-            speaker_change_transition_mode = ?, speaker_change_transition_pause_id = ?, speaker_change_transition_duration_ms = ?,
-            section_transition_mode = ?, section_transition_pause_id = ?, section_transition_duration_ms = ?,
-            updated_at = ? WHERE id = ?
+            connection_profile_id = ?, model_id = NULL, updated_at = ? WHERE id = ?
         `).run(
-          input.name, input.description, input.scriptSource, scriptHash(input.scriptSource), getConnectionId(),
-          booleanToSql(input.transitionPauses.paragraph.mode !== "none"), legacyParagraphPauseId,
-          legacyParagraphDuration, ...paragraph, ...speakerChange, ...section, timestamp, projectId
+          input.name, input.description, input.scriptSource, scriptHash(input.scriptSource), getConnectionId(), timestamp, projectId
         );
         if (Number(result.changes ?? 0) !== 1) throw new PersistenceNotFoundError(`Project ${projectId} was not found.`);
         database.prepare("DELETE FROM speaker_mappings WHERE project_id = ?").run(projectId);
-        database.prepare("DELETE FROM pause_presets WHERE project_id = ?").run(projectId);
         const insertSpeaker = database.prepare(`
           INSERT INTO speaker_mappings (
             project_id, speaker_id, ordinal, display_name, voice_id, speed, gain_db, role_description, sample_text
@@ -602,8 +584,6 @@ function createRepository(options: {
           projectId, speaker.speakerId, ordinal, speaker.displayName, speaker.voiceId, speaker.speed,
           speaker.gainDb, speaker.roleDescription, speaker.sampleText
         ));
-        const insertPause = database.prepare("INSERT INTO pause_presets (project_id, pause_id, ordinal, duration_ms, description) VALUES (?, ?, ?, ?, ?)");
-        input.pausePresets.forEach((pause, ordinal) => insertPause.run(projectId, pause.pauseId, ordinal, pause.durationMs, pause.description));
         replaceLexicon("project", projectId, input.lexiconEntries, timestamp);
       });
       const updated = getProject(projectId);
@@ -617,18 +597,6 @@ function createRepository(options: {
       const source = getProject(projectId);
       const duplicateId = ProjectIdSchema.parse(nextId());
       const timestamp = options.now().toISOString();
-      const paragraphSetting = source.transitionPauses.paragraph;
-      const paragraph = transitionParameters(paragraphSetting);
-      const speakerChange = transitionParameters(source.transitionPauses.speakerChange);
-      const section = transitionParameters(source.transitionPauses.section);
-      const legacyParagraphPauseId = paragraphSetting.mode === "preset"
-        ? paragraphSetting.pauseId
-        : DEFAULT_PARAGRAPH_PAUSE_ID;
-      const legacyParagraphDuration = paragraphSetting.mode === "duration"
-        ? paragraphSetting.durationMs
-        : paragraphSetting.mode === "preset"
-          ? source.pausePresets.find(({ pauseId }) => pauseId === paragraphSetting.pauseId)?.durationMs ?? 0
-          : 0;
       transaction(() => {
         database.prepare(`
           INSERT INTO projects (
@@ -641,8 +609,7 @@ function createRepository(options: {
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           duplicateId, input.name, source.description, source.scriptSource, source.scriptHash, getConnectionId(), null,
-          booleanToSql(source.transitionPauses.paragraph.mode !== "none"), legacyParagraphPauseId,
-          legacyParagraphDuration, ...paragraph, ...speakerChange, ...section, timestamp, timestamp
+          0, "pause_medium", 0, "none", null, null, "none", null, null, "none", null, null, timestamp, timestamp
         );
         const insertSpeaker = database.prepare(`
           INSERT INTO speaker_mappings (
@@ -653,8 +620,6 @@ function createRepository(options: {
           duplicateId, speaker.speakerId, ordinal, speaker.displayName, speaker.voiceId, speaker.speed,
           speaker.gainDb, speaker.roleDescription, speaker.sampleText
         ));
-        const insertPause = database.prepare("INSERT INTO pause_presets (project_id, pause_id, ordinal, duration_ms, description) VALUES (?, ?, ?, ?, ?)");
-        source.pausePresets.forEach((pause, ordinal) => insertPause.run(duplicateId, pause.pauseId, ordinal, pause.durationMs, pause.description));
         replaceLexicon("project", duplicateId, source.lexiconEntries.map((entry) => ({
           scope: entry.scope,
           entryType: entry.entryType,
@@ -678,15 +643,41 @@ function createRepository(options: {
     },
     getSystemPacing() {
       assertOpen();
-      const row = database.prepare("SELECT paragraph_pause_enabled, paragraph_pause_duration_ms FROM system_pacing_defaults WHERE singleton_id = 1")
-        .get() as { paragraph_pause_enabled: number; paragraph_pause_duration_ms: number };
-      return SystemPacingDefaultsSchema.parse({ enabled: booleanFromSql(row.paragraph_pause_enabled), durationMs: row.paragraph_pause_duration_ms });
+      const row = database.prepare("SELECT * FROM system_pacing_defaults WHERE singleton_id = 1").get() as SystemTimingRow;
+      const pauses = database.prepare("SELECT pause_id, duration_ms, description FROM system_pause_presets ORDER BY ordinal ASC")
+        .all() as PauseRow[];
+      return SystemTimingConfigurationSchema.parse({
+        pausePresets: pauses.map((pause) => ({ pauseId: pause.pause_id, durationMs: pause.duration_ms, description: pause.description })),
+        transitionPauses: transitionConfiguration(row)
+      });
     },
     updateSystemPacing(inputValue) {
       assertOpen();
-      const input = SystemPacingDefaultsSchema.parse(inputValue);
-      database.prepare("UPDATE system_pacing_defaults SET paragraph_pause_enabled = ?, paragraph_pause_duration_ms = ?, updated_at = ? WHERE singleton_id = 1")
-        .run(booleanToSql(input.enabled), input.durationMs, options.now().toISOString());
+      const input = SystemTimingConfigurationSchema.parse(inputValue);
+      const paragraphSetting = input.transitionPauses.paragraph;
+      const paragraph = transitionParameters(paragraphSetting);
+      const speakerChange = transitionParameters(input.transitionPauses.speakerChange);
+      const section = transitionParameters(input.transitionPauses.section);
+      transaction(() => {
+        const paragraphDuration = paragraphSetting.mode === "duration"
+          ? paragraphSetting.durationMs
+          : paragraphSetting.mode === "preset"
+            ? input.pausePresets.find(({ pauseId }) => pauseId === paragraphSetting.pauseId)!.durationMs
+            : 0;
+        database.prepare(`
+          UPDATE system_pacing_defaults SET paragraph_pause_enabled = ?, paragraph_pause_duration_ms = ?,
+            paragraph_transition_mode = ?, paragraph_transition_pause_id = ?, paragraph_transition_duration_ms = ?,
+            speaker_change_transition_mode = ?, speaker_change_transition_pause_id = ?, speaker_change_transition_duration_ms = ?,
+            section_transition_mode = ?, section_transition_pause_id = ?, section_transition_duration_ms = ?, updated_at = ?
+          WHERE singleton_id = 1
+        `).run(
+          booleanToSql(input.transitionPauses.paragraph.mode !== "none"), paragraphDuration,
+          ...paragraph, ...speakerChange, ...section, options.now().toISOString()
+        );
+        database.prepare("DELETE FROM system_pause_presets").run();
+        const insert = database.prepare("INSERT INTO system_pause_presets (pause_id, ordinal, duration_ms, description) VALUES (?, ?, ?, ?)");
+        input.pausePresets.forEach((pause, ordinal) => insert.run(pause.pauseId, ordinal, pause.durationMs, pause.description));
+      });
       return this.getSystemPacing();
     },
     getIgnoredDiagnostics() {
@@ -932,9 +923,12 @@ export async function openStudyNarratorRepository(options: {
   const timestamp = now().toISOString();
   migrated.database.prepare(`
     INSERT OR IGNORE INTO system_pacing_defaults (
-      singleton_id, paragraph_pause_enabled, paragraph_pause_duration_ms, updated_at
-    ) VALUES (1, ?, ?, ?)
-  `).run(booleanToSql(DEFAULT_SYSTEM_PACING.enabled), DEFAULT_SYSTEM_PACING.durationMs, timestamp);
+      singleton_id, paragraph_pause_enabled, paragraph_pause_duration_ms,
+      paragraph_transition_mode, paragraph_transition_pause_id, paragraph_transition_duration_ms,
+      speaker_change_transition_mode, speaker_change_transition_pause_id, speaker_change_transition_duration_ms,
+      section_transition_mode, section_transition_pause_id, section_transition_duration_ms, updated_at
+    ) VALUES (1, 1, ?, 'preset', 'pause_medium', NULL, 'none', NULL, NULL, 'none', NULL, NULL, ?)
+  `).run(DEFAULT_SYSTEM_TIMING.pausePresets[1].durationMs, timestamp);
   migrated.database.prepare(`
     INSERT OR IGNORE INTO connection_setup (singleton_id, active_profile_id, onboarding_completed_at, updated_at)
     VALUES (1, NULL, NULL, ?)

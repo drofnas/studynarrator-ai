@@ -12,15 +12,13 @@ const profile = {
   lastTestedAt: null, lastSuccessfulTestAt: null, lastTestSummary: null, createdAt: timestamp, updatedAt: timestamp
 };
 const project = {
-  contractVersion: 8 as const,
+  contractVersion: 9 as const,
   id: projectId,
   name: "Preview project",
   description: "",
   scriptSource: "[speaker_teacher] SQL indexes.\n\n[pause_short]\n\nSecond line.",
   scriptHash: "a".repeat(64),
   speakerMappings: [{ speakerId: "teacher", displayName: "Teacher", voiceId: "voice-teacher", speed: 1.2, gainDb: 3, roleDescription: "", sampleText: "" }],
-  pausePresets: [{ pauseId: "pause_medium", durationMs: 750, description: "Paragraph" }, { pauseId: "pause_short", durationMs: 300, description: "Short" }],
-  transitionPauses: { paragraph: { mode: "preset" as const, pauseId: "pause_medium" as const }, speakerChange: { mode: "none" as const }, section: { mode: "none" as const } },
   lexiconEntries: [{
     id: "project-sql", scope: "project" as const, entryType: "exactTerm" as const, displayText: "SQL", spokenText: "sequel",
     caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: "", createdAt: timestamp, updatedAt: timestamp

@@ -172,23 +172,25 @@ describe("render plan silence and storage", () => {
       schemaVersion: PROJECT_SNAPSHOT_SCHEMA_VERSION,
       capturedAt: timestamp,
       project: {
-        contractVersion: 8,
+        contractVersion: 9,
         id: projectId,
         name: "Frozen plan",
         description: "",
         scriptSource: "[pause_medium]",
         scriptHash: "a".repeat(64),
         speakerMappings: [],
-        pausePresets: [{ pauseId: "pause_medium", durationMs, description: "Paragraph" }],
-        transitionPauses: { paragraph: { mode: "preset", pauseId: "pause_medium" }, speakerChange: { mode: "none" }, section: { mode: "none" } },
         lexiconEntries: [],
         createdAt: timestamp,
         updatedAt: timestamp
       },
+      timing: {
+        pausePresets: [{ pauseId: "pause_short", durationMs: 350, description: "Short" }, { pauseId: "pause_medium", durationMs, description: "Paragraph" }, { pauseId: "pause_long", durationMs: 1_500, description: "Long" }],
+        transitionPauses: { paragraph: { mode: "preset", pauseId: "pause_medium" }, speakerChange: { mode: "none" }, section: { mode: "none" } }
+      },
       globalLexiconEntries: [],
       ignoredDiagnostics: [],
       connection: { modelId: "model", serverIdentityHash: "b".repeat(64) },
-      versions: { scriptGrammar: 1, cirSchema: 1, lexiconTransform: 1, pacing: 1, speechCacheSchema: 1, speechNormalization: 1, speechChunking: 1, speechAdapter: 1 }
+      versions: { scriptGrammar: 2, cirSchema: 1, lexiconTransform: 1, pacing: 1, speechCacheSchema: 1, speechNormalization: 1, speechChunking: 1, speechAdapter: 1 }
     });
     const plan = withRenderPlanHash({
       schemaVersion: RENDER_PLAN_SCHEMA_VERSION,

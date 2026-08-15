@@ -4,6 +4,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { DEFAULT_SYSTEM_TIMING } from "@studynarrator/shared-types";
 import type { ConnectionTestOverall, PersistenceClient, SpeachesConnectionClient, SystemClient } from "@studynarrator/shared-types";
 import { App } from "./App.js";
 
@@ -12,7 +13,7 @@ const unusedProjectGet = vi.fn();
 const unusedPersistence: PersistenceClient = {
   status: vi.fn(async () => { throw new Error("unused"); }),
   projects: { list: vi.fn(async () => []), create: vi.fn(), get: unusedProjectGet, replace: vi.fn(), duplicate: vi.fn(), delete: vi.fn() },
-  settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() },
+  settings: { getPacing: vi.fn(async () => DEFAULT_SYSTEM_TIMING), updatePacing: vi.fn() },
   preferences: { getIgnoredDiagnostics: vi.fn(async () => []), replaceIgnoredDiagnostics: vi.fn() },
   globalLexicon: { list: vi.fn(async () => []), replace: vi.fn() }
 };

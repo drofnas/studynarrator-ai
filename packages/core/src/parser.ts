@@ -15,7 +15,7 @@ import {
 const SPEAKER_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/u;
 const PAUSE_ID = /^pause_[A-Za-z0-9_-]*$/u;
 const SENSE_ID = /^[A-Za-z0-9_-]+$/u;
-const INLINE_DIRECTIVE = /\[(?:pause_|speaker_)[^\]\r\n]*\]/gu;
+const INLINE_DIRECTIVE = /\[(?:pause_(?:short|medium|long)|speaker_)[^\]\r\n]*\]/gu;
 
 interface MutableNamedDiscovery {
   id: string;

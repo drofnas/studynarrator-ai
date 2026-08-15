@@ -1,18 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
-import type { IgnoredDiagnosticCollection, SystemPacingDefaults } from "@studynarrator/shared-types";
+import { DEFAULT_SYSTEM_TIMING, type IgnoredDiagnosticCollection, type SystemTimingConfiguration } from "@studynarrator/shared-types";
 import { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
 import { createPersistenceService, createUnavailablePersistenceService, PersistenceUnavailableError } from "./persistence.js";
 
 const project = {
-  contractVersion: 8 as const,
+  contractVersion: 9 as const,
   id: "00000000-0000-4000-8000-000000000001",
   name: "Persisted study",
   description: "",
   scriptSource: "Résumé\r\nSQL",
   scriptHash: "a".repeat(64),
   speakerMappings: [],
-  pausePresets: [{ pauseId: "pause_medium", durationMs: 750, description: "Paragraph" }],
-  transitionPauses: { paragraph: { mode: "preset" as const, pauseId: "pause_medium" as const }, speakerChange: { mode: "none" as const }, section: { mode: "none" as const } },
   lexiconEntries: [],
   createdAt: "2026-08-12T12:00:00.000Z",
   updatedAt: "2026-08-12T12:00:00.000Z"
@@ -21,10 +19,10 @@ const project = {
 function repository() {
   return {
     status: vi.fn(() => ({
-      contractVersion: 8 as const,
+      contractVersion: 9 as const,
       state: "ready" as const,
-      databaseSchemaVersion: 10 as const,
-      targetDatabaseSchemaVersion: 10 as const,
+      databaseSchemaVersion: 11 as const,
+      targetDatabaseSchemaVersion: 11 as const,
       databasePath: "/tmp/studynarrator.sqlite",
       latestBackupPath: null
     })),
@@ -34,8 +32,8 @@ function repository() {
     replaceProject: vi.fn(() => project),
     duplicateProject: vi.fn(() => project),
     deleteProject: vi.fn(),
-    getSystemPacing: vi.fn(() => ({ enabled: true, durationMs: 750 })),
-    updateSystemPacing: vi.fn((input: SystemPacingDefaults) => input),
+    getSystemPacing: vi.fn(() => DEFAULT_SYSTEM_TIMING),
+    updateSystemPacing: vi.fn((input: SystemTimingConfiguration) => input),
     getIgnoredDiagnostics: vi.fn(() => []),
     replaceIgnoredDiagnostics: vi.fn((input: IgnoredDiagnosticCollection) => input),
     listGlobalLexicon: vi.fn(() => []),
@@ -60,8 +58,6 @@ describe("persistence application service", () => {
       description: project.description,
       scriptSource: project.scriptSource,
       speakerMappings: [],
-      pausePresets: project.pausePresets,
-      transitionPauses: project.transitionPauses,
       lexiconEntries: []
     };
     await service.status();
@@ -72,7 +68,7 @@ describe("persistence application service", () => {
     await service.projects.duplicate(project.id, { name: "Copy" });
     await service.projects.delete(project.id);
     await service.settings.getPacing();
-    await service.settings.updatePacing({ enabled: false, durationMs: 900 });
+    await service.settings.updatePacing(DEFAULT_SYSTEM_TIMING);
     await service.preferences.getIgnoredDiagnostics();
     await service.preferences.replaceIgnoredDiagnostics([]);
     await service.globalLexicon.list();
@@ -114,10 +110,10 @@ describe("persistence application service", () => {
 
   it("keeps status available while rejecting degraded persistence operations", async () => {
     const service = createUnavailablePersistenceService({
-      contractVersion: 8,
+      contractVersion: 9,
       state: "unavailable",
       databaseSchemaVersion: 1,
-      targetDatabaseSchemaVersion: 10,
+      targetDatabaseSchemaVersion: 11,
       databasePath: "/tmp/studynarrator.sqlite",
       latestBackupPath: "/tmp/backups/recovery.sqlite",
       code: "MIGRATION_FAILED",
@@ -125,6 +121,6 @@ describe("persistence application service", () => {
     });
     await expect(service.status()).resolves.toMatchObject({ state: "unavailable" });
     await expect(service.projects.list()).rejects.toBeInstanceOf(PersistenceUnavailableError);
-    await expect(service.settings.updatePacing({ enabled: false, durationMs: 1000 })).rejects.toMatchObject({ code: "PERSISTENCE_UNAVAILABLE" });
+    await expect(service.settings.updatePacing(DEFAULT_SYSTEM_TIMING)).rejects.toMatchObject({ code: "PERSISTENCE_UNAVAILABLE" });
   });
 });

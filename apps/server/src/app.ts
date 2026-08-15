@@ -41,7 +41,7 @@ import {
   SpeachesConnectionAuthoringSchema,
   SpeachesConnectionSchema,
   SystemDiagnosticsSchema,
-  SystemPacingDefaultsSchema,
+  SystemTimingConfigurationSchema,
   VoiceCatalogModelInputSchema,
   VoiceCatalogSchema,
   type SpeachesConnectionClient,
@@ -175,10 +175,10 @@ export function createExpressApp(options: {
       } catch (error) { next(error); }
     });
     app.get("/api/settings/pacing", async (_request, response, next) => {
-      try { response.json(SystemPacingDefaultsSchema.parse(await persistence.settings.getPacing())); } catch (error) { next(error); }
+      try { response.json(SystemTimingConfigurationSchema.parse(await persistence.settings.getPacing())); } catch (error) { next(error); }
     });
     app.put("/api/settings/pacing", async (request, response, next) => {
-      try { response.json(SystemPacingDefaultsSchema.parse(await persistence.settings.updatePacing(SystemPacingDefaultsSchema.parse(request.body)))); } catch (error) { next(error); }
+      try { response.json(SystemTimingConfigurationSchema.parse(await persistence.settings.updatePacing(SystemTimingConfigurationSchema.parse(request.body)))); } catch (error) { next(error); }
     });
     app.get("/api/preferences/ignored-diagnostics", async (_request, response, next) => {
       try { response.json(IgnoredDiagnosticCollectionSchema.parse(await persistence.preferences.getIgnoredDiagnostics())); } catch (error) { next(error); }

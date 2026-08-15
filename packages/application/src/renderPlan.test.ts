@@ -2,7 +2,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import type { ProjectDetail } from "@studynarrator/shared-types";
+import type { ProjectDetail, SystemTimingConfiguration } from "@studynarrator/shared-types";
 import { createRenderPlanStore, createSpeechCacheKey, type SpeechCache } from "@studynarrator/rendering";
 import { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
 import { SPEACHES_CACHE_ADAPTER_ID, SPEACHES_CACHE_ADAPTER_VERSION } from "./cachedSpeech.js";
@@ -19,7 +19,7 @@ const profile = {
 
 function project(): ProjectDetail {
   return {
-    contractVersion: 8,
+    contractVersion: 9,
     id: projectId,
     name: "Render plan fixture",
     description: "",
@@ -29,25 +29,27 @@ function project(): ProjectDetail {
       { speakerId: "teacher", displayName: "Teacher", voiceId: "voice-teacher", speed: 1, gainDb: 0, roleDescription: "", sampleText: "" },
       { speakerId: "student", displayName: "Student", voiceId: "voice-student", speed: 1.1, gainDb: -1, roleDescription: "", sampleText: "" }
     ],
-    pausePresets: [
-      { pauseId: "pause_short", durationMs: 350, description: "Short" },
-      { pauseId: "pause_medium", durationMs: 750, description: "Medium" },
-      { pauseId: "pause_long", durationMs: 1_500, description: "Long" }
-    ],
-    transitionPauses: {
-      paragraph: { mode: "preset", pauseId: "pause_medium" },
-      speakerChange: { mode: "duration", durationMs: 500 },
-      section: { mode: "preset", pauseId: "pause_long" }
-    },
     lexiconEntries: [],
     createdAt: timestamp,
     updatedAt: timestamp
   };
 }
 
-function repository(current: { project: ProjectDetail }): RenderPlanRepository {
+function timing(): SystemTimingConfiguration {
+  return {
+    pausePresets: [
+      { pauseId: "pause_short", durationMs: 350, description: "Short" },
+      { pauseId: "pause_medium", durationMs: 750, description: "Medium" },
+      { pauseId: "pause_long", durationMs: 1_500, description: "Long" }
+    ],
+    transitionPauses: { paragraph: { mode: "preset", pauseId: "pause_medium" }, speakerChange: { mode: "duration", durationMs: 500 }, section: { mode: "preset", pauseId: "pause_long" } }
+  };
+}
+
+function repository(current: { project: ProjectDetail; timing?: SystemTimingConfiguration }): RenderPlanRepository {
   return {
     getProject: vi.fn(() => current.project),
+    getSystemPacing: vi.fn(() => current.timing ?? timing()),
     listGlobalLexicon: vi.fn(() => [{
       id: "global-sql", scope: "global", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel",
       caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: "", createdAt: timestamp, updatedAt: timestamp
@@ -75,7 +77,7 @@ describe("render plan application service", () => {
 
   it("freezes deterministic ordered entries with transition precedence, exact silence, and cache predictions", async () => {
     const root = await mkdtemp(join(tmpdir(), "studynarrator-application-render-plan-"));
-    const current = { project: project() };
+    const current: { project: ProjectDetail; timing?: SystemTimingConfiguration } = { project: project() };
     const store = createRenderPlanStore(root);
     const speechCache = cache();
     const service = createRenderPlanService({
@@ -84,8 +86,9 @@ describe("render plan application service", () => {
     });
     const plan = await service.create(projectId);
     const frozen = await store.load(planId);
-    expect(frozen.snapshot.schemaVersion).toBe(3);
-    if (frozen.snapshot.schemaVersion !== 3) throw new Error("Expected a singular connection snapshot.");
+    expect(frozen.snapshot.schemaVersion).toBe(4);
+    if (frozen.snapshot.schemaVersion !== 4) throw new Error("Expected a global timing snapshot.");
+    expect(frozen.snapshot.timing.transitionPauses.section).toEqual({ mode: "preset", pauseId: "pause_long" });
     expect(frozen.snapshot.connection.modelId).toBe("model");
     expect(frozen.snapshot.connection.serverIdentityHash).toMatch(/^[a-f0-9]{64}$/u);
     expect(frozen.snapshot.connection).not.toHaveProperty("profileId");
@@ -108,7 +111,8 @@ describe("render plan application service", () => {
     expect((speechCache as SpeechCache & { inspectMock: ReturnType<typeof vi.fn> }).inspectMock).toHaveBeenCalledTimes(5);
     expect((await service.list(projectId))[0]).toMatchObject({ id: planId, planHash: plan.planHash });
 
-    current.project = { ...current.project, scriptSource: "Changed after freezing", scriptHash: "c".repeat(64), transitionPauses: { ...current.project.transitionPauses, paragraph: { mode: "none" } } };
+    current.project = { ...current.project, scriptSource: "Changed after freezing", scriptHash: "c".repeat(64) };
+    current.timing = { ...timing(), transitionPauses: { ...timing().transitionPauses, paragraph: { mode: "none" } } };
     const reopened = await service.get(planId);
     expect(reopened).toEqual(plan);
     expect(reopened.scriptHash).toBe("a".repeat(64));
@@ -128,17 +132,17 @@ describe("render plan application service", () => {
   it("supports disabled and zero-duration automatic transitions without leading or trailing silence", async () => {
     const base = project();
     base.scriptSource = "[section: Start]\n[speaker_teacher] One.\n\n[speaker_teacher] Two.";
-    base.transitionPauses = { paragraph: { mode: "duration", durationMs: 0 }, speakerChange: { mode: "none" }, section: { mode: "none" } };
+    const zeroTiming = { ...timing(), transitionPauses: { paragraph: { mode: "duration" as const, durationMs: 0 }, speakerChange: { mode: "none" as const }, section: { mode: "none" as const } } };
     const firstRoot = await mkdtemp(join(tmpdir(), "studynarrator-zero-render-plan-"));
-    const first = createRenderPlanService({ repository: repository({ project: base }), cache: cache(), store: createRenderPlanStore(firstRoot), createId: () => planId });
+    const first = createRenderPlanService({ repository: repository({ project: base, timing: zeroTiming }), cache: cache(), store: createRenderPlanStore(firstRoot), createId: () => planId });
     const zeroPlan = await first.create(projectId);
     expect(zeroPlan.entries.filter((entry) => entry.type === "pause")).toEqual([
       expect.objectContaining({ reason: "paragraph", durationMs: 0, silence: null })
     ]);
 
-    const disabled = { ...base, transitionPauses: { paragraph: { mode: "none" as const }, speakerChange: { mode: "none" as const }, section: { mode: "none" as const } } };
+    const disabledTiming = { ...timing(), transitionPauses: { paragraph: { mode: "none" as const }, speakerChange: { mode: "none" as const }, section: { mode: "none" as const } } };
     const secondRoot = await mkdtemp(join(tmpdir(), "studynarrator-disabled-render-plan-"));
-    const second = createRenderPlanService({ repository: repository({ project: disabled }), cache: cache(), store: createRenderPlanStore(secondRoot), createId: () => planId });
+    const second = createRenderPlanService({ repository: repository({ project: base, timing: disabledTiming }), cache: cache(), store: createRenderPlanStore(secondRoot), createId: () => planId });
     expect((await second.create(projectId)).entries.some((entry) => entry.type === "pause")).toBe(false);
   });
 

@@ -4,12 +4,13 @@ import {
   IgnoredDiagnosticSchema,
   LexiconEntrySchema,
   PauseIdSchema,
-  SpeakerIdSchema
+  SpeakerIdSchema,
+  SupportedPauseIdSchema
 } from "@studynarrator/core";
 import { z } from "zod";
 
-export const DATABASE_SCHEMA_VERSION = 10;
-export const PERSISTENCE_CONTRACT_VERSION = 8;
+export const DATABASE_SCHEMA_VERSION = 11;
+export const PERSISTENCE_CONTRACT_VERSION = 9;
 export const PERSISTENCE_CHANNELS = Object.freeze({
   status: "persistence.status",
   projectsList: "projects.list",
@@ -62,15 +63,46 @@ export const TransitionPauseConfigurationSchema = z.object({
 }).strict();
 export type TransitionPauseConfiguration = z.infer<typeof TransitionPauseConfigurationSchema>;
 
-export const SystemPacingDefaultsSchema = z.object({
-  enabled: z.boolean(),
-  durationMs: z.number().int().min(0).max(30_000)
+const fixedPausePreset = <TId extends "pause_short" | "pause_medium" | "pause_long">(pauseId: TId) => z.object({
+  pauseId: z.literal(pauseId),
+  durationMs: z.number().int().min(0).max(30_000),
+  description: z.string().max(500)
 }).strict();
-export type SystemPacingDefaults = z.infer<typeof SystemPacingDefaultsSchema>;
 
-export const DEFAULT_SYSTEM_PACING: SystemPacingDefaults = Object.freeze({
-  enabled: true,
-  durationMs: DEFAULT_PARAGRAPH_PAUSE_DURATION_MS
+export const SystemPausePresetCollectionSchema = z.tuple([
+  fixedPausePreset("pause_short"),
+  fixedPausePreset("pause_medium"),
+  fixedPausePreset("pause_long")
+]);
+export const SystemTransitionPauseSettingSchema = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("none") }).strict(),
+  z.object({ mode: z.literal("preset"), pauseId: SupportedPauseIdSchema }).strict(),
+  z.object({ mode: z.literal("duration"), durationMs: z.number().int().min(0).max(30_000) }).strict()
+]);
+export type SystemTransitionPauseSetting = z.infer<typeof SystemTransitionPauseSettingSchema>;
+export const SystemTransitionPauseConfigurationSchema = z.object({
+  paragraph: SystemTransitionPauseSettingSchema,
+  speakerChange: SystemTransitionPauseSettingSchema,
+  section: SystemTransitionPauseSettingSchema
+}).strict();
+export type SystemTransitionPauseConfiguration = z.infer<typeof SystemTransitionPauseConfigurationSchema>;
+export const SystemTimingConfigurationSchema = z.object({
+  pausePresets: SystemPausePresetCollectionSchema,
+  transitionPauses: SystemTransitionPauseConfigurationSchema
+}).strict();
+export type SystemTimingConfiguration = z.infer<typeof SystemTimingConfigurationSchema>;
+
+export const DEFAULT_SYSTEM_TIMING: SystemTimingConfiguration = Object.freeze({
+  pausePresets: [
+    { pauseId: "pause_short", durationMs: 350, description: "Brief thinking beat or speaker handoff." },
+    { pauseId: "pause_medium", durationMs: DEFAULT_PARAGRAPH_PAUSE_DURATION_MS, description: "Paragraph or subtopic separation." },
+    { pauseId: "pause_long", durationMs: 1_500, description: "Major subject or section separation." }
+  ],
+  transitionPauses: {
+    paragraph: { mode: "preset", pauseId: DEFAULT_PARAGRAPH_PAUSE_ID },
+    speakerChange: { mode: "none" },
+    section: { mode: "none" }
+  }
 });
 
 function simplifiedLexiconAuthoringSchema<TScope extends "global" | "project">(scope: TScope) {
@@ -160,31 +192,13 @@ const ProjectAggregateShape = {
   name: z.string().trim().min(1).max(200),
   description: z.string().max(10_000),
   scriptSource: z.string().max(5_000_000),
-  speakerMappings: SpeakerMappingCollectionSchema,
-  pausePresets: PausePresetCollectionSchema,
-  transitionPauses: TransitionPauseConfigurationSchema
+  speakerMappings: SpeakerMappingCollectionSchema
 } as const;
-
-function validateTransitionPresets(
-  project: { pausePresets: PausePreset[]; transitionPauses: TransitionPauseConfiguration },
-  context: z.RefinementCtx
-) {
-  for (const [boundary, setting] of Object.entries(project.transitionPauses)) {
-    if (setting.mode !== "preset") continue;
-    if (!project.pausePresets.some((candidate) => candidate.pauseId === setting.pauseId)) {
-      context.addIssue({
-        code: "custom",
-        message: `${boundary} transition pacing must reference a project pause preset.`,
-        path: ["transitionPauses", boundary, "pauseId"]
-      });
-    }
-  }
-}
 
 export const ProjectReplaceInputSchema = z.object({
   ...ProjectAggregateShape,
   lexiconEntries: ProjectLexiconAuthoringCollectionSchema
-}).strict().superRefine(validateTransitionPresets);
+}).strict();
 export type ProjectReplaceInput = z.input<typeof ProjectReplaceInputSchema>;
 
 export const ProjectSummarySchema = z.object({
@@ -205,7 +219,7 @@ export const ProjectDetailSchema = z.object({
   lexiconEntries: z.array(ProjectLexiconEntrySchema),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema
-}).strict().superRefine(validateTransitionPresets);
+}).strict();
 export type ProjectDetail = z.infer<typeof ProjectDetailSchema>;
 
 export const ProjectSummaryCollectionSchema = z.array(ProjectSummarySchema);
@@ -272,8 +286,8 @@ export interface ProjectsClient {
 }
 
 export interface PersistenceSettingsClient {
-  getPacing(): Promise<SystemPacingDefaults>;
-  updatePacing(input: SystemPacingDefaults): Promise<SystemPacingDefaults>;
+  getPacing(): Promise<SystemTimingConfiguration>;
+  updatePacing(input: SystemTimingConfiguration): Promise<SystemTimingConfiguration>;
 }
 
 export interface PreferencesClient {
@@ -295,7 +309,7 @@ export interface PersistenceClient {
 }
 
 export const DEFAULT_PROJECT_PARAGRAPH_PAUSE = Object.freeze({
-  enabled: DEFAULT_SYSTEM_PACING.enabled,
+  enabled: DEFAULT_SYSTEM_TIMING.transitionPauses.paragraph.mode !== "none",
   pauseId: DEFAULT_PARAGRAPH_PAUSE_ID,
-  durationMs: DEFAULT_SYSTEM_PACING.durationMs
+  durationMs: DEFAULT_PARAGRAPH_PAUSE_DURATION_MS
 });

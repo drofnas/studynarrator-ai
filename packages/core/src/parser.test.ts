@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ParseScriptInputSchema, ParseScriptResultSchema, SYSTEM_DEFAULT_SPEAKER_ID, parseScript } from "./index.js";
+import { ParseScriptInputSchema, ParseScriptResultSchema, SYSTEM_DEFAULT_SPEAKER_ID, parseScript, transformScript } from "./index.js";
 
 const validStudyGuide = `[section: Resumes and background processing]
 
@@ -225,8 +225,7 @@ describe("script parser", () => {
     ["[speaker_] text", "INVALID_SPEAKER_DIRECTIVE"],
     ["[speaker", "UNCLOSED_DIRECTIVE"],
     ["[section:]", "MALFORMED_SECTION_DIRECTIVE"],
-    ["[section Topic]", "MALFORMED_SECTION_DIRECTIVE"],
-    ["[pause_bad!]", "MALFORMED_PAUSE_DIRECTIVE"]
+    ["[section Topic]", "MALFORMED_SECTION_DIRECTIVE"]
   ])("diagnoses malformed directive %s and keeps it as literal speech", (source, code) => {
     const result = parseScript({ source, defaultSpeakerId: "narrator" });
     expect(result.errors[0]?.code).toBe(code);
@@ -282,19 +281,33 @@ describe("script parser", () => {
     ]);
   });
 
-  it("diagnoses malformed inline control tokens without removing them from speech", () => {
+  it("diagnoses malformed speakers while treating unsupported pause-shaped text as speech", () => {
     const result = parseScript({
       source: "[speaker_teacher] Keep [speaker_bad name] and [pause_bad!] literal."
     });
     expect(result.errors.map(({ code, ignorePattern }) => [code, ignorePattern])).toEqual([
-      ["INVALID_SPEAKER_DIRECTIVE", "[speaker_bad name]"],
-      ["MALFORMED_PAUSE_DIRECTIVE", "[pause_bad!]"]
+      ["INVALID_SPEAKER_DIRECTIVE", "[speaker_bad name]"]
     ]);
     expect(result.nodes[0]).toMatchObject({
       type: "speech",
       speakerId: "teacher",
       readableText: "Keep [speaker_bad name] and [pause_bad!] literal."
     });
+  });
+
+  it("keeps unsupported standalone and inline pause directives as ordinary speech", () => {
+    const result = parseScript({ source: "[pause_custom]\n[speaker_teacher] Keep [pause_archived] literal." });
+    expect(result.errors).toEqual([]);
+    expect(result.discoveries.pauses).toEqual([]);
+    expect(result.nodes.filter((node) => node.type === "pause")).toEqual([]);
+    expect(result.nodes.filter((node) => node.type === "speech").map((node) => node.type === "speech" ? node.readableText : "")).toEqual([
+      "[pause_custom]",
+      "Keep [pause_archived] literal."
+    ]);
+    expect(transformScript({ parsedScript: result, entries: [] }).segments.map(({ ttsText }) => ttsText)).toEqual([
+      "[pause_custom]",
+      "Keep [pause_archived] literal."
+    ]);
   });
 
   it("suppresses only an exact ignored diagnostic without changing literal recovery", () => {

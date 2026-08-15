@@ -2,11 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   GlobalLexiconReplaceInputSchema,
   IgnoredDiagnosticCollectionSchema,
-  PausePresetCollectionSchema,
   ProjectLexiconAuthoringCollectionSchema,
   ProjectReplaceInputSchema,
   SpeakerMappingCollectionSchema,
-  SystemPacingDefaultsSchema
+  SystemTimingConfigurationSchema
 } from "./persistence.js";
 import { SpeachesConnectionAuthoringSchema } from "./connections.js";
 
@@ -15,23 +14,14 @@ const validProject = {
   description: "",
   scriptSource: "SQL",
   speakerMappings: [],
-  pausePresets: [{ pauseId: "pause_medium", durationMs: 750, description: "Paragraph" }],
-  transitionPauses: {
-    paragraph: { mode: "preset", pauseId: "pause_medium" },
-    speakerChange: { mode: "none" },
-    section: { mode: "none" }
-  },
   lexiconEntries: []
 };
 
 describe("persistence contracts", () => {
-  it("accepts a strict complete aggregate and rejects mismatched pacing", () => {
+  it("accepts a strict complete aggregate and rejects project timing", () => {
     expect(ProjectReplaceInputSchema.parse(validProject)).toEqual(validProject);
     expect(() => ProjectReplaceInputSchema.parse({ ...validProject, unknown: true })).toThrow();
-    expect(() => ProjectReplaceInputSchema.parse({
-      ...validProject,
-      transitionPauses: { ...validProject.transitionPauses, paragraph: { mode: "preset", pauseId: "pause_missing" } }
-    })).toThrow(/must reference/iu);
+    expect(() => ProjectReplaceInputSchema.parse({ ...validProject, pausePresets: [] })).toThrow();
   });
 
   it("enforces project and global lexicon ownership", () => {
@@ -56,10 +46,18 @@ describe("persistence contracts", () => {
     ])).toThrow();
   });
 
-  it("bounds pacing values and excludes credential-shaped connection fields", () => {
-    expect(SystemPacingDefaultsSchema.parse({ enabled: true, durationMs: 0 })).toEqual({ enabled: true, durationMs: 0 });
-    expect(SystemPacingDefaultsSchema.parse({ enabled: false, durationMs: 30_000 })).toEqual({ enabled: false, durationMs: 30_000 });
-    expect(() => SystemPacingDefaultsSchema.parse({ enabled: true, durationMs: 30_001 })).toThrow();
+  it("bounds global timing values and excludes credential-shaped connection fields", () => {
+    const timing = {
+      pausePresets: [
+        { pauseId: "pause_short", durationMs: 0, description: "Short" },
+        { pauseId: "pause_medium", durationMs: 750, description: "Medium" },
+        { pauseId: "pause_long", durationMs: 30_000, description: "Long" }
+      ],
+      transitionPauses: { paragraph: { mode: "preset", pauseId: "pause_medium" }, speakerChange: { mode: "none" }, section: { mode: "duration", durationMs: 900 } }
+    };
+    expect(SystemTimingConfigurationSchema.parse(timing)).toEqual(timing);
+    expect(() => SystemTimingConfigurationSchema.parse({ ...timing, pausePresets: timing.pausePresets.map((preset) => ({ ...preset, durationMs: 30_001 })) })).toThrow();
+    expect(() => SystemTimingConfigurationSchema.parse({ ...timing, transitionPauses: { ...timing.transitionPauses, paragraph: { mode: "preset", pauseId: "pause_custom" } } })).toThrow();
     expect(() => SpeachesConnectionAuthoringSchema.parse({
       baseUrl: "http://127.0.0.1:8000", defaultModelId: null, defaultVoiceId: null, apiKey: "secret"
     })).toThrow();
@@ -72,10 +70,6 @@ describe("persistence contracts", () => {
     const speakerMappings = SpeakerMappingCollectionSchema.parse([
       { speakerId: "teacher", displayName: "Teacher", voiceId: "voice_teacher", speed: 1, gainDb: 0, roleDescription: "Guide", sampleText: "Welcome" }
     ]);
-    const pausePresets = PausePresetCollectionSchema.parse([
-      { pauseId: "pause_medium", durationMs: 750, description: "Paragraph" }
-    ]);
-    const transitionPauses = validProject.transitionPauses;
     const lexiconEntries = ProjectLexiconAuthoringCollectionSchema.parse([
       { id: "project-resume", scope: "project", displayText: "resume", spokenText: "rez-oo-may" }
     ]);
@@ -85,8 +79,6 @@ describe("persistence contracts", () => {
       description: "Reopen proof",
       scriptSource: "resume SQL",
       speakerMappings,
-      pausePresets,
-      transitionPauses,
       lexiconEntries
     })).toBeDefined();
     expect(GlobalLexiconReplaceInputSchema.parse([
@@ -100,14 +92,5 @@ describe("persistence contracts", () => {
       defaultModelId: "speaches-ai/Kokoro-82M-v1.0-ONNX",
       defaultVoiceId: "af_heart"
     })).toBeDefined();
-
-    const updatedPauses = PausePresetCollectionSchema.parse([
-      { pauseId: "pause_medium", durationMs: 900, description: "Automatic paragraph transition" }
-    ]);
-    expect(ProjectReplaceInputSchema.parse({
-      ...validProject,
-      pausePresets: updatedPauses,
-      transitionPauses: { ...validProject.transitionPauses, section: { mode: "duration", durationMs: 900 } }
-    }).transitionPauses.section).toEqual({ mode: "duration", durationMs: 900 });
   });
 });

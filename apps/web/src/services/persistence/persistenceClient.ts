@@ -6,7 +6,7 @@ import {
   PersistenceStatusSchema,
   ProjectDetailSchema,
   ProjectSummaryCollectionSchema,
-  SystemPacingDefaultsSchema,
+  SystemTimingConfigurationSchema,
   type PersistenceClient,
   type StudyNarratorBridge
 } from "@studynarrator/shared-types";
@@ -68,8 +68,8 @@ export function createRestPersistenceClient(fetchInput: typeof fetch = fetch): P
       }
     },
     settings: {
-      getPacing: async () => await request("/api/settings/pacing", SystemPacingDefaultsSchema),
-      updatePacing: async (input) => await request("/api/settings/pacing", SystemPacingDefaultsSchema, { method: "PUT", body: body(input) })
+      getPacing: async () => await request("/api/settings/pacing", SystemTimingConfigurationSchema),
+      updatePacing: async (input) => await request("/api/settings/pacing", SystemTimingConfigurationSchema, { method: "PUT", body: body(input) })
     },
     preferences: {
       getIgnoredDiagnostics: async () => await request("/api/preferences/ignored-diagnostics", IgnoredDiagnosticCollectionSchema),

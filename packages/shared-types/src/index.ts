@@ -50,7 +50,7 @@ export const StorageCheckSchema = z.discriminatedUnion("status", [
     status: z.literal("pass"),
     driver: z.literal("better-sqlite3"),
     sqliteVersion: z.string().min(1),
-    migrationVersion: z.literal(10),
+    migrationVersion: z.literal(11),
     databasePath: z.string().min(1),
     latestBackupPath: z.string().min(1).nullable(),
     markerKey: z.literal("runtime.storage-self-test"),

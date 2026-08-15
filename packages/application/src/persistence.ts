@@ -9,7 +9,7 @@ import {
   ProjectIdSchema,
   ProjectReplaceInputSchema,
   ProjectSummaryCollectionSchema,
-  SystemPacingDefaultsSchema,
+  SystemTimingConfigurationSchema,
   type GlobalLexiconReplaceInput,
   type IgnoredDiagnosticCollection,
   type PersistenceClient,
@@ -19,7 +19,7 @@ import {
   type ProjectDuplicateInput,
   type ProjectReplaceInput,
   type ProjectSummary,
-  type SystemPacingDefaults
+  type SystemTimingConfiguration
 } from "@studynarrator/shared-types";
 import type { LexiconEntry } from "@studynarrator/core";
 
@@ -31,8 +31,8 @@ export interface PersistenceRepository {
   replaceProject(projectId: string, input: ProjectReplaceInput): ProjectDetail;
   duplicateProject(projectId: string, input: ProjectDuplicateInput): ProjectDetail;
   deleteProject(projectId: string): void;
-  getSystemPacing(): SystemPacingDefaults;
-  updateSystemPacing(input: SystemPacingDefaults): SystemPacingDefaults;
+  getSystemPacing(): SystemTimingConfiguration;
+  updateSystemPacing(input: SystemTimingConfiguration): SystemTimingConfiguration;
   getIgnoredDiagnostics(): IgnoredDiagnosticCollection;
   replaceIgnoredDiagnostics(input: IgnoredDiagnosticCollection): IgnoredDiagnosticCollection;
   listGlobalLexicon(): LexiconEntry[];
@@ -71,10 +71,10 @@ export function createPersistenceService(repository: PersistenceRepository): Per
     },
     settings: {
       getPacing() {
-        return execute(() => SystemPacingDefaultsSchema.parse(repository.getSystemPacing()));
+        return execute(() => SystemTimingConfigurationSchema.parse(repository.getSystemPacing()));
       },
       updatePacing(input) {
-        return execute(() => SystemPacingDefaultsSchema.parse(repository.updateSystemPacing(SystemPacingDefaultsSchema.parse(input))));
+        return execute(() => SystemTimingConfigurationSchema.parse(repository.updateSystemPacing(SystemTimingConfigurationSchema.parse(input))));
       }
     },
     preferences: {

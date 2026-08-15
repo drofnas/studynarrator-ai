@@ -24,7 +24,7 @@ import {
   RenderWaveformSchema,
   SYSTEM_DIAGNOSTICS_CHANNEL,
   SystemDiagnosticsSchema,
-  SystemPacingDefaultsSchema,
+  SystemTimingConfigurationSchema,
   RedactedConnectionDiagnosticsSchema,
   SCRATCHPAD_CHANNELS,
   SCRIPT_GENERATION_CHANNELS,
@@ -62,8 +62,8 @@ export function createPreloadBridge(invoke: (channel: string, input?: unknown) =
       async delete(projectId) { EmptyResponseSchema.parse(await invoke(PERSISTENCE_CHANNELS.projectsDelete, { projectId })); }
     },
     settings: {
-      async getPacing() { return SystemPacingDefaultsSchema.parse(await invoke(PERSISTENCE_CHANNELS.pacingGet)); },
-      async updatePacing(input) { return SystemPacingDefaultsSchema.parse(await invoke(PERSISTENCE_CHANNELS.pacingUpdate, input)); }
+      async getPacing() { return SystemTimingConfigurationSchema.parse(await invoke(PERSISTENCE_CHANNELS.pacingGet)); },
+      async updatePacing(input) { return SystemTimingConfigurationSchema.parse(await invoke(PERSISTENCE_CHANNELS.pacingUpdate, input)); }
     },
     preferences: {
       async getIgnoredDiagnostics() { return IgnoredDiagnosticCollectionSchema.parse(await invoke(PERSISTENCE_CHANNELS.ignoredGet)); },

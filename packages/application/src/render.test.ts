@@ -47,27 +47,32 @@ async function fixture(options: { legacyProfileId?: string; previousSingular?: b
   const profileId = "00000000-0000-4000-8000-000000000003";
   const baseUrl = "http://127.0.0.1:8765";
   const timestamp = "2026-08-13T12:00:00.000Z";
-  const project = {
+  const historicalProject = {
     contractVersion: 8 as const, id: projectId, name: "Render fixture", description: "", scriptSource: "narrator: Render me.",
     scriptHash: sha("narrator: Render me."),
     speakerMappings: [{ speakerId: "narrator", displayName: "Narrator", voiceId: "voice", speed: 1, gainDb: 0, roleDescription: "", sampleText: "" }],
     pausePresets: [], transitionPauses: { paragraph: { mode: "none" as const }, speakerChange: { mode: "none" as const }, section: { mode: "none" as const } },
     lexiconEntries: [], createdAt: timestamp, updatedAt: timestamp
   };
-  const versions = { scriptGrammar: 1 as const, cirSchema: 1 as const, lexiconTransform: 1 as const, pacing: 1 as const, speechCacheSchema: 1, speechNormalization: 1, speechChunking: 1, speechAdapter: 1 };
+  const { pausePresets: _pausePresets, transitionPauses, ...currentProjectData } = historicalProject;
+  const project = { ...currentProjectData, contractVersion: 9 as const };
+  const historicalVersions = { scriptGrammar: 1 as const, cirSchema: 1 as const, lexiconTransform: 1 as const, pacing: 1 as const, speechCacheSchema: 1, speechNormalization: 1, speechChunking: 1, speechAdapter: 1 };
   const snapshot = options.legacyProfileId ? withProjectSnapshotHash({
     schemaVersion: 1,
     capturedAt: timestamp,
-    project: { ...project, contractVersion: 4, modelId: "model", connectionProfileId: options.legacyProfileId },
+    project: { ...historicalProject, contractVersion: 4, modelId: "model", connectionProfileId: options.legacyProfileId },
     globalLexiconEntries: [], ignoredDiagnostics: [],
     connection: { profileId: options.legacyProfileId, profileName: "Legacy", profileSource: "saved", modelId: "model", serverIdentityHash: sha(baseUrl) },
-    versions
+    versions: historicalVersions
   }) : options.previousSingular ? withProjectSnapshotHash({
-    schemaVersion: 2, capturedAt: timestamp, project: { ...project, contractVersion: 7, modelId: "model" }, globalLexiconEntries: [], ignoredDiagnostics: [],
-    connection: { modelId: "model", serverIdentityHash: sha(baseUrl) }, versions
+    schemaVersion: 2, capturedAt: timestamp, project: { ...historicalProject, contractVersion: 7, modelId: "model" }, globalLexiconEntries: [], ignoredDiagnostics: [],
+    connection: { modelId: "model", serverIdentityHash: sha(baseUrl) }, versions: historicalVersions
   }) : withProjectSnapshotHash({
-    schemaVersion: 3, capturedAt: timestamp, project, globalLexiconEntries: [], ignoredDiagnostics: [],
-    connection: { modelId: "model", serverIdentityHash: sha(baseUrl) }, versions
+    schemaVersion: 4, capturedAt: timestamp, project, timing: {
+      pausePresets: [{ pauseId: "pause_short", durationMs: 350, description: "Short" }, { pauseId: "pause_medium", durationMs: 750, description: "Medium" }, { pauseId: "pause_long", durationMs: 1_500, description: "Long" }],
+      transitionPauses
+    }, globalLexiconEntries: [], ignoredDiagnostics: [],
+    connection: { modelId: "model", serverIdentityHash: sha(baseUrl) }, versions: { ...historicalVersions, scriptGrammar: 2 }
   });
   const cacheKey = "a".repeat(64);
   const plan = withRenderPlanHash({

@@ -37,7 +37,7 @@ import {
   RenderWaveformSchema,
   SYSTEM_DIAGNOSTICS_CHANNEL,
   SystemDiagnosticsSchema,
-  SystemPacingDefaultsSchema,
+  SystemTimingConfigurationSchema,
   RedactedConnectionDiagnosticsSchema,
   SCRATCHPAD_CHANNELS,
   SCRIPT_GENERATION_CHANNELS,
@@ -137,8 +137,8 @@ export function registerPersistenceHandlers(ipcMain: IpcMainLike, persistence: P
     await persistence.projects.delete(request.projectId);
     return EmptyResponseSchema.parse({});
   });
-  handle(PERSISTENCE_CHANNELS.pacingGet, async () => SystemPacingDefaultsSchema.parse(await persistence.settings.getPacing()));
-  handle(PERSISTENCE_CHANNELS.pacingUpdate, async (input) => SystemPacingDefaultsSchema.parse(await persistence.settings.updatePacing(SystemPacingDefaultsSchema.parse(input))));
+  handle(PERSISTENCE_CHANNELS.pacingGet, async () => SystemTimingConfigurationSchema.parse(await persistence.settings.getPacing()));
+  handle(PERSISTENCE_CHANNELS.pacingUpdate, async (input) => SystemTimingConfigurationSchema.parse(await persistence.settings.updatePacing(SystemTimingConfigurationSchema.parse(input))));
   handle(PERSISTENCE_CHANNELS.ignoredGet, async () => IgnoredDiagnosticCollectionSchema.parse(await persistence.preferences.getIgnoredDiagnostics()));
   handle(PERSISTENCE_CHANNELS.ignoredReplace, async (input) => IgnoredDiagnosticCollectionSchema.parse(await persistence.preferences.replaceIgnoredDiagnostics(IgnoredDiagnosticCollectionSchema.parse(input))));
   handle(PERSISTENCE_CHANNELS.globalLexiconList, async () => GlobalLexiconEntryCollectionSchema.parse(await persistence.globalLexicon.list()));

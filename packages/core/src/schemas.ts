@@ -1,15 +1,18 @@
 import { z } from "zod";
 
-export const SCRIPT_GRAMMAR_VERSION = 1;
+export const SCRIPT_GRAMMAR_VERSION = 2;
 export const CIR_SCHEMA_VERSION = 1;
 export const LEXICON_TRANSFORM_VERSION = 1;
 export const PARAGRAPH_PACING_VERSION = 1;
 export const SYSTEM_DEFAULT_SPEAKER_ID = "narrator";
 export const DEFAULT_PARAGRAPH_PAUSE_ID = "pause_medium";
 export const DEFAULT_PARAGRAPH_PAUSE_DURATION_MS = 750;
+export const SUPPORTED_PAUSE_IDS = ["pause_short", "pause_medium", "pause_long"] as const;
 
 export const SpeakerIdSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/u);
 export const PauseIdSchema = z.string().regex(/^pause_[A-Za-z0-9_-]*$/u);
+export const SupportedPauseIdSchema = z.enum(SUPPORTED_PAUSE_IDS);
+export type SupportedPauseId = z.infer<typeof SupportedPauseIdSchema>;
 
 export const IgnoredDiagnosticSchema = z.object({
   code: z.string().regex(/^[A-Z][A-Z0-9_]*$/u),

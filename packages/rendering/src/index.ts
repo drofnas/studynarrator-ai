@@ -789,7 +789,11 @@ export function hashJson(value: unknown): string {
   return sha256(JSON.stringify(value));
 }
 
-export function withProjectSnapshotHash(input: Omit<ProjectSnapshot, "snapshotHash">): ProjectSnapshot {
+type ProjectSnapshotWithoutHash = ProjectSnapshot extends infer T
+  ? T extends { snapshotHash: string } ? Omit<T, "snapshotHash"> : never
+  : never;
+
+export function withProjectSnapshotHash(input: ProjectSnapshotWithoutHash): ProjectSnapshot {
   const normalized = ProjectSnapshotSchema.parse({ ...input, snapshotHash: "0".repeat(64) });
   const { snapshotHash: _snapshotHash, ...payload } = normalized;
   void _snapshotHash;
