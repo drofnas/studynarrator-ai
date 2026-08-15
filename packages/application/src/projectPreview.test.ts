@@ -12,7 +12,7 @@ const profile = {
   lastTestedAt: null, lastSuccessfulTestAt: null, lastTestSummary: null, createdAt: timestamp, updatedAt: timestamp
 };
 const project = {
-  contractVersion: 9 as const,
+  contractVersion: 1 as const,
   id: projectId,
   name: "Preview project",
   description: "",
@@ -46,7 +46,7 @@ function cached(bytes = Uint8Array.from([1, 2, 3])): CachedSpeechResult {
     key: "a".repeat(64), status: "miss", bytes,
     metadata: {
       schemaVersion: 1, normalizationVersion: 1, chunkingVersion: 1, adapterId: "adapter", adapterVersion: 1,
-      serverIdentityHash: "b".repeat(64), profileId: profile.id, modelId: "model", voiceId: "voice-teacher", speed: 1.2,
+      serverIdentityHash: "b".repeat(64), modelId: "model", voiceId: "voice-teacher", speed: 1.2,
       textHash: "c".repeat(64), responseFormat: "wav", key: "a".repeat(64), audioChecksum: "d".repeat(64),
       byteLength: bytes.byteLength, createdAt: timestamp, lastUsedAt: timestamp, projectIds: [projectId], scratchpadUsed: false
     }

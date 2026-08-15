@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { LexiconEntrySchema, PauseIdSchema, SpeakerIdSchema, type LexiconEntry } from "./schemas.js";
 
-export const SCRIPT_GENERATION_SCHEMA_VERSION = 2;
+export const SCRIPT_GENERATION_SCHEMA_VERSION = 1;
 
 export const ScriptPromptKindSchema = z.enum(["creation", "update"]);
 export type ScriptPromptKind = z.infer<typeof ScriptPromptKindSchema>;

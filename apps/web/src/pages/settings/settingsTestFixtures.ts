@@ -9,7 +9,7 @@ export const cacheClient: SpeechCacheClient = {
 
 export const timestamp = "2026-08-12T12:00:00.000Z";
 export const scratchpadResult = {
-  schemaVersion: 3 as const, id: "b3b58e96-e98f-4dbf-897b-e2fb4b3a7c5c", createdAt: timestamp,
+  schemaVersion: 1 as const, id: "b3b58e96-e98f-4dbf-897b-e2fb4b3a7c5c", createdAt: timestamp,
   modelId: "model-b", voiceId: "voice-b2", voiceLabel: "Second", speed: 1,
   originalText: "sample", readableText: "sample", transformedText: "sample", lexiconApplied: false, warnings: [],
   cache: { status: "miss" as const, key: "a".repeat(64), byteLength: 3, createdAt: timestamp, lastUsedAt: timestamp }, audio: { mimeType: "audio/wav" as const, base64: "AQID", byteLength: 3 }

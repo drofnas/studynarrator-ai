@@ -19,7 +19,7 @@ const profile = {
 
 function project(): ProjectDetail {
   return {
-    contractVersion: 9,
+    contractVersion: 1,
     id: projectId,
     name: "Render plan fixture",
     description: "",
@@ -86,8 +86,7 @@ describe("render plan application service", () => {
     });
     const plan = await service.create(projectId);
     const frozen = await store.load(planId);
-    expect(frozen.snapshot.schemaVersion).toBe(4);
-    if (frozen.snapshot.schemaVersion !== 4) throw new Error("Expected a global timing snapshot.");
+    expect(frozen.snapshot.schemaVersion).toBe(1);
     expect(frozen.snapshot.timing.transitionPauses.section).toEqual({ mode: "preset", pauseId: "pause_long" });
     expect(frozen.snapshot.connection.modelId).toBe("model");
     expect(frozen.snapshot.connection.serverIdentityHash).toMatch(/^[a-f0-9]{64}$/u);
@@ -105,7 +104,7 @@ describe("render plan application service", () => {
     expect(firstSpeech.chunks[0]?.cacheKey).toBe(createSpeechCacheKey({
       adapterId: SPEACHES_CACHE_ADAPTER_ID,
       adapterVersion: SPEACHES_CACHE_ADAPTER_VERSION,
-      serverIdentity: profile.baseUrl!, profileId: profile.id, modelId: "model", voiceId: "voice-teacher", speed: 1,
+      serverIdentity: profile.baseUrl!, modelId: "model", voiceId: "voice-teacher", speed: 1,
       text: "sequel one.", responseFormat: "wav"
     }));
     expect((speechCache as SpeechCache & { inspectMock: ReturnType<typeof vi.fn> }).inspectMock).toHaveBeenCalledTimes(5);

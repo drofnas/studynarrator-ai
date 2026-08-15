@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { PreviewAudioSchema, PreviewCacheMetadataSchema } from "./preview.js";
 
-export const SCRATCHPAD_SCHEMA_VERSION = 3;
+export const SCRATCHPAD_SCHEMA_VERSION = 1;
 export const SCRATCHPAD_MAX_CHARACTERS = 1_200;
 export const SCRATCHPAD_MAX_AUDIO_BYTES = 5 * 1024 * 1024;
 export const SCRATCHPAD_CHANNELS = Object.freeze({ preview: "scratchpad.preview" } as const);

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const SCRIPT_GRAMMAR_VERSION = 2;
+export const SCRIPT_GRAMMAR_VERSION = 1;
 export const CIR_SCHEMA_VERSION = 1;
 export const LEXICON_TRANSFORM_VERSION = 1;
 export const PARAGRAPH_PACING_VERSION = 1;

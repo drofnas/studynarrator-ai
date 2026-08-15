@@ -23,7 +23,7 @@ const SHARD_PATTERN = /^[a-f0-9]{2}$/u;
 const MAX_CACHE_METADATA_BYTES = 64 * 1024;
 const METADATA_KEYS = new Set([
   "schemaVersion", "normalizationVersion", "chunkingVersion", "adapterId", "adapterVersion",
-  "serverIdentityHash", "profileId", "modelId", "voiceId", "speed", "textHash", "responseFormat",
+  "serverIdentityHash", "modelId", "voiceId", "speed", "textHash", "responseFormat",
   "key", "audioChecksum", "byteLength", "createdAt", "lastUsedAt", "projectIds", "scratchpadUsed"
 ]);
 
@@ -31,7 +31,6 @@ export interface SpeechCacheKeyInput {
   adapterId: string;
   adapterVersion: number;
   serverIdentity: string;
-  profileId: string;
   modelId: string;
   voiceId: string;
   speed: number;
@@ -131,7 +130,7 @@ export function normalizeSpeechCacheInput(input: SpeechCacheKeyInput): Normalize
   if (!input.adapterId.trim() || !Number.isInteger(input.adapterVersion) || input.adapterVersion < 1) {
     throw new Error("Speech cache adapter identity is invalid.");
   }
-  if (!input.serverIdentity.trim() || !input.profileId.trim() || !input.modelId.trim() || !input.voiceId.trim()) {
+  if (!input.serverIdentity.trim() || !input.modelId.trim() || !input.voiceId.trim()) {
     throw new Error("Speech cache synthesis identity is incomplete.");
   }
   if (!Number.isFinite(input.speed) || input.speed <= 0 || input.speed > 4 || !normalizedText) {
@@ -141,7 +140,6 @@ export function normalizeSpeechCacheInput(input: SpeechCacheKeyInput): Normalize
     adapterId: input.adapterId.trim(),
     adapterVersion: input.adapterVersion,
     serverIdentityHash: sha256(input.serverIdentity.trim()),
-    profileId: input.profileId.trim(),
     modelId: input.modelId.trim(),
     voiceId: input.voiceId.trim(),
     speed: input.speed,
@@ -160,7 +158,6 @@ export function createSpeechCacheKey(input: SpeechCacheKeyInput): string {
     adapterId: normalized.adapterId,
     adapterVersion: normalized.adapterVersion,
     serverIdentityHash: normalized.serverIdentityHash,
-    profileId: normalized.profileId,
     modelId: normalized.modelId,
     voiceId: normalized.voiceId,
     speed: normalized.speed,
@@ -189,7 +186,6 @@ function parseMetadata(value: unknown): SpeechCacheEntryMetadata | null {
     || typeof item.adapterId !== "string" || !item.adapterId
     || typeof item.adapterVersion !== "number" || !Number.isInteger(item.adapterVersion)
     || typeof item.serverIdentityHash !== "string" || !CACHE_KEY_PATTERN.test(item.serverIdentityHash)
-    || typeof item.profileId !== "string" || !item.profileId
     || typeof item.modelId !== "string" || !item.modelId
     || typeof item.voiceId !== "string" || !item.voiceId
     || typeof item.speed !== "number" || !Number.isFinite(item.speed)
@@ -208,7 +204,6 @@ function metadataMatchesInput(metadata: SpeechCacheEntryMetadata, input: Normali
   return metadata.adapterId === input.adapterId
     && metadata.adapterVersion === input.adapterVersion
     && metadata.serverIdentityHash === input.serverIdentityHash
-    && metadata.profileId === input.profileId
     && metadata.modelId === input.modelId
     && metadata.voiceId === input.voiceId
     && metadata.speed === input.speed
@@ -403,7 +398,6 @@ export function createSpeechCache(options: {
       adapterId: normalized.adapterId,
       adapterVersion: normalized.adapterVersion,
       serverIdentityHash: normalized.serverIdentityHash,
-      profileId: normalized.profileId,
       modelId: normalized.modelId,
       voiceId: normalized.voiceId,
       speed: normalized.speed,

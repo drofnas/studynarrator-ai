@@ -49,7 +49,7 @@ function speechCache() {
         metadata: {
           schemaVersion: 1, normalizationVersion: 1, chunkingVersion: 1,
           adapterId: input.adapterId, adapterVersion: input.adapterVersion,
-          serverIdentityHash: "b".repeat(64), profileId: input.profileId, modelId: input.modelId,
+          serverIdentityHash: "b".repeat(64), modelId: input.modelId,
           voiceId: input.voiceId, speed: input.speed, textHash: "c".repeat(64), responseFormat: "wav",
           key: "a".repeat(64), audioChecksum: "d".repeat(64), byteLength: bytes.byteLength,
           createdAt: timestamp, lastUsedAt: timestamp, projectIds: [], scratchpadUsed: true
@@ -99,7 +99,7 @@ describe("scratchpad service", () => {
       retryCount: 2
     }));
     expect(result).toMatchObject({
-      schemaVersion: 3, originalText: "SQL indexes.", transformedText: "sequel indexes.",
+      schemaVersion: 1, originalText: "SQL indexes.", transformedText: "sequel indexes.",
       voiceLabel: "Friendly Voice", cache: { status: "miss" }, audio: { base64: "AQID", byteLength: 3 }
     });
     expect(retainScratchpad).toHaveBeenCalledWith("a".repeat(64));

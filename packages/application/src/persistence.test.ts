@@ -4,7 +4,7 @@ import { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
 import { createPersistenceService, createUnavailablePersistenceService, PersistenceUnavailableError } from "./persistence.js";
 
 const project = {
-  contractVersion: 9 as const,
+  contractVersion: 1 as const,
   id: "00000000-0000-4000-8000-000000000001",
   name: "Persisted study",
   description: "",
@@ -19,7 +19,7 @@ const project = {
 function repository() {
   return {
     status: vi.fn(() => ({
-      contractVersion: 9 as const,
+      contractVersion: 1 as const,
       state: "ready" as const,
       databaseSchemaVersion: 12 as const,
       targetDatabaseSchemaVersion: 12 as const,
@@ -110,7 +110,7 @@ describe("persistence application service", () => {
 
   it("keeps status available while rejecting degraded persistence operations", async () => {
     const service = createUnavailablePersistenceService({
-      contractVersion: 9,
+      contractVersion: 1,
       state: "unavailable",
       databaseSchemaVersion: 1,
       targetDatabaseSchemaVersion: 12,

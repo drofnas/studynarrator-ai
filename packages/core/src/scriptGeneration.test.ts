@@ -11,7 +11,7 @@ const entries: LexiconEntry[] = [
 ];
 
 const context = ScriptGenerationContextSchema.parse({
-  schemaVersion: 2,
+  schemaVersion: 1,
   projectName: "Caching guide",
   speakers: [
     { speakerId: "teacher", roleDescription: "Explains concepts clearly." },

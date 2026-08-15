@@ -27,12 +27,12 @@ import {
 import { isApprovedExternalUrl, SECURE_WEB_PREFERENCES } from "./security.js";
 
 const diagnostics = {
-  schemaVersion: 4,
+  schemaVersion: 1,
   overall: "fail",
   client: "electron",
   transport: "ipc",
   runtime: {
-    schemaVersion: 4,
+    schemaVersion: 1,
     applicationVersion: "0.1.0",
     runtimeName: "electron",
     runtimeVersion: "24.0.0",
@@ -51,7 +51,7 @@ const diagnostics = {
 } as const;
 
 const persistenceStatus = {
-  contractVersion: 9 as const,
+  contractVersion: 1 as const,
   state: "ready" as const,
   databaseSchemaVersion: 12 as const,
   targetDatabaseSchemaVersion: 12 as const,
@@ -78,7 +78,7 @@ const connection = {
 };
 const voiceCatalog = { get: vi.fn(), replace: vi.fn() };
 const scratchpadResult = {
-  schemaVersion: 3 as const,
+  schemaVersion: 1 as const,
   id: "00000000-0000-4000-8000-000000000099",
   createdAt: "2026-08-12T12:00:00.000Z",
   modelId: "model",
@@ -98,7 +98,7 @@ const scratchpadResult = {
 };
 const scratchpad = { preview: vi.fn(async () => scratchpadResult) };
 const projectPreviewResult = {
-  schemaVersion: 2 as const,
+  schemaVersion: 1 as const,
   id: "00000000-0000-4000-8000-000000000098",
   createdAt: "2026-08-12T12:00:00.000Z",
   projectId: "00000000-0000-4000-8000-000000000001",
@@ -262,7 +262,7 @@ describe("Electron boundary", () => {
   it("invokes every public IPC contract with schema-valid input and output", async () => {
     const timestamp = "2026-08-12T12:00:00.000Z";
     const project = {
-      contractVersion: 9 as const,
+      contractVersion: 1 as const,
       id: "00000000-0000-4000-8000-000000000001",
       name: "IPC project",
       description: "",

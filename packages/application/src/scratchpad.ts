@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { transformScratchpadPassage, ScratchpadPassageError } from "@studynarrator/core";
 import {
+  SCRATCHPAD_SCHEMA_VERSION,
   ScratchpadPreviewInputSchema,
   ScratchpadPreviewResultSchema,
   type ScratchpadClient,
@@ -89,7 +90,7 @@ export function createScratchpadService(dependencies: {
           ?? BUNDLED_VOICE_CATALOGS.get(input.modelId)?.entries.find((entry) => entry.voiceId === input.voiceId)?.label
           ?? input.voiceId;
         const result: ScratchpadPreviewResult = {
-          schemaVersion: 3,
+          schemaVersion: SCRATCHPAD_SCHEMA_VERSION,
           id: createId(),
           createdAt: now().toISOString(),
           modelId: input.modelId,

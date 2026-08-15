@@ -65,7 +65,6 @@ export function createCachedSpeechSynthesis(dependencies: {
         adapterId: SPEACHES_CACHE_ADAPTER_ID,
         adapterVersion: SPEACHES_CACHE_ADAPTER_VERSION,
         serverIdentity: connection.baseUrl,
-        profileId: connection.id,
         modelId: input.modelId,
         voiceId: input.voiceId,
         speed: input.speed,

@@ -8,7 +8,7 @@ import type { ScratchpadClient } from "./scratchpad.js";
 import type { ScriptGenerationClient } from "./scriptGeneration.js";
 
 export const APPLICATION_VERSION = "0.1.0";
-export const DIAGNOSTICS_SCHEMA_VERSION = 4;
+export const DIAGNOSTICS_SCHEMA_VERSION = 1;
 export const SYSTEM_DIAGNOSTICS_CHANNEL = "system.diagnostics";
 
 export const CheckStatusSchema = z.enum(["pass", "fail"]);

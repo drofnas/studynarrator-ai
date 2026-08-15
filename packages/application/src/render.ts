@@ -176,7 +176,6 @@ export async function createRenderService(options: {
       job = update(job, "validating");
       const { plan, snapshot, silenceAssets } = await options.plans.load(job.planId);
       const connection = options.repository.getSpeachesConnection();
-      if (snapshot.schemaVersion === 1 && connection.id !== snapshot.connection.profileId) throw new Error("Legacy connection unavailable. Freeze this project again.");
       if (!connection.baseUrl || sha256(connection.baseUrl) !== snapshot.connection.serverIdentityHash) throw new Error("Frozen endpoint identity changed.");
 
       const orderedAudio: string[] = [];

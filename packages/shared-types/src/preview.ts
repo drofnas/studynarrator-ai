@@ -2,7 +2,7 @@ import { SourceRangeSchema, SpeakerIdSchema } from "@studynarrator/core";
 import { z } from "zod";
 import { ProjectIdSchema } from "./persistence.js";
 
-export const PROJECT_PREVIEW_SCHEMA_VERSION = 2;
+export const PROJECT_PREVIEW_SCHEMA_VERSION = 1;
 export const SPEECH_CACHE_CONTRACT_VERSION = 1;
 export const MAX_PREVIEW_AUDIO_BYTES = 5 * 1024 * 1024;
 export const MAX_PRONUNCIATION_PREVIEW_CHARACTERS = 1_200;

@@ -35,7 +35,7 @@ const voiceCatalog = { get: vi.fn(async (): Promise<VoiceCatalog> => ({ schemaVe
 
 function previewResult(text: string): ScratchpadPreviewResult {
   return {
-    schemaVersion: 3, id: crypto.randomUUID(), createdAt: timestamp,
+    schemaVersion: 1, id: crypto.randomUUID(), createdAt: timestamp,
     modelId: "model", voiceId: "voice", voiceLabel: "Teacher — voice", speed: 1, originalText: text, readableText: text, transformedText: text.replace("SQL", "sequel"),
     lexiconApplied: true, warnings: [],
     cache: { key: "a".repeat(64), status: "miss", byteLength: 3, createdAt: timestamp, lastUsedAt: timestamp },

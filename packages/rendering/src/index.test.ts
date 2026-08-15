@@ -22,7 +22,6 @@ const input: SpeechCacheKeyInput = {
   adapterId: "speaches-openai",
   adapterVersion: 1,
   serverIdentity: "http://127.0.0.1:8000",
-  profileId: "profile-a",
   modelId: "model-a",
   voiceId: "voice-a",
   speed: 1,
@@ -52,7 +51,7 @@ describe("speech cache keys", () => {
     );
   });
 
-  it.each(["adapterId", "adapterVersion", "serverIdentity", "profileId", "modelId", "voiceId", "speed", "text"] as const)(
+  it.each(["adapterId", "adapterVersion", "serverIdentity", "modelId", "voiceId", "speed", "text"] as const)(
     "changes when %s changes",
     (field) => {
       const changed = field === "adapterVersion" ? 2 : field === "speed" ? 1.25 : `${String(input[field])}-changed`;
@@ -116,6 +115,18 @@ describe("content-addressed speech cache", () => {
     await expect(cache.status()).resolves.toMatchObject({ sessionCorruptMisses: 1 });
   });
 
+  it("treats pre-v1 metadata carrying profile identity as a cache miss", async () => {
+    const { cache, rootDirectory } = await fixture();
+    const first = await cache.getOrCreate(input, {}, async () => Uint8Array.from([82, 73, 70, 70]));
+    const metadataPath = join(rootDirectory, first.key.slice(0, 2), `${first.key}.json`);
+    const metadata = JSON.parse(await readFile(metadataPath, "utf8")) as Record<string, unknown>;
+    await writeFile(metadataPath, `${JSON.stringify({ ...metadata, profileId: "removed-profile" })}\n`);
+
+    const synthesize = vi.fn(async () => Uint8Array.from([82, 1, 2, 3]));
+    await expect(cache.getOrCreate(input, {}, synthesize)).resolves.toMatchObject({ status: "miss" });
+    expect(synthesize).toHaveBeenCalledOnce();
+  });
+
   it("clears a selected key, project-associated keys, and all remaining entries", async () => {
     const { cache } = await fixture();
     const one = await cache.getOrCreate(input, { projectId: "project-a" }, async () => Uint8Array.from([82, 1]));
@@ -172,7 +183,7 @@ describe("render plan silence and storage", () => {
       schemaVersion: PROJECT_SNAPSHOT_SCHEMA_VERSION,
       capturedAt: timestamp,
       project: {
-        contractVersion: 9,
+        contractVersion: 1,
         id: projectId,
         name: "Frozen plan",
         description: "",
@@ -190,7 +201,7 @@ describe("render plan silence and storage", () => {
       globalLexiconEntries: [],
       ignoredDiagnostics: [],
       connection: { modelId: "model", serverIdentityHash: "b".repeat(64) },
-      versions: { scriptGrammar: 2, cirSchema: 1, lexiconTransform: 1, pacing: 1, speechCacheSchema: 1, speechNormalization: 1, speechChunking: 1, speechAdapter: 1 }
+      versions: { scriptGrammar: 1, cirSchema: 1, lexiconTransform: 1, pacing: 1, speechCacheSchema: 1, speechNormalization: 1, speechChunking: 1, speechAdapter: 1 }
     });
     const plan = withRenderPlanHash({
       schemaVersion: RENDER_PLAN_SCHEMA_VERSION,
