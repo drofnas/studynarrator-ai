@@ -53,6 +53,8 @@ test.describe("Electron acceptance", () => {
     await expect(page.getByRole("heading", { name: "Quick Scratchpad" })).toBeVisible();
     await expect(page.getByLabel("Model")).toHaveValue("speaches-ai/Kokoro-82M-v1.0-ONNX");
     await expect(page.getByLabel("Voice")).toHaveValue("af_heart");
+    await expect(page.getByLabel("Voice").getByRole("option", { name: "Heart (af_heart | en-US)" })).toBeAttached();
+    await expect(page.getByLabel("Voice").locator('optgroup[label="en-US"]')).toBeAttached();
     await expect(page.getByText("Recent results")).toHaveCount(0);
     await expect(page.getByText("Sent to Speaches")).toHaveCount(0);
     await expect(page.getByText("No audio loaded")).toHaveCount(0);
@@ -80,6 +82,7 @@ test.describe("Electron acceptance", () => {
     await expect(page.getByLabel("Connection profile")).toHaveCount(0);
     await page.getByLabel("Optional model override").fill(FAKE_SPEACHES_SECONDARY_MODEL_ID);
     await expect(page.getByLabel("Voices")).toHaveValue(FAKE_SPEACHES_SECONDARY_VOICE_ID);
+    await expect(page.getByLabel("Voices").getByRole("option", { name: `Lessac (${FAKE_SPEACHES_SECONDARY_VOICE_ID} | Locale unavailable)` })).toBeAttached();
     await page.getByRole("button", { name: "Save now" }).click();
     await expect(page.getByText("All changes saved.")).toBeVisible();
     expect(studyNarrator.fakeSpeaches.getState().requests.filter(({ path }) => path === "/v1/audio/speech")).toHaveLength(2);

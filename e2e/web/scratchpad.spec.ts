@@ -39,6 +39,8 @@ test.describe("Quick Scratchpad", () => {
     await expect(page.getByLabel("Connection profile")).toHaveCount(0);
     await expect(page.getByLabel("Model")).toHaveValue("speaches-ai/Kokoro-82M-v1.0-ONNX");
     await expect(page.getByLabel("Voice")).toHaveValue("af_heart");
+    await expect(page.getByLabel("Voice").getByRole("option", { name: "Heart (af_heart | en-US)" })).toBeAttached();
+    await expect(page.getByLabel("Voice").locator('optgroup[label="en-US"]')).toBeAttached();
     await expect(page.getByText("Recent results")).toHaveCount(0);
     await expect(page.getByText("Sent to Speaches")).toHaveCount(0);
     await expect(page.getByText("No audio loaded")).toHaveCount(0);

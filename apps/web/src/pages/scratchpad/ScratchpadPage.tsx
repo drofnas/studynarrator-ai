@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { transformScratchpadPassage, type LexiconEntry } from "@studynarrator/core";
 import type { PersistenceClient, ScratchpadClient, VoiceCatalog } from "@studynarrator/shared-types";
 import { useConnections } from "@/features/connections/ConnectionProvider.js";
+import { VoiceSelect } from "@/features/connections/VoiceSelect.js";
+import { presentVoices } from "@/features/connections/voicePresentation.js";
 import { supportedProjectVoices } from "@/features/projects/projectAuthoring.js";
 import { SharedAudioPlayer } from "@/shared/audio/SharedAudioPlayer.js";
 import { useScratchpadSession } from "@/features/scratchpad/ScratchpadSessionProvider.js";
@@ -77,6 +79,10 @@ export function ScratchpadPage({ client, persistence }: { client: ScratchpadClie
     if (!catalog || catalogState !== "ready" || !speechModel) return [];
     return supportedProjectVoices(catalog.entries, speechModel.voices);
   }, [catalog, catalogState, speechModel]);
+  const presentedVoiceOptions = useMemo(() => {
+    const selectableIds = new Set(voiceOptions.map(({ voiceId }) => voiceId));
+    return presentVoices(speechModel?.voices.filter(({ voiceId }) => selectableIds.has(voiceId)) ?? [], voiceOptions);
+  }, [speechModel, voiceOptions]);
 
   useEffect(() => {
     if (speechCatalogState?.status !== "ready") return;
@@ -136,7 +142,7 @@ export function ScratchpadPage({ client, persistence }: { client: ScratchpadClie
         <div className={styles.setupHeading}><span className={styles.step}>Signal path</span><h3>Voice setup</h3></div>
         <div className={styles.setupGrid}>
           <label htmlFor="scratchpad-model">Model<select id="scratchpad-model" value={modelId} disabled={speechCatalogState?.status !== "ready" || modelOptions.length === 0} onChange={(event) => { setModelId(event.target.value); setVoiceId(""); }}><option value="">Choose a model</option>{modelOptions.map((item) => <option key={item.modelId} value={item.modelId}>{item.modelId}</option>)}</select></label>
-          <label htmlFor="scratchpad-voice">Voice<select id="scratchpad-voice" value={voiceId} disabled={catalogState !== "ready" || voiceOptions.length === 0} onChange={(event) => setVoiceId(event.target.value)}><option value="">Choose a voice</option>{voiceOptions.map((item) => <option key={item.voiceId} value={item.voiceId}>{item.label}</option>)}</select></label>
+          <label htmlFor="scratchpad-voice">Voice<VoiceSelect id="scratchpad-voice" value={voiceId} voices={presentedVoiceOptions} disabled={catalogState !== "ready" || voiceOptions.length === 0} emptyOption="Choose a voice" onChange={setVoiceId} /></label>
           <label htmlFor="scratchpad-speed">Speed<input id="scratchpad-speed" type="number" min="0.01" max="4" step="0.05" value={speed} onChange={(event) => setSpeed(Number(event.target.value))} /></label>
         </div>
         {!connection?.baseUrl ? <p className={styles.fieldError}>Configure the Speaches server in Settings before synthesis.</p> : null}

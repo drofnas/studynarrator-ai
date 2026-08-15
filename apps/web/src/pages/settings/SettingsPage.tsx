@@ -10,7 +10,8 @@ import {
   type VoiceCatalog
 } from "@studynarrator/shared-types";
 import { useConnections } from "@/features/connections/ConnectionProvider.js";
-import { filterPresentedVoices, groupPresentedVoices, presentVoices, voiceOptionLabel, type PresentedVoice } from "@/features/connections/voicePresentation.js";
+import { VoiceSelect } from "@/features/connections/VoiceSelect.js";
+import { filterPresentedVoices, groupPresentedVoices, presentVoices, type PresentedVoice } from "@/features/connections/voicePresentation.js";
 import { authoringLexicon } from "@/features/projects/projectAuthoring.js";
 import styles from "./SettingsPage.module.css";
 
@@ -369,7 +370,7 @@ export function SettingsPage({ client, cacheClient, scratchpadClient }: { client
   const presentedVoices = useMemo(() => presentVoices(selectedSpeechModel?.voices ?? [], catalog?.entries ?? []), [catalog, selectedSpeechModel]);
   const filteredVoices = useMemo(() => filterPresentedVoices(presentedVoices, catalogSearch), [catalogSearch, presentedVoices]);
   const voiceGroups = useMemo(() => groupPresentedVoices(filteredVoices.slice(0, 100)), [filteredVoices]);
-  const defaultVoiceGroups = useMemo(() => groupPresentedVoices(presentedVoices.filter(({ availableOnServer }) => availableOnServer)), [presentedVoices]);
+  const defaultVoiceOptions = useMemo(() => presentedVoices.filter(({ availableOnServer }) => availableOnServer), [presentedVoices]);
   const filteredLexicon = useMemo(() => globalLexicon.filter((entry) => !lexiconSearch || `${entry.displayText} ${entry.spokenText}`.toLocaleLowerCase().includes(lexiconSearch.toLocaleLowerCase())), [globalLexicon, lexiconSearch]);
   const connectionSummary = workspace.connection?.lastTestSummary;
   const showConnectionDiagnostics = Boolean(
@@ -420,7 +421,7 @@ export function SettingsPage({ client, cacheClient, scratchpadClient }: { client
         <div className={styles.profileForm}>
           <label>Address<input type="url" value={draft.baseUrl} onChange={(event) => setDraft({ ...draft, baseUrl: event.target.value, defaultModelId: "", defaultVoiceId: "" })} placeholder="http://127.0.0.1:8000" /></label>
           <label>Model<select value={draft.defaultModelId} disabled={speechModels.length === 0} onChange={(event) => { const modelId = event.target.value; setDraft({ ...draft, defaultModelId: modelId, defaultVoiceId: speechModels.find((model) => model.modelId === modelId)?.voices[0]?.voiceId ?? "" }); }}><option value="">Load catalog to choose</option>{speechModels.map((model) => <option key={model.modelId} value={model.modelId}>{model.modelId}</option>)}</select></label>
-          <label>Default Voice<select value={draft.defaultVoiceId} disabled={!selectedSpeechModel} onChange={(event) => setDraft({ ...draft, defaultVoiceId: event.target.value })}><option value="">Choose a voice</option>{defaultVoiceGroups.map((group) => <optgroup key={group.key} label={group.label}>{group.voices.map((voice) => <option key={voice.voiceId} value={voice.voiceId}>{voiceOptionLabel(voice)}</option>)}</optgroup>)}</select></label>
+          <label>Default Voice<VoiceSelect value={draft.defaultVoiceId} voices={defaultVoiceOptions} disabled={!selectedSpeechModel} emptyOption="Choose a voice" onChange={(defaultVoiceId) => setDraft({ ...draft, defaultVoiceId })} /></label>
           <div className={styles.inline}><label>Timeout (seconds)<input type="number" min="1" max="600" value={draft.timeoutSeconds} onChange={(event) => setDraft({ ...draft, timeoutSeconds: Number(event.target.value) })} /></label><label>Retries<input type="number" min="0" max="5" value={draft.retryCount} onChange={(event) => setDraft({ ...draft, retryCount: Number(event.target.value) })} /></label></div>
           <div className={styles.actions}><button type="button" disabled={workspace.testing || !draft.baseUrl || !draft.defaultModelId || !draft.defaultVoiceId} onClick={() => void saveConnection()}>{workspace.testing ? "Testing…" : "Save and Test"}</button></div>
         </div>

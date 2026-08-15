@@ -208,6 +208,8 @@ test.describe("Projects connected authoring", () => {
     const voices = page.getByLabel("Voices");
     await expect(voices).toBeVisible();
     await expect(voices).toHaveValue("af_heart");
+    await expect(voices.getByRole("option", { name: "Heart (af_heart | en-US)" })).toBeAttached();
+    await expect(voices.locator('optgroup[label="en-US"]')).toBeAttached();
     await expect(page.getByLabel("Connection profile")).toHaveCount(0);
     await page.getByLabel("Optional model override").fill(modelId);
     await expect(voices).toHaveValue("af_heart");
@@ -215,7 +217,7 @@ test.describe("Projects connected authoring", () => {
     await expect(page.getByText("af_heart", { exact: true })).toBeVisible();
     await page.getByLabel("Optional model override").fill(FAKE_SPEACHES_SECONDARY_MODEL_ID);
     await expect(voices).toHaveValue(FAKE_SPEACHES_SECONDARY_VOICE_ID);
-    await expect(voices.getByRole("option", { name: `Lessac — ${FAKE_SPEACHES_SECONDARY_VOICE_ID}` })).toBeAttached();
+    await expect(voices.getByRole("option", { name: `Lessac (${FAKE_SPEACHES_SECONDARY_VOICE_ID} | Locale unavailable)` })).toBeAttached();
     await expect(voices.getByRole("option", { name: /Heart/u })).toHaveCount(0);
     await page.getByLabel("Optional model override").fill(modelId);
     await expect(voices).toHaveValue("af_heart");

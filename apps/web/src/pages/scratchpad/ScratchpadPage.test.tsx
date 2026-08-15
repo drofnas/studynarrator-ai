@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { PersistenceClient, ScratchpadPreviewResult } from "@studynarrator/shared-types";
+import type { PersistenceClient, ScratchpadPreviewResult, VoiceCatalog } from "@studynarrator/shared-types";
 import { ConnectionProvider } from "@/features/connections/ConnectionProvider.js";
 import { ScratchpadSessionProvider } from "@/features/scratchpad/ScratchpadSessionProvider.js";
 import { ScratchpadPage } from "./ScratchpadPage.js";
@@ -31,7 +31,7 @@ const connections = {
   getSetupState: vi.fn(async () => ({ onboardingCompletedAt: timestamp, client: "web" as const })),
   completeOnboarding: vi.fn()
 };
-const voiceCatalog = { get: vi.fn(async () => ({ schemaVersion: 1 as const, modelId: "model", entries: [{ voiceId: "voice", label: "Teacher — voice", enabled: true, favorite: false, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }] })), replace: vi.fn() };
+const voiceCatalog = { get: vi.fn(async (): Promise<VoiceCatalog> => ({ schemaVersion: 1, modelId: "model", entries: [{ voiceId: "voice", label: "Teacher — voice", enabled: true, favorite: false, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }] })), replace: vi.fn() };
 
 function previewResult(text: string): ScratchpadPreviewResult {
   return {
@@ -71,7 +71,7 @@ describe("Quick Scratchpad", () => {
     await waitFor(() => expect(screen.getByLabelText("Voice")).toHaveValue("voice"));
     expect(screen.getByLabelText("Model")).toBeInstanceOf(HTMLSelectElement);
     expect(screen.getByLabelText("Voice")).toBeInstanceOf(HTMLSelectElement);
-    expect(screen.getByRole("option", { name: "Teacher — voice" })).toHaveValue("voice");
+    expect(screen.getByRole("option", { name: "Teacher (voice | Locale unavailable)" })).toHaveValue("voice");
     expect(screen.getByLabelText("Speed")).toHaveAttribute("max", "4");
     expect(screen.getByLabelText("Passage")).toHaveAttribute("maxlength", "1200");
     expect(screen.getByRole("heading", { name: "Voice setup" }).compareDocumentPosition(screen.getByRole("heading", { name: "Short passage" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -101,6 +101,28 @@ describe("Quick Scratchpad", () => {
     window.sessionStorage.setItem("studynarrator.scratchpad.lastPassage", "Remember this short passage.");
     renderPage();
     expect(await screen.findByLabelText("Passage")).toHaveValue("Remember this short passage.");
+  });
+
+  it("groups enabled supported voices with shared friendly labels", async () => {
+    connections.discoverSpeechCatalog.mockResolvedValue({ schemaVersion: 1 as const, models: [{ modelId: "model", voices: [
+      { voiceId: "voice", name: "VOICE", language: null, gender: null },
+      { voiceId: "favorite", name: "FAVORITE", language: null, gender: null },
+      { voiceId: "disabled", name: "Disabled server voice", language: null, gender: null }
+    ] }] });
+    const groupedCatalog: VoiceCatalog = { schemaVersion: 1, modelId: "model", entries: [
+      { voiceId: "voice", label: "Teacher", enabled: true, favorite: false, language: "English", locale: "en-US", accent: null, category: null, style: null, sampleText: null },
+      { voiceId: "favorite", label: "Favorite Voice", enabled: true, favorite: true, language: "English", locale: "en-GB", accent: null, category: null, style: null, sampleText: null },
+      { voiceId: "disabled", label: "Disabled Voice", enabled: false, favorite: false, language: "English", locale: "en-US", accent: null, category: null, style: null, sampleText: null }
+    ] };
+    voiceCatalog.get.mockResolvedValue(groupedCatalog);
+    renderPage();
+
+    const select = await screen.findByLabelText("Voice");
+    await waitFor(() => expect(select).toHaveValue("voice"));
+    expect([...select.querySelectorAll("optgroup")].map(({ label }) => label)).toEqual(["Favorites", "en-US"]);
+    expect(screen.getByRole("option", { name: "Favorite Voice (favorite | en-GB)" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Teacher (voice | en-US)" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /Disabled/u })).not.toBeInTheDocument();
   });
 
   it("disables catalog selections and explains discovery failures", async () => {

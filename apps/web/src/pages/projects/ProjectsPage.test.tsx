@@ -158,7 +158,7 @@ function renderPage(client: PersistenceClient, analyze: ScriptAnalyzer["analyze"
     schemaVersion: 1 as const,
     models: connection.defaultModelId ? [{
       modelId: connection.defaultModelId,
-      voices: (options.catalog?.entries ?? []).map((entry) => ({ voiceId: entry.voiceId, name: entry.label, language: entry.language, gender: null }))
+      voices: (options.catalog?.entries ?? []).map((entry) => ({ voiceId: entry.voiceId, name: entry.voiceId, language: entry.language, gender: null }))
     }] : []
   };
   const connections = {
@@ -265,7 +265,7 @@ describe("Projects workbench", () => {
     };
     const catalog: VoiceCatalog = { schemaVersion: 1, modelId: connection.defaultModelId!, entries: [
       { voiceId: "af_heart", label: "Heart — American English — af_heart", enabled: true, favorite: false, language: "American English", locale: "en-US", accent: "American", category: null, style: null, sampleText: null },
-      { voiceId: "af_sky", label: "Sky — American English — af_sky", enabled: true, favorite: false, language: "American English", locale: "en-US", accent: "American", category: null, style: null, sampleText: null }
+      { voiceId: "af_sky", label: "Sky — American English — af_sky", enabled: true, favorite: true, language: "American English", locale: "en-US", accent: "American", category: null, style: null, sampleText: null }
     ] };
     renderPage(client, analyze, { connection, catalog });
     await openProjectTab("Settings");
@@ -273,6 +273,9 @@ describe("Projects workbench", () => {
     await waitFor(() => expect(analyze).toHaveBeenCalled());
     expect((await screen.findAllByText("Heart — American English — af_heart")).length).toBeGreaterThan(0);
     expect(await screen.findByLabelText("Voices")).toHaveValue("af_heart");
+    expect(screen.getByRole("option", { name: "Heart (af_heart | en-US)" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Sky (af_sky | en-US)" })).toBeInTheDocument();
+    expect([...screen.getByLabelText("Voices").querySelectorAll("optgroup")].map(({ label }) => label)).toEqual(["Favorites", "en-US"]);
     expect(await screen.findByText("available")).toBeInTheDocument();
     await waitFor(() => expect(replace).toHaveBeenCalledWith(project.id, expect.objectContaining({
       modelId: null,
@@ -307,15 +310,15 @@ describe("Projects workbench", () => {
     await openProjectTab("Settings");
 
     expect(await screen.findByLabelText("Voices")).toHaveValue("voice-a");
-    expect(screen.getByRole("option", { name: "Catalog A" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "New server voice — voice-new" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Server A (voice-a | Locale unavailable)" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "New server voice (voice-new | Locale unavailable)" })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "Disabled" })).not.toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "Catalog B" })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Optional model override"), { target: { value: "model-b" } });
     await waitFor(() => expect(screen.getByLabelText("Voices")).toHaveValue("voice-b"));
-    expect(screen.getByRole("option", { name: "Catalog B" })).toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: "Catalog A" })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Server B (voice-b | Locale unavailable)" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Server A (voice-a | Locale unavailable)" })).not.toBeInTheDocument();
     expect(connections.discoverSpeechCatalog).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(replace).toHaveBeenCalledWith(project.id, expect.objectContaining({
       modelId: "model-b",
@@ -362,7 +365,7 @@ describe("Projects workbench", () => {
 
     expect(await screen.findByLabelText("Voices")).toBeEnabled();
     expect(screen.getByLabelText("Voices")).toHaveValue("af_heart");
-    expect(screen.getByRole("option", { name: "Sky — American English — af_sky" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Sky (af_sky | en-US)" })).toBeInTheDocument();
     expect(voiceCatalog.get).toHaveBeenCalledWith(GLOBAL_VOICE_CATALOG_MODEL_ID);
     await waitFor(() => expect(replace).toHaveBeenCalledWith(project.id, expect.objectContaining({
       modelId: null,
