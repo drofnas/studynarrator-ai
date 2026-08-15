@@ -82,8 +82,6 @@ test("Docker Web remains authorable offline and renders after Speaches reconnect
   const created = await jsonRequest(request, "post", "/api/projects", { name, description: "Created while Speaches is offline." }) as {
     id: string;
     name: string;
-    pausePresets: unknown[];
-    transitionPauses: unknown;
   };
   await page.goto(`/#/projects/${created.id}`);
   await expect(page.getByLabel("Project name").last()).toHaveValue(name);
@@ -92,10 +90,19 @@ test("Docker Web remains authorable offline and renders after Speaches reconnect
   const connected = await jsonRequest(request, "post", "/api/connection/test") as Record<string, unknown>;
   expect(connected.overall).toBe("connected");
 
+  const timing = await jsonRequest(request, "get", "/api/settings/pacing") as {
+    pausePresets: unknown[];
+    transitionPauses: Record<string, unknown>;
+  };
+  await jsonRequest(request, "put", "/api/settings/pacing", {
+    ...timing,
+    transitionPauses: { ...timing.transitionPauses, paragraph: { mode: "duration", durationMs: 625 } }
+  });
+
   await jsonRequest(request, "put", `/api/projects/${created.id}`, {
     name,
     description: "Created offline and rendered after reconnecting without a container restart.",
-    scriptSource: `[speaker_teacher] Deterministic Docker render from ${browserName}.`,
+    scriptSource: `[speaker_teacher] Deterministic Docker render from ${browserName}.\n\n[speaker_teacher] Global timing applies here.`,
     speakerMappings: [{
       speakerId: "teacher",
       displayName: "Teacher",
@@ -105,8 +112,6 @@ test("Docker Web remains authorable offline and renders after Speaches reconnect
       roleDescription: "",
       sampleText: ""
     }],
-    pausePresets: created.pausePresets,
-    transitionPauses: created.transitionPauses,
     lexiconEntries: []
   });
   const plan = await jsonRequest(request, "post", `/api/projects/${created.id}/render-plans`) as { id: string };
@@ -122,6 +127,7 @@ test("Docker Web remains authorable offline and renders after Speaches reconnect
   await expect(page.getByText(String(runtime.sourceRevision), { exact: true })).toBeVisible();
   await page.goto(`/#/projects/${created.id}?tab=render`);
   await expect(page.getByText(/Phase: complete/u)).toBeVisible();
+  await expect(page.getByRole("table", { name: "Frozen render plan ordered entries" })).toContainText("625 ms");
 
   const diagnostics = await jsonRequest(request, "get", "/api/diagnostics");
   const connectionDiagnostics = await jsonRequest(request, "get", "/api/connection/diagnostics");

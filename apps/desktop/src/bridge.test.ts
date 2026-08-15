@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   CONNECTION_CHANNELS,
+  DEFAULT_SYSTEM_TIMING,
   PERSISTENCE_CHANNELS,
   PROJECT_PREVIEW_CHANNELS,
   RENDER_PLAN_CHANNELS,
@@ -50,10 +51,10 @@ const diagnostics = {
 } as const;
 
 const persistenceStatus = {
-  contractVersion: 8 as const,
+  contractVersion: 9 as const,
   state: "ready" as const,
-  databaseSchemaVersion: 10 as const,
-  targetDatabaseSchemaVersion: 10 as const,
+  databaseSchemaVersion: 11 as const,
+  targetDatabaseSchemaVersion: 11 as const,
   databasePath: "/tmp/studynarrator.sqlite",
   latestBackupPath: null
 };
@@ -61,7 +62,7 @@ const persistenceStatus = {
 const persistence = {
   status: vi.fn(async () => persistenceStatus),
   projects: { list: vi.fn(async () => []), create: vi.fn(), get: vi.fn(), replace: vi.fn(), duplicate: vi.fn(), delete: vi.fn() },
-  settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() },
+  settings: { getPacing: vi.fn(async () => DEFAULT_SYSTEM_TIMING), updatePacing: vi.fn() },
   preferences: { getIgnoredDiagnostics: vi.fn(async () => []), replaceIgnoredDiagnostics: vi.fn() },
   globalLexicon: { list: vi.fn(async () => []), replace: vi.fn() }
 };
@@ -261,15 +262,13 @@ describe("Electron boundary", () => {
   it("invokes every public IPC contract with schema-valid input and output", async () => {
     const timestamp = "2026-08-12T12:00:00.000Z";
     const project = {
-      contractVersion: 8 as const,
+      contractVersion: 9 as const,
       id: "00000000-0000-4000-8000-000000000001",
       name: "IPC project",
       description: "",
       scriptSource: "",
       scriptHash: "a".repeat(64),
       speakerMappings: [],
-      pausePresets: [{ pauseId: "pause_medium", durationMs: 750, description: "Paragraph" }],
-      transitionPauses: { paragraph: { mode: "preset" as const, pauseId: "pause_medium" as const }, speakerChange: { mode: "none" as const }, section: { mode: "none" as const } },
       lexiconEntries: [],
       createdAt: timestamp,
       updatedAt: timestamp
@@ -320,7 +319,7 @@ describe("Electron boundary", () => {
     persistence.projects.replace.mockResolvedValue(project);
     persistence.projects.duplicate.mockResolvedValue(project);
     persistence.projects.delete.mockResolvedValue(undefined);
-    persistence.settings.updatePacing.mockResolvedValue({ enabled: false, durationMs: 900 });
+    persistence.settings.updatePacing.mockResolvedValue(DEFAULT_SYSTEM_TIMING);
     persistence.preferences.replaceIgnoredDiagnostics.mockResolvedValue([]);
     persistence.globalLexicon.replace.mockResolvedValue([]);
     connection.get.mockResolvedValue(storedConnection as never);
@@ -349,7 +348,7 @@ describe("Electron boundary", () => {
     registerRenderPlanHandlers(ipcMain, renderPlans);
     registerRenderHandlers(ipcMain, renders as never, saveDialog);
     registerScriptGenerationHandlers(ipcMain, scriptGeneration, saveDialog);
-    const projectReplace = { name: project.name, description: "", scriptSource: "", speakerMappings: [], pausePresets: project.pausePresets, transitionPauses: project.transitionPauses, lexiconEntries: [] };
+    const projectReplace = { name: project.name, description: "", scriptSource: "", speakerMappings: [], lexiconEntries: [] };
     const connectionInput = { baseUrl: "http://127.0.0.1:8000", defaultModelId: "model", defaultVoiceId: "voice" };
     const inputs: Record<string, unknown> = {
       [PERSISTENCE_CHANNELS.projectsCreate]: { name: "IPC project" },
@@ -357,7 +356,7 @@ describe("Electron boundary", () => {
       [PERSISTENCE_CHANNELS.projectsReplace]: { projectId: project.id, project: projectReplace },
       [PERSISTENCE_CHANNELS.projectsDuplicate]: { projectId: project.id, duplicate: { name: "IPC copy" } },
       [PERSISTENCE_CHANNELS.projectsDelete]: { projectId: project.id },
-      [PERSISTENCE_CHANNELS.pacingUpdate]: { enabled: false, durationMs: 900 },
+      [PERSISTENCE_CHANNELS.pacingUpdate]: DEFAULT_SYSTEM_TIMING,
       [PERSISTENCE_CHANNELS.ignoredReplace]: [],
       [PERSISTENCE_CHANNELS.globalLexiconReplace]: [],
       [CONNECTION_CHANNELS.update]: connectionInput,

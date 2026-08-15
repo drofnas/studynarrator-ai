@@ -3,6 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { DEFAULT_SYSTEM_TIMING } from "@studynarrator/shared-types";
 import type { ConnectionTestOverall, GlobalLexiconReplaceInput, PersistenceClient, ScratchpadClient, SpeachesConnection, SpeachesConnectionClient } from "@studynarrator/shared-types";
 import { SettingsPage } from "./SettingsPage.js";
 import { ConnectionProvider } from "@/features/connections/ConnectionProvider.js";
@@ -89,7 +90,7 @@ const voiceCatalog = { get: vi.fn(async (modelId: string) => ({ schemaVersion: 1
 describe("System Settings", () => {
   it("shows the Signal path only for an actual connection error", async () => {
     const client = {
-      settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() },
+      settings: { getPacing: vi.fn(async () => DEFAULT_SYSTEM_TIMING), updatePacing: vi.fn() },
       globalLexicon: { list: vi.fn(async () => []), replace: vi.fn(async (entries: GlobalLexiconReplaceInput) => entries) }
     } as unknown as PersistenceClient;
 
@@ -117,7 +118,7 @@ describe("System Settings", () => {
       return structuredClone(stored);
     });
     const client = {
-      settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() },
+      settings: { getPacing: vi.fn(async () => DEFAULT_SYSTEM_TIMING), updatePacing: vi.fn() },
       globalLexicon: { list: vi.fn(async () => structuredClone(stored)), replace }
     } as unknown as PersistenceClient;
     render(<ConnectionProvider connectionClient={connectionClient()} voiceCatalog={voiceCatalog}><SettingsPage client={client} cacheClient={cacheClient} scratchpadClient={scratchpadClient} /></ConnectionProvider>);
@@ -153,7 +154,7 @@ describe("System Settings", () => {
       .mockRejectedValueOnce(new Error("Storage is unavailable"))
       .mockImplementation(async (entries: GlobalLexiconReplaceInput) => entries.map((entry) => ({ ...entry, id: entry.id ?? "global-new", createdAt: timestamp, updatedAt: timestamp })));
     const client = {
-      settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() },
+      settings: { getPacing: vi.fn(async () => DEFAULT_SYSTEM_TIMING), updatePacing: vi.fn() },
       globalLexicon: { list: vi.fn(async () => [{ id: "global-api", scope: "global", entryType: "exactTerm", displayText: "API", spokenText: "A P I", caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: "", createdAt: timestamp, updatedAt: timestamp }]), replace }
     } as unknown as PersistenceClient;
     render(<ConnectionProvider connectionClient={connectionClient()} voiceCatalog={voiceCatalog}><SettingsPage client={client} cacheClient={cacheClient} scratchpadClient={scratchpadClient} /></ConnectionProvider>);
@@ -177,20 +178,26 @@ describe("System Settings", () => {
     expect(screen.queryByText("Saved")).not.toBeInTheDocument();
   });
 
-  it("normalizes and saves new-project pacing without touching projects", async () => {
-    const updatePacing = vi.fn(async (input: { enabled: boolean; durationMs: number }) => input);
+  it("normalizes and saves global timing without touching projects", async () => {
+    const updatePacing = vi.fn(async (input: typeof DEFAULT_SYSTEM_TIMING) => input);
     const replaceProject = vi.fn();
     const client = {
-      settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing },
+      settings: { getPacing: vi.fn(async () => DEFAULT_SYSTEM_TIMING), updatePacing },
       globalLexicon: { list: vi.fn(async () => []), replace: vi.fn(async (entries: GlobalLexiconReplaceInput) => entries) },
       projects: { replace: replaceProject }
     } as unknown as PersistenceClient;
     render(<ConnectionProvider connectionClient={connectionClient()} voiceCatalog={voiceCatalog}><SettingsPage client={client} cacheClient={cacheClient} scratchpadClient={scratchpadClient} /></ConnectionProvider>);
-    const input = await screen.findByLabelText(/Default pause_medium duration/u);
+    const input = await screen.findByLabelText("pause_medium duration");
+    expect(screen.getByRole("table")).toHaveTextContent("pause_short");
+    expect(screen.getByRole("table")).toHaveTextContent("pause_long");
     fireEvent.change(input, { target: { value: "1.5 s" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save pacing defaults" }));
-    expect(await screen.findByText("Pacing defaults saved. Existing projects were not changed.")).toBeInTheDocument();
-    expect(updatePacing).toHaveBeenCalledWith({ enabled: true, durationMs: 1_500 });
+    await userEvent.selectOptions(screen.getAllByLabelText("Behavior")[1]!, "duration");
+    fireEvent.change(screen.getByLabelText("Duration"), { target: { value: "0.5 s" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save timing" }));
+    expect(await screen.findByText("Global timing saved.")).toBeInTheDocument();
+    const saved = updatePacing.mock.calls[0]?.[0];
+    expect(saved?.pausePresets.find(({ pauseId }) => pauseId === "pause_medium")?.durationMs).toBe(1_500);
+    expect(saved?.transitionPauses.speakerChange).toEqual({ mode: "duration", durationMs: 500 });
     expect(replaceProject).not.toHaveBeenCalled();
   });
 
@@ -211,7 +218,7 @@ describe("System Settings", () => {
       return Promise.resolve({ ...scratchpadResult, originalText: input.text, readableText: input.text, transformedText: input.text, voiceId: input.voiceId });
     });
     const client = {
-      settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() },
+      settings: { getPacing: vi.fn(async () => DEFAULT_SYSTEM_TIMING), updatePacing: vi.fn() },
       globalLexicon: { list: vi.fn(async () => []), replace: vi.fn(async (entries: GlobalLexiconReplaceInput) => entries) }
     } as unknown as PersistenceClient;
     const idNamedConnection = connectionClient({
@@ -264,7 +271,7 @@ describe("System Settings", () => {
     };
     const replace = vi.fn(async (input: typeof stored) => { stored = structuredClone(input); return structuredClone(stored); });
     const localVoiceCatalog = { get: vi.fn(async () => structuredClone(stored)), replace };
-    const client = { settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() }, globalLexicon: { list: vi.fn(async () => []), replace: vi.fn(async (entries: GlobalLexiconReplaceInput) => entries) } } as unknown as PersistenceClient;
+    const client = { settings: { getPacing: vi.fn(async () => DEFAULT_SYSTEM_TIMING), updatePacing: vi.fn() }, globalLexicon: { list: vi.fn(async () => []), replace: vi.fn(async (entries: GlobalLexiconReplaceInput) => entries) } } as unknown as PersistenceClient;
     render(<ConnectionProvider connectionClient={connectionClient()} voiceCatalog={localVoiceCatalog}><SettingsPage client={client} cacheClient={cacheClient} scratchpadClient={scratchpadClient} /></ConnectionProvider>);
 
     const favorites = await screen.findByLabelText("Favorites voices");
@@ -293,7 +300,7 @@ describe("System Settings", () => {
   it("returns an audition button to normal and reports decoding failures", async () => {
     audioContext.decodeAudioData.mockRejectedValue(new Error("Unsupported WAV data"));
     const localVoiceCatalog = { get: vi.fn(async (modelId: string) => ({ schemaVersion: 1 as const, modelId, entries: [{ voiceId: "voice-b2", label: "Second voice", enabled: true, favorite: false, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }] })), replace: vi.fn() };
-    const client = { settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() }, globalLexicon: { list: vi.fn(async () => []), replace: vi.fn(async (entries: GlobalLexiconReplaceInput) => entries) } } as unknown as PersistenceClient;
+    const client = { settings: { getPacing: vi.fn(async () => DEFAULT_SYSTEM_TIMING), updatePacing: vi.fn() }, globalLexicon: { list: vi.fn(async () => []), replace: vi.fn(async (entries: GlobalLexiconReplaceInput) => entries) } } as unknown as PersistenceClient;
     render(<ConnectionProvider connectionClient={connectionClient()} voiceCatalog={localVoiceCatalog}><SettingsPage client={client} cacheClient={cacheClient} scratchpadClient={scratchpadClient} /></ConnectionProvider>);
     await userEvent.click(await screen.findByRole("button", { name: "Test Second" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Voice test failed: Unsupported WAV data");
@@ -307,7 +314,7 @@ describe("System Settings", () => {
       return new Promise((_resolve, reject) => signal?.addEventListener("abort", () => reject(new DOMException("Cancelled", "AbortError"))));
     });
     const localVoiceCatalog = { get: vi.fn(async (modelId: string) => ({ schemaVersion: 1 as const, modelId, entries: [{ voiceId: "voice-b2", label: "Second voice", enabled: true, favorite: false, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }] })), replace: vi.fn() };
-    const client = { settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() }, globalLexicon: { list: vi.fn(async () => []), replace: vi.fn(async (entries: GlobalLexiconReplaceInput) => entries) } } as unknown as PersistenceClient;
+    const client = { settings: { getPacing: vi.fn(async () => DEFAULT_SYSTEM_TIMING), updatePacing: vi.fn() }, globalLexicon: { list: vi.fn(async () => []), replace: vi.fn(async (entries: GlobalLexiconReplaceInput) => entries) } } as unknown as PersistenceClient;
     const view = render(<ConnectionProvider connectionClient={connectionClient()} voiceCatalog={localVoiceCatalog}><SettingsPage client={client} cacheClient={cacheClient} scratchpadClient={{ preview }} /></ConnectionProvider>);
     const button = await screen.findByRole("button", { name: "Test Second" });
     fireEvent.change(screen.getByLabelText("Voice test script"), { target: { value: "" } });
@@ -321,7 +328,7 @@ describe("System Settings", () => {
   });
 
   it("shows session cache statistics and confirms clear-all", async () => {
-    const client = { settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() }, globalLexicon: { list: vi.fn(async () => []), replace: vi.fn(async (entries: GlobalLexiconReplaceInput) => entries) } } as unknown as PersistenceClient;
+    const client = { settings: { getPacing: vi.fn(async () => DEFAULT_SYSTEM_TIMING), updatePacing: vi.fn() }, globalLexicon: { list: vi.fn(async () => []), replace: vi.fn(async (entries: GlobalLexiconReplaceInput) => entries) } } as unknown as PersistenceClient;
     const status = vi.fn()
       .mockResolvedValueOnce({ contractVersion: 1, entryCount: 2, totalBytes: 2048, lastUsedAt: "2026-08-12T12:00:00.000Z", sessionHits: 3, sessionMisses: 2, sessionWrites: 2, sessionCorruptMisses: 1, inFlight: 0 })
       .mockResolvedValueOnce({ contractVersion: 1, entryCount: 0, totalBytes: 0, lastUsedAt: null, sessionHits: 3, sessionMisses: 2, sessionWrites: 2, sessionCorruptMisses: 1, inFlight: 0 });

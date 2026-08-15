@@ -83,4 +83,20 @@ describe("LexiconEditor", () => {
     await user.click(within(row).getByRole("button", { name: "Delete" }));
     expect(screen.getByText("No entries.")).toBeInTheDocument();
   });
+
+  it("can hide search while empty and restore that state after the last deletion", async () => {
+    function Harness() {
+      const [value, setValue] = useState<LexiconEditorValue[]>([]);
+      return <LexiconEditor value={value} hideSearchWhenEmpty searchLabel="Search project lexicon" emptyMessage="No entries." onChange={(next) => setValue(next)} />;
+    }
+    render(<Harness />);
+    const user = userEvent.setup();
+    expect(screen.queryByLabelText("Search project lexicon")).not.toBeInTheDocument();
+    await user.type(screen.getAllByLabelText("Script Text")[0]!, "API");
+    await user.type(screen.getAllByLabelText("Spoken Text")[0]!, "A P I");
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    expect(screen.getByLabelText("Search project lexicon")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    expect(screen.queryByLabelText("Search project lexicon")).not.toBeInTheDocument();
+  });
 });

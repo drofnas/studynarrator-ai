@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { Link, MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseScript, resolveParagraphPauses, transformScript } from "@studynarrator/core";
+import { DEFAULT_SYSTEM_TIMING } from "@studynarrator/shared-types";
 import type { IgnoredDiagnosticCollection, PersistenceClient, ProjectDetail, ProjectPreviewResult, ProjectReplaceInput, ProjectPreviewClient, RenderClient, RenderPlan, RenderPlanClient, RenderPlanSummary, SpeachesConnection, SpeechCatalog, VoiceCatalog } from "@studynarrator/shared-types";
 import type { ScriptAnalyzer } from "@/workers/parser/parserClient.js";
 import type { ScriptAnalysisInput } from "@/workers/parser/parserWorkerProtocol.js";
@@ -13,18 +14,13 @@ import { ProjectsPage } from "./ProjectsPage.js";
 import { ConnectionProvider } from "@/features/connections/ConnectionProvider.js";
 
 const project: ProjectDetail = {
-  contractVersion: 8,
+  contractVersion: 9,
   id: "00000000-0000-4000-8000-000000000001",
   name: "Authoring study",
   description: "Offline fixture",
   scriptSource: "[speaker_teacher] SQL.\n[pause_short]\nContinue.",
   scriptHash: "a".repeat(64),
   speakerMappings: [{ speakerId: "teacher", displayName: "Teacher", voiceId: "voice_teacher", speed: 1, gainDb: 0, roleDescription: "", sampleText: "" }],
-  pausePresets: [
-    { pauseId: "pause_short", durationMs: 350, description: "Brief" },
-    { pauseId: "pause_medium", durationMs: 750, description: "Paragraph" }
-  ],
-  transitionPauses: { paragraph: { mode: "preset", pauseId: "pause_medium" }, speakerChange: { mode: "none" }, section: { mode: "none" } },
   lexiconEntries: [{
     id: "project-sql", scope: "project", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel",
     caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: "", createdAt: "2026-08-12T12:00:00.000Z", updatedAt: "2026-08-12T12:00:00.000Z"
@@ -118,7 +114,7 @@ function fixture(sourceProject = project) {
       duplicate,
       delete: vi.fn(async () => undefined)
     },
-    settings: { getPacing: vi.fn(async () => ({ enabled: true, durationMs: 750 })), updatePacing: vi.fn() },
+    settings: { getPacing: vi.fn(async () => DEFAULT_SYSTEM_TIMING), updatePacing: vi.fn() },
     preferences: {
       getIgnoredDiagnostics: vi.fn(async () => structuredClone(ignoredDiagnostics)),
       replaceIgnoredDiagnostics
@@ -278,10 +274,20 @@ describe("Projects workbench", () => {
     await openProjectTab("Settings");
     expect(screen.queryByLabelText("Connection profile")).not.toBeInTheDocument();
     await waitFor(() => expect(analyze).toHaveBeenCalled());
-    expect(await screen.findByLabelText("Voices")).toHaveValue("af_heart");
+    expect(await screen.findByLabelText("Voice for speaker teacher")).toHaveValue("af_heart");
+    const speakers = screen.getByRole("region", { name: "Project speakers" });
+    expect(within(speakers).getByRole("table")).toBeInTheDocument();
+    expect(within(speakers).getAllByRole("columnheader").map(({ textContent }) => textContent)).toEqual(["Name", "Voice", "Speed", "Gain dB"]);
+    expect(screen.getByLabelText("Name for speaker teacher")).toHaveValue("Teacher");
+    expect(screen.getByLabelText("Speed for speaker teacher")).toHaveValue(1);
+    expect(screen.getByLabelText("Gain dB for speaker teacher")).toHaveValue(0);
+    expect(screen.queryByText("Project Timings")).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Pauses$/u)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Copy" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/1 uses/u)).not.toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Heart (af_heart | en-US)" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Sky (af_sky | en-US)" })).toBeInTheDocument();
-    expect([...screen.getByLabelText("Voices").querySelectorAll("optgroup")].map(({ label }) => label)).toEqual(["Favorites", "en-US"]);
+    expect([...screen.getByLabelText("Voice for speaker teacher").querySelectorAll("optgroup")].map(({ label }) => label)).toEqual(["Favorites", "en-US"]);
     expect(screen.queryByText("Heart — American English — af_heart")).not.toBeInTheDocument();
     expect(screen.queryByText("available")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Project connection" })).not.toBeInTheDocument();
@@ -289,8 +295,8 @@ describe("Projects workbench", () => {
     await waitFor(() => expect(replace).toHaveBeenCalledWith(project.id, expect.objectContaining({
       speakerMappings: [expect.objectContaining({ speakerId: "teacher", voiceId: "af_heart" })]
     })));
-    await userEvent.selectOptions(screen.getByLabelText("Voices"), "af_sky");
-    expect(screen.getByLabelText("Voices")).toHaveValue("af_sky");
+    await userEvent.selectOptions(screen.getByLabelText("Voice for speaker teacher"), "af_sky");
+    expect(screen.getByLabelText("Voice for speaker teacher")).toHaveValue("af_sky");
   });
 
   it("filters voices by model from one session discovery and appends unknown supported voices", async () => {
@@ -317,7 +323,7 @@ describe("Projects workbench", () => {
     const { connections } = renderPage(client, analyze, { connection, catalog, speechCatalog });
     await openProjectTab("Settings");
 
-    expect(await screen.findByLabelText("Voices")).toHaveValue("voice-a");
+    expect(await screen.findByLabelText("Voice for speaker teacher")).toHaveValue("voice-a");
     expect(screen.getByRole("option", { name: "Server A (voice-a | Locale unavailable)" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "New server voice (voice-new | Locale unavailable)" })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "Disabled" })).not.toBeInTheDocument();
@@ -347,12 +353,12 @@ describe("Projects workbench", () => {
     const { connections } = renderPage(client, analyze, { connection, catalog, speechCatalog, discovery });
     await openProjectTab("Settings");
 
-    expect(await screen.findByLabelText("Voices")).toBeDisabled();
+    expect(await screen.findByLabelText("Voice for speaker teacher")).toBeDisabled();
     expect(screen.getByText("Supported voices are temporarily unavailable.")).toBeInTheDocument();
     expect(screen.queryByText("voice-a")).not.toBeInTheDocument();
     expect(replace).not.toHaveBeenCalled();
     await userEvent.click(await screen.findByRole("button", { name: "Retry supported voices" }));
-    await waitFor(() => expect(screen.getByLabelText("Voices")).toHaveValue("voice-a"));
+    await waitFor(() => expect(screen.getByLabelText("Voice for speaker teacher")).toHaveValue("voice-a"));
     expect(screen.getByRole("option", { name: "Voice A (voice-a | Locale unavailable)" })).toBeInTheDocument();
     expect(connections.discoverSpeechCatalog).toHaveBeenCalledTimes(2);
     expect(replace).not.toHaveBeenCalled();
@@ -365,8 +371,8 @@ describe("Projects workbench", () => {
     const { voiceCatalog } = renderPage(client, analyze, { catalog: globalCatalog });
     await openProjectTab("Settings");
 
-    expect(await screen.findByLabelText("Voices")).toBeEnabled();
-    expect(screen.getByLabelText("Voices")).toHaveValue("af_heart");
+    expect(await screen.findByLabelText("Voice for speaker teacher")).toBeEnabled();
+    expect(screen.getByLabelText("Voice for speaker teacher")).toHaveValue("af_heart");
     expect(screen.getByRole("option", { name: "Sky (af_sky | en-US)" })).toBeInTheDocument();
     expect(voiceCatalog.get).toHaveBeenCalledWith(GLOBAL_VOICE_CATALOG_MODEL_ID);
     await waitFor(() => expect(replace).toHaveBeenCalledWith(project.id, expect.objectContaining({
@@ -457,42 +463,19 @@ describe("Projects workbench", () => {
   });
 
   it("does not autosave discovery reconciliation when the user has not edited the project", async () => {
-    const unreconciled = { ...project, speakerMappings: [], pausePresets: [] };
+    const unreconciled = { ...project, speakerMappings: [] };
     const { client, analyze, replace } = fixture(unreconciled);
     const timerSpy = vi.spyOn(window, "setTimeout");
     renderPage(client, analyze);
     await openProjectTab("Settings");
 
     await waitFor(() => expect(analyze).toHaveBeenCalled());
-    expect(await screen.findByLabelText("Voices")).toBeDisabled();
-    expect(screen.getByLabelText("Voices")).toHaveValue("");
+    expect(await screen.findByLabelText("Voice for speaker teacher")).toBeDisabled();
+    expect(screen.getByLabelText("Voice for speaker teacher")).toHaveValue("");
     expect(screen.getByText("The global voice catalog has no enabled voices.")).toBeInTheDocument();
     expect(timerSpy.mock.calls.filter(([, delay]) => delay === 800)).toHaveLength(0);
     expect(replace).not.toHaveBeenCalled();
     expect(screen.queryByText(/^Saved$/u)).not.toBeInTheDocument();
-  });
-
-  it("retains an invalid custom pause draft and blocks Save now", async () => {
-    const custom = { ...project, scriptSource: "[speaker_teacher] One. [pause_custom] Two.", pausePresets: [project.pausePresets[0]!] };
-    const { client, analyze, replace, duplicate } = fixture(custom);
-    renderPage(client, analyze);
-    await openProjectTab("Settings");
-
-    const pauseCode = (await screen.findAllByText("pause_custom")).find((element) => element.tagName === "CODE");
-    if (!pauseCode) throw new Error("Expected the custom pause ID in configuration.");
-    const pauseCard = pauseCode.closest("article");
-    if (!pauseCard) throw new Error("Expected a pause configuration card.");
-    fireEvent.change(within(pauseCard).getByLabelText("Duration"), { target: { value: "-1 s" } });
-    expect(await within(pauseCard).findByText("Pause duration cannot be negative.")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Save now" }));
-    await waitFor(() => expect(screen.getByText("Invalid changes")).toBeInTheDocument());
-    expect(replace).not.toHaveBeenCalled();
-
-    const prompt = vi.spyOn(window, "prompt").mockReturnValue("Invalid copy");
-    fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
-    await waitFor(() => expect(screen.getByText("Invalid changes")).toBeInTheDocument());
-    expect(prompt).not.toHaveBeenCalled();
-    expect(duplicate).not.toHaveBeenCalled();
   });
 
   it("serializes saves so a stale response cannot overwrite a newer revision", async () => {
@@ -573,7 +556,7 @@ describe("Projects workbench", () => {
     expect(preview).toHaveBeenCalledTimes(1);
   });
 
-  it("configures every transition and creates, reopens, and replaces immutable plans", async () => {
+  it("creates, reopens, and replaces immutable plans using global timing", async () => {
     const { client, analyze, replace } = fixture();
     const first = frozenPlan("00000000-0000-4000-8000-000000000002", "b".repeat(64), "2026-08-12T14:00:00.000Z");
     const second = frozenPlan("00000000-0000-4000-8000-000000000003", "c".repeat(64), "2026-08-12T16:00:00.000Z");
@@ -587,28 +570,14 @@ describe("Projects workbench", () => {
     const get = vi.fn(async (planId: string) => plans.find(({ id }) => id === planId)!);
     renderPage(client, analyze, { renderPlanClient: { create, list, get } });
 
-    await openProjectTab("Settings");
-    await userEvent.selectOptions(screen.getByLabelText("Paragraph transition mode"), "duration");
-    fireEvent.change(screen.getByLabelText("Paragraph transition duration (ms)"), { target: { value: "600" } });
-    await userEvent.selectOptions(screen.getByLabelText("Speaker change transition mode"), "preset");
-    await userEvent.selectOptions(screen.getByLabelText("Speaker change transition preset"), "pause_short");
-    await userEvent.selectOptions(screen.getByLabelText("Section transition mode"), "duration");
-    fireEvent.change(screen.getByLabelText("Section transition duration (ms)"), { target: { value: "1500" } });
-    fireEvent.change(screen.getByDisplayValue("Offline fixture"), { target: { value: "Pending frozen revision" } });
+    fireEvent.change(await screen.findByDisplayValue("Offline fixture"), { target: { value: "Pending frozen revision" } });
     await openProjectTab("Render");
     const freeze = await screen.findByRole("button", { name: "Freeze render plan" });
     await waitFor(() => expect(freeze).toBeEnabled());
     await userEvent.click(freeze);
 
     await waitFor(() => expect(create).toHaveBeenCalledWith(project.id));
-    expect(replace).toHaveBeenCalledWith(project.id, expect.objectContaining({
-      description: "Pending frozen revision",
-      transitionPauses: {
-        paragraph: { mode: "duration", durationMs: 600 },
-        speakerChange: { mode: "preset", pauseId: "pause_short" },
-        section: { mode: "duration", durationMs: 1500 }
-      }
-    }));
+    expect(replace).toHaveBeenCalledWith(project.id, expect.objectContaining({ description: "Pending frozen revision" }));
     expect(replace.mock.invocationCallOrder[0]).toBeLessThan(create.mock.invocationCallOrder[0]!);
     const planTable = await screen.findByRole("table", { name: "Frozen render plan ordered entries" });
     expect(planTable).toHaveAttribute("tabindex", "0");

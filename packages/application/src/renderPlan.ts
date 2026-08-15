@@ -15,7 +15,6 @@ import {
   RENDER_PLAN_SCHEMA_VERSION,
   ProjectIdSchema,
   RenderPlanIdSchema,
-  type ProjectDetail,
   type RenderPlan,
   type RenderPlanClient,
   type RenderPlanEntry,

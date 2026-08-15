@@ -6,7 +6,9 @@ import {
   type PersistenceClient,
   type SpeechCacheClient,
   type SpeechCacheStatus,
-  type SystemPacingDefaults,
+  DEFAULT_SYSTEM_TIMING,
+  type SystemTimingConfiguration,
+  type SystemTransitionPauseSetting,
   type VoiceCatalog
 } from "@studynarrator/shared-types";
 import { useConnections } from "@/features/connections/ConnectionProvider.js";
@@ -34,6 +36,25 @@ const VOICE_TEST_SCRIPT = "This short sample lets you hear how this voice handle
 
 type AuditionState = { voiceId: string; phase: "processing" | "playing" } | null;
 type LexiconRowState = "saving" | "saved" | "error";
+type TransitionKey = keyof SystemTimingConfiguration["transitionPauses"];
+
+function TimingTransitionEditor({ label, setting, duration, onSettingChange, onDurationChange }: {
+  label: string;
+  setting: SystemTransitionPauseSetting;
+  duration: string;
+  onSettingChange: (setting: SystemTransitionPauseSetting) => void;
+  onDurationChange: (value: string) => void;
+}) {
+  return <fieldset className={styles.transitionField}>
+    <legend>{label}</legend>
+    <label>Behavior<select value={setting.mode} onChange={(event) => {
+      const mode = event.target.value;
+      onSettingChange(mode === "none" ? { mode } : mode === "preset" ? { mode, pauseId: "pause_medium" } : { mode: "duration", durationMs: 750 });
+    }}><option value="none">None</option><option value="preset">Named preset</option><option value="duration">Direct duration</option></select></label>
+    {setting.mode === "preset" ? <label>Preset<select value={setting.pauseId} onChange={(event) => onSettingChange({ mode: "preset", pauseId: event.target.value as "pause_short" | "pause_medium" | "pause_long" })}><option value="pause_short">pause_short</option><option value="pause_medium">pause_medium</option><option value="pause_long">pause_long</option></select></label> : null}
+    {setting.mode === "duration" ? <label>Duration<input value={duration} onChange={(event) => onDurationChange(event.target.value)} /></label> : null}
+  </fieldset>;
+}
 
 function fixedGlobalEntry(entry: LexiconEntryAuthoring): SimplifiedGlobalEntry {
   return {
@@ -75,8 +96,9 @@ function formatBytes(value: number): string {
 
 export function SettingsPage({ client, cacheClient, scratchpadClient }: { client: PersistenceClient; cacheClient: SpeechCacheClient; scratchpadClient: ScratchpadClient }) {
   const workspace = useConnections();
-  const [pacing, setPacing] = useState<SystemPacingDefaults>({ enabled: true, durationMs: 750 });
-  const [duration, setDuration] = useState("750 ms");
+  const [timing, setTiming] = useState<SystemTimingConfiguration>(DEFAULT_SYSTEM_TIMING);
+  const [pauseInputs, setPauseInputs] = useState<Record<string, string>>(() => Object.fromEntries(DEFAULT_SYSTEM_TIMING.pausePresets.map((preset) => [preset.pauseId, `${String(preset.durationMs)} ms`])));
+  const [transitionInputs, setTransitionInputs] = useState<Record<TransitionKey, string>>({ paragraph: "750 ms", speakerChange: "750 ms", section: "750 ms" });
   const [status, setStatus] = useState("Loading settings…");
   const [error, setError] = useState("");
   const [draft, setDraft] = useState(EMPTY_CONNECTION);
@@ -111,9 +133,10 @@ export function SettingsPage({ client, cacheClient, scratchpadClient }: { client
     let active = true;
     void client.settings.getPacing().then((loaded) => {
       if (!active) return;
-      setPacing(loaded);
-      setDuration(`${String(loaded.durationMs)} ms`);
-      setStatus("These values are copied into each new project.");
+      setTiming(loaded);
+      setPauseInputs(Object.fromEntries(loaded.pausePresets.map((preset) => [preset.pauseId, `${String(preset.durationMs)} ms`])));
+      setTransitionInputs(Object.fromEntries(Object.entries(loaded.transitionPauses).map(([key, setting]) => [key, setting.mode === "duration" ? `${String(setting.durationMs)} ms` : "750 ms"])) as Record<TransitionKey, string>);
+      setStatus("Timing settings apply to every editable project.");
     }).catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : "Settings could not be loaded."); });
     return () => { active = false; };
   }, [client]);
@@ -174,13 +197,27 @@ export function SettingsPage({ client, cacheClient, scratchpadClient }: { client
     if (lexiconTimerRef.current) clearTimeout(lexiconTimerRef.current);
   }, [stopAudition]);
 
-  const savePacing = async () => {
-    const parsed = parsePauseDuration(duration);
-    if (!parsed.ok) { setError(parsed.message); return; }
+  const saveTiming = async () => {
+    const parsedPresets = timing.pausePresets.map((preset) => ({ preset, parsed: parsePauseDuration(pauseInputs[preset.pauseId] ?? "") }));
+    const invalidPreset = parsedPresets.find(({ parsed }) => !parsed.ok);
+    if (invalidPreset && !invalidPreset.parsed.ok) { setError(`${invalidPreset.preset.pauseId}: ${invalidPreset.parsed.message}`); return; }
+    const transitions = { ...timing.transitionPauses };
+    for (const key of Object.keys(transitions) as TransitionKey[]) {
+      const setting = transitions[key];
+      if (setting.mode !== "duration") continue;
+      const parsed = parsePauseDuration(transitionInputs[key]);
+      if (!parsed.ok) { setError(`${key}: ${parsed.message}`); return; }
+      transitions[key] = { mode: "duration", durationMs: parsed.durationMs };
+    }
     try {
-      const saved = await client.settings.updatePacing({ enabled: pacing.enabled, durationMs: parsed.durationMs });
-      setPacing(saved); setDuration(`${String(saved.durationMs)} ms`); setError("");
-      setStatus("Pacing defaults saved. Existing projects were not changed.");
+      const saved = await client.settings.updatePacing({
+        pausePresets: parsedPresets.map(({ preset, parsed }) => ({ ...preset, durationMs: parsed.ok ? parsed.durationMs : preset.durationMs })) as SystemTimingConfiguration["pausePresets"],
+        transitionPauses: transitions
+      });
+      setTiming(saved);
+      setPauseInputs(Object.fromEntries(saved.pausePresets.map((preset) => [preset.pauseId, `${String(preset.durationMs)} ms`])));
+      setError("");
+      setStatus("Global timing saved.");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Settings could not be saved."); }
   };
 
@@ -451,11 +488,12 @@ export function SettingsPage({ client, cacheClient, scratchpadClient }: { client
         />
       </section>
 
-      <section className={styles.pacing}>
-        <div><p>Pacing defaults</p><h3>New-project paragraph pause</h3></div>
-        <label className={styles.check}><input type="checkbox" checked={pacing.enabled} onChange={(event) => setPacing({ ...pacing, enabled: event.target.checked })} />Pause at paragraph breaks</label>
-        <label>Default <code>pause_medium</code> duration<input value={duration} onChange={(event) => { setDuration(event.target.value); setError(""); }} /></label>
-        <button type="button" onClick={() => void savePacing()}>Save pacing defaults</button>
+      <section className={styles.pacing} aria-labelledby="timing-heading">
+        <div><p>Shared render rhythm</p><h3 id="timing-heading">Global timing</h3></div>
+        <p>Saved changes affect every project and newly frozen render plan. Existing frozen plans keep their captured timing.</p>
+        <div className={styles.pauseTableScroll}><table className={styles.pauseTable}><thead><tr><th scope="col">Directive</th><th scope="col">Duration</th><th scope="col">Description</th></tr></thead><tbody>{timing.pausePresets.map((preset, index) => <tr key={preset.pauseId}><th scope="row"><code>{preset.pauseId}</code></th><td><label><span className={styles.srOnly}>{preset.pauseId} duration</span><input value={pauseInputs[preset.pauseId] ?? ""} onChange={(event) => { setPauseInputs((current) => ({ ...current, [preset.pauseId]: event.target.value })); setError(""); }} /></label></td><td><label><span className={styles.srOnly}>{preset.pauseId} description</span><input value={preset.description} onChange={(event) => setTiming((current) => ({ ...current, pausePresets: current.pausePresets.map((item, itemIndex) => itemIndex === index ? { ...item, description: event.target.value } : item) as SystemTimingConfiguration["pausePresets"] }))} /></label></td></tr>)}</tbody></table></div>
+        <div className={styles.transitionGrid}>{(["paragraph", "speakerChange", "section"] as const).map((key) => <TimingTransitionEditor key={key} label={key === "speakerChange" ? "Speaker change" : key[0]!.toUpperCase() + key.slice(1)} setting={timing.transitionPauses[key]} duration={transitionInputs[key]} onDurationChange={(value) => { setTransitionInputs((current) => ({ ...current, [key]: value })); setError(""); }} onSettingChange={(setting) => setTiming((current) => ({ ...current, transitionPauses: { ...current.transitionPauses, [key]: setting } }))} />)}</div>
+        <button type="button" onClick={() => void saveTiming()}>Save timing</button>
       </section>
 
       <section className={styles.cache}>

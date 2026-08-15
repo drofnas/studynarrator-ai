@@ -14,16 +14,12 @@ test.describe("project preview cache", () => {
       id: string;
       name: string;
       description: string;
-      pausePresets: unknown[];
-      transitionPauses: unknown;
     };
     const replacedResponse = await request.put(`${studyNarrator.baseUrl}/api/projects/${created.id}`, { data: {
       name: created.name,
       description: "Isolated Playwright request-accounting fixture.",
       scriptSource: originalScript,
       speakerMappings: [{ speakerId: "teacher", displayName: "Teacher", voiceId: "af_heart", speed: 1, gainDb: 0, roleDescription: "", sampleText: "" }],
-      pausePresets: created.pausePresets,
-      transitionPauses: created.transitionPauses,
       lexiconEntries: []
     } });
     expect(replacedResponse.ok()).toBe(true);
@@ -79,14 +75,14 @@ test.describe("project preview cache", () => {
     expect(speechRequests()).toHaveLength(2);
 
     await openRoute(page, studyNarrator, `/projects/${created.id}?tab=settings`);
-    await expect(page.getByLabel("Voices")).toHaveValue("af_heart");
-    await page.getByLabel("Voices").selectOption("af_sky");
+    await expect(page.getByLabel("Voice for speaker teacher")).toHaveValue("af_heart");
+    await page.getByLabel("Voice for speaker teacher").selectOption("af_sky");
     await page.getByRole("tab", { name: "Details" }).click();
     await previewFirstSegment();
     await expect(result.getByText("Cache miss")).toBeVisible();
     expect(speechRequests()).toHaveLength(3);
     await page.getByRole("tab", { name: "Settings" }).click();
-    await page.getByLabel("Voices").selectOption("af_heart");
+    await page.getByLabel("Voice for speaker teacher").selectOption("af_heart");
     await page.getByRole("tab", { name: "Details" }).click();
     await previewFirstSegment();
     await expect(result.getByText("Cache hit")).toBeVisible();

@@ -80,11 +80,11 @@ test.describe("Electron acceptance", () => {
     await page.getByRole("tab", { name: "Settings" }).click();
     await expect(page.getByLabel("Connection profile")).toHaveCount(0);
     await expect(page.getByLabel("Optional model override")).toHaveCount(0);
-    await expect(page.getByLabel("Voices")).toHaveValue("af_heart");
-    await expect(page.getByLabel("Voices").getByRole("option", { name: "Heart (af_heart | en-US)" })).toBeAttached();
+    await expect(page.getByLabel("Voice for speaker narrator")).toHaveValue("af_heart");
+    await expect(page.getByLabel("Voice for speaker narrator").getByRole("option", { name: "Heart (af_heart | en-US)" })).toBeAttached();
     await expect(page.locator("strong").filter({ hasText: "Heart — American English — af_heart" })).toHaveCount(0);
     await page.getByRole("button", { name: "Save now" }).click();
-    await expect(page.getByText("All changes saved.")).toBeVisible();
+    await expect(page.getByText("All changes saved.")).toHaveCount(0);
     expect(studyNarrator.fakeSpeaches.getState().requests.filter(({ path }) => path === "/v1/audio/speech")).toHaveLength(2);
 
     await page.getByRole("link", { name: "Settings", exact: true }).click();
@@ -108,7 +108,7 @@ test.describe("Electron acceptance", () => {
     await lexicon.getByRole("button", { name: "Add" }).click();
     await expect(lexicon.getByRole("article", { name: "Lexicon entry CLI" })).toBeVisible();
     await page.getByRole("button", { name: "Save now" }).click();
-    await expect(page.getByText("All changes saved.")).toBeVisible();
+    await expect(page.getByText("All changes saved.")).toHaveCount(0);
 
     page = await electronStudyNarrator.relaunch();
     await expect(page.getByRole("heading", { name: "Projects", exact: true })).toBeVisible();
@@ -121,15 +121,20 @@ test.describe("Electron acceptance", () => {
   test("freezes and reopens immutable plans through typed IPC without TTS", async ({ electronStudyNarrator, studyNarrator }) => {
     let page = electronStudyNarrator.page;
     await configureElectronConnection(page, studyNarrator);
+    await page.getByRole("link", { name: "Settings", exact: true }).click();
+    const paragraphTiming = page.getByRole("group", { name: "Paragraph" });
+    await paragraphTiming.getByLabel("Behavior").selectOption("duration");
+    await paragraphTiming.getByRole("textbox", { name: "Duration", exact: true }).fill("350 ms");
+    await page.getByRole("button", { name: "Save timing" }).click();
+    await expect(page.getByText("Global timing saved.")).toBeVisible();
+    await page.getByRole("link", { name: "Projects" }).click();
     studyNarrator.fakeSpeaches.reset();
     await createProject(page, "Desktop frozen plan");
     await page.getByLabel("Script source").fill("[speaker_teacher] First.\n\n[speaker_teacher] Second.");
     await page.getByRole("tab", { name: "Settings" }).click();
     await expect(page.getByLabel("Connection profile")).toHaveCount(0);
     await expect(page.getByLabel("Optional model override")).toHaveCount(0);
-    await expect(page.getByLabel("Voices")).toHaveValue("af_heart");
-    await page.getByLabel("Paragraph transition mode").selectOption("duration");
-    await page.getByLabel("Paragraph transition duration (ms)").fill("350");
+    await expect(page.getByLabel("Voice for speaker teacher")).toHaveValue("af_heart");
     await page.getByRole("tab", { name: "Render" }).click();
     await page.getByRole("button", { name: "Freeze render plan" }).click();
     await expect(page.getByRole("table", { name: "Frozen render plan ordered entries" })).toContainText("350 ms");
@@ -145,11 +150,15 @@ test.describe("Electron acceptance", () => {
     const table = page.getByRole("table", { name: "Frozen render plan ordered entries" });
     await expect(table).toContainText("350 ms");
 
-    await page.getByRole("tab", { name: "Settings" }).click();
-    await page.getByLabel("Paragraph transition duration (ms)").fill("750");
-    await page.getByRole("button", { name: "Save now" }).click();
+    await page.getByRole("link", { name: "Settings", exact: true }).click();
+    await page.getByRole("group", { name: "Paragraph" }).getByRole("textbox", { name: "Duration", exact: true }).fill("750 ms");
+    await page.getByRole("button", { name: "Save timing" }).click();
+    await expect(page.getByText("Global timing saved.")).toBeVisible();
+    await page.getByRole("link", { name: "Projects" }).click();
+    await openProject(page, "Desktop frozen plan");
     await page.getByRole("tab", { name: "Render" }).click();
-    await expect(page.getByText("Frozen from earlier project").first()).toBeVisible();
+    await page.getByLabel("Saved render plans").getByRole("button").click();
+    await expect(table).toContainText("350 ms");
     await page.getByRole("button", { name: "Freeze render plan" }).click();
     await expect(table).toContainText("750 ms");
     await expect(savedPlans.getByRole("button")).toHaveCount(2);
@@ -164,7 +173,7 @@ test.describe("Electron acceptance", () => {
     await page.getByRole("tab", { name: "Settings" }).click();
     await expect(page.getByLabel("Connection profile")).toHaveCount(0);
     await expect(page.getByLabel("Optional model override")).toHaveCount(0);
-    await expect(page.getByLabel("Voices")).toHaveValue("af_heart");
+    await expect(page.getByLabel("Voice for speaker teacher")).toHaveValue("af_heart");
     await page.getByRole("tab", { name: "Render" }).click();
     await page.getByRole("button", { name: "Freeze render plan" }).click();
     studyNarrator.fakeSpeaches.setScenario("timeout");

@@ -1,5 +1,5 @@
 import type { LexiconEntry, LexiconEntryAuthoring } from "@studynarrator/core";
-import type { ProjectDetail, ProjectReplaceInput, SpeechCatalogVoice, TransitionPauseConfiguration, VoiceCatalogEntry } from "@studynarrator/shared-types";
+import type { ProjectDetail, ProjectReplaceInput, SpeechCatalogVoice, SystemTimingConfiguration, VoiceCatalogEntry } from "@studynarrator/shared-types";
 
 export const MAX_SCRIPT_CHARACTERS = 5_000_000;
 export const GLOBAL_VOICE_CATALOG_MODEL_ID = "speaches-ai/Kokoro-82M-v1.0-ONNX";
@@ -65,8 +65,6 @@ export function draftFromProject(project: ProjectDetail): ProjectDraft {
     description: project.description,
     scriptSource: project.scriptSource,
     speakerMappings: project.speakerMappings,
-    pausePresets: project.pausePresets,
-    transitionPauses: project.transitionPauses,
     lexiconEntries: project.lexiconEntries.map((entry) => ({
       id: entry.id,
       scope: "project",
@@ -83,10 +81,9 @@ export function draftFromProject(project: ProjectDetail): ProjectDraft {
 }
 
 export function paragraphPauseForAnalysis(
-  transitions: TransitionPauseConfiguration,
-  pausePresets: ProjectReplaceInput["pausePresets"]
+  timing: SystemTimingConfiguration
 ) {
-  const paragraph = transitions.paragraph;
+  const paragraph = timing.transitionPauses.paragraph;
   if (paragraph.mode === "duration") {
     return { enabled: true, pauseId: "pause_medium" as const, durationMs: paragraph.durationMs };
   }
@@ -94,7 +91,7 @@ export function paragraphPauseForAnalysis(
     return {
       enabled: true,
       pauseId: paragraph.pauseId,
-      durationMs: pausePresets.find(({ pauseId }) => pauseId === paragraph.pauseId)?.durationMs ?? 0
+      durationMs: timing.pausePresets.find(({ pauseId }) => pauseId === paragraph.pauseId)?.durationMs ?? 0
     };
   }
   return { enabled: false, pauseId: "pause_medium" as const, durationMs: 0 };

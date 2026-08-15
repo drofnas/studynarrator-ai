@@ -6,14 +6,12 @@ test.describe("render execution", () => {
   test("renders a frozen plan, publishes the complete bundle, and restores completion after reload", async ({ page, request, studyNarrator }) => {
     await configureConnection(page, studyNarrator);
     const createdResponse = await request.post(`${studyNarrator.baseUrl}/api/projects`, { data: { name: "Render acceptance" } });
-    const created = await createdResponse.json() as { id: string; name: string; pausePresets: unknown[]; transitionPauses: unknown };
+    const created = await createdResponse.json() as { id: string; name: string };
     await request.put(`${studyNarrator.baseUrl}/api/projects/${created.id}`, { data: {
       name: created.name,
       description: "End-to-end render fixture.",
       scriptSource: "[section: Opening]\n[speaker_teacher] SQL renders this sentence.\n[pause_medium]\n[speaker_teacher] Finish this render.",
       speakerMappings: [{ speakerId: "teacher", displayName: "Teacher", voiceId: "af_heart", speed: 1, gainDb: 0, roleDescription: "", sampleText: "" }],
-      pausePresets: created.pausePresets,
-      transitionPauses: created.transitionPauses,
       lexiconEntries: [{
         scope: "project", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel",
         caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: ""
@@ -93,11 +91,11 @@ test.describe("render execution", () => {
 
   test("reports synthesis failure, retries from cache-safe state, and cancels an active request", async ({ page, request, studyNarrator }) => {
     await configureConnection(page, studyNarrator);
-    const created = await (await request.post(`${studyNarrator.baseUrl}/api/projects`, { data: { name: "Render recovery" } })).json() as { id: string; name: string; pausePresets: unknown[]; transitionPauses: unknown };
+    const created = await (await request.post(`${studyNarrator.baseUrl}/api/projects`, { data: { name: "Render recovery" } })).json() as { id: string; name: string };
     await request.put(`${studyNarrator.baseUrl}/api/projects/${created.id}`, { data: {
       name: created.name, description: "Failure fixture.", scriptSource: "[speaker_teacher] Recover this render.",
       speakerMappings: [{ speakerId: "teacher", displayName: "Teacher", voiceId: "af_heart", speed: 1, gainDb: 0, roleDescription: "", sampleText: "" }],
-      pausePresets: created.pausePresets, transitionPauses: created.transitionPauses, lexiconEntries: []
+      lexiconEntries: []
     } });
     await openRoute(page, studyNarrator, `/projects/${created.id}?tab=render`);
     await page.getByRole("button", { name: "Freeze render plan" }).click();

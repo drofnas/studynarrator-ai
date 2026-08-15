@@ -21,6 +21,7 @@ export interface LexiconEditorProps {
   searchLabel: string;
   emptyMessage: string;
   disabled?: boolean;
+  hideSearchWhenEmpty?: boolean;
   rowErrors?: Readonly<Record<string, string | undefined>>;
 }
 
@@ -43,7 +44,7 @@ function duplicateMessage(entries: readonly LexiconEditorValue[], displayText: s
     : "";
 }
 
-export function LexiconEditor({ value, onChange, searchLabel, emptyMessage, disabled = false, rowErrors = {} }: LexiconEditorProps) {
+export function LexiconEditor({ value, onChange, searchLabel, emptyMessage, disabled = false, hideSearchWhenEmpty = false, rowErrors = {} }: LexiconEditorProps) {
   const [draft, setDraft] = useState({ displayText: "", spokenText: "" });
   const [search, setSearch] = useState("");
   const [validationError, setValidationError] = useState("");
@@ -84,7 +85,7 @@ export function LexiconEditor({ value, onChange, searchLabel, emptyMessage, disa
       <button type="submit" disabled={disabled || pending}>{pending ? "Adding…" : "Add"}</button>
     </form>
     {validationError ? <p className={styles.validation} role="alert">{validationError}</p> : null}
-    <input className={styles.search} aria-label={searchLabel} placeholder="Search Script Text or Spoken Text" value={search} onChange={(event) => setSearch(event.target.value)} />
+    {!hideSearchWhenEmpty || value.length > 0 ? <input className={styles.search} aria-label={searchLabel} placeholder="Search Script Text or Spoken Text" value={search} onChange={(event) => setSearch(event.target.value)} /> : null}
     <div className={styles.entries}>{filtered.length === 0 ? <p>{emptyMessage}</p> : filtered.map(({ entry, index, id }) => {
       return <article key={id} aria-label={`Lexicon entry ${entry.displayText || "without Script Text"}`}>
         <label>Script Text<input disabled={disabled || pending} value={entry.displayText} onChange={(event) => update(index, id, "displayText", event.target.value)} onBlur={() => void onChange([...value], { kind: "commit", id })} /></label>
