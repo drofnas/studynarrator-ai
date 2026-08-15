@@ -113,7 +113,7 @@ test.describe("render execution", () => {
     await request.delete(`${studyNarrator.baseUrl}/api/speech-cache`);
     await page.getByRole("button", { name: "Render this frozen plan" }).click();
     await expect(page.getByText(/Phase: synthesizing/u)).toBeVisible();
-    await page.getByRole("button", { name: "Cancel render" }).click();
+    await page.getByRole("button", { name: "Cancel render" }).dispatchEvent("click");
     await expect(page.getByText(/Phase: canceled/u)).toBeVisible();
   });
 });

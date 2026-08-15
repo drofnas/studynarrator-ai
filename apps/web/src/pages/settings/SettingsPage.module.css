@@ -1,4 +1,4 @@
-.page { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(300px, 0.6fr); gap: 20px; }
+.page { display: grid; min-width: 0; grid-template-columns: minmax(0, 1.4fr) minmax(300px, 0.6fr); gap: 20px; }
 .page > header { grid-column: 1 / -1; padding-bottom: 22px; border-bottom: 2px solid var(--ink); }
 .page > header p, .sectionHeading p, .pacing > div p, .diagnosticHeader p { margin: 0 0 7px; color: var(--signal); font: 800 0.68rem ui-monospace, monospace; letter-spacing: 0.12em; text-transform: uppercase; }
 .page > header h2 { margin: 0; font: 700 clamp(2.7rem, 6vw, 5.2rem)/0.9 "Avenir Next Condensed", "Arial Narrow", sans-serif; letter-spacing: -0.045em; }
@@ -75,9 +75,9 @@
 @keyframes audition-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .auditionButton[data-state="processing"] svg { animation: none; } }
 .attribution { color: #557080; font-size: 0.7rem; line-height: 1.5; }
-.pacing { grid-column: 1 / -1; align-self: start; }
+.pacing { min-width: 0; grid-column: 1 / -1; align-self: start; }
 .pacing > p { max-width: 760px; color: #557080; font-size: 0.78rem; }
-.pauseTableScroll { margin: 16px 0; overflow-x: auto; }
+.pauseTableScroll { width: 100%; min-width: 0; max-width: 100%; margin: 16px 0; overflow-x: auto; }
 .pauseTable { width: 100%; min-width: 680px; border-collapse: collapse; }
 .pauseTable th, .pauseTable td { padding: 9px; text-align: left; border-bottom: 1px solid var(--line); }
 .pauseTable thead th { color: var(--signal); font: 800 0.65rem ui-monospace, monospace; letter-spacing: 0.08em; text-transform: uppercase; }
