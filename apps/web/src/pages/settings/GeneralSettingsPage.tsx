@@ -131,7 +131,7 @@ export function GeneralSettingsPage({ cacheClient }: { cacheClient: SpeechCacheC
 
       <section className={styles.connections}>
         <div className={styles.sectionHeading}><div><p>Speaches server</p><h3>Connection workshop</h3></div><button type="button" className={styles.secondary} disabled={!draft.baseUrl || workspace.catalog.status === "loading"} onClick={() => void refreshSpeechCatalog()}>{workspace.catalog.status === "loading" ? "Loading…" : "Refresh catalog"}</button></div>
-        <div className={styles.profileForm}>
+        <div className={styles.connectionForm}>
           <label>Address<input type="url" value={draft.baseUrl} onChange={(event) => setDraft({ ...draft, baseUrl: event.target.value, defaultModelId: "", defaultVoiceId: "" })} placeholder="http://127.0.0.1:8000" /></label>
           <label>Model<select value={draft.defaultModelId} disabled={speechModels.length === 0} onChange={(event) => { const modelId = event.target.value; setDraft({ ...draft, defaultModelId: modelId, defaultVoiceId: speechModels.find((model) => model.modelId === modelId)?.voices[0]?.voiceId ?? "" }); }}><option value="">Load catalog to choose</option>{speechModels.map((model) => <option key={model.modelId} value={model.modelId}>{model.modelId}</option>)}</select></label>
           <label>Default Voice<VoiceSelect value={draft.defaultVoiceId} voices={defaultVoiceOptions} disabled={!selectedSpeechModel} emptyOption="Choose a voice" onChange={(defaultVoiceId) => setDraft({ ...draft, defaultVoiceId })} /></label>

@@ -1,18 +1,18 @@
-import { app, safeStorage } from "electron";
+import { app } from "electron";
 import { SystemDiagnosticsSchema } from "@studynarrator/shared-types";
 import { createDesktopServices } from "./bootstrap.js";
 
 void app.whenReady().then(async () => {
   const defaultDataDirectory = app.getPath("userData");
   const smokeProjectName = "Deterministic runtime smoke";
-  const first = await createDesktopServices({ defaultDataDirectory, safeStorage });
+  const first = await createDesktopServices({ defaultDataDirectory });
   try {
     const existing = (await first.persistence.projects.list()).find((project) => project.name === smokeProjectName);
     if (!existing) await first.persistence.projects.create({ name: smokeProjectName, description: "Disposable reopen evidence" });
   } finally {
     first.service.close();
   }
-  const reopened = await createDesktopServices({ defaultDataDirectory, safeStorage });
+  const reopened = await createDesktopServices({ defaultDataDirectory });
   try {
     const summary = (await reopened.persistence.projects.list()).find((project) => project.name === smokeProjectName);
     if (!summary) throw new Error("The runtime smoke project did not survive reopen.");

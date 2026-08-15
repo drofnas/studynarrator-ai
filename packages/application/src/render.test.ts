@@ -23,8 +23,8 @@ class MemoryRepository implements RenderRepository {
   artifacts = new Map<string, RenderArtifact & { path: string }>();
   segments = new Map<string, RenderSegment>();
   segmentPaths = new Map<string, string | null>();
-  constructor(readonly profile: SpeachesConnection & { id: string }) {}
-  getSpeachesConnection() { return this.profile; }
+  constructor(readonly connection: SpeachesConnection) {}
+  getSpeachesConnection() { return this.connection; }
   createRenderJob(job: RenderJob, segments: RenderSegment[]) { this.jobs.set(job.id, job); segments.forEach((item) => this.segments.set(`${item.renderId}:${String(item.ordinal)}`, item)); return job; }
   getRenderJob(id: string) { const job = this.jobs.get(id); if (!job) throw new Error("missing"); return job; }
   listRenderJobs(projectId: string) { return [...this.jobs.values()].filter((job) => job.projectId === projectId); }
@@ -44,7 +44,6 @@ async function fixture() {
   roots.push(dataDirectory);
   const projectId = "00000000-0000-4000-8000-000000000001";
   const planId = "00000000-0000-4000-8000-000000000002";
-  const profileId = "00000000-0000-4000-8000-000000000003";
   const baseUrl = "http://127.0.0.1:8765";
   const timestamp = "2026-08-13T12:00:00.000Z";
   const project = {
@@ -79,7 +78,7 @@ async function fixture() {
     async load() { return { snapshot, plan, silenceAssets: new Map() }; }
   };
   const repository = new MemoryRepository({
-    id: profileId, baseUrl, suppliedUrlForm: "root", configured: true, defaultModelId: "model", defaultVoiceId: "voice",
+    baseUrl, suppliedUrlForm: "root", configured: true, defaultModelId: "model", defaultVoiceId: "voice",
     timeoutSeconds: 120, retryCount: 0, responseFormat: "wav", lastTestedAt: null, lastSuccessfulTestAt: null,
     lastTestSummary: null, createdAt: timestamp, updatedAt: timestamp
   });
@@ -157,7 +156,7 @@ describe("render coordinator", () => {
 
   it("fails safely when the frozen endpoint identity changes", async () => {
     const { service, repository, plan } = await fixture();
-    repository.profile.baseUrl = "http://127.0.0.1:9999";
+    repository.connection.baseUrl = "http://127.0.0.1:9999";
     const job = await terminal(service, (await service.start(plan.id)).id);
     expect(job).toMatchObject({ state: "failed", error: { code: "RENDER_VALIDATION_FAILED", retryable: false } });
     expect(await service.listArtifacts(job.id)).toEqual([]);

@@ -6,8 +6,8 @@ import { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
 
 const timestamp = "2026-08-13T12:00:00.000Z";
 const projectId = "00000000-0000-4000-8000-000000000001";
-const profile = {
-  id: "local", baseUrl: "http://127.0.0.1:8000", suppliedUrlForm: "root" as const, configured: true,
+const connection = {
+  baseUrl: "http://127.0.0.1:8000", suppliedUrlForm: "root" as const, configured: true,
   defaultModelId: "model", defaultVoiceId: "voice-default", timeoutSeconds: 12, retryCount: 0, responseFormat: "wav" as const,
   lastTestedAt: null, lastSuccessfulTestAt: null, lastTestSummary: null, createdAt: timestamp, updatedAt: timestamp
 };
@@ -31,7 +31,7 @@ function repository(): ProjectPreviewRepository {
   return {
     getProject: vi.fn(() => project),
     listGlobalLexicon: vi.fn(() => []),
-    getSpeachesConnection: vi.fn(() => profile),
+    getSpeachesConnection: vi.fn(() => connection),
     getVoiceCatalogOverrides: vi.fn(() => ({
       schemaVersion: 1, modelId: "model", entries: [{
         voiceId: "voice-teacher", label: "Teacher Voice", enabled: true, favorite: false, language: null, locale: null,
@@ -96,7 +96,7 @@ describe("project preview service", () => {
     expect(store.getProject).toHaveBeenCalledTimes(1);
   });
 
-  it("uses the profile default for a System narrator pronunciation sample", async () => {
+  it("uses the connection default for a System narrator pronunciation sample", async () => {
     const speech = { synthesize: vi.fn(async () => ({
       ...cached(), metadata: { ...cached().metadata, voiceId: "voice-default", speed: 1 }
     })) };

@@ -9,12 +9,12 @@ export type ProjectDraft = ProjectReplaceInput;
 
 export function resolveProjectSpeakerVoiceId(
   currentVoiceId: string | null,
-  profileDefaultVoiceId: string | null,
+  connectionDefaultVoiceId: string | null,
   catalogEntries: readonly VoiceCatalogEntry[]
 ): string | null {
   const enabledVoiceIds = new Set(catalogEntries.filter(({ enabled }) => enabled).map(({ voiceId }) => voiceId));
   if (currentVoiceId && enabledVoiceIds.has(currentVoiceId)) return currentVoiceId;
-  if (profileDefaultVoiceId && enabledVoiceIds.has(profileDefaultVoiceId)) return profileDefaultVoiceId;
+  if (connectionDefaultVoiceId && enabledVoiceIds.has(connectionDefaultVoiceId)) return connectionDefaultVoiceId;
   return catalogEntries.find(({ enabled }) => enabled)?.voiceId ?? null;
 }
 

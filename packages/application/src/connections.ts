@@ -28,12 +28,10 @@ import {
   type SpeachesDiagnosticResult
 } from "@studynarrator/speaches-adapter";
 
-export interface StoredSpeachesConnection extends SpeachesConnection { id: string }
-
 export interface ConnectionRepository {
-  getSpeachesConnection(): StoredSpeachesConnection;
-  replaceSpeachesConnection(input: SpeachesConnectionAuthoring, suppliedUrlForm: "root" | "v1" | "unconfigured"): StoredSpeachesConnection;
-  recordConnectionTest(summary: ConnectionTestSummary): StoredSpeachesConnection;
+  getSpeachesConnection(): SpeachesConnection;
+  replaceSpeachesConnection(input: SpeachesConnectionAuthoring, suppliedUrlForm: "root" | "v1" | "unconfigured"): SpeachesConnection;
+  recordConnectionTest(summary: ConnectionTestSummary): SpeachesConnection;
   getConnectionSetup(): { onboardingCompletedAt: string | null };
   completeConnectionOnboarding(): { onboardingCompletedAt: string | null };
   getVoiceCatalogOverrides(modelId: string): VoiceCatalog;
@@ -92,12 +90,6 @@ function normalizeAuthoring(inputValue: SpeachesConnectionAuthoring) {
   } as const;
 }
 
-function publicConnection(connection: StoredSpeachesConnection): SpeachesConnection {
-  const { id, ...value } = connection;
-  void id;
-  return value;
-}
-
 function setupState(state: { onboardingCompletedAt: string | null }, context: ConnectionRuntimeContext): ConnectionSetupState {
   return ConnectionSetupStateSchema.parse({ ...state, client: context.client });
 }
@@ -139,11 +131,11 @@ export function createConnectionService(dependencies: {
   const diagnose = dependencies.diagnose ?? ((input) => diagnoseSpeaches(input));
   const discoverCatalog = dependencies.discoverCatalog ?? ((input) => discoverSpeachesSpeechCatalog(input));
   return {
-    get: () => Promise.resolve(publicConnection(dependencies.repository.getSpeachesConnection())),
+    get: () => Promise.resolve(dependencies.repository.getSpeachesConnection()),
     update(inputValue) {
       return Promise.resolve().then(() => {
         const normalized = normalizeAuthoring(inputValue);
-        return publicConnection(dependencies.repository.replaceSpeachesConnection(normalized.connection, normalized.suppliedUrlForm));
+        return dependencies.repository.replaceSpeachesConnection(normalized.connection, normalized.suppliedUrlForm);
       });
     },
     async test() {

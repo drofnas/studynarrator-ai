@@ -13,8 +13,7 @@ import {
   createConnectionService,
   createVoiceCatalogService,
   type ConnectionCatalogRunner,
-  type ConnectionRepository,
-  type StoredSpeachesConnection
+  type ConnectionRepository
 } from "./connections.js";
 import { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
 
@@ -37,9 +36,7 @@ const connected: ConnectionTestSummary = {
 
 class MemoryRepository implements ConnectionRepository {
   setup = { onboardingCompletedAt: null as string | null };
-  connection: StoredSpeachesConnection = {
-    id: "legacy-winner",
-    ...SpeachesConnectionSchema.parse({
+  connection = SpeachesConnectionSchema.parse({
       baseUrl: null,
       suppliedUrlForm: "unconfigured",
       configured: false,
@@ -53,8 +50,7 @@ class MemoryRepository implements ConnectionRepository {
       lastTestSummary: null,
       createdAt: timestamp,
       updatedAt: timestamp
-    })
-  };
+  });
   overrides = new Map<string, VoiceCatalog>();
 
   getSpeachesConnection() { return this.connection; }
@@ -165,12 +161,9 @@ describe("connection service", () => {
     const connection = service(repository);
     const updated = await connection.update({ baseUrl: "http://127.0.0.1:8000/v1", defaultModelId: "model", defaultVoiceId: "voice" });
     expect(updated.baseUrl).toBe("http://127.0.0.1:8000");
-    expect(Object.keys(updated)).not.toContain("id");
-    expect(JSON.stringify(updated)).not.toContain("profile");
     await connection.test();
     const exported = await connection.exportDiagnostics();
     expect(JSON.stringify(exported)).not.toContain("127.0.0.1");
-    expect(Object.keys(exported)).not.toContain("apiKeyConfigured");
   });
 });
 

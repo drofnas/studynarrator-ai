@@ -22,10 +22,10 @@
 .profileList button { display: grid; gap: 4px; min-height: 0; padding: 12px; color: var(--ink); text-align: left; background: white; border: 1px solid var(--line); }
 .profileList button[data-active="true"] { color: white; background: var(--ink); border-left: 5px solid var(--signal); }
 .profileList span { font-size: 0.67rem; }
-.profileForm { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; padding: 16px; background: var(--mist); }
-.profileForm > label, .pacing label, .catalog > label { display: grid; gap: 5px; font-size: 0.74rem; font-weight: 800; }
-.profileForm input, .profileForm select, .catalog input, .catalog textarea, .pacing input, .pacing select { width: 100%; padding: 9px 10px; color: var(--ink); background: white; border: 1px solid #91a9b2; }
-.profileForm input:disabled { color: #607481; background: #dbe4e6; }
+.connectionForm { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; padding: 16px; background: var(--mist); }
+.connectionForm > label, .pacing label, .catalog > label { display: grid; gap: 5px; font-size: 0.74rem; font-weight: 800; }
+.connectionForm input, .connectionForm select, .catalog input, .catalog textarea, .pacing input, .pacing select { width: 100%; padding: 9px 10px; color: var(--ink); background: white; border: 1px solid #91a9b2; }
+.connectionForm input:disabled { color: #607481; background: #dbe4e6; }
 .managed, .keyState { grid-column: 1 / -1; margin: 0; padding: 10px; background: #d4e4e6; font-size: 0.73rem; font-weight: 800; }
 .inline { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .inline label { display: grid; gap: 5px; font-size: 0.74rem; font-weight: 800; }
@@ -95,4 +95,4 @@
 .cacheGrid span { color: var(--signal); font-size: 0.62rem; font-weight: 800; text-transform: uppercase; }
 .cacheGrid code, .cache > p { color: #557080; font-size: 0.68rem; line-height: 1.45; }
 @media (max-width: 960px) { .page { grid-template-columns: 1fr; } .connections, .globalLexicon, .page > header, .page > .error, .page > .status { grid-column: 1; } .diagnostics ol { grid-template-columns: repeat(4, 1fr); } }
-@media (max-width: 700px) { .connectionGrid, .profileForm, .transitionGrid { grid-template-columns: 1fr; } .managed, .keyState, .actions { grid-column: 1; } .diagnostics ol { grid-template-columns: repeat(2, 1fr); } .catalog .sectionHeading { align-items: flex-start; } .catalogMeta { max-width: 58%; } .voiceList article { gap: 8px; padding-inline: 9px; } .voiceList article > .voiceActions { gap: 5px; } }
+@media (max-width: 700px) { .connectionGrid, .connectionForm, .transitionGrid { grid-template-columns: 1fr; } .managed, .keyState, .actions { grid-column: 1; } .diagnostics ol { grid-template-columns: repeat(2, 1fr); } .catalog .sectionHeading { align-items: flex-start; } .catalogMeta { max-width: 58%; } .voiceList article { gap: 8px; padding-inline: 9px; } .voiceList article > .voiceActions { gap: 5px; } }

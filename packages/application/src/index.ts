@@ -116,8 +116,7 @@ export {
   type ConnectionCatalogRunner,
   type ConnectionDiagnosticRunner,
   type ConnectionRepository,
-  type ConnectionRuntimeContext,
-  type StoredSpeachesConnection
+  type ConnectionRuntimeContext
 } from "./connections.js";
 export { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
 export {

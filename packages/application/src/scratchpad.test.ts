@@ -5,8 +5,7 @@ import { createScratchpadService, type ScratchpadRepository } from "./scratchpad
 import { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
 
 const timestamp = "2026-08-12T12:00:00.000Z";
-const profile = {
-  id: "local",
+const connection = {
   baseUrl: "http://127.0.0.1:8000",
   suppliedUrlForm: "root" as const,
   configured: true,
@@ -24,7 +23,7 @@ const profile = {
 
 function repository(): ScratchpadRepository {
   return {
-    getSpeachesConnection: vi.fn(() => profile),
+    getSpeachesConnection: vi.fn(() => connection),
     listGlobalLexicon: vi.fn(() => [{
       id: "sql", scope: "global" as const, entryType: "exactTerm" as const, displayText: "SQL", spokenText: "sequel",
       caseSensitive: true, wholeWord: true, priority: 0, enabled: true, notes: "", createdAt: timestamp, updatedAt: timestamp
@@ -90,7 +89,7 @@ describe("scratchpad service", () => {
     });
     const result = await service.preview({ modelId: "model", voiceId: "voice", speed: 1.1, text: "SQL indexes.", applyGlobalLexicon: true });
     expect(synthesize).toHaveBeenCalledWith(expect.objectContaining({
-      baseUrl: profile.baseUrl,
+      baseUrl: connection.baseUrl,
       modelId: "model",
       voiceId: "voice",
       speed: 1.1,
