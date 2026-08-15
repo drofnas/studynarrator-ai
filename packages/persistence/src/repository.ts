@@ -425,7 +425,6 @@ function createRepository(options: {
       description: row.description,
       scriptSource: row.script_source,
       scriptHash: row.script_hash,
-      modelId: row.model_id,
       speakerMappings: speakers.map((speaker) => ({
         speakerId: speaker.speaker_id,
         displayName: speaker.display_name,
@@ -580,14 +579,14 @@ function createRepository(options: {
       transaction(() => {
         const result = database.prepare(`
           UPDATE projects SET name = ?, description = ?, script_source = ?, script_hash = ?,
-            connection_profile_id = ?, model_id = ?, paragraph_pause_enabled = ?, paragraph_pause_id = ?,
+            connection_profile_id = ?, model_id = NULL, paragraph_pause_enabled = ?, paragraph_pause_id = ?,
             paragraph_pause_duration_ms = ?,
             paragraph_transition_mode = ?, paragraph_transition_pause_id = ?, paragraph_transition_duration_ms = ?,
             speaker_change_transition_mode = ?, speaker_change_transition_pause_id = ?, speaker_change_transition_duration_ms = ?,
             section_transition_mode = ?, section_transition_pause_id = ?, section_transition_duration_ms = ?,
             updated_at = ? WHERE id = ?
         `).run(
-          input.name, input.description, input.scriptSource, scriptHash(input.scriptSource), getConnectionId(), input.modelId,
+          input.name, input.description, input.scriptSource, scriptHash(input.scriptSource), getConnectionId(),
           booleanToSql(input.transitionPauses.paragraph.mode !== "none"), legacyParagraphPauseId,
           legacyParagraphDuration, ...paragraph, ...speakerChange, ...section, timestamp, projectId
         );
@@ -641,7 +640,7 @@ function createRepository(options: {
             created_at, updated_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
-          duplicateId, input.name, source.description, source.scriptSource, source.scriptHash, getConnectionId(), source.modelId,
+          duplicateId, input.name, source.description, source.scriptSource, source.scriptHash, getConnectionId(), null,
           booleanToSql(source.transitionPauses.paragraph.mode !== "none"), legacyParagraphPauseId,
           legacyParagraphDuration, ...paragraph, ...speakerChange, ...section, timestamp, timestamp
         );

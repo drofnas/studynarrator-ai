@@ -2,15 +2,14 @@ import {
   DEFAULT_PARAGRAPH_PAUSE_DURATION_MS,
   DEFAULT_PARAGRAPH_PAUSE_ID,
   IgnoredDiagnosticSchema,
-  LexiconEntryAuthoringSchema,
   LexiconEntrySchema,
   PauseIdSchema,
   SpeakerIdSchema
 } from "@studynarrator/core";
 import { z } from "zod";
 
-export const DATABASE_SCHEMA_VERSION = 9;
-export const PERSISTENCE_CONTRACT_VERSION = 7;
+export const DATABASE_SCHEMA_VERSION = 10;
+export const PERSISTENCE_CONTRACT_VERSION = 8;
 export const PERSISTENCE_CHANNELS = Object.freeze({
   status: "persistence.status",
   projectsList: "projects.list",
@@ -74,15 +73,10 @@ export const DEFAULT_SYSTEM_PACING: SystemPacingDefaults = Object.freeze({
   durationMs: DEFAULT_PARAGRAPH_PAUSE_DURATION_MS
 });
 
-const ProjectLexiconAuthoringSchema = LexiconEntryAuthoringSchema.superRefine((entry, context) => {
-  if (entry.scope !== "project") {
-    context.addIssue({ code: "custom", message: "Project lexicon entries must use project scope.", path: ["scope"] });
-  }
-});
-
-const GlobalLexiconAuthoringSchema = z.object({
+function simplifiedLexiconAuthoringSchema<TScope extends "global" | "project">(scope: TScope) {
+  return z.object({
   id: z.string().min(1).optional(),
-  scope: z.literal("global"),
+  scope: z.literal(scope),
   entryType: z.literal("exactTerm").default("exactTerm"),
   displayText: z.string().trim().min(1),
   spokenText: z.string().trim().min(1),
@@ -91,7 +85,11 @@ const GlobalLexiconAuthoringSchema = z.object({
   priority: z.literal(0).default(0),
   enabled: z.boolean().default(true),
   notes: z.literal("").default("")
-}).strict();
+  }).strict();
+}
+
+const ProjectLexiconAuthoringSchema = simplifiedLexiconAuthoringSchema("project");
+const GlobalLexiconAuthoringSchema = simplifiedLexiconAuthoringSchema("global");
 
 export const SpeakerMappingCollectionSchema = z.array(SpeakerMappingSchema).superRefine((items, context) => {
   const seen = new Set<string>();
@@ -130,6 +128,12 @@ export const GlobalLexiconAuthoringCollectionSchema = z.array(GlobalLexiconAutho
 
 const ProjectLexiconEntrySchema = LexiconEntrySchema.superRefine((entry, context) => {
   if (entry.scope !== "project") context.addIssue({ code: "custom", message: "Project lexicon entries must use project scope.", path: ["scope"] });
+  if (entry.entryType !== "exactTerm") context.addIssue({ code: "custom", message: "Project lexicon entries must use exact-term matching.", path: ["entryType"] });
+  if (entry.senseId !== undefined) context.addIssue({ code: "custom", message: "Project lexicon entries cannot define a sense ID.", path: ["senseId"] });
+  if (entry.caseSensitive) context.addIssue({ code: "custom", message: "Project lexicon entries must be case insensitive.", path: ["caseSensitive"] });
+  if (!entry.wholeWord) context.addIssue({ code: "custom", message: "Project lexicon entries must match whole words.", path: ["wholeWord"] });
+  if (entry.priority !== 0) context.addIssue({ code: "custom", message: "Project lexicon entries use fixed priority.", path: ["priority"] });
+  if (entry.notes !== "") context.addIssue({ code: "custom", message: "Project lexicon entries do not store notes.", path: ["notes"] });
 });
 const GlobalLexiconEntrySchema = LexiconEntrySchema.superRefine((entry, context) => {
   if (entry.scope !== "global") context.addIssue({ code: "custom", message: "Global lexicon entries must use global scope.", path: ["scope"] });
@@ -156,7 +160,6 @@ const ProjectAggregateShape = {
   name: z.string().trim().min(1).max(200),
   description: z.string().max(10_000),
   scriptSource: z.string().max(5_000_000),
-  modelId: z.string().trim().min(1).max(500).nullable().default(null),
   speakerMappings: SpeakerMappingCollectionSchema,
   pausePresets: PausePresetCollectionSchema,
   transitionPauses: TransitionPauseConfigurationSchema

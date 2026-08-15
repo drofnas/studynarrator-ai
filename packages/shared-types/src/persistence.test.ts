@@ -14,7 +14,6 @@ const validProject = {
   name: "Persistence contract",
   description: "",
   scriptSource: "SQL",
-  modelId: null,
   speakerMappings: [],
   pausePresets: [{ pauseId: "pause_medium", durationMs: 750, description: "Paragraph" }],
   transitionPauses: {
@@ -39,7 +38,7 @@ describe("persistence contracts", () => {
     expect(() => ProjectReplaceInputSchema.parse({
       ...validProject,
       lexiconEntries: [{ scope: "global", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel" }]
-    })).toThrow(/project scope/iu);
+    })).toThrow();
     expect(() => GlobalLexiconReplaceInputSchema.parse([
       { scope: "project", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel" }
     ])).toThrow();
@@ -78,14 +77,13 @@ describe("persistence contracts", () => {
     ]);
     const transitionPauses = validProject.transitionPauses;
     const lexiconEntries = ProjectLexiconAuthoringCollectionSchema.parse([
-      { id: "project-resume", scope: "project", entryType: "namedSense", displayText: "resume", senseId: "cv", spokenText: "rez-oo-may" }
+      { id: "project-resume", scope: "project", displayText: "resume", spokenText: "rez-oo-may" }
     ]);
 
     expect(ProjectReplaceInputSchema.parse({
       name: "Persistent project",
       description: "Reopen proof",
-      scriptSource: "{{resume|cv}} SQL",
-      modelId: null,
+      scriptSource: "resume SQL",
       speakerMappings,
       pausePresets,
       transitionPauses,

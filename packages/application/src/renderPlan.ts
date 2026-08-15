@@ -90,7 +90,7 @@ export function createRenderPlanService(dependencies: {
         const project = dependencies.repository.getProject(projectId);
         const connection = dependencies.repository.getSpeachesConnection();
         if (!connection.baseUrl) throw new RenderPlanServiceError("RENDER_PLAN_CONFIGURATION", "The Speaches connection needs a server address.");
-        const modelId = project.modelId ?? connection.defaultModelId;
+        const modelId = connection.defaultModelId;
         if (!modelId) throw new RenderPlanServiceError("RENDER_PLAN_CONFIGURATION", "Choose a speech model before freezing a render plan.");
         const globalLexiconEntries = dependencies.repository.listGlobalLexicon();
         const ignoredDiagnostics = dependencies.repository.getIgnoredDiagnostics();

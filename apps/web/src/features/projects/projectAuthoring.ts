@@ -49,7 +49,7 @@ export function authoringLexicon(entries: readonly LexiconEntry[]): LexiconEntry
     scope: entry.scope,
     entryType: entry.entryType,
     displayText: entry.displayText,
-    ...(entry.senseId === undefined ? {} : { senseId: entry.senseId }),
+    ...("senseId" in entry && entry.senseId !== undefined ? { senseId: entry.senseId } : {}),
     spokenText: entry.spokenText,
     caseSensitive: entry.caseSensitive,
     wholeWord: entry.wholeWord,
@@ -64,11 +64,21 @@ export function draftFromProject(project: ProjectDetail): ProjectDraft {
     name: project.name,
     description: project.description,
     scriptSource: project.scriptSource,
-    modelId: project.modelId,
     speakerMappings: project.speakerMappings,
     pausePresets: project.pausePresets,
     transitionPauses: project.transitionPauses,
-    lexiconEntries: authoringLexicon(project.lexiconEntries)
+    lexiconEntries: project.lexiconEntries.map((entry) => ({
+      id: entry.id,
+      scope: "project",
+      entryType: "exactTerm",
+      displayText: entry.displayText,
+      spokenText: entry.spokenText,
+      caseSensitive: false,
+      wholeWord: true,
+      priority: 0,
+      enabled: entry.enabled,
+      notes: ""
+    }))
   };
 }
 
@@ -118,8 +128,12 @@ export function replaceLiteral(source: string, search: string, replacement: stri
 export function materializeLexicon(entries: readonly (LexiconEntryAuthoring | ProjectReplaceInput["lexiconEntries"][number])[], scopePrefix: string): LexiconEntry[] {
   const timestamp = "2000-01-01T00:00:00.000Z";
   return entries.map((entry, index) => ({
-    ...entry,
     id: entry.id ?? `${scopePrefix}-${String(index + 1).padStart(4, "0")}`,
+    scope: entry.scope,
+    entryType: entry.entryType ?? "exactTerm",
+    displayText: entry.displayText,
+    ...("senseId" in entry && entry.senseId !== undefined ? { senseId: entry.senseId } : {}),
+    spokenText: entry.spokenText,
     caseSensitive: entry.caseSensitive ?? true,
     wholeWord: entry.wholeWord ?? true,
     priority: entry.priority ?? 0,

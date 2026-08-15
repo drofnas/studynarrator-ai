@@ -50,10 +50,10 @@ const diagnostics = {
 } as const;
 
 const persistenceStatus = {
-  contractVersion: 7 as const,
+  contractVersion: 8 as const,
   state: "ready" as const,
-  databaseSchemaVersion: 9 as const,
-  targetDatabaseSchemaVersion: 9 as const,
+  databaseSchemaVersion: 10 as const,
+  targetDatabaseSchemaVersion: 10 as const,
   databasePath: "/tmp/studynarrator.sqlite",
   latestBackupPath: null
 };
@@ -261,13 +261,12 @@ describe("Electron boundary", () => {
   it("invokes every public IPC contract with schema-valid input and output", async () => {
     const timestamp = "2026-08-12T12:00:00.000Z";
     const project = {
-      contractVersion: 7 as const,
+      contractVersion: 8 as const,
       id: "00000000-0000-4000-8000-000000000001",
       name: "IPC project",
       description: "",
       scriptSource: "",
       scriptHash: "a".repeat(64),
-      modelId: null,
       speakerMappings: [],
       pausePresets: [{ pauseId: "pause_medium", durationMs: 750, description: "Paragraph" }],
       transitionPauses: { paragraph: { mode: "preset" as const, pauseId: "pause_medium" as const }, speakerChange: { mode: "none" as const }, section: { mode: "none" as const } },
@@ -350,7 +349,7 @@ describe("Electron boundary", () => {
     registerRenderPlanHandlers(ipcMain, renderPlans);
     registerRenderHandlers(ipcMain, renders as never, saveDialog);
     registerScriptGenerationHandlers(ipcMain, scriptGeneration, saveDialog);
-    const projectReplace = { name: project.name, description: "", scriptSource: "", modelId: null, speakerMappings: [], pausePresets: project.pausePresets, transitionPauses: project.transitionPauses, lexiconEntries: [] };
+    const projectReplace = { name: project.name, description: "", scriptSource: "", speakerMappings: [], pausePresets: project.pausePresets, transitionPauses: project.transitionPauses, lexiconEntries: [] };
     const connectionInput = { baseUrl: "http://127.0.0.1:8000", defaultModelId: "model", defaultVoiceId: "voice" };
     const inputs: Record<string, unknown> = {
       [PERSISTENCE_CHANNELS.projectsCreate]: { name: "IPC project" },

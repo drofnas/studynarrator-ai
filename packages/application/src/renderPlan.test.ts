@@ -19,13 +19,12 @@ const profile = {
 
 function project(): ProjectDetail {
   return {
-    contractVersion: 7,
+    contractVersion: 8,
     id: projectId,
     name: "Render plan fixture",
     description: "",
     scriptSource: `[section: First]\n[speaker_teacher] SQL one.\n\n[speaker_student] Two.\n[section: Second]\n[speaker_teacher] Three.\n\n[speaker_teacher] Four.\n[pause_long]\n[speaker_teacher] Five.\n[pause_short]`,
     scriptHash: "a".repeat(64),
-    modelId: "model",
     speakerMappings: [
       { speakerId: "teacher", displayName: "Teacher", voiceId: "voice-teacher", speed: 1, gainDb: 0, roleDescription: "", sampleText: "" },
       { speakerId: "student", displayName: "Student", voiceId: "voice-student", speed: 1.1, gainDb: -1, roleDescription: "", sampleText: "" }
@@ -85,8 +84,8 @@ describe("render plan application service", () => {
     });
     const plan = await service.create(projectId);
     const frozen = await store.load(planId);
-    expect(frozen.snapshot.schemaVersion).toBe(2);
-    if (frozen.snapshot.schemaVersion !== 2) throw new Error("Expected a singular connection snapshot.");
+    expect(frozen.snapshot.schemaVersion).toBe(3);
+    if (frozen.snapshot.schemaVersion !== 3) throw new Error("Expected a singular connection snapshot.");
     expect(frozen.snapshot.connection.modelId).toBe("model");
     expect(frozen.snapshot.connection.serverIdentityHash).toMatch(/^[a-f0-9]{64}$/u);
     expect(frozen.snapshot.connection).not.toHaveProperty("profileId");

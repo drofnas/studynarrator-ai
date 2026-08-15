@@ -1,4 +1,4 @@
-import { CIR_SCHEMA_VERSION, LEXICON_TRANSFORM_VERSION, PARAGRAPH_PACING_VERSION, SCRIPT_GRAMMAR_VERSION, SourceRangeSchema } from "@studynarrator/core";
+import { CIR_SCHEMA_VERSION, LEXICON_TRANSFORM_VERSION, LexiconEntrySchema, PARAGRAPH_PACING_VERSION, SCRIPT_GRAMMAR_VERSION, SourceRangeSchema } from "@studynarrator/core";
 import { z } from "zod";
 import {
   DurableIdSchema,
@@ -8,7 +8,8 @@ import {
   ProjectIdSchema
 } from "./persistence.js";
 
-export const PROJECT_SNAPSHOT_SCHEMA_VERSION = 2;
+export const PROJECT_SNAPSHOT_SCHEMA_VERSION = 3;
+export const PREVIOUS_SINGULAR_PROJECT_SNAPSHOT_SCHEMA_VERSION = 2;
 export const LEGACY_PROJECT_SNAPSHOT_SCHEMA_VERSION = 1;
 export const RENDER_PLAN_SCHEMA_VERSION = 1;
 export const RENDER_PLAN_CHANNELS = Object.freeze({
@@ -51,8 +52,29 @@ export const SingularProjectSnapshotSchema = z.object({
   }).strict()
 }).strict();
 
-const LegacyProjectDetailSchema = z.object({
+const HistoricalProjectDetailShape = {
   ...ProjectDetailSchema.shape,
+  modelId: z.string().trim().min(1).max(500).nullable(),
+  lexiconEntries: z.array(LexiconEntrySchema)
+} as const;
+
+const PreviousSingularProjectDetailSchema = z.object({
+  ...HistoricalProjectDetailShape,
+  contractVersion: z.literal(7)
+}).strict();
+
+export const PreviousSingularProjectSnapshotSchema = z.object({
+  schemaVersion: z.literal(PREVIOUS_SINGULAR_PROJECT_SNAPSHOT_SCHEMA_VERSION),
+  ...SnapshotBaseShape,
+  project: PreviousSingularProjectDetailSchema,
+  connection: z.object({
+    modelId: z.string().min(1),
+    serverIdentityHash: HashSchema
+  }).strict()
+}).strict();
+
+const LegacyProjectDetailSchema = z.object({
+  ...HistoricalProjectDetailShape,
   contractVersion: z.literal(4),
   connectionProfileId: DurableIdSchema.nullable()
 }).strict();
@@ -70,7 +92,7 @@ export const LegacyProjectSnapshotSchema = z.object({
   }).strict()
 }).strict();
 
-export const ProjectSnapshotSchema = z.union([SingularProjectSnapshotSchema, LegacyProjectSnapshotSchema]);
+export const ProjectSnapshotSchema = z.union([SingularProjectSnapshotSchema, PreviousSingularProjectSnapshotSchema, LegacyProjectSnapshotSchema]);
 export type ProjectSnapshot = z.infer<typeof ProjectSnapshotSchema>;
 
 const RenderEntryBaseSchema = z.object({

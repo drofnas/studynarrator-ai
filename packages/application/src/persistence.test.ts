@@ -4,13 +4,12 @@ import { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
 import { createPersistenceService, createUnavailablePersistenceService, PersistenceUnavailableError } from "./persistence.js";
 
 const project = {
-  contractVersion: 7 as const,
+  contractVersion: 8 as const,
   id: "00000000-0000-4000-8000-000000000001",
   name: "Persisted study",
   description: "",
   scriptSource: "Résumé\r\nSQL",
   scriptHash: "a".repeat(64),
-  modelId: null,
   speakerMappings: [],
   pausePresets: [{ pauseId: "pause_medium", durationMs: 750, description: "Paragraph" }],
   transitionPauses: { paragraph: { mode: "preset" as const, pauseId: "pause_medium" as const }, speakerChange: { mode: "none" as const }, section: { mode: "none" as const } },
@@ -22,10 +21,10 @@ const project = {
 function repository() {
   return {
     status: vi.fn(() => ({
-      contractVersion: 7 as const,
+      contractVersion: 8 as const,
       state: "ready" as const,
-      databaseSchemaVersion: 9 as const,
-      targetDatabaseSchemaVersion: 9 as const,
+      databaseSchemaVersion: 10 as const,
+      targetDatabaseSchemaVersion: 10 as const,
       databasePath: "/tmp/studynarrator.sqlite",
       latestBackupPath: null
     })),
@@ -60,7 +59,6 @@ describe("persistence application service", () => {
       name: project.name,
       description: project.description,
       scriptSource: project.scriptSource,
-      modelId: null,
       speakerMappings: [],
       pausePresets: project.pausePresets,
       transitionPauses: project.transitionPauses,
@@ -116,10 +114,10 @@ describe("persistence application service", () => {
 
   it("keeps status available while rejecting degraded persistence operations", async () => {
     const service = createUnavailablePersistenceService({
-      contractVersion: 7,
+      contractVersion: 8,
       state: "unavailable",
       databaseSchemaVersion: 1,
-      targetDatabaseSchemaVersion: 9,
+      targetDatabaseSchemaVersion: 10,
       databasePath: "/tmp/studynarrator.sqlite",
       latestBackupPath: "/tmp/backups/recovery.sqlite",
       code: "MIGRATION_FAILED",

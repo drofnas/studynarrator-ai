@@ -331,10 +331,10 @@ describe("Express persistence API", () => {
   it("keeps diagnostics status available while degraded writes return 503", async () => {
     const { service } = await fixture();
     const persistence = createUnavailablePersistenceService({
-      contractVersion: 7,
+      contractVersion: 8,
       state: "unavailable",
       databaseSchemaVersion: 1,
-      targetDatabaseSchemaVersion: 9,
+      targetDatabaseSchemaVersion: 10,
       databasePath: "/tmp/studynarrator.sqlite",
       latestBackupPath: "/tmp/backups/recovery.sqlite",
       code: "MIGRATION_FAILED",
@@ -434,7 +434,6 @@ describe("REST API operation manifest", () => {
       name: created.name,
       description: "manifest",
       scriptSource: "Manifest source",
-      modelId: null,
       speakerMappings: [],
       pausePresets: created.pausePresets,
       transitionPauses: created.transitionPauses,
@@ -542,7 +541,7 @@ describe("REST API operation manifest", () => {
     expect(JSON.stringify(responses.map((response) => response.body as unknown))).not.toContain(secret);
 
     const unavailable = createUnavailablePersistenceService({
-      contractVersion: 7, state: "unavailable", databaseSchemaVersion: 2, targetDatabaseSchemaVersion: 9,
+      contractVersion: 8, state: "unavailable", databaseSchemaVersion: 2, targetDatabaseSchemaVersion: 10,
       databasePath: "/redacted/data.sqlite", latestBackupPath: null, code: "MIGRATION_FAILED", message: "Unavailable."
     });
     const degraded = await listen(createExpressApp({ service, persistence: unavailable, context }));

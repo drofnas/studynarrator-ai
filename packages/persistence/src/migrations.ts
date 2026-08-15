@@ -351,6 +351,37 @@ function migrateSimplifiedGlobalLexicon(database: DatabaseLike): void {
   });
 }
 
+interface MigrationProjectLexiconRow {
+  id: string;
+  project_id: string;
+  ordinal: number;
+  display_text: string;
+  enabled: number;
+}
+
+function migrateSimplifiedProjectLexicons(database: DatabaseLike): void {
+  const rows = database.prepare(`
+    SELECT id, project_id, ordinal, display_text, enabled
+    FROM lexicon_entries
+    WHERE scope = 'project'
+    ORDER BY project_id ASC, ordinal ASC, id ASC
+  `).all() as MigrationProjectLexiconRow[];
+  const duplicateKeys = new Set<string>();
+  const update = database.prepare(`
+    UPDATE lexicon_entries
+    SET entry_type = 'exactTerm', sense_id = NULL, case_sensitive = 0,
+        whole_word = 1, priority = 0, enabled = ?, notes = ''
+    WHERE id = ? AND scope = 'project'
+  `);
+  for (const row of rows) {
+    const key = `${row.project_id}\u0000${row.display_text.trim().toLocaleLowerCase("en-US")}`;
+    const duplicate = duplicateKeys.has(key);
+    duplicateKeys.add(key);
+    update.run(duplicate ? 0 : row.enabled, row.id);
+  }
+  database.prepare("UPDATE projects SET model_id = NULL").run();
+}
+
 export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
   { version: 1, name: "runtime-diagnostics", up: (database) => { database.exec(MIGRATION_1_SQL); } },
   {
@@ -406,6 +437,11 @@ export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
     up: (database) => {
       database.exec(MIGRATION_9_SQL);
     }
+  },
+  {
+    version: 10,
+    name: "simplified-project-lexicon-and-global-model",
+    up: migrateSimplifiedProjectLexicons
   }
 ]);
 

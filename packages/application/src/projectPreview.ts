@@ -71,7 +71,7 @@ function entries(repository: ProjectPreviewRepository, project: ProjectDetail): 
 
 function projectConnection(project: ProjectDetail, repository: ProjectPreviewRepository) {
   const connection = repository.getSpeachesConnection();
-  const modelId = project.modelId ?? connection.defaultModelId;
+  const modelId = connection.defaultModelId;
   if (!modelId) throw new ProjectPreviewServiceError("PROJECT_PREVIEW_CONFIGURATION", "Choose a speech model before previewing.");
   return { connection, modelId };
 }

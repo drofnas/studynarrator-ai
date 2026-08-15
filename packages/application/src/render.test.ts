@@ -39,7 +39,7 @@ class MemoryRepository implements RenderRepository {
   getRenderArtifactPath(id: string) { const item = this.artifacts.get(id); if (!item) throw new Error("missing"); const { path, ...artifact } = item; return { artifact, path }; }
 }
 
-async function fixture(options: { legacyProfileId?: string } = {}) {
+async function fixture(options: { legacyProfileId?: string; previousSingular?: boolean } = {}) {
   const dataDirectory = await mkdtemp(join(tmpdir(), "studynarrator-render-"));
   roots.push(dataDirectory);
   const projectId = "00000000-0000-4000-8000-000000000001";
@@ -48,8 +48,8 @@ async function fixture(options: { legacyProfileId?: string } = {}) {
   const baseUrl = "http://127.0.0.1:8765";
   const timestamp = "2026-08-13T12:00:00.000Z";
   const project = {
-    contractVersion: 7 as const, id: projectId, name: "Render fixture", description: "", scriptSource: "narrator: Render me.",
-    scriptHash: sha("narrator: Render me."), modelId: "model",
+    contractVersion: 8 as const, id: projectId, name: "Render fixture", description: "", scriptSource: "narrator: Render me.",
+    scriptHash: sha("narrator: Render me."),
     speakerMappings: [{ speakerId: "narrator", displayName: "Narrator", voiceId: "voice", speed: 1, gainDb: 0, roleDescription: "", sampleText: "" }],
     pausePresets: [], transitionPauses: { paragraph: { mode: "none" as const }, speakerChange: { mode: "none" as const }, section: { mode: "none" as const } },
     lexiconEntries: [], createdAt: timestamp, updatedAt: timestamp
@@ -58,12 +58,15 @@ async function fixture(options: { legacyProfileId?: string } = {}) {
   const snapshot = options.legacyProfileId ? withProjectSnapshotHash({
     schemaVersion: 1,
     capturedAt: timestamp,
-    project: { ...project, contractVersion: 4, connectionProfileId: options.legacyProfileId },
+    project: { ...project, contractVersion: 4, modelId: "model", connectionProfileId: options.legacyProfileId },
     globalLexiconEntries: [], ignoredDiagnostics: [],
     connection: { profileId: options.legacyProfileId, profileName: "Legacy", profileSource: "saved", modelId: "model", serverIdentityHash: sha(baseUrl) },
     versions
+  }) : options.previousSingular ? withProjectSnapshotHash({
+    schemaVersion: 2, capturedAt: timestamp, project: { ...project, contractVersion: 7, modelId: "model" }, globalLexiconEntries: [], ignoredDiagnostics: [],
+    connection: { modelId: "model", serverIdentityHash: sha(baseUrl) }, versions
   }) : withProjectSnapshotHash({
-    schemaVersion: 2, capturedAt: timestamp, project, globalLexiconEntries: [], ignoredDiagnostics: [],
+    schemaVersion: 3, capturedAt: timestamp, project, globalLexiconEntries: [], ignoredDiagnostics: [],
     connection: { modelId: "model", serverIdentityHash: sha(baseUrl) }, versions
   });
   const cacheKey = "a".repeat(64);
@@ -171,6 +174,13 @@ describe("render coordinator", () => {
   it("renders a legacy plan when its preserved connection and endpoint still match", async () => {
     const preservedProfileId = "00000000-0000-4000-8000-000000000003";
     const { service, plan } = await fixture({ legacyProfileId: preservedProfileId });
+    const job = await terminal(service, (await service.start(plan.id)).id);
+    expect(job.state).toBe("complete");
+    await service.close();
+  });
+
+  it("renders a previous singular snapshot with its captured model", async () => {
+    const { service, plan } = await fixture({ previousSingular: true });
     const job = await terminal(service, (await service.start(plan.id)).id);
     expect(job.state).toBe("complete");
     await service.close();
