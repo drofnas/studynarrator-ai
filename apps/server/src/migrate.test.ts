@@ -13,9 +13,9 @@ describe("db:migrate command", () => {
   it("reports applied and current versions without project content", async () => {
     const dataDirectory = mkdtempSync(join(tmpdir(), "studynarrator-migrate-command-"));
     const first = await runMigrationCommand(["--data-dir", dataDirectory]);
-    expect(first).toMatchObject({ state: "ready", databaseSchemaVersion: 10, appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], backupPath: null });
+    expect(first).toMatchObject({ state: "ready", databaseSchemaVersion: 11, appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], backupPath: null });
     const second = await runMigrationCommand(["--data-dir", dataDirectory]);
-    expect(second).toMatchObject({ databaseSchemaVersion: 10, appliedVersions: [] });
+    expect(second).toMatchObject({ databaseSchemaVersion: 11, appliedVersions: [] });
     expect(JSON.stringify(second)).not.toContain("scriptSource");
   });
 });

@@ -4,7 +4,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ConnectionTestSummary, PersistenceClient, SpeachesConnectionClient } from "@studynarrator/shared-types";
+import { DEFAULT_SYSTEM_TIMING, type ConnectionTestSummary, type PersistenceClient, type SpeachesConnectionClient } from "@studynarrator/shared-types";
 import { App } from "@/app/App.js";
 
 const timestamp = "2026-08-12T12:00:00.000Z";
@@ -21,6 +21,7 @@ const connectedSummary: ConnectionTestSummary = {
 };
 const persistence = {
   projects: { list: vi.fn(async () => []), create: vi.fn(), get: vi.fn(), replace: vi.fn(), duplicate: vi.fn(), delete: vi.fn() },
+  settings: { getPacing: vi.fn(async () => DEFAULT_SYSTEM_TIMING), updatePacing: vi.fn() },
   globalLexicon: { list: vi.fn(async () => []), replace: vi.fn() },
   preferences: { getIgnoredDiagnostics: vi.fn(async () => []), replaceIgnoredDiagnostics: vi.fn() }
 } as unknown as PersistenceClient;

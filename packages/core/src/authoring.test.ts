@@ -75,7 +75,7 @@ describe("pause duration normalization", () => {
 });
 
 describe("discovery reconciliation", () => {
-  it("adds stable defaults and preserves unused authored configuration", () => {
+  it("adds supported defaults and preserves unused authored configuration", () => {
     const parseResult = parseScript({ source: "[speaker_teacher] One. [pause_short] Two. [pause_custom] Three." });
     const first = reconcileDiscoveredConfiguration({
       parseResult,
@@ -89,7 +89,6 @@ describe("discovery reconciliation", () => {
     ]);
     expect(first.pauses).toEqual([
       expect.objectContaining({ pauseId: "pause_short", durationMs: 350, discovered: true }),
-      expect.objectContaining({ pauseId: "pause_custom", durationMs: null, discovered: true }),
       expect.objectContaining({ pauseId: "pause_archived", durationMs: 2_000, discovered: false })
     ]);
 
@@ -111,17 +110,16 @@ describe("discovery reconciliation", () => {
 });
 
 describe("deterministic readiness and dry run", () => {
-  it("blocks exact missing speaker and pause mappings", () => {
+  it("blocks missing speakers while treating unsupported pause-shaped text as speech", () => {
     const parseResult = parseScript({ source: "[speaker_teacher] Hello. [pause_custom] Continue." });
     const transformResult = transformScript({ parsedScript: parseResult, entries: [] });
     const reconciled = reconcileDiscoveredConfiguration({ parseResult, speakerMappings: [], pausePresets: [] });
     const validation = validateAuthoringConfiguration({ parseResult, transformResult, speakers: reconciled.speakers, pauses: reconciled.pauses });
 
     expect(validation.status).toBe("blocked");
-    expect(validation.issues).toEqual(expect.arrayContaining([
-      expect.objectContaining({ code: "MISSING_VOICE_MAPPING", target: { kind: "speaker", id: "teacher" } }),
-      expect.objectContaining({ code: "MISSING_PAUSE_CONFIGURATION", target: { kind: "pause", id: "pause_custom" } })
-    ]));
+    expect(validation.issues).toEqual([
+      expect.objectContaining({ code: "MISSING_VOICE_MAPPING", target: { kind: "speaker", id: "teacher" } })
+    ]);
   });
 
   it("keeps original, readable, and TTS text separate in a representative study guide", () => {

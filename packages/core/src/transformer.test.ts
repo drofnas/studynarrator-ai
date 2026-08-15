@@ -208,11 +208,11 @@ describe("lexicon transformation", () => {
     expect(conflict.ttsTranscript).toBe("aye");
   });
 
-  it("never applies ordinary replacement to directives or metadata", () => {
+  it("protects supported metadata while retaining unsupported pause-shaped speech", () => {
     const source = "[section: SQL]\n[speaker_SQL] Spoken SQL.\n[pause_SQL]";
     const result = transform(source, [entry({ id: "sql", displayText: "SQL", spokenText: "sequel" })]);
-    expect(result.readableTranscript).toBe("Spoken SQL.");
-    expect(result.ttsTranscript).toBe("Spoken sequel.");
+    expect(result.readableTranscript).toBe("Spoken SQL.\n[pause_SQL]");
+    expect(result.ttsTranscript).toBe("Spoken sequel.\n[pause_SQL]");
     expect(result.matches).toHaveLength(1);
   });
 
