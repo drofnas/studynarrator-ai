@@ -70,7 +70,7 @@
 .sourceActions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; align-items: center; margin-top: 9px; color: #557080; font-size: 0.7rem; }
 .sourceActions button { min-height: 34px; padding: 0 10px; font-size: 0.68rem; }
 .configRail { display: grid; grid-template-columns: 1fr; gap: 14px; min-width: 0; }
-.configRail > section { padding: 15px; border-top: 4px solid var(--copper); }
+.configRail > section { min-width: 0; padding: 15px; border-top: 4px solid var(--copper); }
 .configRail article { margin-top: 11px; padding: 12px; background: white; border-left: 3px solid var(--signal); }
 .configRail article header { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
 .configRail article header span { color: #557080; font-size: 0.63rem; }
@@ -84,7 +84,8 @@
 .copyRow button { min-height: 37px; padding: 0 10px; }
 .voiceFieldMessage { margin: 8px 0 0; color: #557080; font-size: 0.68rem; line-height: 1.45; }
 .voiceFieldMessage button { min-height: 28px; padding: 0 7px; font-size: 0.65rem; }
-.speakerTableScroll { max-width: 100%; margin-top: 10px; overflow-x: auto; }
+.speakerTableScroll { width: 100%; min-width: 0; max-width: 100%; margin-top: 10px; overflow-x: auto; scrollbar-gutter: stable; }
+.speakerTableScroll:focus-visible { outline: 3px solid var(--signal-pale); outline-offset: 3px; }
 .speakerTable { width: 100%; min-width: 720px; border-collapse: collapse; }
 .speakerTable th, .speakerTable td { padding: 8px; text-align: left; border-bottom: 1px solid var(--line); }
 .speakerTable thead th { color: var(--signal); font: 800 0.66rem ui-monospace, monospace; letter-spacing: 0.08em; text-transform: uppercase; }

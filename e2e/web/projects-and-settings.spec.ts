@@ -202,12 +202,52 @@ test.describe("Projects connected authoring", () => {
     await createProject(page, "Automated narration", "Acceptance project");
     await expect(page.getByRole("heading", { name: "Script editor" })).toBeVisible();
 
-    const longScript = ["[section: Start]", ...Array.from({ length: 48 }, (_value, index) => `[speaker_teacher] Welcome line ${String(index + 1)}.`), "[pause_short] Continue."].join("\n");
+    const longScript = [
+      "[section: Start]",
+      ...Array.from({ length: 48 }, (_value, index) => `[speaker_teacher] Welcome line ${String(index + 1)}.`),
+      "[speaker_student] I am ready.",
+      "[speaker_narrator] Let us begin.",
+      "[speaker_coach] Watch the spacing.",
+      "[speaker_guest] Test long labels and controls.",
+      "[speaker_facilitator] Confirm the table scrolls locally.",
+      "[pause_short] Continue."
+    ].join("\n");
     await page.getByLabel("Script source").fill(longScript);
     await page.getByRole("tab", { name: "Settings" }).click();
     const speakers = page.getByRole("region", { name: "Project speakers" });
     const voices = page.getByLabel("Voice for speaker teacher");
     await expect(speakers.getByRole("columnheader")).toHaveText(["Name", "Voice", "Speed", "Gain dB"]);
+    await page.setViewportSize({ width: 390, height: 844 });
+    const menu = page.getByRole("button", { name: "Open navigation" });
+    const closeNavigation = page.getByRole("button", { name: "Close navigation" });
+    await expect(menu).toHaveAttribute("aria-expanded", "false");
+    await expect.poll(() => closeNavigation.evaluate((element) => element.getBoundingClientRect().right <= 0)).toBe(true);
+    expect(await speakers.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+    const speakerScroll = await speakers.evaluate((element) => {
+      const table = element.querySelector("table");
+      if (!table) throw new Error("Expected the speaker table inside its scroll region.");
+      element.scrollLeft = 0;
+      const start = element.scrollLeft;
+      const leftEdgeVisible = table.getBoundingClientRect().left >= element.getBoundingClientRect().left - 1;
+      element.scrollLeft = element.scrollWidth;
+      const end = element.scrollLeft;
+      const rightEdgeVisible = table.getBoundingClientRect().right <= element.getBoundingClientRect().right + 1;
+      return { start, end, leftEdgeVisible, rightEdgeVisible };
+    });
+    expect(speakerScroll.start).toBe(0);
+    expect(speakerScroll.end).toBeGreaterThan(0);
+    expect(speakerScroll.leftEdgeVisible).toBe(true);
+    expect(speakerScroll.rightEdgeVisible).toBe(true);
+    await speakers.focus();
+    await page.keyboard.press("Shift+Tab");
+    await page.keyboard.press("Tab");
+    await expect(speakers).toBeFocused();
+    expect(await speakers.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return style.outlineStyle !== "none" && Number.parseFloat(style.outlineWidth) >= 3;
+    })).toBe(true);
+    await page.setViewportSize({ width: 1280, height: 720 });
     await expect(page.getByText("Project Timings")).toHaveCount(0);
     await expect(page.getByRole("button", { name: /Copy to/u })).toHaveCount(0);
     await expect(voices).toBeVisible();
