@@ -150,6 +150,14 @@ test.describe("shell, onboarding, and runtime routes", () => {
     await expect.poll(() => tabList.evaluate((element) => element.getBoundingClientRect().top)).toBeGreaterThan(58);
     await page.getByRole("tab", { name: "Details" }).click();
     await expect(page.getByRole("heading", { name: "Narration score" })).toBeVisible();
+    const score = page.getByRole("region", { name: "Narration score content" });
+    expect(await score.evaluate((element) => ({
+      overflowY: getComputedStyle(element).overflowY,
+      scrolls: element.scrollHeight > element.clientHeight + 1,
+      pageScrolls: document.documentElement.scrollHeight > document.documentElement.clientHeight
+    }))).toEqual({ overflowY: "visible", scrolls: false, pageScrolls: true });
+    await score.evaluate((element) => { element.scrollTop = 200; });
+    expect(await score.evaluate((element) => element.scrollTop)).toBe(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
   });
 });

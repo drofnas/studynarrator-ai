@@ -26,46 +26,46 @@ test.describe("project preview cache", () => {
     studyNarrator.fakeSpeaches.reset();
 
     const speechRequests = () => studyNarrator.fakeSpeaches.getState().requests.filter(({ path, status }) => path === "/v1/audio/speech" && status === 200);
-    const result = page.getByRole("region", { name: "Project preview result" });
     const previewFirstSegment = async () => {
       const completed = page.waitForResponse((response) => response.request().method() === "POST" && response.url().endsWith(`/api/projects/${created.id}/preview`));
-      await page.getByRole("button", { name: /^Preview$/u }).first().click();
-      expect((await completed).ok()).toBe(true);
-      await expect(result).toBeVisible();
+      await page.getByRole("button", { name: /narration row/u }).first().click();
+      const response = await completed;
+      expect(response.ok()).toBe(true);
+      await expect(page.getByRole("button", { name: /Playing narration row/u }).first()).toBeVisible();
+      await expect(page.locator("audio")).toHaveCount(0);
+      return await response.json() as { cache: { key: string; status: "hit" | "miss" } };
     };
 
     await openRoute(page, studyNarrator, `/projects/${created.id}?tab=details`);
     await expect(page.getByRole("heading", { name: "Narration score" })).toBeVisible();
-    await previewFirstSegment();
-    await expect(result.getByText("Cache miss")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Sections" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Preview" })).toHaveCount(0);
+    expect((await previewFirstSegment()).cache.status).toBe("miss");
+    await expect(page.getByText("Audible preview")).toHaveCount(0);
     expect(speechRequests()).toHaveLength(1);
 
-    await previewFirstSegment();
-    await expect(result.getByText("Cache hit")).toBeVisible();
+    expect((await previewFirstSegment()).cache.status).toBe("hit");
     expect(speechRequests()).toHaveLength(1);
 
     await page.getByRole("tab", { name: "Script Editor" }).click();
     await page.getByLabel("Script source").fill(changedScript);
     await page.getByRole("tab", { name: "Details" }).click();
     await expect(page.getByLabel("Dry run ordered segment table")).toContainText("Cache this changed sentence.");
-    await previewFirstSegment();
-    await expect(result.getByText("Cache miss")).toBeVisible();
+    expect((await previewFirstSegment()).cache.status).toBe("miss");
     expect(speechRequests()).toHaveLength(2);
 
     await page.getByRole("tab", { name: "Script Editor" }).click();
     await page.getByLabel("Script source").fill(originalScript);
     await page.getByRole("tab", { name: "Details" }).click();
     await expect(page.getByLabel("Dry run ordered segment table")).toContainText("Cache this exact sentence.");
-    await previewFirstSegment();
-    await expect(result.getByText("Cache hit")).toBeVisible();
+    expect((await previewFirstSegment()).cache.status).toBe("hit");
     expect(speechRequests()).toHaveLength(2);
 
     await page.getByRole("tab", { name: "Script Editor" }).click();
     await page.getByLabel("Script source").fill(`${originalScript}\n[pause_short]`);
     await page.getByRole("tab", { name: "Details" }).click();
     await expect(page.getByLabel("Dry run ordered segment table")).toContainText("pause_short");
-    await previewFirstSegment();
-    await expect(result.getByText("Cache hit")).toBeVisible();
+    expect((await previewFirstSegment()).cache.status).toBe("hit");
     expect(speechRequests()).toHaveLength(2);
 
     await openRoute(page, studyNarrator, "/scratchpad");
@@ -78,24 +78,20 @@ test.describe("project preview cache", () => {
     await expect(page.getByLabel("Voice for speaker teacher")).toHaveValue("af_heart");
     await page.getByLabel("Voice for speaker teacher").selectOption("af_sky");
     await page.getByRole("tab", { name: "Details" }).click();
-    await previewFirstSegment();
-    await expect(result.getByText("Cache miss")).toBeVisible();
+    expect((await previewFirstSegment()).cache.status).toBe("miss");
     expect(speechRequests()).toHaveLength(3);
     await page.getByRole("tab", { name: "Settings" }).click();
     await page.getByLabel("Voice for speaker teacher").selectOption("af_heart");
     await page.getByRole("tab", { name: "Details" }).click();
-    await previewFirstSegment();
-    await expect(result.getByText("Cache hit")).toBeVisible();
+    expect((await previewFirstSegment()).cache.status).toBe("hit");
     expect(speechRequests()).toHaveLength(3);
 
     await page.getByRole("tab", { name: "Details" }).click();
-    await previewFirstSegment();
-    const cacheKey = (await result.locator("footer code").innerText()).trim();
+    const cacheKey = (await previewFirstSegment()).cache.key;
     expect(cacheKey).toMatch(/^[a-f0-9]{64}$/u);
     const cacheFile = join(studyNarrator.dataDirectory, "cache", "speech", cacheKey.slice(0, 2), `${cacheKey}.wav`);
     await writeFile(cacheFile, "isolated corrupt fixture");
-    await previewFirstSegment();
-    await expect(result.getByText("Cache miss")).toBeVisible();
+    expect((await previewFirstSegment()).cache.status).toBe("miss");
     expect(speechRequests()).toHaveLength(4);
 
     await expect(page.getByRole("button", { name: "Clear this cached entry" })).toHaveCount(0);

@@ -201,7 +201,7 @@ test.describe("Settings and connection diagnostics", () => {
 });
 
 test.describe("Projects connected authoring", () => {
-  test("defaults and persists catalog voices in bounded editor panels without requesting TTS", async ({ page, studyNarrator }) => {
+  test("defaults and persists catalog voices while Details uses document scrolling without requesting TTS", async ({ page, studyNarrator }) => {
     await configureConnection(page, studyNarrator);
     studyNarrator.fakeSpeaches.reset();
     await page.reload();
@@ -284,16 +284,23 @@ test.describe("Projects connected authoring", () => {
     const detailsLayout = await page.evaluate(() => {
       const score = document.querySelector('[aria-label="Narration score content"]');
       const scorePanel = score?.closest("section");
-      if (!(score instanceof HTMLElement) || !(scorePanel instanceof HTMLElement)) throw new Error("Expected a bounded narration score panel.");
+      if (!(score instanceof HTMLElement) || !(scorePanel instanceof HTMLElement)) throw new Error("Expected a narration score panel.");
       return {
         scorePanelHeight: scorePanel.getBoundingClientRect().height,
-        scoreOverflows: score.scrollHeight > score.clientHeight
+        scoreOverflowY: getComputedStyle(score).overflowY,
+        scoreOverflows: score.scrollHeight > score.clientHeight + 1,
+        pageScrolls: document.documentElement.scrollHeight > document.documentElement.clientHeight
       };
     });
-    expect(detailsLayout.scorePanelHeight).toBeLessThanOrEqual(600);
-    expect(detailsLayout.scoreOverflows).toBe(true);
+    expect(detailsLayout.scorePanelHeight).toBeGreaterThan(600);
+    expect(detailsLayout.scoreOverflowY).toBe("visible");
+    expect(detailsLayout.scoreOverflows).toBe(false);
+    expect(detailsLayout.pageScrolls).toBe(true);
+    await expect(page.getByRole("heading", { name: "Sections" })).toHaveCount(0);
     await scoreBody.evaluate((element) => { element.scrollTop = 250; });
-    await expect.poll(() => scoreBody.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    await expect.poll(() => scoreBody.evaluate((element) => element.scrollTop)).toBe(0);
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
 
     await page.getByRole("button", { name: "Save now" }).click();
     await expect(page.getByText("All changes saved.")).toHaveCount(0);

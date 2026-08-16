@@ -20,11 +20,18 @@ test.describe("render execution", () => {
     };
     await request.put(`${studyNarrator.baseUrl}/api/projects/${created.id}`, { data: projectInput });
     studyNarrator.fakeSpeaches.reset();
+    studyNarrator.fakeSpeaches.setScenario("slow");
 
     await openRoute(page, studyNarrator, `/projects/${created.id}?tab=render`);
     await expect(page.getByRole("button", { name: "Render" })).toBeEnabled();
     await page.getByRole("button", { name: "Render" }).click();
-    await expect(page.getByLabel(/Audio player for Completed project render/u)).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("button", { name: "Rendering…" })).toBeDisabled();
+    const progress = page.getByRole("progressbar", { name: "Render chunk progress" });
+    await expect(progress).toBeVisible();
+    await expect(progress).toHaveAttribute("max", "2");
+    await expect.poll(async () => Number(await progress.getAttribute("value"))).toBeGreaterThan(0);
+    const completedPlayer = page.getByLabel(/Audio player for Completed project render/u);
+    await expect(completedPlayer).toBeVisible({ timeout: 20_000 });
     expect(studyNarrator.fakeSpeaches.getState().requests.filter(({ path, status }) => path === "/v1/audio/speech" && status === 200)).toHaveLength(2);
 
     await page.getByRole("tab", { name: "Script Editor" }).click();
@@ -35,7 +42,12 @@ test.describe("render execution", () => {
     await expect(page.getByText(/Unsaved changes|Saving…|Save failed|Invalid changes/u)).toHaveCount(0);
     await page.getByRole("tab", { name: "Render" }).click();
     await page.getByRole("button", { name: "Render" }).click();
-    await expect(page.getByLabel(/Audio player for Completed project render/u)).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("button", { name: "Rendering…" })).toBeDisabled();
+    await expect(completedPlayer).toHaveAttribute("aria-disabled", "true");
+    await expect(page.getByRole("button", { name: "Download", exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Download Details" })).toBeDisabled();
+    await expect(completedPlayer).toHaveAttribute("aria-disabled", "false", { timeout: 20_000 });
+    await expect(page.getByRole("button", { name: "Download", exact: true })).toBeEnabled();
     expect(studyNarrator.fakeSpeaches.getState().requests.filter(({ path, status }) => path === "/v1/audio/speech" && status === 200)).toHaveLength(3);
 
     const audioDownload = page.waitForEvent("download");
