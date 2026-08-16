@@ -64,6 +64,28 @@ describe("LexiconEditor", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  it("uses Alias language without changing the emitted editor shape", async () => {
+    const onChange = vi.fn(() => true);
+    render(<LexiconEditor
+      value={[{ id: "resume-cv", displayText: "resume/cv", spokenText: "rez oo may", enabled: true }]}
+      onChange={onChange}
+      searchLabel="Search aliases"
+      emptyMessage="No aliases."
+      displayTextLabel="Alias"
+    />);
+    const user = userEvent.setup();
+
+    expect(screen.getAllByLabelText("Alias")).toHaveLength(2);
+    expect(screen.getByPlaceholderText("Search Alias or Spoken Text")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    expect(screen.getByText("Alias and Spoken Text are required.")).toBeInTheDocument();
+    await user.type(screen.getAllByLabelText("Alias")[0]!, "RESUME/CV");
+    await user.type(screen.getAllByLabelText("Spoken Text")[0]!, "duplicate");
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    expect(screen.getByText("Alias must be unique regardless of capitalization.")).toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it("supports JSON entries without IDs", async () => {
     function Harness() {
       const [value, setValue] = useState<LexiconEditorValue[]>([
