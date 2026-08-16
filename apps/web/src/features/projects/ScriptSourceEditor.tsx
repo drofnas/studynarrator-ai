@@ -49,7 +49,21 @@ export const ScriptSourceEditor = forwardRef<ScriptSourceEditorHandle, {
     });
     viewRef.current = view;
 
+    const scrollPageFromEditorWheel = (event: WheelEvent) => {
+      if (event.ctrlKey || event.metaKey || event.deltaY === 0) return;
+      const pageWindow = host.ownerDocument.defaultView;
+      if (!pageWindow) return;
+      const deltaScale = event.deltaMode === WheelEvent.DOM_DELTA_LINE
+        ? view.defaultLineHeight
+        : event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? pageWindow.innerHeight : 1;
+      event.preventDefault();
+      event.stopPropagation();
+      pageWindow.scrollBy({ top: event.deltaY * deltaScale, behavior: "auto" });
+    };
+    host.addEventListener("wheel", scrollPageFromEditorWheel, { capture: true, passive: false });
+
     return () => {
+      host.removeEventListener("wheel", scrollPageFromEditorWheel, { capture: true });
       viewRef.current = undefined;
       view.destroy();
     };

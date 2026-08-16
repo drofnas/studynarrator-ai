@@ -323,7 +323,7 @@ test.describe("Projects connected authoring", () => {
   test("keeps wrapped logical line numbers aligned while the page owns scrolling", async ({ page, studyNarrator }) => {
     await continueOffline(page, studyNarrator);
     await createProject(page, "Wrapped line numbers");
-    await page.setViewportSize({ width: 520, height: 800 });
+    await page.setViewportSize({ width: 1280, height: 800 });
 
     const logicalLines = [
       `[speaker_teacher] ${"This sentence should wrap without becoming a new source line. ".repeat(16)}`,
@@ -355,6 +355,27 @@ test.describe("Projects connected authoring", () => {
     expect(editorLayout.scrollerOverflowY).toBe("visible");
     expect(editorLayout.scrollerScrolls).toBe(false);
     expect(editorLayout.sharedSurface).toBe(true);
+
+    const expectWheelToScrollPage = async (width: number) => {
+      await page.setViewportSize({ width, height: 800 });
+      await editor.evaluate((element) => { window.scrollTo(0, element.getBoundingClientRect().top + window.scrollY); });
+      const editorBox = await editor.boundingBox();
+      if (!editorBox) throw new Error("Expected the script editor to have a browser layout box.");
+      await page.mouse.move(editorBox.x + Math.min(200, editorBox.width / 2), editorBox.y + 250);
+
+      const beforeDown = await page.evaluate(() => window.scrollY);
+      await page.mouse.wheel(0, 400);
+      await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(beforeDown);
+      await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBe(0);
+
+      const beforeUp = await page.evaluate(() => window.scrollY);
+      await page.mouse.wheel(0, -240);
+      await expect.poll(() => page.evaluate(() => window.scrollY)).toBeLessThan(beforeUp);
+      await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBe(0);
+    };
+
+    await expectWheelToScrollPage(1280);
+    await expectWheelToScrollPage(520);
 
     await editor.evaluate((element) => { window.scrollTo(0, element.getBoundingClientRect().top + window.scrollY); });
 

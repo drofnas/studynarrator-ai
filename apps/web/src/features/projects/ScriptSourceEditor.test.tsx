@@ -14,7 +14,10 @@ function editorView(): EditorView {
   return view;
 }
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 describe("ScriptSourceEditor", () => {
   it("reports edits and synchronizes externally replaced content", () => {
@@ -38,5 +41,54 @@ describe("ScriptSourceEditor", () => {
 
     ref.current?.setSelection(6, 12, { scrollIntoView: true });
     expect(ref.current?.getSelection()).toEqual({ from: 6, to: 12 });
+  });
+
+  it("hands vertical wheel deltas to the page", () => {
+    const scrollBy = vi.spyOn(window, "scrollBy").mockImplementation(() => undefined);
+    render(<ScriptSourceEditor value="First line" onChange={() => undefined} />);
+    const content = screen.getByRole("textbox", { name: "Script source" });
+    const lineHeight = editorView().defaultLineHeight;
+
+    const pixels = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: 120 });
+    content.dispatchEvent(pixels);
+    const lines = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      deltaMode: WheelEvent.DOM_DELTA_LINE,
+      deltaY: -3
+    });
+    content.dispatchEvent(lines);
+    const pages = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      deltaMode: WheelEvent.DOM_DELTA_PAGE,
+      deltaY: 1
+    });
+    content.dispatchEvent(pages);
+
+    expect(pixels.defaultPrevented).toBe(true);
+    expect(lines.defaultPrevented).toBe(true);
+    expect(pages.defaultPrevented).toBe(true);
+    expect(scrollBy.mock.calls).toEqual([
+      [{ top: 120, behavior: "auto" }],
+      [{ top: -3 * lineHeight, behavior: "auto" }],
+      [{ top: window.innerHeight, behavior: "auto" }]
+    ]);
+  });
+
+  it("leaves browser zoom and horizontal-only wheel gestures untouched", () => {
+    const scrollBy = vi.spyOn(window, "scrollBy").mockImplementation(() => undefined);
+    render(<ScriptSourceEditor value="First line" onChange={() => undefined} />);
+    const content = screen.getByRole("textbox", { name: "Script source" });
+    const gestures = [
+      new WheelEvent("wheel", { bubbles: true, cancelable: true, ctrlKey: true, deltaY: 120 }),
+      new WheelEvent("wheel", { bubbles: true, cancelable: true, metaKey: true, deltaY: 120 }),
+      new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX: 120, deltaY: 0 })
+    ];
+
+    for (const gesture of gestures) content.dispatchEvent(gesture);
+
+    expect(gestures.every(({ defaultPrevented }) => !defaultPrevented)).toBe(true);
+    expect(scrollBy).not.toHaveBeenCalled();
   });
 });
