@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type {
   ConnectionSetupState,
   ConnectionTestOverall,
@@ -20,6 +20,7 @@ type SpeechCatalogLoadState =
   | { status: "failed"; catalog: null; error: string };
 
 const idleSpeechCatalog: SpeechCatalogLoadState = { status: "idle", catalog: null, error: "" };
+const recoveryDelays = [250, 500, 1_000, 2_000, 5_000] as const;
 
 interface ConnectionWorkspace {
   connection: SpeachesConnection | null;
@@ -58,19 +59,99 @@ export function ConnectionProvider({ connectionClient, voiceCatalog, children }:
   const [error, setError] = useState("");
   const [testing, setTesting] = useState(false);
   const [catalog, setCatalog] = useState<SpeechCatalogLoadState>(idleSpeechCatalog);
+  const mountedRef = useRef(false);
+  const lifecycleRef = useRef(0);
+  const connectionLoadedRef = useRef(false);
+  const setupLoadedRef = useRef(false);
+  const needsRecoveryRef = useRef(true);
+  const inFlightRef = useRef<Promise<boolean> | undefined>(undefined);
+  const recoveryTimerRef = useRef<number | undefined>(undefined);
+  const scheduleRecoveryRef = useRef<(() => void) | undefined>(undefined);
 
-  const refresh = useCallback(async () => {
-    try {
-      const [nextConnection, nextSetup] = await Promise.all([connectionClient.get(), connectionClient.getSetupState()]);
-      setConnection(nextConnection);
-      setSetup(nextSetup);
-      setError("");
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Connection settings could not be loaded.");
-    } finally { setLoading(false); }
+  const loadPersistedState = useCallback(async (): Promise<boolean> => {
+    if (inFlightRef.current) return await inFlightRef.current;
+    const lifecycle = lifecycleRef.current;
+    const request = Promise.allSettled([connectionClient.get(), connectionClient.getSetupState()]).then(([connectionResult, setupResult]) => {
+      if (!mountedRef.current || lifecycleRef.current !== lifecycle) return false;
+      const failures: unknown[] = [];
+      if (connectionResult.status === "fulfilled") {
+        connectionLoadedRef.current = true;
+        setConnection(connectionResult.value);
+      } else failures.push(connectionResult.reason);
+      if (setupResult.status === "fulfilled") {
+        setupLoadedRef.current = true;
+        setSetup(setupResult.value);
+      } else failures.push(setupResult.reason);
+
+      const completeAttempt = failures.length === 0;
+      const hasPersistedState = connectionLoadedRef.current && setupLoadedRef.current;
+      needsRecoveryRef.current = !completeAttempt;
+      setLoading(!hasPersistedState);
+      if (completeAttempt) {
+        if (recoveryTimerRef.current !== undefined) window.clearTimeout(recoveryTimerRef.current);
+        recoveryTimerRef.current = undefined;
+        setError("");
+      } else {
+        const reason = failures[0];
+        setError(reason instanceof Error ? reason.message : "Connection settings could not be loaded.");
+      }
+      return completeAttempt;
+    });
+    inFlightRef.current = request;
+    void request.finally(() => { if (inFlightRef.current === request) inFlightRef.current = undefined; });
+    return await request;
   }, [connectionClient]);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  const refresh = useCallback(async () => {
+    if (!await loadPersistedState()) scheduleRecoveryRef.current?.();
+  }, [loadPersistedState]);
+
+  useEffect(() => {
+    const lifecycle = lifecycleRef.current + 1;
+    lifecycleRef.current = lifecycle;
+    mountedRef.current = true;
+    let stopped = false;
+    let recoveryAttempt = 0;
+
+    const clearRecoveryTimer = () => {
+      if (recoveryTimerRef.current !== undefined) window.clearTimeout(recoveryTimerRef.current);
+      recoveryTimerRef.current = undefined;
+    };
+    const attemptRecovery = async () => {
+      const complete = await loadPersistedState();
+      if (stopped || lifecycleRef.current !== lifecycle || complete) return;
+      clearRecoveryTimer();
+      const delay = recoveryDelays[Math.min(recoveryAttempt, recoveryDelays.length - 1)]!;
+      recoveryAttempt += 1;
+      recoveryTimerRef.current = window.setTimeout(() => { void attemptRecovery(); }, delay);
+    };
+    const scheduleRecovery = () => {
+      if (stopped || !needsRecoveryRef.current || recoveryTimerRef.current !== undefined) return;
+      const delay = recoveryDelays[Math.min(recoveryAttempt, recoveryDelays.length - 1)]!;
+      recoveryAttempt += 1;
+      recoveryTimerRef.current = window.setTimeout(() => { void attemptRecovery(); }, delay);
+    };
+    const retryNow = () => {
+      if (!needsRecoveryRef.current) return;
+      clearRecoveryTimer();
+      void attemptRecovery();
+    };
+
+    scheduleRecoveryRef.current = scheduleRecovery;
+    window.addEventListener("online", retryNow);
+    window.addEventListener("focus", retryNow);
+    void attemptRecovery();
+    return () => {
+      stopped = true;
+      mountedRef.current = false;
+      lifecycleRef.current += 1;
+      inFlightRef.current = undefined;
+      scheduleRecoveryRef.current = undefined;
+      clearRecoveryTimer();
+      window.removeEventListener("online", retryNow);
+      window.removeEventListener("focus", retryNow);
+    };
+  }, [loadPersistedState]);
 
   const value = useMemo<ConnectionWorkspace>(() => ({
     connection,
@@ -83,7 +164,9 @@ export function ConnectionProvider({ connectionClient, voiceCatalog, children }:
     refresh,
     async update(input) {
       const updated = await connectionClient.update(input);
+      connectionLoadedRef.current = true;
       setConnection(updated);
+      setError("");
       return updated;
     },
     async test() {
@@ -91,7 +174,9 @@ export function ConnectionProvider({ connectionClient, voiceCatalog, children }:
       try {
         const result = await connectionClient.test();
         if (result.overall === "connected" && setup?.onboardingCompletedAt === null) {
-          setSetup(await connectionClient.completeOnboarding());
+          const nextSetup = await connectionClient.completeOnboarding();
+          setupLoadedRef.current = true;
+          setSetup(nextSetup);
         }
         await refresh();
         return result;
@@ -110,7 +195,11 @@ export function ConnectionProvider({ connectionClient, voiceCatalog, children }:
       }
     },
     exportDiagnostics: async () => await connectionClient.exportDiagnostics(),
-    async completeOnboarding() { setSetup(await connectionClient.completeOnboarding()); },
+    async completeOnboarding() {
+      const nextSetup = await connectionClient.completeOnboarding();
+      setupLoadedRef.current = true;
+      setSetup(nextSetup);
+    },
     getCatalog: async (modelId) => await voiceCatalog.get(modelId),
     replaceCatalog: async (input) => await voiceCatalog.replace(input)
   }), [catalog, connection, connectionClient, error, loading, refresh, setup, testing, voiceCatalog]);

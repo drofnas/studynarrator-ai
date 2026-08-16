@@ -88,6 +88,29 @@ test.describe("Settings and connection diagnostics", () => {
     await expect(page.getByLabel("Default Voice")).toHaveValue("af_heart");
   });
 
+  test("restores saved connection fields after the application service briefly restarts", async ({ page, studyNarrator }) => {
+    let connectionLoads = 0;
+    await page.route("**/api/connection", async (route) => {
+      if (route.request().method() === "GET" && connectionLoads === 0) {
+        connectionLoads += 1;
+        await route.abort("connectionrefused");
+        return;
+      }
+      if (route.request().method() === "GET") connectionLoads += 1;
+      await route.continue();
+    });
+
+    await page.reload();
+    await expect(page.getByRole("status", { name: "Restoring connection settings" })).toBeVisible();
+    await expect(page.getByLabel("Address")).toHaveCount(0);
+    await expect(page.getByLabel("Address")).toHaveValue(studyNarrator.fakeSpeaches.baseUrl);
+    await expect(page.getByLabel("Model")).toHaveValue(modelId);
+    await expect(page.getByLabel("Default Voice")).toHaveValue("af_heart");
+    await expect(page.getByLabel("Timeout (seconds)")).toHaveValue("2");
+    await expect(page.getByLabel("Retries")).toHaveValue("0");
+    expect(connectionLoads).toBeGreaterThanOrEqual(2);
+  });
+
   test("groups, favorites, and auditions catalog voices while persisting settings", async ({ page, studyNarrator }) => {
     await page.route("**/api/connection/speech-catalog", async (route) => {
       const response = await route.fetch();
