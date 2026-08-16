@@ -36,12 +36,14 @@ describe("script generation service", () => {
     expect(document.fileName).toBe("resume-unsafe-project-creation-prompt.md");
     expect(document.mimeType).toBe("text/markdown; charset=utf-8");
     expect(document.checksum).toMatch(/^[a-f0-9]{64}$/u);
-    expect(document.content).toContain("KNOWLEDGE TO GATHER AND TEACH");
+    expect(document.content).toContain("# StudyNarrator Script Creation Instructions");
+    expect(document.content).toContain("[WHAT SHOULD THE SCRIPT TEACH?]");
     expect(document.content).not.toContain(project.scriptSource);
     const update = await service.previewPrompt(project.id, "update");
     expect(update).toMatchObject({ kind: "update", fileName: "resume-unsafe-project-update-prompt.md" });
-    expect(update.content).toContain("Convert the existing study guide");
-    expect(update.content.trimEnd().endsWith("[INSERT EXISTING SCRIPT]")).toBe(true);
+    expect(update.content).toContain("# StudyNarrator Script Update Instructions");
+    expect(update.content).toContain("[DESCRIBE WHAT SHOULD BE ADDED, REMOVED, CORRECTED, EXPANDED, OR REORGANIZED.]");
+    expect(update.content.trimEnd().endsWith("[OPTIONAL — PROVIDE FACTS, RESEARCH, SOURCE MATERIAL, CONSTRAINTS, OR ATTACH RELEVANT FILES.]")).toBe(true);
     expect(update.content).not.toContain("SQL → sequel");
   });
 
@@ -53,7 +55,8 @@ describe("script generation service", () => {
     expect(document.fileName).toBe("studynarrator-creation-prompt.md");
     expect(document.content).toContain("[speaker_narrator]");
     expect(document.content).toContain("[pause_medium]");
-    expect(document.content).toContain("SQL → sequel");
+    expect(document.content).toContain("`resume/cv`");
+    expect(document.content).not.toContain("SQL → sequel");
     expect(getProject).not.toHaveBeenCalled();
     await expect(service.resolveSkillPackage(null)).resolves.toMatchObject({ fileName: "studynarrator-script-skill.zip" });
   });
@@ -70,7 +73,7 @@ describe("script generation service", () => {
   it("falls back to the generated prompt when no export override is supplied", async () => {
     const service = createScriptGenerationService({ repository: repository() });
     const file = await service.resolvePromptExport(project.id, "creation");
-    expect(strFromU8(file.bytes)).toContain("KNOWLEDGE TO GATHER AND TEACH");
+    expect(strFromU8(file.bytes)).toContain("# StudyNarrator Script Creation Instructions");
   });
 
   it("creates byte-identical ZIPs with both prompts, safe paths, and no saved script", async () => {
