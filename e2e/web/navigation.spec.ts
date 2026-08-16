@@ -97,7 +97,7 @@ test.describe("shell, onboarding, and runtime routes", () => {
       name: "Ledger workspace",
       description: "A project-index acceptance fixture.",
       scriptSource: longScript,
-      speakerMappings: [],
+      speakerMappings: [{ speakerId: "teacher", displayName: "Teacher", voiceId: "af_heart", speed: 1, gainDb: 0, roleDescription: "", sampleText: "" }],
       lexiconEntries: []
     } });
     expect(update.status()).toBe(200);
