@@ -609,6 +609,12 @@ describe("Projects workbench", () => {
     const { client, analyze } = fixture();
     renderPage(client, analyze);
     await openProjectTab("Render");
+    expect(screen.getByRole("heading", { name: "Project details" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Project name")).toHaveValue(project.name);
+    expect(screen.getByLabelText("Description")).toHaveValue(project.description);
+    expect(screen.getByRole("button", { name: "Save now" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Duplicate" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Render and listen" })).toBeInTheDocument();
     expect(screen.getByText(/first render may take longer/u)).toBeInTheDocument();
     expect(screen.queryByText(/Frozen render plans/u)).not.toBeInTheDocument();

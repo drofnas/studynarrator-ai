@@ -613,18 +613,18 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
   return (
     <div className={styles.page}>
       <Link className={styles.backLink} to="/projects">← Back to Projects</Link>
-      {activeTab !== "render" ? <header className={styles.pageHeader}>
+      <header className={styles.pageHeader}>
         <div><p className={styles.kicker}>Project workspace</p><h2>Project details</h2><p>Shape the script, assign voices, inspect the narration score, then render and listen.</p></div>
-      </header> : null}
+      </header>
       {errors.length > 0 ? <div className={styles.alert} role="alert"><strong>Review these items</strong><ul>{errors.map((item) => <li key={item}>{item}</li>)}</ul><button type="button" onClick={() => setErrors([])}>Dismiss</button></div> : null}
-      {activeTab !== "render" ? <p className={styles.notice} aria-live="polite">{notice}</p> : null}
+      <p className={styles.notice} aria-live="polite">{notice}</p>
 
       {draft && project ? <>
-        {activeTab !== "render" ? <section className={styles.projectIdentity} aria-label="Project details">
+        <section className={styles.projectIdentity} aria-label="Project details">
           <label>Project name<input value={draft.name} onChange={(event) => updateDraft((current) => ({ ...current, name: event.target.value }))} /></label>
           <label>Description<input value={draft.description} onChange={(event) => updateDraft((current) => ({ ...current, description: event.target.value }))} /></label>
           <div className={styles.projectActions}><div className={styles.actionRow}><button type="button" onClick={() => void saveNow()}>Save now</button><button type="button" className={styles.secondary} onClick={() => void duplicateProject()}>Duplicate</button><button type="button" className={styles.danger} onClick={() => void deleteProject()}>Delete</button></div></div>
-        </section> : null}
+        </section>
         <StickyTabBar label="Project workspace">
           {projectTabs.map(({ id, label }) => <button ref={(element) => { tabRefs.current[id] = element; }} type="button" role="tab" id={`project-tab-${id}`} aria-controls={`project-panel-${id}`} aria-selected={activeTab === id} tabIndex={activeTab === id ? 0 : -1} key={id} onClick={() => selectTab(id)} onKeyDown={(event) => moveTabFocus(event, id)}>{label}</button>)}
         </StickyTabBar>
