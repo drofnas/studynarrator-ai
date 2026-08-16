@@ -54,6 +54,7 @@
 .sectionHeading span { display: block; }
 .sectionHeading b { min-width: 34px; padding: 8px; color: white; text-align: center; background: var(--ink); }
 .sourceActions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; align-items: center; margin-top: 9px; color: #557080; font-size: 0.7rem; }
+.sourceMetrics { display: flex; flex-wrap: wrap; gap: 8px 28px; }
 .sourceActions button { min-height: 34px; padding: 0 10px; font-size: 0.68rem; }
 .configRail { display: grid; grid-template-columns: 1fr; gap: 14px; min-width: 0; }
 .configRail > section { min-width: 0; padding: 15px; border-top: 4px solid var(--copper); }

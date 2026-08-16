@@ -77,6 +77,10 @@ function formatAudioDuration(durationMs: number | null): string {
   const totalSeconds = Math.floor(durationMs / 1_000);
   return `${String(Math.floor(totalSeconds / 60))}:${String(totalSeconds % 60).padStart(2, "0")}`;
 }
+function countWords(source: string): number {
+  const trimmed = source.trim();
+  return trimmed === "" ? 0 : trimmed.split(/\s+/u).length;
+}
 
 const terminalRenderStates = new Set<RenderJob["state"]>(["complete", "failed", "canceled"]);
 const renderPhaseLabels: Record<RenderJob["state"], string> = {
@@ -638,7 +642,7 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
               <div className={styles.sectionHeading}><div><span>Source</span><h3>Script editor</h3></div></div>
               <div className={styles.panelScrollBody} role="region" aria-label="Script editor content" tabIndex={0}>
                 <ScriptSourceEditor ref={editorRef} value={draft.scriptSource} onChange={(scriptSource) => updateDraft((current) => ({ ...current, scriptSource }))} />
-                <div className={styles.sourceActions}><span>{draft.scriptSource.length.toLocaleString()} characters</span>{cleanedFencedSource !== undefined ? <button type="button" className={styles.secondary} onClick={() => { setCleanupUndo(draft.scriptSource); updateDraft((current) => ({ ...current, scriptSource: cleanedFencedSource })); }}>Remove surrounding code fence</button> : null}{cleanupUndo !== undefined ? <button type="button" className={styles.secondary} onClick={() => { updateDraft((current) => ({ ...current, scriptSource: cleanupUndo })); setCleanupUndo(undefined); }}>Restore fenced source</button> : null}</div>
+                <div className={styles.sourceActions}><div className={styles.sourceMetrics} role="group" aria-label="Script statistics"><span>{countWords(draft.scriptSource).toLocaleString()} words</span><span>{draft.scriptSource.length.toLocaleString()} characters</span></div>{cleanedFencedSource !== undefined ? <button type="button" className={styles.secondary} onClick={() => { setCleanupUndo(draft.scriptSource); updateDraft((current) => ({ ...current, scriptSource: cleanedFencedSource })); }}>Remove surrounding code fence</button> : null}{cleanupUndo !== undefined ? <button type="button" className={styles.secondary} onClick={() => { updateDraft((current) => ({ ...current, scriptSource: cleanupUndo })); setCleanupUndo(undefined); }}>Restore fenced source</button> : null}</div>
               </div>
             </section> : null}
           </main> : null}

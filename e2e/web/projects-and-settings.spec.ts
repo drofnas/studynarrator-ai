@@ -383,7 +383,10 @@ test.describe("Projects connected authoring", () => {
     const editor = source.locator("xpath=ancestor::div[contains(@class, 'cm-editor')]");
     const minimumEditorHeight = await editor.evaluate((element) => element.getBoundingClientRect().height);
     await source.fill(script);
-    await expect(page.getByText(`${script.length.toLocaleString()} characters`, { exact: false })).toBeVisible();
+    const statistics = page.getByRole("group", { name: "Script statistics" });
+    const wordCount = script.trim().split(/\s+/u).length;
+    await expect(statistics.getByText(`${wordCount.toLocaleString()} words`)).toBeVisible();
+    await expect(statistics.getByText(`${script.length.toLocaleString()} characters`)).toBeVisible();
 
     const scroller = editor.locator(".cm-scroller");
     await expect(scroller).toHaveCount(1);
@@ -452,7 +455,8 @@ test.describe("Projects connected authoring", () => {
 
     await page.getByRole("button", { name: "Save now" }).click();
     await page.reload();
-    await expect(page.getByText(`${script.length.toLocaleString()} characters`, { exact: false })).toBeVisible();
+    await expect(page.getByRole("group", { name: "Script statistics" }).getByText(`${wordCount.toLocaleString()} words`)).toBeVisible();
+    await expect(page.getByRole("group", { name: "Script statistics" }).getByText(`${script.length.toLocaleString()} characters`)).toBeVisible();
     const reloadedSource = page.getByRole("textbox", { name: "Script source" });
     const reloadedEditor = reloadedSource.locator("xpath=ancestor::div[contains(@class, 'cm-editor')]");
     const reloadedScroller = reloadedEditor.locator(".cm-scroller");

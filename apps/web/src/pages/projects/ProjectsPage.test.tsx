@@ -268,6 +268,25 @@ describe("Projects workbench", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("project index unavailable");
   });
 
+  it("shows live word and character counts for the raw script source", async () => {
+    const { client, analyze } = fixture();
+    renderPage(client, analyze);
+
+    const statistics = await screen.findByRole("group", { name: "Script statistics" });
+    expect(within(statistics).getByText("4 words")).toBeInTheDocument();
+    expect(within(statistics).getByText(`${project.scriptSource.length.toLocaleString()} characters`)).toBeInTheDocument();
+
+    const mixedWhitespace = "  [speaker_teacher]\nOne\t two  ";
+    replaceScriptSource(mixedWhitespace);
+    expect(await within(statistics).findByText("3 words")).toBeInTheDocument();
+    expect(within(statistics).getByText(`${mixedWhitespace.length.toLocaleString()} characters`)).toBeInTheDocument();
+
+    const whitespaceOnly = " \n\t ";
+    replaceScriptSource(whitespaceOnly);
+    expect(await within(statistics).findByText("0 words")).toBeInTheDocument();
+    expect(within(statistics).getByText(`${whitespaceOnly.length.toLocaleString()} characters`)).toBeInTheDocument();
+  });
+
   it("keeps project lexicon changes isolated from global entries", async () => {
     const { client, analyze, replace, replaceGlobalLexicon } = fixture();
     renderPage(client, analyze);
