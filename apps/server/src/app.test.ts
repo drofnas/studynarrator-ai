@@ -18,6 +18,7 @@ import { openStudyNarratorRepository, type DatabaseConstructor } from "@studynar
 import {
   BoundaryErrorSchema,
   DEFAULT_SYSTEM_TIMING,
+  GlobalLexiconEntryCollectionSchema,
   HealthSchema,
   ProjectDetailSchema,
   ProjectPreviewResultSchema,
@@ -455,8 +456,13 @@ describe("REST API operation manifest", () => {
     await call("PUT", "/api/settings/pacing", 200, DEFAULT_SYSTEM_TIMING);
     await call("GET", "/api/preferences/ignored-diagnostics", 200);
     await call("PUT", "/api/preferences/ignored-diagnostics", 200, []);
-    await call("GET", "/api/lexicon/global", 200);
-    await call("PUT", "/api/lexicon/global", 200, []);
+    GlobalLexiconEntryCollectionSchema.parse((await call("GET", "/api/lexicon/global", 200)).body as unknown);
+    const globalLexicon = GlobalLexiconEntryCollectionSchema.parse((await call("PUT", "/api/lexicon/global", 200, [{
+      scope: "global", entryType: "namedSense", displayText: "resume", senseId: "cv", spokenText: "rez oo may"
+    }])).body as unknown);
+    expect(globalLexicon).toMatchObject([{
+      scope: "global", entryType: "namedSense", displayText: "resume", senseId: "cv", spokenText: "rez oo may"
+    }]);
     await call("GET", "/api/connection", 200);
     await call("PUT", "/api/connection", 200, { baseUrl: "http://127.0.0.1:1/v1", defaultModelId: "model", defaultVoiceId: "voice" });
     SpeechCatalogSchema.parse((await call("POST", "/api/connection/speech-catalog", 200, { baseUrl: "http://127.0.0.1:1/v1" })).body as unknown);

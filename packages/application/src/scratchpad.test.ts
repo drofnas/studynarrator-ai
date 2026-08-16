@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { SpeachesSynthesisError } from "@studynarrator/speaches-adapter";
 import type { SpeechCache } from "@studynarrator/rendering";
+import { DEFAULT_GLOBAL_NAMED_SENSE_LEXICON } from "@studynarrator/shared-types";
 import { createScratchpadService, type ScratchpadRepository } from "./scratchpad.js";
 import { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
 
@@ -20,6 +21,11 @@ const connection = {
   createdAt: timestamp,
   updatedAt: timestamp
 };
+const namedSenseDefaults = DEFAULT_GLOBAL_NAMED_SENSE_LEXICON.map((entry) => ({
+  ...entry,
+  createdAt: timestamp,
+  updatedAt: timestamp
+}));
 
 function repository(): ScratchpadRepository {
   return {
@@ -27,7 +33,7 @@ function repository(): ScratchpadRepository {
     listGlobalLexicon: vi.fn(() => [{
       id: "sql", scope: "global" as const, entryType: "exactTerm" as const, displayText: "SQL", spokenText: "sequel",
       caseSensitive: true, wholeWord: true, priority: 0, enabled: true, notes: "", createdAt: timestamp, updatedAt: timestamp
-    }]),
+    }, ...namedSenseDefaults]),
     replaceSpeachesConnection: vi.fn(), recordConnectionTest: vi.fn(), getConnectionSetup: vi.fn(), completeConnectionOnboarding: vi.fn(),
     getVoiceCatalogOverrides: vi.fn(() => ({
       schemaVersion: 1, modelId: "model", entries: [{
@@ -104,6 +110,37 @@ describe("scratchpad service", () => {
     expect(retainScratchpad).toHaveBeenCalledWith("a".repeat(64));
     expect(JSON.stringify(result)).not.toContain("test-secret-must-not-appear");
     expect((store.recordConnectionTest as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(0);
+  });
+
+  it("applies built-in named senses and keeps disabled or deleted senses literal", async () => {
+    const source = "{{resume|cv}}, {{lead|metal}}, and {{axes|tools}}.";
+    const synthesize = vi.fn(async () => ({ bytes: new Uint8Array([1]), mimeType: "audio/wav" as const, attempts: 1 }));
+    const enabled = createScratchpadService({ repository: repository(), cache: speechCache().cache, synthesize });
+    await expect(enabled.preview({ modelId: "model", voiceId: "voice", speed: 1, text: source, applyGlobalLexicon: true })).resolves.toMatchObject({
+      readableText: "resume, lead, and axes.",
+      transformedText: "rez oo may, led, and ak siz.",
+      warnings: []
+    });
+
+    const disabledRepository = repository();
+    (disabledRepository.listGlobalLexicon as ReturnType<typeof vi.fn>).mockReturnValue([
+      { ...namedSenseDefaults[0]!, enabled: false }
+    ]);
+    const disabled = createScratchpadService({ repository: disabledRepository, cache: speechCache().cache, synthesize });
+    await expect(disabled.preview({ modelId: "model", voiceId: "voice", speed: 1, text: "Review {{resume|cv}}.", applyGlobalLexicon: true })).resolves.toMatchObject({
+      transformedText: "Review {{resume|cv}}.",
+      warnings: [expect.objectContaining({ code: "UNRESOLVED_NAMED_SENSE" })]
+    });
+
+    const deleted = createScratchpadService({
+      repository: { ...repository(), listGlobalLexicon: vi.fn(() => []) },
+      cache: speechCache().cache,
+      synthesize
+    });
+    await expect(deleted.preview({ modelId: "model", voiceId: "voice", speed: 1, text: "Review {{resume|cv}}.", applyGlobalLexicon: true })).resolves.toMatchObject({
+      transformedText: "Review {{resume|cv}}.",
+      warnings: [expect.objectContaining({ code: "UNRESOLVED_NAMED_SENSE" })]
+    });
   });
 
   it("maps adapter failures to stable sanitized application errors and creates no result", async () => {

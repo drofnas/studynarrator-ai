@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { configureConnection, expect, openRoute, test } from "../support/studyNarratorTest.js";
 
-const original = "SQL indexes can improve database reads.";
-const transformed = "sequel indexes can improve database reads.";
+const original = "Review {{resume|cv}} before the interview.";
+const transformed = "Review rez oo may before the interview.";
 
 test.describe("Quick Scratchpad", () => {
   test("transforms, synthesizes, recovers from failures, and never mutates projects", async ({ page, request, studyNarrator }) => {
@@ -17,21 +17,6 @@ test.describe("Quick Scratchpad", () => {
     expect(beforeResponse.ok()).toBe(true);
     const projectBefore = await beforeResponse.json() as unknown;
 
-    const lexiconResponse = await request.put(`${studyNarrator.baseUrl}/api/lexicon/global`, {
-      data: [{
-        id: "global-sql",
-        scope: "global",
-        entryType: "exactTerm",
-        displayText: "SQL",
-        spokenText: "sequel",
-        caseSensitive: false,
-        wholeWord: true,
-        priority: 0,
-        enabled: true,
-        notes: ""
-      }]
-    });
-    expect(lexiconResponse.ok()).toBe(true);
     studyNarrator.fakeSpeaches.reset();
 
     await openRoute(page, studyNarrator, "/scratchpad");

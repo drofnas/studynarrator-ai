@@ -72,7 +72,13 @@ describe("persistence application service", () => {
     await service.preferences.getIgnoredDiagnostics();
     await service.preferences.replaceIgnoredDiagnostics([]);
     await service.globalLexicon.list();
-    await service.globalLexicon.replace([]);
+    await service.globalLexicon.replace([{
+      scope: "global",
+      entryType: "namedSense",
+      displayText: "resume",
+      senseId: "cv",
+      spokenText: "rez oo may"
+    }]);
 
     expect(source.status).toHaveBeenCalledOnce();
     expect(source.listProjects).toHaveBeenCalledOnce();
@@ -86,7 +92,10 @@ describe("persistence application service", () => {
     expect(source.getIgnoredDiagnostics).toHaveBeenCalledOnce();
     expect(source.replaceIgnoredDiagnostics).toHaveBeenCalledOnce();
     expect(source.listGlobalLexicon).toHaveBeenCalledOnce();
-    expect(source.replaceGlobalLexicon).toHaveBeenCalledOnce();
+    expect(source.replaceGlobalLexicon).toHaveBeenCalledWith([{
+      scope: "global", entryType: "namedSense", displayText: "resume", senseId: "cv", spokenText: "rez oo may",
+      caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: ""
+    }]);
     expect(liveMethods).toHaveLength(13);
   });
 
