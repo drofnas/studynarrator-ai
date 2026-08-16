@@ -8,23 +8,10 @@
 .backLink:hover { color: white; background: var(--signal); }
 .backLink:focus-visible { outline: 3px solid var(--copper); outline-offset: 3px; }
 .workspace { display: grid; min-width: 0; }
-.templateTabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); min-width: 0; border-bottom: 2px solid var(--ink); }
-.templateTabs button { display: grid; min-width: 0; min-height: 108px; gap: 6px; align-content: center; padding: 16px 20px; color: #557080; text-align: left; background: var(--mist); border: 0; border-top: 5px solid transparent; }
-.templateTabs button + button { border-left: 1px solid var(--line); }
-.templateTabs button:hover { color: var(--ink); background: var(--signal-pale); }
-.templateTabs button[aria-selected="true"] { color: white; background: var(--ink); border-top-color: var(--copper); }
-.templateTabs button:focus-visible { position: relative; z-index: 1; outline: 3px solid var(--copper); outline-offset: -3px; }
-.templateTabs span { color: var(--signal); font: 800 0.64rem ui-monospace, monospace; letter-spacing: 0.08em; text-transform: uppercase; }
-.templateTabs button[aria-selected="true"] span { color: #8bd4ce; }
-.templateTabs strong { font-size: 1rem; }
-.templateTabs small { max-width: 560px; color: #557080; font-size: 0.74rem; line-height: 1.45; }
-.templateTabs button[aria-selected="true"] small { color: #d5e1e4; }
 .previewPanel { min-width: 0; padding: 20px; background: var(--paper); border: 1px solid var(--line); border-top: 0; }
 .previewHeading h3 { margin: 0; }
 .instructions, .notice { color: #557080; font-size: 0.76rem; line-height: 1.5; }
 .instructions { max-width: 720px; margin: 12px 0 16px; padding: 11px 13px; background: #dcebec; border-left: 5px solid var(--signal); }
-.actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.secondary { color: var(--ink); background: transparent; }
 .error { padding: 10px; color: var(--fault); background: #f8e5e5; font-size: 0.78rem; font-weight: 800; }
 .notice { min-height: 1.2em; }
 .editorMeta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin-top: 9px; color: #557080; font-size: 0.7rem; }
@@ -32,8 +19,5 @@
 .loadingState a { color: var(--signal); font-weight: 800; }
 @media (max-width: 900px) { .header { align-items: start; flex-direction: column; } }
 @media (max-width: 580px) {
-  .templateTabs button { min-height: 96px; padding: 13px; }
-  .templateTabs small { display: none; }
-  .actions { grid-template-columns: 1fr; }
   .previewPanel { padding: 14px; }
 }

@@ -25,20 +25,27 @@ test.describe("external-LLM script generation", () => {
 
     await page.getByRole("link", { name: "Prompt Kit" }).click();
     await expect(page.getByRole("heading", { name: "Script prompt kit" })).toBeVisible();
-    const createTab = page.getByRole("tab", { name: /Create a script/u });
-    const updateTab = page.getByRole("tab", { name: /Update a script/u });
+    const createTab = page.getByRole("tab", { name: "Create Prompt" });
+    const updateTab = page.getByRole("tab", { name: "Update Prompt" });
     await expect(createTab).toHaveAttribute("aria-selected", "true");
     const creationEditor = page.getByRole("textbox", { name: "Create a script prompt editor" });
     await expect(creationEditor).toContainText("KNOWLEDGE TO GATHER AND TEACH");
     await expect(creationEditor).toContainText("AUTHORING GOALS");
 
-    const [createBox, updateBox, tabListBox, panelBox] = await Promise.all([
-      createTab.boundingBox(), updateTab.boundingBox(), page.getByRole("tablist", { name: "Choose a prompt template" }).boundingBox(), page.getByRole("tabpanel").boundingBox()
+    const tabList = page.getByRole("tablist", { name: "Choose a prompt template" });
+    const promptActions = page.getByRole("group", { name: "Prompt actions" });
+    const promptBar = tabList.locator("..");
+    const [createBox, updateBox, actionsBox, barBox, panelBox] = await Promise.all([
+      createTab.boundingBox(), updateTab.boundingBox(), promptActions.boundingBox(), promptBar.boundingBox(), page.getByRole("tabpanel").boundingBox()
     ]);
-    if (!createBox || !updateBox || !tabListBox || !panelBox) throw new Error("Expected Prompt Kit layout boxes.");
+    if (!createBox || !updateBox || !actionsBox || !barBox || !panelBox) throw new Error("Expected Prompt Kit layout boxes.");
     expect(Math.abs(createBox.y - updateBox.y)).toBeLessThan(1);
-    expect(Math.abs(createBox.width - updateBox.width)).toBeLessThan(1);
-    expect(Math.abs(tabListBox.width - panelBox.width)).toBeLessThan(1);
+    expect(createBox.width).toBeGreaterThanOrEqual(150);
+    expect(updateBox.width).toBeGreaterThanOrEqual(150);
+    expect(Math.abs((createBox.x + createBox.width) - updateBox.x)).toBeLessThan(1);
+    expect(updateBox.x + updateBox.width).toBeLessThanOrEqual(actionsBox.x + 1);
+    expect(Math.abs(barBox.width - panelBox.width)).toBeLessThan(1);
+    await expect(page.getByRole("tabpanel").getByRole("button", { name: /Copy|Download/u })).toHaveCount(0);
     const editorLayout = await page.getByRole("tabpanel").evaluate((panel) => {
       const editor = panel.querySelector(".cm-editor");
       const scroller = panel.querySelector(".cm-scroller");
@@ -87,6 +94,14 @@ test.describe("external-LLM script generation", () => {
     expect(updateText).toBe(editedUpdate);
     await createTab.click();
     await expect(page.getByRole("textbox", { name: "Create a script prompt editor" })).toHaveText(editedCreation);
+
+    await creationEditor.fill(Array.from({ length: 120 }, (_value, index) => `PROMPT LINE ${String(index + 1)}`).join("\n"));
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await expect.poll(() => promptBar.evaluate((element) => Math.round(element.getBoundingClientRect().top))).toBe(0);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await expect.poll(() => promptBar.evaluate((element) => Math.round(element.getBoundingClientRect().top))).toBe(58);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
 
     expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/speech"] ?? 0).toBe(0);
   });

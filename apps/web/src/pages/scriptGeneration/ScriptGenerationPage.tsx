@@ -2,22 +2,23 @@ import { useEffect, useState, type KeyboardEvent } from "react";
 import { Link, useParams } from "react-router";
 import type { PersistenceClient, ProjectDetail, PromptDocument, ScriptGenerationClient, ScriptPromptKind } from "@studynarrator/shared-types";
 import { ScriptSourceEditor } from "@/features/projects/ScriptSourceEditor.js";
+import { StickyTabBar } from "@/shared/ui/StickyTabBar.js";
 import styles from "./ScriptGenerationPage.module.css";
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : "StudyNarrator could not prepare the script prompts.";
 }
 
-const promptLabels: Record<ScriptPromptKind, { eyebrow: string; title: string; description: string }> = {
+const promptLabels: Record<ScriptPromptKind, { tab: string; eyebrow: string; title: string }> = {
   creation: {
+    tab: "Create Prompt",
     eyebrow: "New script",
-    title: "Create a script",
-    description: "Add your topic, goals, and trusted sources to a complete script-authoring contract."
+    title: "Create a script"
   },
   update: {
+    tab: "Update Prompt",
     eyebrow: "Existing script",
-    title: "Update a script",
-    description: "Paste the current script and requested changes into a compact format-preserving contract."
+    title: "Update a script"
   }
 };
 const promptKinds = Object.keys(promptLabels) as ScriptPromptKind[];
@@ -111,7 +112,18 @@ export function ScriptGenerationPage({ persistence, generation }: {
     </header>
 
     <div className={styles.workspace}>
-      <div className={styles.templateTabs} role="tablist" aria-label="Choose a prompt template">
+      <StickyTabBar
+        label="Choose a prompt template"
+        actionsLabel="Prompt actions"
+        actions={<>
+          <button type="button" aria-label={`Copy ${selected} prompt`} title={`Copy ${selected} prompt`} aria-busy={busy === "copy"} disabled={busy !== null || draft.length === 0} onClick={() => void copyPrompt()}>
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="8" y="8" width="11" height="11" rx="1"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>
+          </button>
+          <button type="button" aria-label={`Download ${selected} prompt`} title={`Download ${selected} prompt`} aria-busy={busy === "prompt"} disabled={busy !== null || draft.length === 0} onClick={() => void exportPrompt()}>
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v9m-4-4 4 4 4-4"/></svg>
+          </button>
+        </>}
+      >
         {promptKinds.map((kind) => <button
           key={kind}
           type="button"
@@ -122,17 +134,13 @@ export function ScriptGenerationPage({ persistence, generation }: {
           tabIndex={selected === kind ? 0 : -1}
           onClick={() => selectPrompt(kind)}
           onKeyDown={(event) => movePromptTab(event, kind)}
-        ><span>{promptLabels[kind].eyebrow}</span><strong>{promptLabels[kind].title}</strong><small>{promptLabels[kind].description}</small></button>)}
-      </div>
+        >{promptLabels[kind].tab}</button>)}
+      </StickyTabBar>
       <main className={styles.previewPanel} role="tabpanel" id="prompt-panel" aria-labelledby={`prompt-tab-${selected}`}>
         <div className={styles.previewHeading}><span>{promptLabels[selected].eyebrow}</span><h3>{promptLabels[selected].title}</h3></div>
         <p className={styles.instructions}>{selected === "creation"
           ? "Replace the KNOWLEDGE TO GATHER AND TEACH block with your topic, learning goals, sources, and constraints."
           : "Replace the SCRIPT AND CHANGE REQUEST block with the current script and the exact edits you want."}</p>
-        <div className={styles.actions}>
-          <button type="button" disabled={busy !== null || draft.length === 0} onClick={() => void copyPrompt()}>{busy === "copy" ? "Copying…" : `Copy ${selected} prompt`}</button>
-          <button type="button" className={styles.secondary} disabled={busy !== null || draft.length === 0} onClick={() => void exportPrompt()}>{window.studyNarrator ? `Save ${selected} prompt` : `Download ${selected} prompt`}</button>
-        </div>
         {operationError ? <p className={styles.error} role="alert">{operationError}</p> : null}
         <p className={styles.notice} aria-live="polite">{notice}</p>
         <ScriptSourceEditor

@@ -71,8 +71,8 @@ describe("script prompt kit", () => {
     const { persistence, generation, getProject, previewPrompt } = fixture();
     renderPage(persistence, generation);
     expect(await screen.findByRole("heading", { name: "Script prompt kit" })).toBeInTheDocument();
-    const createTab = screen.getByRole("tab", { name: /Create a script/u });
-    const updateTab = screen.getByRole("tab", { name: /Update a script/u });
+    const createTab = screen.getByRole("tab", { name: "Create Prompt" });
+    const updateTab = screen.getByRole("tab", { name: "Update Prompt" });
     expect(createTab).toHaveAttribute("aria-selected", "true");
     expect(updateTab).toHaveAttribute("aria-selected", "false");
     expect(editorView("Create a script prompt editor").state.doc.toString()).toContain("KNOWLEDGE TO GATHER AND TEACH");
@@ -81,8 +81,8 @@ describe("script prompt kit", () => {
     await userEvent.click(updateTab);
     expect(editorView("Update a script prompt editor").state.doc.toString()).toContain("SCRIPT AND CHANGE REQUEST");
     expect(screen.getByText(/current script and the exact edits/u)).toBeInTheDocument();
-    expect(screen.getByText("New script", { exact: true })).toBeInTheDocument();
-    expect(screen.getAllByText("Existing script", { exact: true })).toHaveLength(2);
+    expect(screen.getByRole("tablist", { name: "Choose a prompt template" })).toHaveTextContent("Create PromptUpdate Prompt");
+    expect(screen.getByText("Existing script", { exact: true })).toBeInTheDocument();
     expect(screen.queryByText(/Blank page|Red pen|Included automatically/u)).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "View Projects" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /both prompts/u })).not.toBeInTheDocument();
@@ -99,12 +99,12 @@ describe("script prompt kit", () => {
     await screen.findByRole("heading", { name: "Script prompt kit" });
     const editedCreation = `${creation.content}\nCREATE EDIT`;
     replaceEditorContent("Create a script prompt editor", editedCreation);
-    await userEvent.click(screen.getByRole("tab", { name: /Update a script/u }));
+    await userEvent.click(screen.getByRole("tab", { name: "Update Prompt" }));
     const editedUpdate = `${update.content}\nUPDATE EDIT`;
     replaceEditorContent("Update a script prompt editor", editedUpdate);
-    await userEvent.click(screen.getByRole("tab", { name: /Create a script/u }));
+    await userEvent.click(screen.getByRole("tab", { name: "Create Prompt" }));
     expect(editorView("Create a script prompt editor").state.doc.toString()).toBe(editedCreation);
-    await userEvent.click(screen.getByRole("tab", { name: /Update a script/u }));
+    await userEvent.click(screen.getByRole("tab", { name: "Update Prompt" }));
     expect(editorView("Update a script prompt editor").state.doc.toString()).toBe(editedUpdate);
     await userEvent.click(screen.getByRole("button", { name: "Copy update prompt" }));
     expect(writeText).toHaveBeenCalledWith(editedUpdate);
@@ -126,11 +126,11 @@ describe("script prompt kit", () => {
   it("supports keyboard navigation between prompt tabs", async () => {
     const { persistence, generation } = fixture();
     renderPage(persistence, generation);
-    const createTab = await screen.findByRole("tab", { name: /Create a script/u });
+    const createTab = await screen.findByRole("tab", { name: "Create Prompt" });
     createTab.focus();
     await userEvent.keyboard("{ArrowRight}");
-    expect(screen.getByRole("tab", { name: /Update a script/u })).toHaveFocus();
-    expect(screen.getByRole("tab", { name: /Update a script/u })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Update Prompt" })).toHaveFocus();
+    expect(screen.getByRole("tab", { name: "Update Prompt" })).toHaveAttribute("aria-selected", "true");
   });
 
   it("reports clipboard denial without hiding either prompt", async () => {

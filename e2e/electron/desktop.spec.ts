@@ -223,14 +223,14 @@ test.describe("Electron acceptance", () => {
         filePath: defaultPath.includes("update") ? destinations.update : destinations.creation
       });
     }, { creation: creationDestination, update: updateDestination });
-    await page.getByRole("button", { name: "Save creation prompt" }).click();
+    await page.getByRole("button", { name: "Download creation prompt" }).click();
     await expect.poll(async () => (await stat(creationDestination)).size).toBeGreaterThan(0);
-    await page.getByRole("tab", { name: /Update a script/u }).click();
+    await page.getByRole("tab", { name: "Update Prompt" }).click();
     const updateEditor = page.getByRole("textbox", { name: "Update a script prompt editor" });
     await expect(updateEditor).toContainText("SCRIPT AND CHANGE REQUEST");
     const editedUpdate = "EDITED DESKTOP UPDATE PROMPT";
     await updateEditor.fill(editedUpdate);
-    await page.getByRole("button", { name: "Save update prompt" }).click();
+    await page.getByRole("button", { name: "Download update prompt" }).click();
     await expect.poll(async () => (await stat(updateDestination)).size).toBeGreaterThan(0);
     await expect(page.getByRole("button", { name: /both prompts/u })).toHaveCount(0);
 

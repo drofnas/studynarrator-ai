@@ -46,6 +46,7 @@ import { LexiconEditor, type LexiconEditorValue } from "@/features/lexicon/Lexic
 import { AuditionIcon } from "@/shared/audio/AuditionIcon.js";
 import { SharedAudioPlayer } from "@/shared/audio/SharedAudioPlayer.js";
 import { useAudioAudition } from "@/shared/audio/useAudioAudition.js";
+import { StickyTabBar } from "@/shared/ui/StickyTabBar.js";
 import { ScriptSourceEditor, type ScriptSourceEditorHandle } from "@/features/projects/ScriptSourceEditor.js";
 
 type SaveState = "saved" | "unsaved" | "saving" | "invalid" | "failed";
@@ -624,9 +625,9 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
           <label>Description<input value={draft.description} onChange={(event) => updateDraft((current) => ({ ...current, description: event.target.value }))} /></label>
           <div className={styles.projectActions}><div className={styles.actionRow}><button type="button" onClick={() => void saveNow()}>Save now</button><button type="button" className={styles.secondary} onClick={() => void duplicateProject()}>Duplicate</button><button type="button" className={styles.danger} onClick={() => void deleteProject()}>Delete</button></div></div>
         </section> : null}
-        <div className={styles.tabList} role="tablist" aria-label="Project workspace">
+        <StickyTabBar label="Project workspace">
           {projectTabs.map(({ id, label }) => <button ref={(element) => { tabRefs.current[id] = element; }} type="button" role="tab" id={`project-tab-${id}`} aria-controls={`project-panel-${id}`} aria-selected={activeTab === id} tabIndex={activeTab === id ? 0 : -1} key={id} onClick={() => selectTab(id)} onKeyDown={(event) => moveTabFocus(event, id)}>{label}</button>)}
-        </div>
+        </StickyTabBar>
       </> : null}
 
       <div className={styles.tabPanel} role={draft && project ? "tabpanel" : undefined} id={draft && project ? `project-panel-${activeTab}` : undefined} aria-labelledby={draft && project ? `project-tab-${activeTab}` : undefined}>

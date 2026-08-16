@@ -41,11 +41,6 @@
 .projectIdentity { display: grid; grid-template-columns: minmax(180px, 0.8fr) minmax(260px, 1.4fr) auto; gap: 12px; align-items: end; padding: 16px; border-top: 5px solid var(--signal); }
 .projectIdentity label { margin: 0; }
 .projectActions { align-self: end; }
-.tabList { position: sticky; z-index: 15; top: 0; display: flex; gap: 0; overflow-x: auto; background: rgb(248 251 251 / 97%); border-bottom: 2px solid var(--ink); box-shadow: 0 8px 14px rgb(23 48 75 / 6%); backdrop-filter: blur(10px); }
-.tabList button { min-width: 150px; min-height: 46px; padding: 0 20px; color: #557080; background: transparent; border: 0; border-bottom: 5px solid transparent; }
-.tabList button:hover { color: var(--ink); background: var(--signal-pale); }
-.tabList button[aria-selected="true"] { color: white; background: var(--ink); border-bottom-color: var(--copper); }
-.tabList button:focus-visible { position: relative; z-index: 1; outline: 3px solid var(--copper); outline-offset: -3px; }
 .actionRow { display: flex; flex-wrap: wrap; gap: 7px; }
 .actionRow button { min-height: 38px; padding: 0 12px; font-size: 0.75rem; }
 .secondary { color: var(--ink); background: transparent; }
@@ -176,11 +171,6 @@
   .scoreRow[data-type="section"], .scoreRow[data-type="pause"] { min-width: 560px; }
 }
 
-@media (max-width: 960px) {
-  .tabList { top: 58px; }
-}
-
 @media (max-width: 560px) {
-  .tabList button { min-width: 132px; padding: 0 14px; }
   .scriptPanel, .lexiconPanel, .renderPlansPanel, .validationPanel { padding: 13px; }
 }

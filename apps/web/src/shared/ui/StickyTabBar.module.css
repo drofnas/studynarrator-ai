@@ -1,0 +1,33 @@
+.bar {
+  position: sticky;
+  z-index: 15;
+  top: 0;
+  display: flex;
+  min-width: 0;
+  background: rgb(248 251 251 / 97%);
+  border-bottom: 2px solid var(--ink);
+  box-shadow: 0 8px 14px rgb(23 48 75 / 6%);
+  backdrop-filter: blur(10px);
+}
+
+.tabs { display: flex; flex: 1 1 auto; min-width: 0; overflow-x: auto; }
+.tabs > button { flex: 0 0 auto; min-width: 150px; min-height: 46px; padding: 0 20px; color: #557080; background: transparent; border: 0; border-bottom: 5px solid transparent; }
+.tabs > button:hover:not(:disabled) { color: var(--ink); background: var(--signal-pale); transform: none; }
+.tabs > button[aria-selected="true"] { color: white; background: var(--ink); border-bottom-color: var(--copper); }
+.tabs > button:focus-visible, .actions > button:focus-visible { position: relative; z-index: 1; outline: 3px solid var(--copper); outline-offset: -3px; }
+
+.actions { display: flex; flex: none; align-self: stretch; border-left: 1px solid var(--line); }
+.actions > button { display: grid; width: 48px; min-height: 46px; padding: 0; place-items: center; color: var(--ink); background: transparent; border: 0; border-left: 1px solid var(--line); }
+.actions > button:first-child { border-left: 0; }
+.actions > button:hover:not(:disabled) { color: white; background: var(--signal); transform: none; }
+.actions > button:disabled { color: #91a9b2; background: transparent; }
+.actions svg { width: 21px; height: 21px; }
+
+@media (max-width: 960px) {
+  .bar { top: 58px; }
+}
+
+@media (max-width: 560px) {
+  .tabs > button { min-width: 132px; padding: 0 14px; }
+  .actions > button { width: 44px; }
+}
