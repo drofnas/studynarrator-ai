@@ -7,6 +7,7 @@ import {
   createCachedSpeechSynthesis,
   createPersistenceService,
   createProjectPreviewService,
+  createProjectSpeechCacheKeyPlanner,
   createRenderPlanService,
   createRenderService,
   createScratchpadService,
@@ -53,7 +54,7 @@ export async function createDesktopServices(options: {
   try {
     const openedRepository = await openStudyNarratorRepository({ Database, databasePath });
     repository = openedRepository;
-    persistence = createPersistenceService(openedRepository);
+    persistence = createPersistenceService(openedRepository, { projectSpeechCacheKeys: createProjectSpeechCacheKeyPlanner(openedRepository) });
     const context = {
       client: "electron" as const,
       nodeVersion: process.versions.node,
@@ -68,6 +69,7 @@ export async function createDesktopServices(options: {
     scratchpad = createScratchpadService({ repository: openedRepository, cache });
     projectPreview = createProjectPreviewService({ repository: openedRepository, speech });
     const planStore = createRenderPlanStore(resolve(dataDirectory, "render-plans"));
+    await planStore.migrateLegacy?.(openedRepository.listProjects().flatMap(({ id }) => openedRepository.listRenderJobs(id)));
     renderPlans = createRenderPlanService({
       repository: openedRepository,
       cache,
@@ -77,6 +79,7 @@ export async function createDesktopServices(options: {
     renders = await createRenderService({
       repository: openedRepository,
       plans: planStore,
+      renderPlans,
       speech,
       dataDirectory,
       ...(environment.STUDYNARRATOR_FFMPEG_PATH ? { ffmpegPath: environment.STUDYNARRATOR_FFMPEG_PATH } : {})

@@ -12,6 +12,12 @@
       "package": "pkg:deb/debian/cjson@",
       "reason": "Unfixed Debian cJSON finding inherited only through the FFmpeg runtime package; StudyNarrator does not expose cJSON parsing and requires FFmpeg for deterministic audio assembly.",
       "expiresAt": "2026-11-13"
+    },
+    {
+      "id": "CVE-2026-29036",
+      "package": "pkg:deb/debian/cjson@",
+      "reason": "Unfixed Debian cJSON JSON-Patch finding is in libcjson_utils; StudyNarrator inherits the package through FFmpeg, which does not load libcjson_utils, and the app accepts no JSON Patch input.",
+      "expiresAt": "2026-11-13"
     }
   ]
 }

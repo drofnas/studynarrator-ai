@@ -21,8 +21,8 @@ function repository() {
     status: vi.fn(() => ({
       contractVersion: 1 as const,
       state: "ready" as const,
-      databaseSchemaVersion: 1 as const,
-      targetDatabaseSchemaVersion: 1 as const,
+      databaseSchemaVersion: 2 as const,
+      targetDatabaseSchemaVersion: 2 as const,
       databasePath: "/tmp/studynarrator.sqlite",
       latestBackupPath: null
     })),
@@ -112,8 +112,8 @@ describe("persistence application service", () => {
     const service = createUnavailablePersistenceService({
       contractVersion: 1,
       state: "unavailable",
-      databaseSchemaVersion: 1,
-      targetDatabaseSchemaVersion: 1,
+      databaseSchemaVersion: 2,
+      targetDatabaseSchemaVersion: 2,
       databasePath: "/tmp/studynarrator.sqlite",
       latestBackupPath: "/tmp/backups/recovery.sqlite",
       code: "MIGRATION_FAILED",

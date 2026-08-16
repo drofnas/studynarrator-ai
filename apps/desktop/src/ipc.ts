@@ -296,6 +296,10 @@ export function registerRenderHandlers(
     const { planId } = RenderPlanInputSchema.parse(input);
     return RenderJobSchema.parse(await renders.start(planId));
   });
+  handle(RENDER_CHANNELS.startProject, async (input) => {
+    const { projectId } = RenderProjectInputSchema.parse(input);
+    return RenderJobSchema.parse(await renders.startProject!(projectId));
+  });
   handle(RENDER_CHANNELS.list, async (input) => {
     const { projectId } = RenderProjectInputSchema.parse(input);
     return RenderJobCollectionSchema.parse(await renders.list(projectId));
@@ -323,6 +327,22 @@ export function registerRenderHandlers(
     if (destination.canceled || !destination.filePath) return RenderArtifactExportResultSchema.parse({ disposition: "canceled", fileName: artifact.fileName });
     await copyFile(path, destination.filePath);
     return RenderArtifactExportResultSchema.parse({ disposition: "saved", fileName: artifact.fileName });
+  });
+  handle(RENDER_CHANNELS.exportAudio, async (input) => {
+    const { renderId } = RenderIdInputSchema.parse(input);
+    const media = await renders.resolveRenderAudio(renderId);
+    const destination = await dialog.showSaveDialog({ defaultPath: media.fileName });
+    if (destination.canceled || !destination.filePath) return RenderArtifactExportResultSchema.parse({ disposition: "canceled", fileName: media.fileName });
+    await copyFile(media.path, destination.filePath);
+    return RenderArtifactExportResultSchema.parse({ disposition: "saved", fileName: media.fileName });
+  });
+  handle(RENDER_CHANNELS.exportDetails, async (input) => {
+    const { renderId } = RenderIdInputSchema.parse(input);
+    const archive = await renders.resolveDetailsArchive!(renderId);
+    const destination = await dialog.showSaveDialog({ defaultPath: archive.fileName });
+    if (destination.canceled || !destination.filePath) return RenderArtifactExportResultSchema.parse({ disposition: "canceled", fileName: archive.fileName });
+    await writeFile(destination.filePath, archive.bytes, { mode: 0o600 });
+    return RenderArtifactExportResultSchema.parse({ disposition: "saved", fileName: archive.fileName });
   });
   handle(RENDER_CHANNELS.segments, async (input) => {
     const { renderId } = RenderIdInputSchema.parse(input);

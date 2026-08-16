@@ -114,10 +114,11 @@ test("Docker Web remains authorable offline and renders after Speaches reconnect
     }],
     lexiconEntries: []
   });
-  const plan = await jsonRequest(request, "post", `/api/projects/${created.id}/render-plans`) as { id: string };
+  const started = await jsonRequest(request, "post", `/api/projects/${created.id}/renders`) as { id: string };
+  const [plan] = await jsonRequest(request, "get", `/api/projects/${created.id}/render-plans`) as Array<{ id: string }>;
+  if (!plan) throw new Error("Project render did not create its current plan.");
   const planDetail = await jsonRequest(request, "get", `/api/render-plans/${plan.id}`) as { entries: Array<{ type: string; durationMs?: number }> };
   expect(planDetail.entries).toContainEqual(expect.objectContaining({ type: "pause", durationMs: 625 }));
-  const started = await jsonRequest(request, "post", `/api/render-plans/${plan.id}/renders`) as { id: string };
   const completed = await pollRender(request, started.id);
   expect(completed.state).toBe("complete");
   const artifacts = await jsonRequest(request, "get", `/api/renders/${started.id}/artifacts`) as unknown[];
@@ -128,7 +129,8 @@ test("Docker Web remains authorable offline and renders after Speaches reconnect
   await expect(page.getByText("Docker Web")).toBeVisible();
   await expect(page.getByText(String(runtime.sourceRevision), { exact: true })).toBeVisible();
   await page.goto(`/#/projects/${created.id}?tab=render`);
-  await expect(page.getByText(/Phase: complete/u)).toBeVisible();
+  await expect(page.getByLabel(/Audio player for Completed project render/u)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Download", exact: true })).toBeVisible();
 
   const diagnostics = await jsonRequest(request, "get", "/api/diagnostics");
   const connectionDiagnostics = await jsonRequest(request, "get", "/api/connection/diagnostics");

@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import {
   buildAuthoringDryRun,
@@ -17,11 +17,10 @@ import {
   type ProjectDetail,
   type ProjectPreviewClient,
   type ProjectPreviewResult,
-  type RenderPlan,
   type RenderPlanClient,
-  type RenderPlanSummary,
   type RenderClient,
   type RenderJob,
+  type RenderWaveform,
   type ProjectSummary,
   type SystemTimingConfiguration,
   type VoiceCatalog
@@ -48,7 +47,8 @@ import { VoiceSelect } from "@/features/connections/VoiceSelect.js";
 import { presentVoices } from "@/features/connections/voicePresentation.js";
 import { LexiconEditor, type LexiconEditorValue } from "@/features/lexicon/LexiconEditor.js";
 import { PreviewResultCard } from "@/features/preview/PreviewResultCard.js";
-import { RenderHistory } from "@/features/renders/RenderHistory.js";
+import { SharedAudioPlayer } from "@/shared/audio/SharedAudioPlayer.js";
+import { ScriptSourceEditor, type ScriptSourceEditorHandle } from "@/features/projects/ScriptSourceEditor.js";
 
 type SaveState = "saved" | "unsaved" | "saving" | "invalid" | "failed";
 type AnalysisState = "idle" | "parsing" | "ready" | "failed";
@@ -114,15 +114,12 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
   const [previewResult, setPreviewResult] = useState<ProjectPreviewResult>();
   const [previewBusy, setPreviewBusy] = useState(false);
   const [previewError, setPreviewError] = useState("");
-  const [renderPlanSummaries, setRenderPlanSummaries] = useState<RenderPlanSummary[]>([]);
-  const [selectedRenderPlan, setSelectedRenderPlan] = useState<RenderPlan>();
-  const [renderPlanBusy, setRenderPlanBusy] = useState(false);
-  const [renderPlanError, setRenderPlanError] = useState("");
-  const [renderJobs, setRenderJobs] = useState<RenderJob[]>([]);
+  const [, setRenderJobs] = useState<RenderJob[]>([]);
   const [selectedRenderJob, setSelectedRenderJob] = useState<RenderJob>();
+  const [renderWaveform, setRenderWaveform] = useState<RenderWaveform>();
   const [renderError, setRenderError] = useState("");
   const previewControllerRef = useRef<AbortController | null>(null);
-  const editorRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<ScriptSourceEditorHandle>(null);
   const pendingFocusLineRef = useRef<number | undefined>(undefined);
   const tabRefs = useRef<Record<ProjectTab, HTMLButtonElement | null>>({ script: null, settings: null, details: null, render: null });
   const revisionRef = useRef(0);
@@ -133,6 +130,7 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
   const saveNowRef = useRef<() => Promise<boolean>>(() => Promise.resolve(false));
 
   draftRef.current = draft;
+  void renderPlanClient;
   const isDirty = saveState === "unsaved" || saveState === "saving" || saveState === "invalid" || saveState === "failed";
   const selectedConnection = connections.connection;
   const effectiveModelId = selectedConnection?.defaultModelId ?? null;
@@ -218,10 +216,9 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
       draftRef.current = undefined;
       setAnalysis(undefined);
       setConfiguration({ speakers: [], pauses: [], sections: [] });
-      setRenderPlanSummaries([]);
-      setSelectedRenderPlan(undefined);
       setRenderJobs([]);
       setSelectedRenderJob(undefined);
+      setRenderWaveform(undefined);
       return;
     }
     let active = true;
@@ -244,26 +241,13 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
   }, [clearAutosave, client, projectId]);
 
   useEffect(() => {
-    if (!projectId) return;
-    let active = true;
-    setRenderPlanError("");
-    setSelectedRenderPlan(undefined);
-    void renderPlanClient.list(projectId).then((summaries) => {
-      if (active) setRenderPlanSummaries(summaries);
-    }).catch((error: unknown) => {
-      if (active) setRenderPlanError(message(error));
-    });
-    return () => { active = false; };
-  }, [projectId, renderPlanClient]);
-
-  useEffect(() => {
     if (!projectId || !renderClient) return;
     let active = true;
     setRenderError("");
     void renderClient.list(projectId).then((jobs) => {
       if (!active) return;
       setRenderJobs(jobs);
-      setSelectedRenderJob(jobs.find(({ state }) => !["complete", "failed", "canceled"].includes(state)) ?? jobs[0]);
+      setSelectedRenderJob(jobs[0]);
     }).catch((error: unknown) => { if (active) setRenderError(message(error)); });
     return () => { active = false; };
   }, [projectId, renderClient]);
@@ -280,6 +264,13 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
     }, 500);
     return () => { active = false; window.clearInterval(timer); };
   }, [renderClient, selectedRenderJob]);
+
+  useEffect(() => {
+    if (!renderClient || selectedRenderJob?.state !== "complete") { setRenderWaveform(undefined); return; }
+    let active = true;
+    void renderClient.getWaveform(selectedRenderJob.id).then((waveform) => { if (active) setRenderWaveform(waveform); }).catch((error: unknown) => { if (active) setRenderError(message(error)); });
+    return () => { active = false; };
+  }, [renderClient, selectedRenderJob?.id, selectedRenderJob?.state]);
 
   const updateDraft = useCallback((updater: (current: ProjectDraft) => ProjectDraft, autosave = true) => {
     const current = draftRef.current;
@@ -423,8 +414,6 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
     ? buildAuthoringDryRun({ parseResult: analysis.parseResult, pacingResult: analysis.pacingResult, transformResult: analysis.transformResult, speakers: configuration.speakers, pauses: configuration.pauses })
     : undefined, [analysis, configuration]);
 
-  const deferredScriptSource = useDeferredValue(draft?.scriptSource ?? "");
-  const lineNumbers = useMemo(() => deferredScriptSource.split(/\r?\n/u).map((_line, index) => index + 1).join("\n") || "1", [deferredScriptSource]);
   const cleanedFencedSource = useMemo(() => draft ? stripSingleSurroundingCodeFence(draft.scriptSource) : undefined, [draft?.scriptSource]);
 
   const createProject = async () => {
@@ -489,7 +478,7 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
       if (!editor) return;
       const start = draft.scriptSource.split(/\r?\n/u).slice(0, line - 1).reduce((length, item) => length + item.length + 1, 0);
       editor.focus();
-      editor.setSelectionRange(start, start);
+      editor.setSelection(start, start, { scrollIntoView: true });
     }, 0);
   }, [activeTab, draft]);
 
@@ -498,20 +487,21 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
     if (!editor || !draft || !search) return;
     const haystack = caseSensitive ? draft.scriptSource : draft.scriptSource.toLocaleLowerCase();
     const needle = caseSensitive ? search : search.toLocaleLowerCase();
-    let index = haystack.indexOf(needle, editor.selectionEnd);
+    let index = haystack.indexOf(needle, editor.getSelection().to);
     if (index < 0) index = haystack.indexOf(needle);
-    if (index >= 0) { editor.focus(); editor.setSelectionRange(index, index + search.length); }
+    if (index >= 0) { editor.focus(); editor.setSelection(index, index + search.length, { scrollIntoView: true }); }
   };
 
   const replaceNext = () => {
     const editor = editorRef.current;
     if (!editor || !draft || !search) return;
-    const selected = draft.scriptSource.slice(editor.selectionStart, editor.selectionEnd);
+    const selection = editor.getSelection();
+    const selected = draft.scriptSource.slice(selection.from, selection.to);
     const matches = caseSensitive ? selected === search : selected.toLocaleLowerCase() === search.toLocaleLowerCase();
     if (!matches) { findNext(); return; }
-    const start = editor.selectionStart;
-    updateDraft((current) => ({ ...current, scriptSource: `${current.scriptSource.slice(0, start)}${replacement}${current.scriptSource.slice(editor.selectionEnd)}` }));
-    window.setTimeout(() => { editor.focus(); editor.setSelectionRange(start, start + replacement.length); }, 0);
+    const start = selection.from;
+    updateDraft((current) => ({ ...current, scriptSource: `${current.scriptSource.slice(0, start)}${replacement}${current.scriptSource.slice(selection.to)}` }));
+    window.setTimeout(() => { editor.focus(); editor.setSelection(start, start + replacement.length, { scrollIntoView: true }); }, 0);
   };
 
   const importFile = async (file: File | undefined) => {
@@ -587,73 +577,17 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
     }
   };
 
-  const openRenderPlan = async (planId: string) => {
-    setRenderPlanBusy(true);
-    setRenderPlanError("");
-    try {
-      setSelectedRenderPlan(await renderPlanClient.get(planId));
-    } catch (error) {
-      setRenderPlanError(message(error));
-    } finally {
-      setRenderPlanBusy(false);
-    }
-  };
-
-  const freezeRenderPlan = async () => {
-    if (!project) return;
-    setRenderPlanBusy(true);
-    setRenderPlanError("");
-    try {
-      if (!await saveNow()) throw new Error("Save valid project changes before freezing a render plan.");
-      const plan = await renderPlanClient.create(project.id);
-      setSelectedRenderPlan(plan);
-      setRenderPlanSummaries(await renderPlanClient.list(project.id));
-      setNotice(`Frozen render plan ${plan.id}. No speech was synthesized.`);
-    } catch (error) {
-      setRenderPlanError(message(error));
-    } finally {
-      setRenderPlanBusy(false);
-    }
-  };
-
   const startRender = async () => {
-    if (!renderClient || !selectedRenderPlan) return;
+    if (!renderClient || !project) return;
     setRenderError("");
+    setSelectedRenderJob(undefined);
+    setRenderWaveform(undefined);
     try {
-      const job = await renderClient.start(selectedRenderPlan.id);
+      if (isDirty && !await saveNow()) throw new Error("Save valid project changes before rendering.");
+      const job = await renderClient.startProject(project.id);
       setSelectedRenderJob(job);
       setRenderJobs((current) => [job, ...current.filter(({ id }) => id !== job.id)]);
-      setNotice(`Render ${job.id} entered the queue.`);
-    } catch (error) { setRenderError(message(error)); }
-  };
-
-  const cancelRender = async () => {
-    if (!renderClient || !selectedRenderJob) return;
-    try {
-      const job = await renderClient.cancel(selectedRenderJob.id);
-      setSelectedRenderJob(job);
-      setRenderJobs((current) => current.map((item) => item.id === job.id ? job : item));
-    }
-    catch (error) { setRenderError(message(error)); }
-  };
-
-  const retryRender = async () => {
-    if (!renderClient || !selectedRenderJob) return;
-    try {
-      const job = await renderClient.retry(selectedRenderJob.id);
-      setSelectedRenderJob(job);
-      setRenderJobs((current) => [job, ...current]);
-    } catch (error) { setRenderError(message(error)); }
-  };
-
-  const rerenderFrozenPlan = async (source: RenderJob) => {
-    if (!renderClient) return;
-    setRenderError("");
-    try {
-      const job = await renderClient.start(source.planId);
-      setSelectedRenderJob(job);
-      setRenderJobs((current) => [job, ...current.filter(({ id }) => id !== job.id)]);
-      setNotice(`Started a full rerender from frozen plan ${source.planId}.`);
+      setNotice("Rendering started.");
     } catch (error) { setRenderError(message(error)); }
   };
 
@@ -694,18 +628,18 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
   return (
     <div className={styles.page}>
       <Link className={styles.backLink} to="/projects">← Back to Projects</Link>
-      <header className={styles.pageHeader}>
-        <div><p className={styles.kicker}>Project workspace</p><h2>Project details</h2><p>Shape the script, assign voices, inspect the narration score, then render a frozen plan.</p></div>
-      </header>
+      {activeTab !== "render" ? <header className={styles.pageHeader}>
+        <div><p className={styles.kicker}>Project workspace</p><h2>Project details</h2><p>Shape the script, assign voices, inspect the narration score, then render and listen.</p></div>
+      </header> : null}
       {errors.length > 0 ? <div className={styles.alert} role="alert"><strong>Review these items</strong><ul>{errors.map((item) => <li key={item}>{item}</li>)}</ul><button type="button" onClick={() => setErrors([])}>Dismiss</button></div> : null}
-      <p className={styles.notice} aria-live="polite">{notice}</p>
+      {activeTab !== "render" ? <p className={styles.notice} aria-live="polite">{notice}</p> : null}
 
       {draft && project ? <>
-        <section className={styles.projectIdentity} aria-label="Project details">
+        {activeTab !== "render" ? <section className={styles.projectIdentity} aria-label="Project details">
           <label>Project name<input value={draft.name} onChange={(event) => updateDraft((current) => ({ ...current, name: event.target.value }))} /></label>
           <label>Description<input value={draft.description} onChange={(event) => updateDraft((current) => ({ ...current, description: event.target.value }))} /></label>
           <div className={styles.projectActions}><div className={styles.actionRow}><button type="button" onClick={() => void saveNow()} disabled={saveState === "saving"}>Save now</button><button type="button" className={styles.secondary} onClick={() => void duplicateProject()}>Duplicate</button><button type="button" className={styles.danger} onClick={() => void deleteProject()}>Delete</button></div><span className={styles.saveState} data-state={saveState} aria-live="polite">{saveState === "saved" ? "" : saveState === "saving" ? "Saving…" : saveState === "invalid" ? "Invalid changes" : saveState === "failed" ? "Save failed" : "Unsaved changes"}</span></div>
-        </section>
+        </section> : null}
         <div className={styles.tabList} role="tablist" aria-label="Project workspace">
           {projectTabs.map(({ id, label }) => <button ref={(element) => { tabRefs.current[id] = element; }} type="button" role="tab" id={`project-tab-${id}`} aria-controls={`project-panel-${id}`} aria-selected={activeTab === id} tabIndex={activeTab === id ? 0 : -1} key={id} onClick={() => selectTab(id)} onKeyDown={(event) => moveTabFocus(event, id)}>{label}</button>)}
         </div>
@@ -719,7 +653,7 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
               <div className={styles.sectionHeading}><div><span>Source</span><h3>Script editor</h3></div><label className={styles.fileButton}>Upload .txt<input type="file" accept=".txt,text/plain" onChange={(event) => void importFile(event.target.files?.[0])} /></label></div>
               <div className={styles.panelScrollBody} role="region" aria-label="Script editor content" tabIndex={0}>
                 <div className={styles.searchBar}><input aria-label="Find text" placeholder="Find literal text" value={search} onChange={(event) => setSearch(event.target.value)} /><input aria-label="Replacement text" placeholder="Replace with" value={replacement} onChange={(event) => setReplacement(event.target.value)} /><label><input type="checkbox" checked={caseSensitive} onChange={(event) => setCaseSensitive(event.target.checked)} />Case sensitive</label><button type="button" onClick={findNext}>Find next</button><button type="button" onClick={replaceNext}>Replace next</button><button type="button" onClick={() => updateDraft((current) => ({ ...current, scriptSource: replaceLiteral(current.scriptSource, search, replacement, caseSensitive) }))}>Replace all</button></div>
-                <div className={styles.sourceEditor}><pre aria-hidden="true">{lineNumbers}</pre><textarea ref={editorRef} aria-label="Script source" spellCheck={false} value={draft.scriptSource} onChange={(event) => updateDraft((current) => ({ ...current, scriptSource: event.target.value }))} /></div>
+                <ScriptSourceEditor ref={editorRef} value={draft.scriptSource} onChange={(scriptSource) => updateDraft((current) => ({ ...current, scriptSource }))} />
                 <div className={styles.sourceActions}><span>{draft.scriptSource.length.toLocaleString()} characters · drop a UTF-8 .txt file anywhere in this panel</span>{cleanedFencedSource !== undefined ? <button type="button" className={styles.secondary} onClick={() => { setCleanupUndo(draft.scriptSource); updateDraft((current) => ({ ...current, scriptSource: cleanedFencedSource })); }}>Remove surrounding code fence</button> : null}{cleanupUndo !== undefined ? <button type="button" className={styles.secondary} onClick={() => { updateDraft((current) => ({ ...current, scriptSource: cleanupUndo })); setCleanupUndo(undefined); }}>Restore fenced source</button> : null}</div>
               </div>
             </section> : null}
@@ -754,56 +688,22 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
         {previewError && activeTab === "details" ? <p className={styles.previewError} role="alert">{previewError} Your project and preview selection are unchanged.</p> : null}
         {previewResult?.mode === "segment" && activeTab === "details" ? <PreviewResultCard result={previewResult} /> : null}
 
-        {activeTab === "render" ? <section className={styles.renderPlansPanel} aria-labelledby="render-plans-heading">
+        {activeTab === "render" ? <section className={styles.renderPlansPanel} aria-labelledby="render-listen-heading">
           <div className={styles.sectionHeading}>
-            <div><span>Immutable handoff</span><h3 id="render-plans-heading">Frozen render plans</h3></div>
-            <button type="button" disabled={renderPlanBusy || !dryRun || dryRun.status === "blocked"} onClick={() => void freezeRenderPlan()}>{renderPlanBusy ? "Freezing…" : "Freeze render plan"}</button>
+            <div><span>Project audio</span><h3 id="render-listen-heading">Render and listen</h3></div>
+            {renderClient ? <button type="button" disabled={!dryRun || dryRun.status === "blocked" || (selectedRenderJob ? !["complete", "failed", "canceled"].includes(selectedRenderJob.state) : false)} onClick={() => void startRender()}>{selectedRenderJob && !["complete", "failed", "canceled"].includes(selectedRenderJob.state) ? "Rendering…" : selectedRenderJob?.state === "failed" ? "Try again" : "Render"}</button> : null}
           </div>
-          <p>Capture the saved project, pronunciation rules, connection/model identity, ordered entries, cache predictions, and exact silence without contacting Speaches.</p>
-          {renderPlanError ? <p className={styles.fieldError} role="alert">{renderPlanError}</p> : null}
-          <div className={styles.renderPlanWorkspace}>
-            <div className={styles.renderPlanList} aria-label="Saved render plans">
-              {renderPlanSummaries.length === 0 ? <p>No frozen plans yet.</p> : renderPlanSummaries.map((summary) => <button type="button" aria-pressed={selectedRenderPlan?.id === summary.id} key={summary.id} onClick={() => void openRenderPlan(summary.id)}>
-                <strong>{new Date(summary.createdAt).toLocaleString()}</strong>
-                <span>{summary.scriptHash === project.scriptHash && summary.createdAt >= project.updatedAt ? "Matches current project" : "Frozen from earlier project"}</span>
-                <small>{summary.summary.speechCount} speech · {summary.summary.pauseCount} pauses · {summary.summary.cacheHits} predicted hits</small>
-              </button>)}
+          <p>Create your audio, then listen or download it here. The first render may take longer while voice segments are generated; later edits are faster when unchanged segments can be reused.</p>
+          {renderError ? <p className={styles.fieldError} role="alert">{renderError}</p> : null}
+          {selectedRenderJob && selectedRenderJob.state !== "complete" && selectedRenderJob.state !== "failed" && selectedRenderJob.state !== "canceled" ? <p aria-live="polite">Rendering…</p> : null}
+          {selectedRenderJob?.error ? <p className={styles.fieldError} role="alert">{selectedRenderJob.error.message}</p> : null}
+          {renderClient && selectedRenderJob?.state === "complete" ? <div className={styles.renderResult}>
+            <SharedAudioPlayer label="Completed project render" src={renderClient.renderAudioSource(selectedRenderJob.id)} {...(renderWaveform ? { waveform: renderWaveform } : {})} />
+            <div className={styles.renderDownloads}>
+              <button type="button" className={styles.textLinkButton} onClick={() => void renderClient.exportDetails(selectedRenderJob.id).catch((error: unknown) => setRenderError(message(error)))}>Download Details</button>
+              <button type="button" onClick={() => void renderClient.exportAudio(selectedRenderJob.id).catch((error: unknown) => setRenderError(message(error)))}>Download</button>
             </div>
-            <div className={styles.renderPlanDetail} aria-live="polite">
-              {!selectedRenderPlan ? <p>Select a saved plan to inspect its immutable entries.</p> : <>
-                <header><div><strong>{selectedRenderPlan.scriptHash === project.scriptHash && selectedRenderPlan.createdAt >= project.updatedAt ? "Matches current project" : "Frozen from earlier project"}</strong><span>{new Date(selectedRenderPlan.createdAt).toLocaleString()}</span></div><code>{selectedRenderPlan.id}</code></header>
-                <div className={styles.renderPlanTable} role="table" aria-label="Frozen render plan ordered entries" tabIndex={0}>
-                  <div className={styles.renderPlanRow} role="row"><b>#</b><b>Type / origin</b><b>Duration</b><b>Voice</b><b>Transformed text</b><b>Cache</b></div>
-                  {selectedRenderPlan.entries.map((entry) => <div className={styles.renderPlanRow} role="row" key={entry.ordinal}>
-                    <span>{entry.ordinal}</span>
-                    <strong>{entry.type === "pause" ? `${entry.pauseKind} · ${entry.reason}` : entry.type}</strong>
-                    <span>{entry.type === "pause" ? `${entry.durationMs} ms` : "—"}</span>
-                    <code>{entry.type === "speech" ? entry.voiceId : "—"}</code>
-                    <span>{entry.type === "speech" ? entry.ttsText : entry.type === "section" ? entry.title : entry.pauseId ?? "direct duration"}</span>
-                    <span data-state={entry.type === "speech" ? entry.chunks[0]?.cacheStatus : undefined}>{entry.type === "speech" ? entry.chunks[0]?.cacheStatus : "—"}</span>
-                  </div>)}
-                </div>
-                {renderClient ? <div className={styles.actionRow}><button type="button" onClick={() => void startRender()}>Render this frozen plan</button></div> : null}
-              </>}
-            </div>
-          </div>
-          {renderClient ? <section aria-labelledby="render-execution-heading">
-            <div className={styles.sectionHeading}><div><span>Durable worker</span><h4 id="render-execution-heading">Render execution</h4></div><b>{renderJobs.length}</b></div>
-            {renderError ? <p className={styles.fieldError} role="alert">{renderError}</p> : null}
-            <RenderHistory
-              jobs={renderJobs}
-              expandedJob={selectedRenderJob}
-              client={renderClient}
-              onExpand={setSelectedRenderJob}
-              onCancel={cancelRender}
-              onRetry={retryRender}
-              onRerender={rerenderFrozenPlan}
-              onSourceLine={focusLine}
-              onNotice={setNotice}
-              onError={setRenderError}
-              voiceCatalog={voiceCatalog}
-            />
-          </section> : null}
+          </div> : null}
         </section> : null}
 
         {activeTab === "details" ? <section className={styles.validationPanel}>

@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
+import "@/test/domGeometry.js";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { EditorView } from "@codemirror/view";
 import { Link, MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseScript, resolveParagraphPauses, transformScript } from "@studynarrator/core";
@@ -176,6 +178,18 @@ function deferred<T>() {
 
 async function openProjectTab(name: "Script Editor" | "Settings" | "Details" | "Render") {
   await userEvent.click(await screen.findByRole("tab", { name }));
+}
+
+function scriptEditorView(): EditorView {
+  const content = screen.getByRole("textbox", { name: "Script source" });
+  const view = EditorView.findFromDOM(content.closest(".cm-editor") as HTMLElement);
+  if (!view) throw new Error("Expected a CodeMirror editor view.");
+  return view;
+}
+
+function replaceScriptSource(value: string): void {
+  const view = scriptEditorView();
+  view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: value } });
 }
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
@@ -440,16 +454,16 @@ describe("Projects workbench", () => {
     const timerSpy = vi.spyOn(window, "setTimeout");
     renderPage(client, analyze);
 
-    const scriptSource = await screen.findByLabelText("Script source");
+    await screen.findByRole("textbox", { name: "Script source" });
     await waitFor(() => expect(analyze).toHaveBeenCalled());
     timerSpy.mockClear();
 
     const pastedSource = `[speaker_teacher] ${"Responsive paste 🧠 ".repeat(2_000)}`;
-    fireEvent.change(scriptSource, { target: { value: "[speaker_teacher] Autosave revision one" } });
-    fireEvent.change(scriptSource, { target: { value: "[speaker_teacher] Autosave revision two" } });
-    fireEvent.change(scriptSource, { target: { value: pastedSource } });
+    replaceScriptSource("[speaker_teacher] Autosave revision one");
+    replaceScriptSource("[speaker_teacher] Autosave revision two");
+    replaceScriptSource(pastedSource);
     const editTimers = timerSpy.mock.calls.filter(([, delay]) => delay === 800).length;
-    expect(scriptSource).toHaveValue(pastedSource);
+    expect(scriptEditorView().state.doc.toString()).toBe(pastedSource);
 
     await waitFor(() => expect(replace).toHaveBeenCalledTimes(1), { timeout: 2_000 });
     expect(editTimers).toBe(3);
@@ -555,60 +569,17 @@ describe("Projects workbench", () => {
     expect(preview).toHaveBeenCalledTimes(1);
   });
 
-  it("creates, reopens, and replaces immutable plans using global timing", async () => {
-    const { client, analyze, replace } = fixture();
-    const first = frozenPlan("00000000-0000-4000-8000-000000000002", "b".repeat(64), "2026-08-12T14:00:00.000Z");
-    const second = frozenPlan("00000000-0000-4000-8000-000000000003", "c".repeat(64), "2026-08-12T16:00:00.000Z");
-    const plans: RenderPlan[] = [];
-    const create = vi.fn(async () => {
-      const plan = plans.length === 0 ? first : second;
-      plans.unshift(plan);
-      return plan;
-    });
-    const list = vi.fn(async () => plans.map(summaryOf));
-    const get = vi.fn(async (planId: string) => plans.find(({ id }) => id === planId)!);
-    renderPage(client, analyze, { renderPlanClient: { create, list, get } });
-
-    fireEvent.change(await screen.findByDisplayValue("Offline fixture"), { target: { value: "Pending frozen revision" } });
+  it("shows the simplified render-and-listen surface without plan internals", async () => {
+    const { client, analyze } = fixture();
+    renderPage(client, analyze);
     await openProjectTab("Render");
-    const freeze = await screen.findByRole("button", { name: "Freeze render plan" });
-    await waitFor(() => expect(freeze).toBeEnabled());
-    await userEvent.click(freeze);
-
-    await waitFor(() => expect(create).toHaveBeenCalledWith(project.id));
-    expect(replace).toHaveBeenCalledWith(project.id, expect.objectContaining({ description: "Pending frozen revision" }));
-    expect(replace.mock.invocationCallOrder[0]).toBeLessThan(create.mock.invocationCallOrder[0]!);
-    const planTable = await screen.findByRole("table", { name: "Frozen render plan ordered entries" });
-    expect(planTable).toHaveAttribute("tabindex", "0");
-    expect(planTable).toHaveTextContent("automatic · paragraph");
-    expect(planTable).toHaveTextContent("750 ms");
-    expect(planTable).toHaveTextContent("voice_teacher");
-    expect(planTable).toHaveTextContent("sequel.");
-    expect(planTable).toHaveTextContent("miss");
-    expect(screen.getAllByText("Matches current project").length).toBeGreaterThan(0);
-
-    replace.mockImplementationOnce(async (_id, input) => ({
-      ...project, ...input, scriptHash: "c".repeat(64), lexiconEntries: project.lexiconEntries,
-      updatedAt: "2026-08-12T15:00:00.000Z"
-    }));
-    await openProjectTab("Script Editor");
-    fireEvent.change(screen.getByLabelText("Script source"), { target: { value: "[speaker_teacher] Changed live script." } });
-    await openProjectTab("Render");
-    await waitFor(() => expect(screen.getAllByText("Frozen from earlier project").length).toBeGreaterThan(0), { timeout: 2_000 });
-    expect(planTable).toHaveTextContent("sequel.");
-
-    const secondFreeze = screen.getByRole("button", { name: "Freeze render plan" });
-    await waitFor(() => expect(secondFreeze).toBeEnabled());
-    await userEvent.click(secondFreeze);
-    await waitFor(() => expect(create).toHaveBeenCalledTimes(2));
-    const savedPlans = screen.getByLabelText("Saved render plans");
-    expect(within(savedPlans).getAllByRole("button")).toHaveLength(2);
-    await userEvent.click(within(savedPlans).getAllByRole("button")[1]!);
-    await waitFor(() => expect(get).toHaveBeenCalledWith(first.id));
-    expect(screen.getByRole("table", { name: "Frozen render plan ordered entries" })).toHaveTextContent("sequel.");
+    expect(await screen.findByRole("heading", { name: "Render and listen" })).toBeInTheDocument();
+    expect(screen.getByText(/first render may take longer/u)).toBeInTheDocument();
+    expect(screen.queryByText(/Frozen render plans/u)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Saved render plans")).not.toBeInTheDocument();
   });
 
-  it("starts a selected frozen plan and exposes completed artifact actions", async () => {
+  it("starts the project render and exposes only completed playback and downloads", async () => {
     const { client, analyze } = fixture();
     const plan = frozenPlan("00000000-0000-4000-8000-000000000002", project.scriptHash, "2026-08-12T14:00:00.000Z");
     const job = {
@@ -624,9 +595,11 @@ describe("Projects workbench", () => {
     };
     const start = vi.fn(async () => job);
     const exportArtifact = vi.fn(async () => ({ disposition: "download" as const, fileName: artifact.fileName }));
+    const exportDetails = vi.fn(async () => ({ disposition: "download" as const, fileName: "offline-fixture-render-details.zip" }));
     const renderClient: RenderClient = {
-      start, list: vi.fn(async () => []), get: vi.fn(async () => job), cancel: vi.fn(async () => job), retry: vi.fn(async () => job),
+      start, startProject: start, list: vi.fn(async () => []), get: vi.fn(async () => job), cancel: vi.fn(async () => job), retry: vi.fn(async () => job),
       listArtifacts: vi.fn(async () => [artifact]), exportArtifact,
+      exportAudio: exportArtifact, exportDetails,
       listSegments: vi.fn(async () => []),
       getWaveform: vi.fn(async () => ({ status: "unavailable" as const, renderId: job.id, reason: "audioMissing" as const })),
       renderAudioSource: vi.fn(() => "/render.mp3"), segmentAudioSource: vi.fn(() => "/segment.wav"),
@@ -637,14 +610,16 @@ describe("Projects workbench", () => {
       renderClient
     });
     await openProjectTab("Render");
-    const savedPlans = await screen.findByLabelText("Saved render plans");
-    await userEvent.click(within(savedPlans).getByRole("button"));
-    await userEvent.click(await screen.findByRole("button", { name: "Render this frozen plan" }));
-    expect(start).toHaveBeenCalledWith(plan.id);
-    expect(await screen.findByText(/Phase: complete/u)).toBeInTheDocument();
-    expect(await screen.findByRole("list", { name: "Render artifacts" })).toHaveTextContent("offline-fixture.mp3");
+    const renderSection = (await screen.findByRole("heading", { name: "Render and listen" })).closest("section")!;
+    const renderButton = within(renderSection).getByRole("button", { name: "Render" });
+    await waitFor(() => expect(renderButton).toBeEnabled());
+    fireEvent.click(renderButton);
+    await waitFor(() => expect(start).toHaveBeenCalledWith(project.id));
+    expect(await screen.findByLabelText(/Audio player for Completed project render/u)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Download" }));
-    expect(exportArtifact).toHaveBeenCalledWith(artifact.id);
+    expect(exportArtifact).toHaveBeenCalledWith(job.id);
+    await userEvent.click(screen.getByRole("button", { name: "Download Details" }));
+    expect(exportDetails).toHaveBeenCalledWith(job.id);
   });
 
   it("shows failed saves and guards unload and route navigation", async () => {
@@ -673,6 +648,6 @@ describe("Projects workbench", () => {
     const source = "[speaker_teacher] Résumé 🧠\r\n[pause_short]\r\nContinue.";
     fireEvent.change(upload, { target: { files: [new File([source], "fixture.txt", { type: "text/plain" })] } });
     await waitFor(() => expect(analyze.mock.calls.some(([input]) => input.source === source)).toBe(true));
-    expect(screen.getByLabelText("Script source")).toHaveValue(source.replaceAll("\r\n", "\n"));
+    expect(scriptEditorView().state.doc.toString()).toBe(source.replaceAll("\r\n", "\n"));
   });
 });

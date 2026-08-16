@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, unlink } from "node:fs/promises";
+import { mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { SpeachesConnection, RenderArtifact, RenderJob, RenderSegment } from "@studynarrator/shared-types";
+import { unzipSync } from "fflate";
+import type { SpeachesConnection, ProjectDetail, RenderArtifact, RenderJob, RenderSegment } from "@studynarrator/shared-types";
 import {
   createPcmSilence,
   probeAudioFile,
@@ -23,8 +24,9 @@ class MemoryRepository implements RenderRepository {
   artifacts = new Map<string, RenderArtifact & { path: string }>();
   segments = new Map<string, RenderSegment>();
   segmentPaths = new Map<string, string | null>();
-  constructor(readonly connection: SpeachesConnection) {}
+  constructor(readonly connection: SpeachesConnection, readonly project: ProjectDetail) {}
   getSpeachesConnection() { return this.connection; }
+  getProject(id: string) { if (id !== this.project.id) throw new Error("missing"); return this.project; }
   createRenderJob(job: RenderJob, segments: RenderSegment[]) { this.jobs.set(job.id, job); segments.forEach((item) => this.segments.set(`${item.renderId}:${String(item.ordinal)}`, item)); return job; }
   getRenderJob(id: string) { const job = this.jobs.get(id); if (!job) throw new Error("missing"); return job; }
   listRenderJobs(projectId: string) { return [...this.jobs.values()].filter((job) => job.projectId === projectId); }
@@ -75,13 +77,16 @@ async function fixture() {
   });
   const plans: RenderPlanStore = {
     async save() { return plan; }, async list() { return []; }, async get() { return plan; },
-    async load() { return { snapshot, plan, silenceAssets: new Map() }; }
+    async load() { return { snapshot, plan, silenceAssets: new Map() }; },
+    async snapshotJob() { /* in-memory fixture */ },
+    async cloneJobSnapshot() { /* in-memory fixture */ },
+    async loadJob() { return { snapshot, plan, silenceAssets: new Map() }; }
   };
   const repository = new MemoryRepository({
     baseUrl, suppliedUrlForm: "root", configured: true, defaultModelId: "model", defaultVoiceId: "voice",
     timeoutSeconds: 120, retryCount: 0, responseFormat: "wav", lastTestedAt: null, lastSuccessfulTestAt: null,
     lastTestSummary: null, createdAt: timestamp, updatedAt: timestamp
-  });
+  }, project);
   const wav = createPcmSilence(1_000).bytes!;
   let nextId = 10;
   const service = await createRenderService({
@@ -151,6 +156,13 @@ describe("render coordinator", () => {
     await expect(service.resolveSegmentAudio(started.id, 1)).rejects.toThrow("unavailable");
     const checksums = artifacts.find(({ type }) => type === "checksums")!;
     expect(await readFile((await service.resolveArtifact(checksums.id)).path, "utf8")).toContain(mp3.checksum);
+    await expect(service.exportAudio!(started.id)).resolves.toEqual({ disposition: "download", fileName: "render-fixture.mp3" });
+    const details = await service.resolveDetailsArchive!(started.id);
+    expect(details.fileName).toBe("render-fixture-render-details.zip");
+    expect(Object.keys(unzipSync(details.bytes)).sort()).toEqual(artifacts.map(({ fileName }) => fileName).sort());
+    expect(Object.keys(unzipSync(details.bytes)).some((name) => name.includes("segment") || name.includes("waveform"))).toBe(false);
+    await writeFile((await service.resolveArtifact(mp3.id)).path, Uint8Array.from([1, 2, 3]));
+    await expect(service.resolveDetailsArchive!(started.id)).rejects.toThrow(/integrity/iu);
     await service.close();
   });
 

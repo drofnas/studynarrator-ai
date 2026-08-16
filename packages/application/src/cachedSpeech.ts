@@ -9,10 +9,13 @@ import {
 } from "@studynarrator/shared-types";
 import {
   createSpeechCache,
+  createSpeechCacheKey,
   type CachedSpeechResult,
   type SpeechCache,
   type SpeechCacheUsage
 } from "@studynarrator/rendering";
+import { parseScript, transformScript, type LexiconEntry } from "@studynarrator/core";
+import type { ProjectReplaceInput } from "@studynarrator/shared-types";
 import {
   probeAudioWithFfprobe,
   synthesizeSpeech,
@@ -23,6 +26,49 @@ import type { ConnectionRepository } from "./connections.js";
 
 export const SPEACHES_CACHE_ADAPTER_ID = "speaches-openai-compatible";
 export const SPEACHES_CACHE_ADAPTER_VERSION = 1;
+
+export function createProjectSpeechCacheKeyPlanner(repository: Pick<ConnectionRepository, "getSpeachesConnection"> & { listGlobalLexicon(): LexiconEntry[] }) {
+  return (input: ProjectReplaceInput): readonly string[] | undefined => {
+    const connection = repository.getSpeachesConnection();
+    if (!connection.baseUrl || !connection.defaultModelId) return undefined;
+    const parsed = parseScript({ source: input.scriptSource });
+    const timestamp = "2000-01-01T00:00:00.000Z";
+    const projectLexicon: LexiconEntry[] = input.lexiconEntries.map((entry, index) => ({
+      id: entry.id ?? `cache-planner-${String(index + 1).padStart(4, "0")}`,
+      scope: entry.scope,
+      entryType: entry.entryType ?? "exactTerm",
+      displayText: entry.displayText,
+      spokenText: entry.spokenText,
+      caseSensitive: entry.caseSensitive ?? true,
+      wholeWord: entry.wholeWord ?? true,
+      priority: entry.priority ?? 0,
+      enabled: entry.enabled ?? true,
+      notes: entry.notes ?? "",
+      createdAt: timestamp,
+      updatedAt: timestamp
+    }));
+    const transformed = transformScript({ parsedScript: parsed, entries: [...repository.listGlobalLexicon(), ...projectLexicon] });
+    if (parsed.errors.length > 0 || transformed.errors.length > 0 || !transformed.synthesisReady) return undefined;
+    const keys = new Set<string>();
+    for (const node of parsed.nodes) {
+      if (node.type !== "speech") continue;
+      const segment = transformed.segments.find((candidate) => candidate.nodeOrdinal === node.ordinal);
+      const speaker = input.speakerMappings.find((candidate) => candidate.speakerId === node.speakerId);
+      if (!segment || !speaker?.voiceId) return undefined;
+      keys.add(createSpeechCacheKey({
+        adapterId: SPEACHES_CACHE_ADAPTER_ID,
+        adapterVersion: SPEACHES_CACHE_ADAPTER_VERSION,
+        serverIdentity: connection.baseUrl,
+        modelId: connection.defaultModelId,
+        voiceId: speaker.voiceId,
+        speed: speaker.speed,
+        text: segment.ttsText,
+        responseFormat: "wav"
+      }));
+    }
+    return [...keys].sort();
+  };
+}
 
 interface CachedSpeechSynthesisInput {
   modelId: string;

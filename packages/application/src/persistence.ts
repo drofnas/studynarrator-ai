@@ -28,7 +28,7 @@ export interface PersistenceRepository {
   listProjects(): ProjectSummary[];
   createProject(input: ProjectCreateInput): ProjectDetail;
   getProject(projectId: string): ProjectDetail;
-  replaceProject(projectId: string, input: ProjectReplaceInput): ProjectDetail;
+  replaceProject(projectId: string, input: ProjectReplaceInput, speechCacheKeys?: readonly string[]): ProjectDetail;
   duplicateProject(projectId: string, input: ProjectDuplicateInput): ProjectDetail;
   deleteProject(projectId: string): void;
   getSystemPacing(): SystemTimingConfiguration;
@@ -43,7 +43,9 @@ export class PersistenceUnavailableError extends Error {
   readonly code = "PERSISTENCE_UNAVAILABLE";
 }
 
-export function createPersistenceService(repository: PersistenceRepository): PersistenceClient {
+export function createPersistenceService(repository: PersistenceRepository, options: {
+  projectSpeechCacheKeys?: (input: ProjectReplaceInput) => readonly string[] | undefined;
+} = {}): PersistenceClient {
   const execute = <T>(operation: () => T): Promise<T> => Promise.resolve().then(operation);
   return {
     status() {
@@ -60,7 +62,10 @@ export function createPersistenceService(repository: PersistenceRepository): Per
         return execute(() => ProjectDetailSchema.parse(repository.getProject(ProjectIdSchema.parse(projectId))));
       },
       replace(projectId, input) {
-        return execute(() => ProjectDetailSchema.parse(repository.replaceProject(ProjectIdSchema.parse(projectId), ProjectReplaceInputSchema.parse(input))));
+        return execute(() => {
+          const parsed = ProjectReplaceInputSchema.parse(input);
+          return ProjectDetailSchema.parse(repository.replaceProject(ProjectIdSchema.parse(projectId), parsed, options.projectSpeechCacheKeys?.(parsed)));
+        });
       },
       duplicate(projectId, input) {
         return execute(() => ProjectDetailSchema.parse(repository.duplicateProject(ProjectIdSchema.parse(projectId), ProjectDuplicateInputSchema.parse(input))));

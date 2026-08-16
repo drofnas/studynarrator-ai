@@ -188,11 +188,12 @@ async function fixture() {
     sizeBytes: 1, checksum: "d".repeat(64), durationMs: null, createdAt: lastRenderPlan.createdAt
   };
   const renders = {
-    start: async () => renderJob(), list: async () => [renderJob()], get: async () => renderJob(),
+    start: async () => renderJob(), startProject: async () => renderJob(), list: async () => [renderJob()], get: async () => renderJob(),
     cancel: async () => renderJob(), retry: async () => renderJob(), listArtifacts: async () => [artifact],
     exportArtifact: async () => ({ disposition: "download" as const, fileName: artifact.fileName }),
     resolveArtifact: async () => ({ artifact, path: join(import.meta.dirname, "../../../package.json") }),
     resolveRenderAudio: async () => ({ path: join(import.meta.dirname, "../../../package.json"), fileName: "fixture.mp3", mimeType: "audio/mpeg" as const, sizeBytes: 1 }),
+    resolveDetailsArchive: async () => ({ bytes: Uint8Array.from([1]), fileName: "fixture-render-details.zip", mimeType: "application/zip" as const }),
     resolveSegmentAudio: async () => ({ path: join(import.meta.dirname, "../../../package.json"), fileName: "000001.wav", mimeType: "audio/wav" as const, sizeBytes: 1 }),
     listSegments: async () => [],
     getWaveform: async () => ({ status: "unavailable" as const, renderId, reason: "audioMissing" as const }),
@@ -333,8 +334,8 @@ describe("Express persistence API", () => {
     const persistence = createUnavailablePersistenceService({
       contractVersion: 1,
       state: "unavailable",
-      databaseSchemaVersion: 1,
-      targetDatabaseSchemaVersion: 1,
+      databaseSchemaVersion: 2,
+      targetDatabaseSchemaVersion: 2,
       databasePath: "/tmp/studynarrator.sqlite",
       latestBackupPath: "/tmp/backups/recovery.sqlite",
       code: "MIGRATION_FAILED",
@@ -414,10 +415,10 @@ describe("REST API operation manifest", () => {
       : []);
     const declared = REST_API_MANIFEST.map(({ method, path }) => `${method} ${path}`);
     expect(registered.sort()).toEqual([...declared].sort());
-    expect(new Set(declared).size).toBe(52);
+    expect(new Set(declared).size).toBe(55);
   });
 
-  it("exercises a successful schema-valid response for all 52 operations", async () => {
+  it("exercises a successful schema-valid response for all 55 operations", async () => {
     const { app } = await fixture();
     const covered = new Set<string>();
     const call = async (method: string, path: string, expected: number, body?: string | object) => {
@@ -484,12 +485,15 @@ describe("REST API operation manifest", () => {
     RenderPlanSummaryCollectionSchema.parse((await call("GET", `/api/projects/${created.id}/render-plans`, 200)).body as unknown);
     RenderPlanSchema.parse((await call("GET", `/api/render-plans/${renderPlan.id}`, 200)).body as unknown);
     const render = (await call("POST", `/api/render-plans/${renderPlan.id}/renders`, 202)).body as { id: string };
+    await call("POST", `/api/projects/${created.id}/renders`, 202);
     await call("GET", `/api/projects/${created.id}/renders`, 200);
     await call("GET", `/api/renders/${render.id}`, 200);
     await call("POST", `/api/renders/${render.id}/cancel`, 200);
     await call("POST", `/api/renders/${render.id}/retry`, 202);
     const artifacts = (await call("GET", `/api/renders/${render.id}/artifacts`, 200)).body as Array<{ id: string }>;
     await call("GET", `/api/renders/${render.id}/audio`, 200);
+    await call("GET", `/api/renders/${render.id}/download`, 200);
+    await call("GET", `/api/renders/${render.id}/details`, 200);
     await call("GET", `/api/renders/${render.id}/waveform`, 200);
     await call("GET", `/api/renders/${render.id}/segments`, 200);
     await call("GET", `/api/renders/${render.id}/segments/1/audio`, 200);
@@ -550,7 +554,7 @@ describe("REST API operation manifest", () => {
     expect(JSON.stringify(responses.map((response) => response.body as unknown))).not.toContain(secret);
 
     const unavailable = createUnavailablePersistenceService({
-      contractVersion: 1, state: "unavailable", databaseSchemaVersion: 2, targetDatabaseSchemaVersion: 1,
+      contractVersion: 1, state: "unavailable", databaseSchemaVersion: 1, targetDatabaseSchemaVersion: 2,
       databasePath: "/redacted/data.sqlite", latestBackupPath: null, code: "MIGRATION_FAILED", message: "Unavailable."
     });
     const degraded = await listen(createExpressApp({ service, persistence: unavailable, context }));

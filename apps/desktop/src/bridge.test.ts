@@ -53,8 +53,8 @@ const diagnostics = {
 const persistenceStatus = {
   contractVersion: 1 as const,
   state: "ready" as const,
-  databaseSchemaVersion: 1 as const,
-  targetDatabaseSchemaVersion: 1 as const,
+  databaseSchemaVersion: 2 as const,
+  targetDatabaseSchemaVersion: 2 as const,
   databasePath: "/tmp/studynarrator.sqlite",
   latestBackupPath: null
 };
@@ -178,11 +178,12 @@ const renderArtifact = {
   durationMs: 1, createdAt: renderPlan.createdAt
 };
 const renders = {
-  start: vi.fn(async () => renderJob), list: vi.fn(async () => [renderJob]), get: vi.fn(async () => renderJob),
+  start: vi.fn(async () => renderJob), startProject: vi.fn(async () => renderJob), list: vi.fn(async () => [renderJob]), get: vi.fn(async () => renderJob),
   cancel: vi.fn(async () => renderJob), retry: vi.fn(async () => renderJob), listArtifacts: vi.fn(async () => []),
   exportArtifact: vi.fn(async () => ({ disposition: "download" as const, fileName: "audio.mp3" })),
   resolveArtifact: vi.fn(async () => ({ artifact: renderArtifact, path: "/tmp/audio.mp3" })),
   resolveRenderAudio: vi.fn(async () => ({ path: "/tmp/audio.mp3", fileName: "audio.mp3", mimeType: "audio/mpeg" as const, sizeBytes: 3 })),
+  resolveDetailsArchive: vi.fn(async () => ({ bytes: Uint8Array.from([1]), fileName: "details.zip", mimeType: "application/zip" as const })),
   resolveSegmentAudio: vi.fn(async () => ({ path: "/tmp/000001.wav", fileName: "000001.wav", mimeType: "audio/wav" as const, sizeBytes: 3 })),
   listSegments: vi.fn(async () => []),
   getWaveform: vi.fn(async () => ({ status: "unavailable" as const, renderId: renderJob.id, reason: "audioMissing" as const })),
@@ -371,12 +372,15 @@ describe("Electron boundary", () => {
       [RENDER_PLAN_CHANNELS.list]: { projectId: project.id },
       [RENDER_PLAN_CHANNELS.get]: { planId: renderPlan.id },
       [RENDER_CHANNELS.start]: { planId: renderPlan.id },
+      [RENDER_CHANNELS.startProject]: { projectId: project.id },
       [RENDER_CHANNELS.list]: { projectId: project.id },
       [RENDER_CHANNELS.get]: { renderId: renderJob.id },
       [RENDER_CHANNELS.cancel]: { renderId: renderJob.id },
       [RENDER_CHANNELS.retry]: { renderId: renderJob.id },
       [RENDER_CHANNELS.artifacts]: { renderId: renderJob.id },
       [RENDER_CHANNELS.exportArtifact]: { artifactId: renderArtifact.id },
+      [RENDER_CHANNELS.exportAudio]: { renderId: renderJob.id },
+      [RENDER_CHANNELS.exportDetails]: { renderId: renderJob.id },
       [RENDER_CHANNELS.segments]: { renderId: renderJob.id },
       [RENDER_CHANNELS.waveform]: { renderId: renderJob.id },
       [RENDER_CHANNELS.exportSegment]: { renderId: renderJob.id, ordinal: 1 },

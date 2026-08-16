@@ -299,8 +299,9 @@ test.describe("Projects connected authoring", () => {
     await expect(page.getByText("All changes saved.")).toHaveCount(0);
     await page.reload();
     await expect(page.getByRole("tab", { name: "Details" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByLabel("Dry run ordered segment table")).toContainText("Welcome line 48.");
     await page.getByRole("tab", { name: "Script Editor" }).click();
-    await expect(page.getByLabel("Script source")).toHaveValue(longScript);
+    await expect(page.getByText(`${longScript.length.toLocaleString()} characters`, { exact: false })).toBeVisible();
     await page.getByRole("tab", { name: "Settings" }).click();
     await expect(page.getByLabel("Optional model override")).toHaveCount(0);
     await expect(page.getByLabel("Voice for speaker teacher")).toHaveValue("af_sky");
@@ -317,6 +318,103 @@ test.describe("Projects connected authoring", () => {
     await expect(page.getByLabel("Voice for speaker teacher")).toHaveValue("af_sky");
     expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/models"] ?? 0).toBe(4);
     expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/speech"] ?? 0).toBe(0);
+  });
+
+  test("keeps wrapped logical line numbers aligned while the page owns scrolling", async ({ page, studyNarrator }) => {
+    await continueOffline(page, studyNarrator);
+    await createProject(page, "Wrapped line numbers");
+    await page.setViewportSize({ width: 1280, height: 800 });
+
+    const logicalLines = [
+      `[speaker_teacher] ${"This sentence should wrap without becoming a new source line. ".repeat(16)}`,
+      ...Array.from({ length: 59 }, (_value, index) => `[speaker_teacher] Logical line ${String(index + 2)}.`)
+    ];
+    const script = logicalLines.join("\n");
+    const source = page.getByRole("textbox", { name: "Script source" });
+    const editor = source.locator("xpath=ancestor::div[contains(@class, 'cm-editor')]");
+    const minimumEditorHeight = await editor.evaluate((element) => element.getBoundingClientRect().height);
+    await source.fill(script);
+    await expect(page.getByText(`${script.length.toLocaleString()} characters`, { exact: false })).toBeVisible();
+
+    const scroller = editor.locator(".cm-scroller");
+    await expect(scroller).toHaveCount(1);
+    const editorLayout = await editor.evaluate((element) => {
+      const sharedScroller = element.querySelector(".cm-scroller");
+      const gutters = element.querySelector(".cm-gutters");
+      if (!(sharedScroller instanceof HTMLElement) || !(gutters instanceof HTMLElement)) throw new Error("Expected the CodeMirror scroll surface and gutter.");
+      return {
+        editorHeight: element.getBoundingClientRect().height,
+        pageScrolls: document.documentElement.scrollHeight > document.documentElement.clientHeight,
+        scrollerOverflowY: getComputedStyle(sharedScroller).overflowY,
+        scrollerScrolls: sharedScroller.scrollHeight > sharedScroller.clientHeight + 1,
+        sharedSurface: gutters.closest(".cm-scroller") === sharedScroller
+      };
+    });
+    expect(editorLayout.editorHeight).toBeGreaterThan(minimumEditorHeight);
+    expect(editorLayout.pageScrolls).toBe(true);
+    expect(editorLayout.scrollerOverflowY).toBe("visible");
+    expect(editorLayout.scrollerScrolls).toBe(false);
+    expect(editorLayout.sharedSurface).toBe(true);
+
+    const expectWheelToScrollPage = async (width: number) => {
+      await page.setViewportSize({ width, height: 800 });
+      await editor.evaluate((element) => { window.scrollTo(0, element.getBoundingClientRect().top + window.scrollY); });
+      const editorBox = await editor.boundingBox();
+      if (!editorBox) throw new Error("Expected the script editor to have a browser layout box.");
+      await page.mouse.move(editorBox.x + Math.min(200, editorBox.width / 2), editorBox.y + 250);
+
+      const beforeDown = await page.evaluate(() => window.scrollY);
+      await page.mouse.wheel(0, 400);
+      await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(beforeDown);
+      await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBe(0);
+
+      const beforeUp = await page.evaluate(() => window.scrollY);
+      await page.mouse.wheel(0, -240);
+      await expect.poll(() => page.evaluate(() => window.scrollY)).toBeLessThan(beforeUp);
+      await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBe(0);
+    };
+
+    await expectWheelToScrollPage(1280);
+    await expectWheelToScrollPage(520);
+
+    await editor.evaluate((element) => { window.scrollTo(0, element.getBoundingClientRect().top + window.scrollY); });
+
+    const firstLineMetrics = await editor.locator(".cm-line").first().evaluate((line) => ({
+      height: line.getBoundingClientRect().height,
+      lineHeight: Number.parseFloat(getComputedStyle(line).lineHeight)
+    }));
+    expect(firstLineMetrics.height).toBeGreaterThan(firstLineMetrics.lineHeight * 2);
+    await expect.poll(async () => editor.evaluate((element) => [...element.querySelectorAll<HTMLElement>(".cm-lineNumbers .cm-gutterElement")]
+      .filter((item) => getComputedStyle(item).visibility !== "hidden")
+      .map((item) => item.textContent?.trim()).filter(Boolean))).toContain("3");
+    const visibleNumbers = await editor.evaluate((element) => [...element.querySelectorAll<HTMLElement>(".cm-lineNumbers .cm-gutterElement")]
+      .filter((item) => getComputedStyle(item).visibility !== "hidden")
+      .map((item) => item.textContent?.trim()).filter(Boolean));
+    expect(visibleNumbers.slice(0, 3)).toEqual(["1", "2", "3"]);
+
+    await page.evaluate(() => { window.scrollTo(0, document.documentElement.scrollHeight); });
+    await expect.poll(async () => editor.evaluate((element, lastLineNumber) => {
+      const sourceLines = [...element.querySelectorAll<HTMLElement>(".cm-content .cm-line")];
+      const gutterLine = [...element.querySelectorAll<HTMLElement>(".cm-lineNumbers .cm-gutterElement")]
+        .find((item) => item.textContent?.trim() === String(lastLineNumber));
+      const sourceLine = sourceLines.at(-1);
+      return sourceLine && gutterLine ? Math.abs(sourceLine.getBoundingClientRect().top - gutterLine.getBoundingClientRect().top) : 999;
+    }, logicalLines.length)).toBeLessThanOrEqual(1);
+
+    await page.getByRole("button", { name: "Save now" }).click();
+    await page.reload();
+    await expect(page.getByText(`${script.length.toLocaleString()} characters`, { exact: false })).toBeVisible();
+    const reloadedSource = page.getByRole("textbox", { name: "Script source" });
+    const reloadedEditor = reloadedSource.locator("xpath=ancestor::div[contains(@class, 'cm-editor')]");
+    const reloadedScroller = reloadedEditor.locator(".cm-scroller");
+    await expect.poll(async () => reloadedScroller.evaluate((element) => ({
+      overflowY: getComputedStyle(element).overflowY,
+      scrolls: element.scrollHeight > element.clientHeight + 1
+    }))).toEqual({ overflowY: "visible", scrolls: false });
+    await page.evaluate(() => { window.scrollTo(0, document.documentElement.scrollHeight); });
+    await expect.poll(async () => reloadedEditor.evaluate((element) => [...element.querySelectorAll<HTMLElement>(".cm-lineNumbers .cm-gutterElement")]
+      .filter((item) => getComputedStyle(item).visibility !== "hidden")
+      .map((item) => item.textContent?.trim()).filter(Boolean))).toContain(String(logicalLines.length));
   });
 
   test("persists diagnostic suppression and supports complete project CRUD", async ({ page, studyNarrator }) => {

@@ -112,12 +112,12 @@ test.describe("Electron acceptance", () => {
     page = await electronStudyNarrator.relaunch();
     await expect(page.getByRole("heading", { name: "Projects", exact: true })).toBeVisible();
     await openProject(page, "Desktop durable project");
-    await expect(page.getByLabel("Script source")).toHaveValue("[speaker_teacher] Persist through relaunch.");
+    await expect(page.getByLabel("Script source")).toHaveText("[speaker_teacher] Persist through relaunch.");
     await page.getByRole("tab", { name: "Settings" }).click();
     await expect(page.getByRole("region", { name: "Project lexicon" }).getByRole("article", { name: "Lexicon entry CLI" })).toBeVisible();
   });
 
-  test("freezes and reopens immutable plans through typed IPC without TTS", async ({ electronStudyNarrator, studyNarrator }) => {
+  test("keeps one hidden current plan and reopens the latest render through typed IPC", async ({ electronStudyNarrator, studyNarrator }) => {
     let page = electronStudyNarrator.page;
     await configureElectronConnection(page, studyNarrator);
     await page.getByRole("link", { name: "Timings" }).click();
@@ -128,39 +128,41 @@ test.describe("Electron acceptance", () => {
     await expect(page.getByText("Global timing saved.")).toBeVisible();
     await page.getByRole("link", { name: "Projects" }).click();
     studyNarrator.fakeSpeaches.reset();
-    await createProject(page, "Desktop frozen plan");
+    await createProject(page, "Desktop current render");
     await page.getByLabel("Script source").fill("[speaker_teacher] First.\n\n[speaker_teacher] Second.");
     await page.getByRole("tab", { name: "Settings" }).click();
     await expect(page.getByLabel("Optional model override")).toHaveCount(0);
     await expect(page.getByLabel("Voice for speaker teacher")).toHaveValue("af_heart");
     await page.getByRole("tab", { name: "Render" }).click();
-    await page.getByRole("button", { name: "Freeze render plan" }).click();
-    await expect(page.getByRole("table", { name: "Frozen render plan ordered entries" })).toContainText("350 ms");
-    expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/speech"] ?? 0).toBe(0);
+    await expect(page.getByRole("heading", { name: "Render and listen" })).toBeVisible();
+    await page.getByRole("button", { name: "Render" }).click();
+    await expect(page.getByRole("button", { name: "Download", exact: true })).toBeVisible({ timeout: 20_000 });
+    const projectId = page.url().match(/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/u)?.[0];
+    if (!projectId) throw new Error("Project route did not contain a project ID.");
+    const firstPlans = await page.evaluate(async (id) => await (window as typeof window & { studyNarrator: StudyNarratorBridge }).studyNarrator.renderPlans.list(id), projectId);
+    expect(firstPlans).toHaveLength(1);
+    expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/speech"] ?? 0).toBe(2);
 
     page = await electronStudyNarrator.relaunch();
     await expect(page.getByRole("heading", { name: "Projects", exact: true })).toBeVisible();
-    await openProject(page, "Desktop frozen plan");
+    await openProject(page, "Desktop current render");
     await page.getByRole("tab", { name: "Render" }).click();
-    const savedPlans = page.getByLabel("Saved render plans");
-    await expect(savedPlans.getByRole("button")).toHaveCount(1);
-    await savedPlans.getByRole("button").click();
-    const table = page.getByRole("table", { name: "Frozen render plan ordered entries" });
-    await expect(table).toContainText("350 ms");
+    await expect(page.getByLabel(/Audio player for Completed project render/u)).toBeVisible();
+    await expect(page.getByLabel("Saved render plans")).toHaveCount(0);
 
     await page.getByRole("link", { name: "Timings" }).click();
     await page.getByLabel("pause_short duration").fill("750 ms");
     await page.getByRole("button", { name: "Save timing" }).click();
     await expect(page.getByText("Global timing saved.")).toBeVisible();
     await page.getByRole("link", { name: "Projects" }).click();
-    await openProject(page, "Desktop frozen plan");
+    await openProject(page, "Desktop current render");
     await page.getByRole("tab", { name: "Render" }).click();
-    await page.getByLabel("Saved render plans").getByRole("button").click();
-    await expect(table).toContainText("350 ms");
-    await page.getByRole("button", { name: "Freeze render plan" }).click();
-    await expect(table).toContainText("750 ms");
-    await expect(savedPlans.getByRole("button")).toHaveCount(2);
-    expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/speech"] ?? 0).toBe(0);
+    await page.getByRole("button", { name: "Render" }).click();
+    await expect(page.getByRole("button", { name: "Download", exact: true })).toBeVisible({ timeout: 20_000 });
+    const currentPlans = await page.evaluate(async (id) => await (window as typeof window & { studyNarrator: StudyNarratorBridge }).studyNarrator.renderPlans.list(id), projectId);
+    expect(currentPlans).toHaveLength(1);
+    expect(currentPlans[0]!.id).toBe(firstPlans[0]!.id);
+    expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/speech"] ?? 0).toBe(2);
   });
 
   test("auto-resumes an interrupted render and saves a validated artifact through native IPC", async ({ electronStudyNarrator, studyNarrator }) => {
@@ -172,37 +174,30 @@ test.describe("Electron acceptance", () => {
     await expect(page.getByLabel("Optional model override")).toHaveCount(0);
     await expect(page.getByLabel("Voice for speaker teacher")).toHaveValue("af_heart");
     await page.getByRole("tab", { name: "Render" }).click();
-    await page.getByRole("button", { name: "Freeze render plan" }).click();
     studyNarrator.fakeSpeaches.setScenario("timeout");
-    await page.getByRole("button", { name: "Render this frozen plan" }).click();
-    await expect(page.getByText(/Phase: synthesizing/u)).toBeVisible();
+    await page.getByRole("button", { name: "Render" }).click();
+    await expect(page.getByRole("button", { name: "Rendering…" })).toBeVisible();
 
     studyNarrator.fakeSpeaches.setScenario("healthy");
     page = await electronStudyNarrator.relaunch();
     await expect(page.getByRole("heading", { name: "Projects", exact: true })).toBeVisible();
     await openProject(page, "Desktop render recovery");
     await page.getByRole("tab", { name: "Render" }).click();
-    await expect(page.getByText(/Phase: complete/u)).toBeVisible({ timeout: 20_000 });
-    const mp3Row = page.getByRole("list", { name: "Render artifacts" }).getByRole("listitem").filter({ hasText: "mp3" });
-    await expect(mp3Row).toBeVisible();
+    await expect(page.getByRole("button", { name: "Download", exact: true })).toBeVisible({ timeout: 20_000 });
     const destination = resolve(electronStudyNarrator.dataDirectory, "exported-render.mp3");
     await electronStudyNarrator.application.evaluate(({ dialog }: ElectronEvaluationApi, filePath) => {
       dialog.showSaveDialog = () => Promise.resolve({ canceled: false, filePath });
     }, destination);
-    await mp3Row.getByRole("button", { name: "Save As" }).click();
+    await page.getByRole("button", { name: "Download", exact: true }).click();
     await expect.poll(async () => (await stat(destination)).size).toBeGreaterThan(0);
 
-    const segmentRow = page.getByLabel("Ordered segment rows").getByRole("article").filter({ has: page.getByRole("button", { name: /Play segment/u }) }).first();
-    await segmentRow.getByRole("button", { name: /Play segment/u }).click();
-    const segmentPlayer = page.getByLabel(/Audio player for Teacher · segment/u);
-    await expect(segmentPlayer).toBeVisible();
-    await expect.poll(async () => await segmentPlayer.locator("audio").getAttribute("src")).toMatch(/^studynarrator-media:\/\/segment\//u);
-    const segmentDestination = resolve(electronStudyNarrator.dataDirectory, "exported-segment.wav");
+    const detailsDestination = resolve(electronStudyNarrator.dataDirectory, "exported-render-details.zip");
     await electronStudyNarrator.application.evaluate(({ dialog }: ElectronEvaluationApi, filePath) => {
       dialog.showSaveDialog = () => Promise.resolve({ canceled: false, filePath });
-    }, segmentDestination);
-    await segmentRow.getByRole("button", { name: "Save segment" }).click();
-    await expect.poll(async () => (await stat(segmentDestination)).size).toBeGreaterThan(0);
+    }, detailsDestination);
+    await page.getByRole("button", { name: "Download Details" }).click();
+    await expect.poll(async () => await stat(detailsDestination).then(({ size }) => size).catch(() => 0)).toBeGreaterThan(0);
+    expect(Object.keys(unzipSync(await readFile(detailsDestination)))).toHaveLength(7);
   });
 
   test("saves creation, update, and reusable prompt-kit artifacts through native typed IPC without TTS", async ({ electronStudyNarrator, studyNarrator }) => {

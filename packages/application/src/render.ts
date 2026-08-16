@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve, sep } from "node:path";
+import { zipSync } from "fflate";
 import {
   RENDER_CONTRACT_VERSION,
   RenderArtifactIdSchema,
@@ -31,6 +32,7 @@ import {
 import type { StudyNarratorRepository } from "@studynarrator/persistence";
 import type { CachedSpeechSynthesis } from "./cachedSpeech.js";
 import type { ResolvedRenderMedia } from "./renderMedia.js";
+import type { RenderPlanClient } from "@studynarrator/shared-types";
 
 const NONTERMINAL = new Set<RenderJob["state"]>([
   "queued", "validating", "synthesizing", "assembling", "normalizing", "encoding", "writing_artifacts"
@@ -43,12 +45,17 @@ class RenderMediaUnavailableError extends Error {
 export type RenderRepository = Pick<StudyNarratorRepository,
   "getSpeachesConnection" | "createRenderJob" | "getRenderJob" | "listRenderJobs" | "findActiveRenderJob" |
   "listRecoverableRenderJobs" | "updateRenderJob" | "updateRenderSegment" | "replaceRenderArtifacts" |
-  "listRenderArtifacts" | "getRenderArtifactPath" | "listRenderSegments" | "getRenderSegmentPath">;
+  "listRenderArtifacts" | "getRenderArtifactPath" | "listRenderSegments" | "getRenderSegmentPath"> &
+  Partial<Pick<StudyNarratorRepository, "getProject">>;
 
-export interface RenderService extends Omit<RenderClient, "renderAudioSource" | "segmentAudioSource"> {
+export interface RenderService extends Omit<RenderClient, "renderAudioSource" | "segmentAudioSource" | "startProject" | "exportAudio" | "exportDetails"> {
+  startProject?(projectId: string): Promise<RenderJob>;
+  exportAudio?(renderId: string): Promise<{ disposition: "download" | "saved" | "canceled"; fileName: string }>;
+  exportDetails?(renderId: string): Promise<{ disposition: "download" | "saved" | "canceled"; fileName: string }>;
   resolveArtifact(artifactId: string): Promise<{ artifact: RenderArtifact; path: string }>;
   resolveRenderAudio(renderId: string): Promise<ResolvedRenderMedia>;
   resolveSegmentAudio(renderId: string, ordinal: number): Promise<ResolvedRenderMedia>;
+  resolveDetailsArchive?(renderId: string): Promise<{ bytes: Uint8Array; fileName: string; mimeType: "application/zip" }>;
   close(): Promise<void>;
 }
 
@@ -87,8 +94,8 @@ function safeRenderError(error: unknown, phase: RenderJob["state"], entry: Rende
         : phase === "assembling" ? "RENDER_ASSEMBLY_FAILED"
           : phase === "encoding" ? "RENDER_ENCODING_FAILED" : "RENDER_ARTIFACT_FAILED",
     message: aborted ? "The render operation stopped before completion."
-      : legacyConnectionUnavailable ? "This frozen plan uses a legacy connection that is no longer available. Freeze the project again."
-      : phase === "validating" ? "The frozen render plan no longer matches its configured speech endpoint."
+      : legacyConnectionUnavailable ? "This render uses a legacy connection that is no longer available. Start a new render."
+      : phase === "validating" ? "The saved render input no longer matches its configured speech endpoint."
         : phase === "synthesizing" ? "Speech generation failed for the current segment."
           : phase === "assembling" ? "The generated audio segments could not be assembled."
             : phase === "encoding" ? "The final MP3 could not be encoded or validated."
@@ -120,6 +127,7 @@ export async function createRenderService(options: {
   ffprobePath?: string;
   now?: () => Date;
   createId?: () => string;
+  renderPlans?: Pick<RenderPlanClient, "create">;
 }): Promise<RenderService> {
   const now = options.now ?? (() => new Date());
   const createId = options.createId ?? randomUUID;
@@ -174,7 +182,13 @@ export async function createRenderService(options: {
       await mkdir(join(stage, "segments"), { mode: 0o700 });
       await mkdir(join(stage, "work"), { mode: 0o700 });
       job = update(job, "validating");
-      const { plan, snapshot, silenceAssets } = await options.plans.load(job.planId);
+      let jobBundle: Awaited<ReturnType<RenderPlanStore["loadJob"]>>;
+      try { jobBundle = await options.plans.loadJob(job.id); }
+      catch {
+        await options.plans.snapshotJob(job.id, job.planId);
+        jobBundle = await options.plans.loadJob(job.id);
+      }
+      const { plan, snapshot, silenceAssets } = jobBundle;
       const connection = options.repository.getSpeachesConnection();
       if (!connection.baseUrl || sha256(connection.baseUrl) !== snapshot.connection.serverIdentityHash) throw new Error("Frozen endpoint identity changed.");
 
@@ -493,6 +507,35 @@ export async function createRenderService(options: {
     return { path, fileName: stored.audioFileName, mimeType: "audio/wav", sizeBytes: stored.audioSizeBytes };
   }
 
+  async function resolveArtifactFile(artifactId: string) {
+    const resolved = options.repository.getRenderArtifactPath(RenderArtifactIdSchema.parse(artifactId));
+    const path = resolve(resolved.path);
+    const expectedDirectory = join(root, resolved.artifact.renderId);
+    const details = await lstat(path);
+    if (dirname(path) !== expectedDirectory || basename(path) !== resolved.artifact.fileName || !details.isFile() || details.isSymbolicLink()) {
+      throw new Error("The render artifact path failed validation.");
+    }
+    const metadata = await fileMetadataAt(path);
+    if (metadata.checksum !== resolved.artifact.checksum || metadata.sizeBytes !== resolved.artifact.sizeBytes) throw new Error("The render artifact failed integrity validation.");
+    return { artifact: resolved.artifact, path };
+  }
+
+  async function resolveDetailsArchive(renderIdInput: string) {
+    const renderId = RenderIdSchema.parse(renderIdInput);
+    const artifacts = options.repository.listRenderArtifacts(renderId);
+    const expected = ["mp3", "originalScript", "readableTranscript", "ttsTranscript", "projectSnapshot", "manifest", "checksums"] as const;
+    if (expected.some((type) => !artifacts.some((artifact) => artifact.type === type))) throw new Error("The render details package is incomplete.");
+    const entries: Record<string, Uint8Array> = {};
+    for (const artifact of artifacts) {
+      if (!expected.includes(artifact.type)) continue;
+      const resolved = await resolveArtifactFile(artifact.id);
+      entries[artifact.fileName] = new Uint8Array(await readFile(resolved.path));
+    }
+    const job = options.repository.getRenderJob(renderId);
+    const projectName = options.repository.getProject?.(job.projectId).name ?? "study-narration";
+    return { bytes: zipSync(entries, { level: 6 }), fileName: `${slug(projectName)}-render-details.zip`, mimeType: "application/zip" as const };
+  }
+
   async function drain(): Promise<void> {
     while (!closing && queue.length > 0) {
       const renderId = queue.shift()!;
@@ -511,8 +554,12 @@ export async function createRenderService(options: {
   }
 
   const createJob = async (planIdInput: string, retryOfRenderId: string | null): Promise<RenderJob> => {
-    const plan = await options.plans.get(RenderPlanIdSchema.parse(planIdInput));
+    const plan = retryOfRenderId === null
+      ? await options.plans.get(RenderPlanIdSchema.parse(planIdInput))
+      : (await options.plans.loadJob(retryOfRenderId)).plan;
     const id = RenderIdSchema.parse(createId());
+    if (retryOfRenderId === null) await options.plans.snapshotJob(id, plan.id);
+    else await options.plans.cloneJobSnapshot(id, retryOfRenderId);
     const job = RenderJobSchema.parse({
       contractVersion: RENDER_CONTRACT_VERSION, id, projectId: plan.projectId, planId: plan.id,
       retryOfRenderId, state: "queued", progress: initialProgress(plan), error: null,
@@ -523,16 +570,23 @@ export async function createRenderService(options: {
     return job;
   };
 
+  const startPlan = async (planId: string) => {
+    const normalized = RenderPlanIdSchema.parse(planId);
+    const active = options.repository.findActiveRenderJob(normalized);
+    if (active) return active;
+    const starting = startingPlans.get(normalized);
+    if (starting) return await starting;
+    const promise = createJob(normalized, null).finally(() => startingPlans.delete(normalized));
+    startingPlans.set(normalized, promise);
+    return await promise;
+  };
+
   return {
-    async start(planId) {
-      const normalized = RenderPlanIdSchema.parse(planId);
-      const active = options.repository.findActiveRenderJob(normalized);
-      if (active) return active;
-      const starting = startingPlans.get(normalized);
-      if (starting) return await starting;
-      const promise = createJob(normalized, null).finally(() => startingPlans.delete(normalized));
-      startingPlans.set(normalized, promise);
-      return await promise;
+    start: startPlan,
+    async startProject(projectId) {
+      if (!options.renderPlans) throw new Error("Project rendering is unavailable.");
+      const plan = await options.renderPlans.create(projectId);
+      return await startPlan(plan.id);
     },
     async list(projectId) { return await Promise.resolve(options.repository.listRenderJobs(projectId)); },
     async get(renderId) { return await Promise.resolve(options.repository.getRenderJob(RenderIdSchema.parse(renderId))); },
@@ -560,17 +614,16 @@ export async function createRenderService(options: {
       const { artifact } = options.repository.getRenderArtifactPath(RenderArtifactIdSchema.parse(artifactId));
       return await Promise.resolve({ disposition: "download" as const, fileName: artifact.fileName });
     },
+    async exportAudio(renderId) {
+      const media = await resolveRenderAudio(renderId);
+      return { disposition: "download" as const, fileName: media.fileName };
+    },
+    async exportDetails(renderId) {
+      const archive = await resolveDetailsArchive(renderId);
+      return { disposition: "download" as const, fileName: archive.fileName };
+    },
     async resolveArtifact(artifactId) {
-      const resolved = options.repository.getRenderArtifactPath(RenderArtifactIdSchema.parse(artifactId));
-      const path = resolve(resolved.path);
-      const expectedDirectory = join(root, resolved.artifact.renderId);
-      const details = await lstat(path);
-      if (dirname(path) !== expectedDirectory || basename(path) !== resolved.artifact.fileName || !details.isFile() || details.isSymbolicLink()) {
-        throw new Error("The render artifact path failed validation.");
-      }
-      const metadata = await fileMetadataAt(path);
-      if (metadata.checksum !== resolved.artifact.checksum || metadata.sizeBytes !== resolved.artifact.sizeBytes) throw new Error("The render artifact failed integrity validation.");
-      return { artifact: resolved.artifact, path };
+      return await resolveArtifactFile(artifactId);
     },
     async listSegments(renderId) { return await buildHistorySegments(renderId); },
     async getWaveform(renderId) { return await waveformFor(renderId); },
@@ -580,6 +633,7 @@ export async function createRenderService(options: {
     },
     resolveRenderAudio,
     resolveSegmentAudio,
+    resolveDetailsArchive,
     async close() {
       closing = true;
       for (const controller of controllers.values()) controller.abort(new DOMException("StudyNarrator is shutting down.", "AbortError"));
