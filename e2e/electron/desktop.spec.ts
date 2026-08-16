@@ -23,7 +23,7 @@ async function createProject(page: Page, name: string): Promise<void> {
 }
 
 async function openProject(page: Page, name: string): Promise<void> {
-  await page.getByRole("row", { name: new RegExp(name, "u") }).getByRole("link", { name: "Open" }).click();
+  await page.getByRole("row", { name: new RegExp(name, "u") }).getByRole("link", { name }).click();
   await expect(page.getByRole("tab", { name: "Script Editor" })).toHaveAttribute("aria-selected", "true");
 }
 

@@ -92,13 +92,36 @@ test.describe("shell, onboarding, and runtime routes", () => {
     const response = await request.post(`${studyNarrator.baseUrl}/api/projects`, { data: { name: "Ledger workspace", description: "A project-index acceptance fixture." } });
     expect(response.status()).toBe(201);
     const created = await response.json() as { id: string };
+    const longScript = Array.from({ length: 60 }, (_value, index) => `[speaker_teacher] Ledger line ${String(index + 1)}.`).join("\n");
+    const update = await request.put(`${studyNarrator.baseUrl}/api/projects/${created.id}`, { data: {
+      name: "Ledger workspace",
+      description: "A project-index acceptance fixture.",
+      scriptSource: longScript,
+      speakerMappings: [],
+      lexiconEntries: []
+    } });
+    expect(update.status()).toBe(200);
     await page.reload();
 
     const table = page.getByRole("table");
-    await expect(table.getByRole("columnheader")).toHaveText(["Name", "Description", "Created", "Last updated", "Open"]);
+    await expect(table.getByRole("columnheader")).toHaveText(["Name", "Description", "Script Lines", "Audio Length"]);
     const row = table.getByRole("row", { name: /Ledger workspace/u });
-    await row.getByRole("link", { name: "Open" }).click();
+    await expect(row.getByRole("cell")).toHaveText(["A project-index acceptance fixture.", "60", "-"]);
+    const descriptionCell = await row.getByRole("cell", { name: "A project-index acceptance fixture." }).boundingBox();
+    expect(descriptionCell).not.toBeNull();
+    await page.mouse.click(descriptionCell!.x + (descriptionCell!.width / 2), descriptionCell!.y + (descriptionCell!.height / 2));
     await expect(page.getByRole("tab", { name: "Script Editor" })).toHaveAttribute("aria-selected", "true");
+    const descriptionBox = await page.getByLabel("Description").boundingBox();
+    const saveBox = await page.getByRole("button", { name: "Save now" }).boundingBox();
+    expect(descriptionBox).not.toBeNull();
+    expect(saveBox).not.toBeNull();
+    expect(Math.abs((descriptionBox!.y + descriptionBox!.height) - (saveBox!.y + saveBox!.height))).toBeLessThanOrEqual(1);
+    const tabList = page.getByRole("tablist", { name: "Project workspace" });
+    expect(await tabList.evaluate((element) => element.getBoundingClientRect().top)).toBeGreaterThan(0);
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await expect.poll(() => tabList.evaluate((element) => Math.round(element.getBoundingClientRect().top))).toBe(0);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await expect.poll(() => tabList.evaluate((element) => element.getBoundingClientRect().top)).toBeGreaterThan(0);
     await page.getByRole("tab", { name: "Script Editor" }).press("ArrowRight");
     await expect(page.getByRole("tab", { name: "Settings" })).toHaveAttribute("aria-selected", "true");
     await expect(page).toHaveURL(new RegExp(`/projects/${created.id}\\?tab=settings$`, "u"));
@@ -116,9 +139,15 @@ test.describe("shell, onboarding, and runtime routes", () => {
     expect(await scrollRegion.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
 
-    await page.getByRole("row", { name: /Ledger workspace/u }).getByRole("link", { name: "Open" }).click();
-    const tabList = page.getByRole("tablist", { name: "Project workspace" });
+    const projectLink = page.getByRole("row", { name: /Ledger workspace/u }).getByRole("link", { name: "Ledger workspace" });
+    await projectLink.focus();
+    await expect(projectLink).toBeFocused();
+    await projectLink.press("Enter");
     expect(await tabList.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await expect.poll(() => tabList.evaluate((element) => Math.round(element.getBoundingClientRect().top))).toBe(58);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await expect.poll(() => tabList.evaluate((element) => element.getBoundingClientRect().top)).toBeGreaterThan(58);
     await page.getByRole("tab", { name: "Details" }).click();
     await expect(page.getByRole("heading", { name: "Narration score" })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);

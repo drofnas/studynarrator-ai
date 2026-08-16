@@ -40,7 +40,7 @@ describe("ScriptSourceEditor", () => {
     expect(screen.getByRole("textbox", { name: "Script source" })).toHaveFocus();
 
     ref.current?.setSelection(6, 12, { scrollIntoView: true });
-    expect(ref.current?.getSelection()).toEqual({ from: 6, to: 12 });
+    expect(editorView().state.selection.main).toMatchObject({ from: 6, to: 12 });
   });
 
   it("hands vertical wheel deltas to the page", () => {

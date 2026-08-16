@@ -2,6 +2,11 @@ import { readFile } from "node:fs/promises";
 import { strFromU8, unzipSync } from "fflate";
 import { configureConnection, expect, openRoute, test } from "../support/studyNarratorTest.js";
 
+function formatAudioDuration(durationMs: number): string {
+  const totalSeconds = Math.floor(durationMs / 1_000);
+  return `${String(Math.floor(totalSeconds / 60))}:${String(totalSeconds % 60).padStart(2, "0")}`;
+}
+
 test.describe("render execution", () => {
   test("renders, reuses unchanged edits, downloads MP3 and the exact evidence package, and restores the latest render", async ({ page, request, studyNarrator }) => {
     await configureConnection(page, studyNarrator);
@@ -24,8 +29,10 @@ test.describe("render execution", () => {
 
     await page.getByRole("tab", { name: "Script Editor" }).click();
     await page.getByLabel("Script source").fill("[speaker_teacher] Render an edited sentence.\n\n[speaker_teacher] Keep this sentence.");
+    const saveResponse = page.waitForResponse((response) => response.url().endsWith(`/api/projects/${created.id}`) && response.request().method() === "PUT" && response.ok());
     await page.getByRole("button", { name: "Save now" }).click();
-    await expect(page.locator('span[data-state="saved"]')).toHaveAttribute("data-state", "saved");
+    await saveResponse;
+    await expect(page.getByText(/Unsaved changes|Saving…|Save failed|Invalid changes/u)).toHaveCount(0);
     await page.getByRole("tab", { name: "Render" }).click();
     await page.getByRole("button", { name: "Render" }).click();
     await expect(page.getByLabel(/Audio player for Completed project render/u)).toBeVisible({ timeout: 20_000 });
@@ -51,6 +58,14 @@ test.describe("render execution", () => {
     await page.reload();
     await expect(page.getByLabel(/Audio player for Completed project render/u)).toBeVisible();
     await expect(page.getByText(renders[1]!.id)).toHaveCount(0);
+    const summaries = await (await request.get(`${studyNarrator.baseUrl}/api/projects`)).json() as Array<{ id: string; scriptLineCount: number | null; audioDurationMs: number | null }>;
+    const summary = summaries.find(({ id }) => id === created.id);
+    expect(summary).toMatchObject({ scriptLineCount: 3 });
+    expect(summary?.audioDurationMs).not.toBeNull();
+    await page.getByRole("link", { name: "← Back to Projects" }).click();
+    const row = page.getByRole("row", { name: /Render acceptance/u });
+    await expect(row).toContainText("3");
+    await expect(row).toContainText(formatAudioDuration(summary!.audioDurationMs!));
   });
 
   test("shows a concise failure and retries from the same project action", async ({ page, request, studyNarrator }) => {

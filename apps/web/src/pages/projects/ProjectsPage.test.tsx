@@ -8,7 +8,7 @@ import { Link, MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseScript, resolveParagraphPauses, transformScript } from "@studynarrator/core";
 import { DEFAULT_SYSTEM_TIMING } from "@studynarrator/shared-types";
-import type { IgnoredDiagnosticCollection, PersistenceClient, ProjectDetail, ProjectPreviewResult, ProjectReplaceInput, ProjectPreviewClient, RenderClient, RenderPlan, RenderPlanClient, RenderPlanSummary, SpeachesConnection, SpeechCatalog, VoiceCatalog } from "@studynarrator/shared-types";
+import type { IgnoredDiagnosticCollection, PersistenceClient, ProjectDetail, ProjectPreviewResult, ProjectReplaceInput, ProjectPreviewClient, ProjectSummary, RenderClient, RenderPlan, RenderPlanClient, RenderPlanSummary, SpeachesConnection, SpeechCatalog, VoiceCatalog } from "@studynarrator/shared-types";
 import type { ScriptAnalyzer } from "@/workers/parser/parserClient.js";
 import type { ScriptAnalysisInput } from "@/workers/parser/parserWorkerProtocol.js";
 import { GLOBAL_VOICE_CATALOG_MODEL_ID } from "@/features/projects/projectAuthoring.js";
@@ -89,7 +89,7 @@ function summaryOf(plan: RenderPlan): RenderPlanSummary {
   };
 }
 
-function fixture(sourceProject = project) {
+function fixture(sourceProject = project, summaryOverrides: Partial<Pick<ProjectSummary, "scriptLineCount" | "audioDurationMs">> = {}) {
   let stored = structuredClone(sourceProject);
   let ignoredDiagnostics: Array<{ code: string; pattern: string }> = [];
   const replace = vi.fn(async (_id: string, input: ProjectReplaceInput) => {
@@ -116,6 +116,7 @@ function fixture(sourceProject = project) {
         scriptHash: stored.scriptHash,
         scriptLineCount: stored.scriptSource === "" ? null : stored.scriptSource.split("\n").length,
         audioDurationMs: null,
+        ...summaryOverrides,
         createdAt: stored.createdAt,
         updatedAt: stored.updatedAt
       }]),
@@ -205,12 +206,14 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("Projects workbench", () => {
   it("renders the project index ledger and creates from an expandable form", async () => {
-    const { client, analyze, create } = fixture();
+    const { client, analyze, create } = fixture({ ...project, description: "" }, { audioDurationMs: 752_000 });
     renderPage(client, analyze, { path: "/projects" });
 
     const table = await screen.findByRole("table");
-    expect(within(table).getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual(["Name", "Description", "Created", "Last updated", "Open"]);
-    expect(within(table).getByRole("rowheader", { name: "Authoring study" })).toBeInTheDocument();
+    expect(within(table).getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual(["Name", "Description", "Script Lines", "Audio Length"]);
+    const row = within(table).getByRole("row", { name: /Authoring study/u });
+    expect(within(row).getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["-", "3", "12:32"]);
+    expect(within(row).getByRole("link", { name: "Authoring study" })).toHaveAttribute("href", `/projects/${project.id}`);
     expect(screen.queryByText("Your projects")).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "New project" }));
@@ -409,6 +412,10 @@ describe("Projects workbench", () => {
     renderPage(client, analyze);
 
     expect(await screen.findByRole("heading", { name: "Script editor" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Upload .txt")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Find text")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Replacement text")).not.toBeInTheDocument();
+    expect(screen.queryByText(/drop a UTF-8/u)).not.toBeInTheDocument();
     await waitFor(() => expect(analyze).toHaveBeenCalled());
     expect(screen.getByRole("region", { name: "Script editor content" })).toHaveAttribute("tabindex", "0");
     await openProjectTab("Details");
@@ -432,7 +439,7 @@ describe("Projects workbench", () => {
 
     const projectName = screen.getByLabelText("Project name");
     fireEvent.change(projectName, { target: { value: "Autosaved study" } });
-    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    expect(screen.queryByText(/Unsaved changes|Saving…|Save failed|Invalid changes/u)).not.toBeInTheDocument();
     await waitFor(() => expect(replace).toHaveBeenCalled(), { timeout: 2_000 });
     expect(replace.mock.calls.at(-1)?.[1]).toMatchObject({ name: "Autosaved study" });
     await waitFor(() => expect(screen.queryByText(/^Saved$/u)).not.toBeInTheDocument());
@@ -640,8 +647,8 @@ describe("Projects workbench", () => {
     fireEvent.change(description, { target: { value: "Cannot save yet" } });
     fireEvent.click(screen.getByRole("button", { name: "Save now" }));
 
-    expect(await screen.findByText("Save failed")).toBeInTheDocument();
-    expect(screen.getByRole("alert")).toHaveTextContent("disk unavailable");
+    expect(await screen.findByRole("alert")).toHaveTextContent("disk unavailable");
+    expect(screen.queryByText("Save failed")).not.toBeInTheDocument();
     const beforeUnload = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(beforeUnload);
     expect(beforeUnload.defaultPrevented).toBe(true);
@@ -650,13 +657,4 @@ describe("Projects workbench", () => {
     expect(screen.queryByText("Settings destination")).not.toBeInTheDocument();
   });
 
-  it("imports strict UTF-8 text without changing Unicode or CRLF", async () => {
-    const { client, analyze } = fixture();
-    renderPage(client, analyze);
-    const upload = await screen.findByLabelText("Upload .txt");
-    const source = "[speaker_teacher] Résumé 🧠\r\n[pause_short]\r\nContinue.";
-    fireEvent.change(upload, { target: { files: [new File([source], "fixture.txt", { type: "text/plain" })] } });
-    await waitFor(() => expect(analyze.mock.calls.some(([input]) => input.source === source)).toBe(true));
-    expect(scriptEditorView().state.doc.toString()).toBe(source.replaceAll("\r\n", "\n"));
-  });
 });

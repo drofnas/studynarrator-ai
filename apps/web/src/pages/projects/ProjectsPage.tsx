@@ -34,8 +34,6 @@ import {
   GLOBAL_VOICE_CATALOG_MODEL_ID,
   materializeLexicon,
   paragraphPauseForAnalysis,
-  readUtf8TextFile,
-  replaceLiteral,
   resolveProjectSpeakerVoiceId,
   supportedProjectVoices,
   stripSingleSurroundingCodeFence,
@@ -73,6 +71,11 @@ function sameDraft(left: ProjectDraft, right: ProjectDraft): boolean {
 }
 function message(error: unknown): string { return error instanceof Error ? error.message : "The operation failed."; }
 function diagnosticKey(item: IgnoredDiagnostic): string { return `${item.code}\u0000${item.pattern}`; }
+function formatAudioDuration(durationMs: number | null): string {
+  if (durationMs === null) return "-";
+  const totalSeconds = Math.floor(durationMs / 1_000);
+  return `${String(Math.floor(totalSeconds / 60))}:${String(totalSeconds % 60).padStart(2, "0")}`;
+}
 
 export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient, renderClient }: {
   client: PersistenceClient;
@@ -105,9 +108,6 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [newProjectOpen, setNewProjectOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const [replacement, setReplacement] = useState("");
-  const [caseSensitive, setCaseSensitive] = useState(true);
   const [cleanupUndo, setCleanupUndo] = useState<string>();
   const [voiceCatalog, setVoiceCatalog] = useState<VoiceCatalog | null>(null);
   const [voiceCatalogState, setVoiceCatalogState] = useState<VoiceCatalogState>("idle");
@@ -482,37 +482,6 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
     }, 0);
   }, [activeTab, draft]);
 
-  const findNext = () => {
-    const editor = editorRef.current;
-    if (!editor || !draft || !search) return;
-    const haystack = caseSensitive ? draft.scriptSource : draft.scriptSource.toLocaleLowerCase();
-    const needle = caseSensitive ? search : search.toLocaleLowerCase();
-    let index = haystack.indexOf(needle, editor.getSelection().to);
-    if (index < 0) index = haystack.indexOf(needle);
-    if (index >= 0) { editor.focus(); editor.setSelection(index, index + search.length, { scrollIntoView: true }); }
-  };
-
-  const replaceNext = () => {
-    const editor = editorRef.current;
-    if (!editor || !draft || !search) return;
-    const selection = editor.getSelection();
-    const selected = draft.scriptSource.slice(selection.from, selection.to);
-    const matches = caseSensitive ? selected === search : selected.toLocaleLowerCase() === search.toLocaleLowerCase();
-    if (!matches) { findNext(); return; }
-    const start = selection.from;
-    updateDraft((current) => ({ ...current, scriptSource: `${current.scriptSource.slice(0, start)}${replacement}${current.scriptSource.slice(selection.to)}` }));
-    window.setTimeout(() => { editor.focus(); editor.setSelection(start, start + replacement.length, { scrollIntoView: true }); }, 0);
-  };
-
-  const importFile = async (file: File | undefined) => {
-    if (!file) return;
-    try {
-      const source = await readUtf8TextFile(file);
-      updateDraft((current) => ({ ...current, scriptSource: source }));
-    }
-    catch (error) { setErrors([message(error)]); }
-  };
-
   const changeProjectLexicon = (value: LexiconEditorValue[]) => {
     updateDraft((current) => ({
       ...current,
@@ -617,8 +586,8 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
         <div className={styles.sectionHeading}><div><span>Authoring ledger</span><h3 id="project-index-heading">All projects</h3></div><b>{projects.length}</b></div>
         <div className={styles.projectTableScroll} tabIndex={0}>
           <table className={styles.projectTable}>
-            <thead><tr><th scope="col">Name</th><th scope="col">Description</th><th scope="col">Created</th><th scope="col">Last updated</th><th scope="col"><span className={styles.visuallyHidden}>Open</span></th></tr></thead>
-            <tbody>{busy ? <tr><td colSpan={5}>Loading projects…</td></tr> : projects.length === 0 ? <tr><td colSpan={5}>No projects yet. Create the first study guide.</td></tr> : projects.map((item) => <tr key={item.id}><th scope="row">{item.name}</th><td>{item.description || "No description"}</td><td><time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString()}</time></td><td><time dateTime={item.updatedAt}>{new Date(item.updatedAt).toLocaleString()}</time></td><td><Link to={`/projects/${item.id}`}>Open</Link></td></tr>)}</tbody>
+            <thead><tr><th scope="col">Name</th><th scope="col">Description</th><th scope="col">Script Lines</th><th scope="col">Audio Length</th></tr></thead>
+            <tbody>{busy ? <tr><td colSpan={4}>Loading projects…</td></tr> : projects.length === 0 ? <tr><td colSpan={4}>No projects yet. Create the first study guide.</td></tr> : projects.map((item) => <tr className={styles.projectRow} key={item.id}><th scope="row"><Link className={styles.projectLink} to={`/projects/${item.id}`}>{item.name}</Link></th><td>{item.description || "-"}</td><td>{item.scriptLineCount?.toLocaleString() ?? "-"}</td><td>{formatAudioDuration(item.audioDurationMs)}</td></tr>)}</tbody>
           </table>
         </div>
       </section>
@@ -638,7 +607,7 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
         {activeTab !== "render" ? <section className={styles.projectIdentity} aria-label="Project details">
           <label>Project name<input value={draft.name} onChange={(event) => updateDraft((current) => ({ ...current, name: event.target.value }))} /></label>
           <label>Description<input value={draft.description} onChange={(event) => updateDraft((current) => ({ ...current, description: event.target.value }))} /></label>
-          <div className={styles.projectActions}><div className={styles.actionRow}><button type="button" onClick={() => void saveNow()} disabled={saveState === "saving"}>Save now</button><button type="button" className={styles.secondary} onClick={() => void duplicateProject()}>Duplicate</button><button type="button" className={styles.danger} onClick={() => void deleteProject()}>Delete</button></div><span className={styles.saveState} data-state={saveState} aria-live="polite">{saveState === "saved" ? "" : saveState === "saving" ? "Saving…" : saveState === "invalid" ? "Invalid changes" : saveState === "failed" ? "Save failed" : "Unsaved changes"}</span></div>
+          <div className={styles.projectActions}><div className={styles.actionRow}><button type="button" onClick={() => void saveNow()} disabled={saveState === "saving"}>Save now</button><button type="button" className={styles.secondary} onClick={() => void duplicateProject()}>Duplicate</button><button type="button" className={styles.danger} onClick={() => void deleteProject()}>Delete</button></div></div>
         </section> : null}
         <div className={styles.tabList} role="tablist" aria-label="Project workspace">
           {projectTabs.map(({ id, label }) => <button ref={(element) => { tabRefs.current[id] = element; }} type="button" role="tab" id={`project-tab-${id}`} aria-controls={`project-panel-${id}`} aria-selected={activeTab === id} tabIndex={activeTab === id ? 0 : -1} key={id} onClick={() => selectTab(id)} onKeyDown={(event) => moveTabFocus(event, id)}>{label}</button>)}
@@ -649,12 +618,11 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
       <div className={styles.workspace}>
         {!draft || !project ? <section className={styles.empty}><h3>{busy ? "Loading project" : "Project unavailable"}</h3><p>{busy ? "Opening the saved project workspace…" : "Return to the project index and choose another project."}</p></section> : <>
           {activeTab === "script" ? <main className={styles.editorColumn}>
-            {activeTab === "script" ? <section className={styles.scriptPanel} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void importFile(event.dataTransfer.files[0]); }}>
-              <div className={styles.sectionHeading}><div><span>Source</span><h3>Script editor</h3></div><label className={styles.fileButton}>Upload .txt<input type="file" accept=".txt,text/plain" onChange={(event) => void importFile(event.target.files?.[0])} /></label></div>
+            {activeTab === "script" ? <section className={styles.scriptPanel}>
+              <div className={styles.sectionHeading}><div><span>Source</span><h3>Script editor</h3></div></div>
               <div className={styles.panelScrollBody} role="region" aria-label="Script editor content" tabIndex={0}>
-                <div className={styles.searchBar}><input aria-label="Find text" placeholder="Find literal text" value={search} onChange={(event) => setSearch(event.target.value)} /><input aria-label="Replacement text" placeholder="Replace with" value={replacement} onChange={(event) => setReplacement(event.target.value)} /><label><input type="checkbox" checked={caseSensitive} onChange={(event) => setCaseSensitive(event.target.checked)} />Case sensitive</label><button type="button" onClick={findNext}>Find next</button><button type="button" onClick={replaceNext}>Replace next</button><button type="button" onClick={() => updateDraft((current) => ({ ...current, scriptSource: replaceLiteral(current.scriptSource, search, replacement, caseSensitive) }))}>Replace all</button></div>
                 <ScriptSourceEditor ref={editorRef} value={draft.scriptSource} onChange={(scriptSource) => updateDraft((current) => ({ ...current, scriptSource }))} />
-                <div className={styles.sourceActions}><span>{draft.scriptSource.length.toLocaleString()} characters · drop a UTF-8 .txt file anywhere in this panel</span>{cleanedFencedSource !== undefined ? <button type="button" className={styles.secondary} onClick={() => { setCleanupUndo(draft.scriptSource); updateDraft((current) => ({ ...current, scriptSource: cleanedFencedSource })); }}>Remove surrounding code fence</button> : null}{cleanupUndo !== undefined ? <button type="button" className={styles.secondary} onClick={() => { updateDraft((current) => ({ ...current, scriptSource: cleanupUndo })); setCleanupUndo(undefined); }}>Restore fenced source</button> : null}</div>
+                <div className={styles.sourceActions}><span>{draft.scriptSource.length.toLocaleString()} characters</span>{cleanedFencedSource !== undefined ? <button type="button" className={styles.secondary} onClick={() => { setCleanupUndo(draft.scriptSource); updateDraft((current) => ({ ...current, scriptSource: cleanedFencedSource })); }}>Remove surrounding code fence</button> : null}{cleanupUndo !== undefined ? <button type="button" className={styles.secondary} onClick={() => { updateDraft((current) => ({ ...current, scriptSource: cleanupUndo })); setCleanupUndo(undefined); }}>Restore fenced source</button> : null}</div>
               </div>
             </section> : null}
           </main> : null}

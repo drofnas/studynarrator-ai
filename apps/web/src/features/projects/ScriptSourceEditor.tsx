@@ -4,14 +4,8 @@ import { minimalSetup } from "codemirror";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import styles from "./ScriptSourceEditor.module.css";
 
-interface ScriptSourceSelection {
-  from: number;
-  to: number;
-}
-
 export interface ScriptSourceEditorHandle {
   focus(): void;
-  getSelection(): ScriptSourceSelection;
   setSelection(from: number, to?: number, options?: { scrollIntoView?: boolean }): void;
 }
 
@@ -83,10 +77,6 @@ export const ScriptSourceEditor = forwardRef<ScriptSourceEditorHandle, {
   useImperativeHandle(ref, () => ({
     focus() {
       viewRef.current?.focus();
-    },
-    getSelection() {
-      const selection = viewRef.current?.state.selection.main;
-      return selection ? { from: selection.from, to: selection.to } : { from: 0, to: 0 };
     },
     setSelection(from, to = from, options = {}) {
       const view = viewRef.current;

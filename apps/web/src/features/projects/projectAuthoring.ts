@@ -1,7 +1,6 @@
 import type { LexiconEntry, LexiconEntryAuthoring } from "@studynarrator/core";
 import type { ProjectDetail, ProjectReplaceInput, SpeechCatalogVoice, SystemTimingConfiguration, VoiceCatalogEntry } from "@studynarrator/shared-types";
 
-export const MAX_SCRIPT_CHARACTERS = 5_000_000;
 export const GLOBAL_VOICE_CATALOG_MODEL_ID = "speaches-ai/Kokoro-82M-v1.0-ONNX";
 export const GLOBAL_VOICE_CATALOG_DEFAULT_VOICE_ID = "af_heart";
 
@@ -97,29 +96,9 @@ export function paragraphPauseForAnalysis(
   return { enabled: false, pauseId: "pause_medium" as const, durationMs: 0 };
 }
 
-export async function readUtf8TextFile(file: File): Promise<string> {
-  if (!file.name.toLowerCase().endsWith(".txt")) throw new Error("Choose a .txt file.");
-  const bytes = await file.arrayBuffer();
-  let source: string;
-  try {
-    source = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  } catch {
-    throw new Error("The file is not valid UTF-8 text.");
-  }
-  if (source.length > MAX_SCRIPT_CHARACTERS) throw new Error("The script exceeds the five-million-character limit.");
-  return source;
-}
-
 export function stripSingleSurroundingCodeFence(source: string): string | undefined {
   const match = /^```[^\r\n]*\r?\n([\s\S]*?)\r?\n```\s*$/u.exec(source);
   return match?.[1];
-}
-
-export function replaceLiteral(source: string, search: string, replacement: string, caseSensitive: boolean): string {
-  if (!search) return source;
-  if (caseSensitive) return source.split(search).join(replacement);
-  const escaped = search.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-  return source.replace(new RegExp(escaped, "giu"), replacement);
 }
 
 export function materializeLexicon(entries: readonly (LexiconEntryAuthoring | ProjectReplaceInput["lexiconEntries"][number])[], scopePrefix: string): LexiconEntry[] {
