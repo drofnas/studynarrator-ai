@@ -70,8 +70,10 @@ test.describe("project preview cache", () => {
 
     await openRoute(page, studyNarrator, "/scratchpad");
     await page.getByLabel("Passage").fill("Cache this exact sentence.");
-    await page.getByRole("button", { name: "Synthesize passage" }).click();
-    await expect(page.getByLabel(/Audio player for/u)).toBeVisible();
+    const scratchpadPreview = page.waitForResponse((response) => response.request().method() === "POST" && response.url().endsWith("/api/scratchpad/preview"));
+    await page.getByRole("button", { name: "Render and Play" }).click();
+    expect((await scratchpadPreview).ok()).toBe(true);
+    await expect(page.locator("audio")).toHaveCount(0);
     expect(speechRequests()).toHaveLength(2);
 
     await openRoute(page, studyNarrator, `/projects/${created.id}?tab=settings`);

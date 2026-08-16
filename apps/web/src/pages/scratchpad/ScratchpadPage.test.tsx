@@ -1,12 +1,11 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PersistenceClient, ScratchpadPreviewResult, VoiceCatalog } from "@studynarrator/shared-types";
 import { ConnectionProvider } from "@/features/connections/ConnectionProvider.js";
-import { ScratchpadSessionProvider } from "@/features/scratchpad/ScratchpadSessionProvider.js";
 import { ScratchpadPage } from "./ScratchpadPage.js";
 
 const timestamp = "2026-08-12T12:00:00.000Z";
@@ -44,19 +43,31 @@ function previewResult(text: string): ScratchpadPreviewResult {
 }
 
 function renderPage(preview = vi.fn(async (input: { text: string }) => previewResult(input.text))) {
-  return render(<MemoryRouter><ConnectionProvider connectionClient={connections as never} voiceCatalog={voiceCatalog as never}><ScratchpadSessionProvider><ScratchpadPage client={{ preview }} persistence={persistence} /></ScratchpadSessionProvider></ConnectionProvider></MemoryRouter>);
+  return render(<MemoryRouter><ConnectionProvider connectionClient={connections as never} voiceCatalog={voiceCatalog as never}><ScratchpadPage client={{ preview }} persistence={persistence} /></ConnectionProvider></MemoryRouter>);
 }
 
+const sources: Array<{ buffer: AudioBuffer | null; connect: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn>; start: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn>; onended: (() => void) | null }> = [];
+
 beforeEach(() => {
+  sources.length = 0;
   window.sessionStorage.clear();
   connections.discoverSpeechCatalog.mockResolvedValue({ schemaVersion: 1 as const, models: [{ modelId: "model", voices: [{ voiceId: "voice", name: "Teacher", language: null, gender: null }] }] });
   voiceCatalog.get.mockResolvedValue({ schemaVersion: 1 as const, modelId: "model", entries: [{ voiceId: "voice", label: "Teacher — voice", enabled: true, favorite: false, language: null, locale: null, accent: null, category: null, style: null, sampleText: null }] });
   vi.stubGlobal("atob", (value: string) => Buffer.from(value, "base64").toString("binary"));
-  vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:scratchpad");
-  vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
-  vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => undefined);
-  vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(function (this: HTMLMediaElement) { fireEvent.play(this); return Promise.resolve(); });
-  vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(function (this: HTMLMediaElement) { fireEvent.pause(this); });
+  function FakeAudioContext() {
+    return {
+      destination: {},
+      resume: vi.fn(async () => undefined),
+      decodeAudioData: vi.fn(async () => ({} as AudioBuffer)),
+      createBufferSource: vi.fn(() => {
+        const source = { buffer: null as AudioBuffer | null, connect: vi.fn(), disconnect: vi.fn(), start: vi.fn(), stop: vi.fn(), onended: null as (() => void) | null };
+        sources.push(source);
+        return source;
+      }),
+      close: vi.fn(async () => undefined)
+    };
+  }
+  vi.stubGlobal("AudioContext", FakeAudioContext);
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
@@ -64,7 +75,7 @@ describe("Quick Scratchpad", () => {
   it("defaults from the singleton connection, previews global transformation, synthesizes, and plays", async () => {
     const user = userEvent.setup();
     const preview = vi.fn(async (input: { text: string }) => previewResult(input.text));
-    const { container } = renderPage(preview);
+    const rendered = renderPage(preview);
     expect(await screen.findByRole("heading", { name: "Quick Scratchpad" })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByLabelText("Model")).toHaveValue("model"));
     await waitFor(() => expect(screen.getByLabelText("Voice")).toHaveValue("voice"));
@@ -77,23 +88,23 @@ describe("Quick Scratchpad", () => {
     expect(screen.queryByText("Recent results")).not.toBeInTheDocument();
     expect(screen.queryByText("Sent to Speaches")).not.toBeInTheDocument();
     expect(screen.queryByText("No audio loaded")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Synthesize passage" })).toBeDisabled();
+    expect(screen.queryByText("Active signal")).not.toBeInTheDocument();
+    expect(screen.queryByText("Audible proof")).not.toBeInTheDocument();
+    const renderButton = screen.getByRole("button", { name: "Render and Play" });
+    expect(renderButton).toBeDisabled();
+    expect(within(screen.getByRole("heading", { name: "Short passage" }).closest("section")!).getByRole("button", { name: "Render and Play" })).toBe(renderButton);
     await user.type(screen.getByLabelText("Passage"), "SQL indexes can improve database reads.");
     expect(window.sessionStorage.getItem("studynarrator.scratchpad.lastPassage")).toBe("SQL indexes can improve database reads.");
     await user.click(screen.getByLabelText("Apply global lexicon"));
-    await user.click(screen.getByRole("button", { name: "Synthesize passage" }));
+    await user.click(renderButton);
     await waitFor(() => expect(preview).toHaveBeenCalledWith(expect.objectContaining({ text: "SQL indexes can improve database reads.", applyGlobalLexicon: true }), expect.any(AbortSignal)));
-    expect(await screen.findByLabelText(/Audio player for Teacher/u)).toBeInTheDocument();
+    await waitFor(() => expect(sources[0]?.start).toHaveBeenCalledOnce());
+    expect(screen.getByRole("button", { name: "Render and Play" })).toBeEnabled();
+    expect(screen.queryByLabelText(/Audio player/u)).not.toBeInTheDocument();
+    expect(document.querySelector("audio")).toBeNull();
     expect(screen.queryByText(/Result · cache/u)).not.toBeInTheDocument();
-
-    const audio = container.querySelector("audio");
-    expect(audio).not.toBeNull();
-    Object.defineProperty(audio, "duration", { configurable: true, value: 1 });
-    fireEvent.loadedMetadata(audio!);
-    await user.click(screen.getByRole("button", { name: "Play" }));
-    expect(screen.getByRole("status")).toHaveTextContent("Playing");
-    fireEvent.ended(audio!);
-    expect(screen.getByRole("status")).toHaveTextContent("Playback complete");
+    rendered.unmount();
+    expect(sources[0]?.stop).toHaveBeenCalledOnce();
   });
 
   it("restores the last passage from session storage after a reload", async () => {
@@ -132,7 +143,7 @@ describe("Quick Scratchpad", () => {
     expect(screen.getByLabelText("Voice")).toBeDisabled();
   });
 
-  it("preserves every control and the last player after a failed replacement, then retries", async () => {
+  it("stops prior playback, preserves every control after failure, and retries with a constant label", async () => {
     const user = userEvent.setup();
     const preview = vi.fn()
       .mockImplementationOnce(async (input: { text: string }) => previewResult(input.text))
@@ -141,14 +152,18 @@ describe("Quick Scratchpad", () => {
     renderPage(preview);
     await waitFor(() => expect(screen.getByLabelText("Voice")).toHaveValue("voice"));
     await user.type(screen.getByLabelText("Passage"), "Keep this passage.");
-    await user.click(screen.getByRole("button", { name: "Synthesize passage" }));
-    const player = await screen.findByLabelText(/Audio player/u);
-    await user.click(screen.getByRole("button", { name: "Synthesize passage" }));
+    const renderButton = screen.getByRole("button", { name: "Render and Play" });
+    await user.click(renderButton);
+    await waitFor(() => expect(sources[0]?.start).toHaveBeenCalledOnce());
+    await user.click(renderButton);
     expect(await screen.findByRole("alert")).toHaveTextContent("Speaches rejected the selected voice.");
     expect(screen.getByLabelText("Passage")).toHaveValue("Keep this passage.");
-    expect(screen.getByLabelText(/Audio player/u)).toBe(player);
-    await user.click(screen.getByRole("button", { name: "Retry synthesis" }));
-    expect(await screen.findByLabelText(/Audio player/u)).toBeInTheDocument();
+    expect(sources[0]?.stop).toHaveBeenCalledOnce();
+    expect(renderButton).toHaveTextContent("Render and Play");
+    expect(renderButton).toBeEnabled();
+    expect(screen.queryByLabelText(/Audio player/u)).not.toBeInTheDocument();
+    await user.click(renderButton);
+    await waitFor(() => expect(sources[1]?.start).toHaveBeenCalledOnce());
     expect(preview).toHaveBeenCalledTimes(3);
   });
 });
