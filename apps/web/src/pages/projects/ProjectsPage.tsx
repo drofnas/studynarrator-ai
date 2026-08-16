@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import {
   buildAuthoringDryRun,
@@ -48,6 +48,7 @@ import { presentVoices } from "@/features/connections/voicePresentation.js";
 import { LexiconEditor, type LexiconEditorValue } from "@/features/lexicon/LexiconEditor.js";
 import { PreviewResultCard } from "@/features/preview/PreviewResultCard.js";
 import { SharedAudioPlayer } from "@/shared/audio/SharedAudioPlayer.js";
+import { ScriptSourceEditor, type ScriptSourceEditorHandle } from "@/features/projects/ScriptSourceEditor.js";
 
 type SaveState = "saved" | "unsaved" | "saving" | "invalid" | "failed";
 type AnalysisState = "idle" | "parsing" | "ready" | "failed";
@@ -118,7 +119,7 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
   const [renderWaveform, setRenderWaveform] = useState<RenderWaveform>();
   const [renderError, setRenderError] = useState("");
   const previewControllerRef = useRef<AbortController | null>(null);
-  const editorRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<ScriptSourceEditorHandle>(null);
   const pendingFocusLineRef = useRef<number | undefined>(undefined);
   const tabRefs = useRef<Record<ProjectTab, HTMLButtonElement | null>>({ script: null, settings: null, details: null, render: null });
   const revisionRef = useRef(0);
@@ -413,8 +414,6 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
     ? buildAuthoringDryRun({ parseResult: analysis.parseResult, pacingResult: analysis.pacingResult, transformResult: analysis.transformResult, speakers: configuration.speakers, pauses: configuration.pauses })
     : undefined, [analysis, configuration]);
 
-  const deferredScriptSource = useDeferredValue(draft?.scriptSource ?? "");
-  const lineNumbers = useMemo(() => deferredScriptSource.split(/\r?\n/u).map((_line, index) => index + 1).join("\n") || "1", [deferredScriptSource]);
   const cleanedFencedSource = useMemo(() => draft ? stripSingleSurroundingCodeFence(draft.scriptSource) : undefined, [draft?.scriptSource]);
 
   const createProject = async () => {
@@ -479,7 +478,7 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
       if (!editor) return;
       const start = draft.scriptSource.split(/\r?\n/u).slice(0, line - 1).reduce((length, item) => length + item.length + 1, 0);
       editor.focus();
-      editor.setSelectionRange(start, start);
+      editor.setSelection(start, start, { scrollIntoView: true });
     }, 0);
   }, [activeTab, draft]);
 
@@ -488,20 +487,21 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
     if (!editor || !draft || !search) return;
     const haystack = caseSensitive ? draft.scriptSource : draft.scriptSource.toLocaleLowerCase();
     const needle = caseSensitive ? search : search.toLocaleLowerCase();
-    let index = haystack.indexOf(needle, editor.selectionEnd);
+    let index = haystack.indexOf(needle, editor.getSelection().to);
     if (index < 0) index = haystack.indexOf(needle);
-    if (index >= 0) { editor.focus(); editor.setSelectionRange(index, index + search.length); }
+    if (index >= 0) { editor.focus(); editor.setSelection(index, index + search.length, { scrollIntoView: true }); }
   };
 
   const replaceNext = () => {
     const editor = editorRef.current;
     if (!editor || !draft || !search) return;
-    const selected = draft.scriptSource.slice(editor.selectionStart, editor.selectionEnd);
+    const selection = editor.getSelection();
+    const selected = draft.scriptSource.slice(selection.from, selection.to);
     const matches = caseSensitive ? selected === search : selected.toLocaleLowerCase() === search.toLocaleLowerCase();
     if (!matches) { findNext(); return; }
-    const start = editor.selectionStart;
-    updateDraft((current) => ({ ...current, scriptSource: `${current.scriptSource.slice(0, start)}${replacement}${current.scriptSource.slice(editor.selectionEnd)}` }));
-    window.setTimeout(() => { editor.focus(); editor.setSelectionRange(start, start + replacement.length); }, 0);
+    const start = selection.from;
+    updateDraft((current) => ({ ...current, scriptSource: `${current.scriptSource.slice(0, start)}${replacement}${current.scriptSource.slice(selection.to)}` }));
+    window.setTimeout(() => { editor.focus(); editor.setSelection(start, start + replacement.length, { scrollIntoView: true }); }, 0);
   };
 
   const importFile = async (file: File | undefined) => {
@@ -653,7 +653,7 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
               <div className={styles.sectionHeading}><div><span>Source</span><h3>Script editor</h3></div><label className={styles.fileButton}>Upload .txt<input type="file" accept=".txt,text/plain" onChange={(event) => void importFile(event.target.files?.[0])} /></label></div>
               <div className={styles.panelScrollBody} role="region" aria-label="Script editor content" tabIndex={0}>
                 <div className={styles.searchBar}><input aria-label="Find text" placeholder="Find literal text" value={search} onChange={(event) => setSearch(event.target.value)} /><input aria-label="Replacement text" placeholder="Replace with" value={replacement} onChange={(event) => setReplacement(event.target.value)} /><label><input type="checkbox" checked={caseSensitive} onChange={(event) => setCaseSensitive(event.target.checked)} />Case sensitive</label><button type="button" onClick={findNext}>Find next</button><button type="button" onClick={replaceNext}>Replace next</button><button type="button" onClick={() => updateDraft((current) => ({ ...current, scriptSource: replaceLiteral(current.scriptSource, search, replacement, caseSensitive) }))}>Replace all</button></div>
-                <div className={styles.sourceEditor}><pre aria-hidden="true">{lineNumbers}</pre><textarea ref={editorRef} aria-label="Script source" spellCheck={false} value={draft.scriptSource} onChange={(event) => updateDraft((current) => ({ ...current, scriptSource: event.target.value }))} /></div>
+                <ScriptSourceEditor ref={editorRef} value={draft.scriptSource} onChange={(scriptSource) => updateDraft((current) => ({ ...current, scriptSource }))} />
                 <div className={styles.sourceActions}><span>{draft.scriptSource.length.toLocaleString()} characters · drop a UTF-8 .txt file anywhere in this panel</span>{cleanedFencedSource !== undefined ? <button type="button" className={styles.secondary} onClick={() => { setCleanupUndo(draft.scriptSource); updateDraft((current) => ({ ...current, scriptSource: cleanedFencedSource })); }}>Remove surrounding code fence</button> : null}{cleanupUndo !== undefined ? <button type="button" className={styles.secondary} onClick={() => { updateDraft((current) => ({ ...current, scriptSource: cleanupUndo })); setCleanupUndo(undefined); }}>Restore fenced source</button> : null}</div>
               </div>
             </section> : null}

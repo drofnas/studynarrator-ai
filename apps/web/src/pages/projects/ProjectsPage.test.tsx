@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
+import "@/test/domGeometry.js";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { EditorView } from "@codemirror/view";
 import { Link, MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseScript, resolveParagraphPauses, transformScript } from "@studynarrator/core";
@@ -176,6 +178,18 @@ function deferred<T>() {
 
 async function openProjectTab(name: "Script Editor" | "Settings" | "Details" | "Render") {
   await userEvent.click(await screen.findByRole("tab", { name }));
+}
+
+function scriptEditorView(): EditorView {
+  const content = screen.getByRole("textbox", { name: "Script source" });
+  const view = EditorView.findFromDOM(content.closest(".cm-editor") as HTMLElement);
+  if (!view) throw new Error("Expected a CodeMirror editor view.");
+  return view;
+}
+
+function replaceScriptSource(value: string): void {
+  const view = scriptEditorView();
+  view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: value } });
 }
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
@@ -440,16 +454,16 @@ describe("Projects workbench", () => {
     const timerSpy = vi.spyOn(window, "setTimeout");
     renderPage(client, analyze);
 
-    const scriptSource = await screen.findByLabelText("Script source");
+    await screen.findByRole("textbox", { name: "Script source" });
     await waitFor(() => expect(analyze).toHaveBeenCalled());
     timerSpy.mockClear();
 
     const pastedSource = `[speaker_teacher] ${"Responsive paste 🧠 ".repeat(2_000)}`;
-    fireEvent.change(scriptSource, { target: { value: "[speaker_teacher] Autosave revision one" } });
-    fireEvent.change(scriptSource, { target: { value: "[speaker_teacher] Autosave revision two" } });
-    fireEvent.change(scriptSource, { target: { value: pastedSource } });
+    replaceScriptSource("[speaker_teacher] Autosave revision one");
+    replaceScriptSource("[speaker_teacher] Autosave revision two");
+    replaceScriptSource(pastedSource);
     const editTimers = timerSpy.mock.calls.filter(([, delay]) => delay === 800).length;
-    expect(scriptSource).toHaveValue(pastedSource);
+    expect(scriptEditorView().state.doc.toString()).toBe(pastedSource);
 
     await waitFor(() => expect(replace).toHaveBeenCalledTimes(1), { timeout: 2_000 });
     expect(editTimers).toBe(3);
@@ -634,6 +648,6 @@ describe("Projects workbench", () => {
     const source = "[speaker_teacher] Résumé 🧠\r\n[pause_short]\r\nContinue.";
     fireEvent.change(upload, { target: { files: [new File([source], "fixture.txt", { type: "text/plain" })] } });
     await waitFor(() => expect(analyze.mock.calls.some(([input]) => input.source === source)).toBe(true));
-    expect(screen.getByLabelText("Script source")).toHaveValue(source.replaceAll("\r\n", "\n"));
+    expect(scriptEditorView().state.doc.toString()).toBe(source.replaceAll("\r\n", "\n"));
   });
 });

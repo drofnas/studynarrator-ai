@@ -112,7 +112,7 @@ test.describe("Electron acceptance", () => {
     page = await electronStudyNarrator.relaunch();
     await expect(page.getByRole("heading", { name: "Projects", exact: true })).toBeVisible();
     await openProject(page, "Desktop durable project");
-    await expect(page.getByLabel("Script source")).toHaveValue("[speaker_teacher] Persist through relaunch.");
+    await expect(page.getByLabel("Script source")).toHaveText("[speaker_teacher] Persist through relaunch.");
     await page.getByRole("tab", { name: "Settings" }).click();
     await expect(page.getByRole("region", { name: "Project lexicon" }).getByRole("article", { name: "Lexicon entry CLI" })).toBeVisible();
   });
