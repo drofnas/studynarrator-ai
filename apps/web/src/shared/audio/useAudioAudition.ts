@@ -5,7 +5,7 @@ interface AuditionAudio {
   base64: string;
 }
 
-export interface AudioAuditionState<Key extends string | number> {
+interface AudioAuditionState<Key extends string | number> {
   key: Key;
   phase: Exclude<AuditionPhase, "normal">;
 }
