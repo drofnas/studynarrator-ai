@@ -227,7 +227,8 @@ test.describe("Electron acceptance", () => {
     await expect.poll(async () => (await stat(creationDestination)).size).toBeGreaterThan(0);
     await page.getByRole("tab", { name: "Update Prompt" }).click();
     const updateEditor = page.getByRole("textbox", { name: "Update a script prompt editor" });
-    await expect(updateEditor).toContainText("SCRIPT AND CHANGE REQUEST");
+    await updateEditor.press("Meta+ArrowDown");
+    await expect(updateEditor).toContainText("[INSERT EXISTING SCRIPT]");
     const editedUpdate = "EDITED DESKTOP UPDATE PROMPT";
     await updateEditor.fill(editedUpdate);
     await page.getByRole("button", { name: "Download update prompt" }).click();

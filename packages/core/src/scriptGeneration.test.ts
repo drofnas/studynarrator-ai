@@ -36,13 +36,18 @@ describe("script generation", () => {
     expect(buildExternalLlmPrompt({ kind: "creation", context, lexiconEntries: entries })).toBe(prompt);
   });
 
-  it("builds a shorter update boilerplate with script and change-request placeholders", () => {
+  it("builds a study-guide conversion prompt with structure directives and a final insertion placeholder", () => {
     const prompt = buildExternalLlmPrompt({ kind: "update", context, lexiconEntries: entries });
-    expect(prompt).toContain("SCRIPT AND CHANGE REQUEST");
-    expect(prompt).toContain("[PASTE THE CURRENT SCRIPT AND DESCRIBE THE CHANGES TO MAKE HERE.]");
-    expect(prompt).toContain("Return the complete revised script, not a patch");
+    expect(prompt).toContain("# StudyNarrator study guide conversion instructions");
+    expect(prompt).toContain("Convert the existing study guide");
+    expect(prompt).toContain("AUDIO SCRIPT GOALS");
     expect(prompt).toContain("[speaker_student]");
-    expect(prompt).toContain("SQL → sequel");
+    expect(prompt).toContain("[pause_short]");
+    expect(prompt).toContain("[section: Descriptive title]");
+    expect(prompt.trimEnd().endsWith("[INSERT EXISTING SCRIPT]")).toBe(true);
+    expect(prompt).not.toContain("Pronunciation lexicon");
+    expect(prompt).not.toContain("SQL → sequel");
+    expect(prompt).not.toContain("new_sense_id");
     expect(prompt).not.toContain("KNOWLEDGE TO GATHER AND TEACH");
   });
 
@@ -58,8 +63,10 @@ describe("script generation", () => {
     ]);
     const combined = files.map(({ content }) => content).join("\n");
     expect(combined).toContain("KNOWLEDGE TO GATHER AND TEACH");
-    expect(combined).toContain("SCRIPT AND CHANGE REQUEST");
+    expect(combined).toContain("[INSERT EXISTING SCRIPT]");
     expect(combined).not.toContain("SECRET_ALIAS");
+    const update = files.find(({ path }) => path === "UPDATE_PROMPT.md");
+    expect(update?.content).not.toContain("SQL → sequel");
     const single = buildSkillPackageFiles({ context: { ...context, speakers: [context.speakers[0]!] }, lexiconEntries: entries });
     expect(single.map(({ path }) => path)).not.toContain("examples/two-speaker-study-guide.txt");
   });

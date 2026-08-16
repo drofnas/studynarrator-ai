@@ -82,8 +82,9 @@ test.describe("external-LLM script generation", () => {
 
     await updateTab.click();
     const updateEditor = page.getByRole("textbox", { name: "Update a script prompt editor" });
-    await expect(updateEditor).toContainText("SCRIPT AND CHANGE REQUEST");
-    await expect(updateEditor).toContainText("Return the complete revised script, not a patch");
+    await expect(updateEditor).toContainText("Convert the existing study guide");
+    await updateEditor.press("Meta+ArrowDown");
+    await expect(updateEditor).toContainText("[INSERT EXISTING SCRIPT]");
     const editedUpdate = "EDITED UPDATE PROMPT";
     await updateEditor.fill(editedUpdate);
     const updateDownload = page.waitForEvent("download");

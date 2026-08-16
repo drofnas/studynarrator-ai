@@ -33,7 +33,7 @@ function fixture() {
     globalLexicon: { list: vi.fn(async () => []), replace: vi.fn() }
   };
   const creation = { kind: "creation" as const, fileName: "caching-creation-prompt.md", mimeType: "text/markdown; charset=utf-8" as const, content: "KNOWLEDGE TO GATHER AND TEACH\n[speaker_teacher]\nSQL → sequel\n{{display text|new_sense_id}}", checksum: "a".repeat(64) };
-  const update = { kind: "update" as const, fileName: "caching-update-prompt.md", mimeType: "text/markdown; charset=utf-8" as const, content: "SCRIPT AND CHANGE REQUEST\n[speaker_teacher]\nSQL → sequel", checksum: "b".repeat(64) };
+  const update = { kind: "update" as const, fileName: "caching-update-prompt.md", mimeType: "text/markdown; charset=utf-8" as const, content: "Convert the existing study guide\n[speaker_teacher]\n[pause_short]\n[section: Topic]\n[INSERT EXISTING SCRIPT]", checksum: "b".repeat(64) };
   const exportPrompt = vi.fn(async (_projectId: string | null, kind: "creation" | "update", _content?: string) => ({ disposition: "download" as const, fileName: kind === "creation" ? creation.fileName : update.fileName }));
   const exportSkillPackage = vi.fn(async () => ({ disposition: "download" as const, fileName: "caching-skill.zip" }));
   const previewPrompt = vi.fn(async (_projectId: string | null, kind: "creation" | "update") => kind === "creation" ? creation : update);
@@ -79,8 +79,9 @@ describe("script prompt kit", () => {
     expect(editorView("Create a script prompt editor").state.doc.toString()).toContain("{{display text|new_sense_id}}");
     expect(screen.queryByText(project.scriptSource)).not.toBeInTheDocument();
     await userEvent.click(updateTab);
-    expect(editorView("Update a script prompt editor").state.doc.toString()).toContain("SCRIPT AND CHANGE REQUEST");
-    expect(screen.getByText(/current script and the exact edits/u)).toBeInTheDocument();
+    expect(editorView("Update a script prompt editor").state.doc.toString()).toContain("[INSERT EXISTING SCRIPT]");
+    expect(editorView("Update a script prompt editor").state.doc.toString()).not.toContain("SQL → sequel");
+    expect(screen.getByText(/study guide you want converted/u)).toBeInTheDocument();
     expect(screen.getByRole("tablist", { name: "Choose a prompt template" })).toHaveTextContent("Create PromptUpdate Prompt");
     expect(screen.getByText("Existing script", { exact: true })).toBeInTheDocument();
     expect(screen.queryByText(/Blank page|Red pen|Included automatically/u)).not.toBeInTheDocument();

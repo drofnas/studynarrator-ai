@@ -40,7 +40,9 @@ describe("script generation service", () => {
     expect(document.content).not.toContain(project.scriptSource);
     const update = await service.previewPrompt(project.id, "update");
     expect(update).toMatchObject({ kind: "update", fileName: "resume-unsafe-project-update-prompt.md" });
-    expect(update.content).toContain("SCRIPT AND CHANGE REQUEST");
+    expect(update.content).toContain("Convert the existing study guide");
+    expect(update.content.trimEnd().endsWith("[INSERT EXISTING SCRIPT]")).toBe(true);
+    expect(update.content).not.toContain("SQL → sequel");
   });
 
   it("builds a default prompt kit from global lexicon without loading a project", async () => {

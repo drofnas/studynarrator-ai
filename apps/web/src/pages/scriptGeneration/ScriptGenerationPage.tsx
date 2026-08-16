@@ -140,7 +140,7 @@ export function ScriptGenerationPage({ persistence, generation }: {
         <div className={styles.previewHeading}><span>{promptLabels[selected].eyebrow}</span><h3>{promptLabels[selected].title}</h3></div>
         <p className={styles.instructions}>{selected === "creation"
           ? "Replace the KNOWLEDGE TO GATHER AND TEACH block with your topic, learning goals, sources, and constraints."
-          : "Replace the SCRIPT AND CHANGE REQUEST block with the current script and the exact edits you want."}</p>
+          : "Replace the INSERT EXISTING SCRIPT callout at the bottom with the study guide you want converted."}</p>
         {operationError ? <p className={styles.error} role="alert">{operationError}</p> : null}
         <p className={styles.notice} aria-live="polite">{notice}</p>
         <ScriptSourceEditor

@@ -74,11 +74,8 @@ function aliasSections(entriesInput: readonly LexiconEntry[]): { senses: string[
   return { senses, automatic };
 }
 
-function formatReference(context: ScriptGenerationContext, entriesInput: readonly LexiconEntry[]): string[] {
-  const aliases = aliasSections(entriesInput);
+function formatStructure(context: ScriptGenerationContext): string[] {
   return [
-    "SCRIPT FORMAT AND LEXICON",
-    "",
     "Speaker directives",
     "- Start a spoken turn with [speaker_<id>]. The selected speaker remains active until another speaker directive appears.",
     "- Use only these configured speaker directives:",
@@ -91,7 +88,16 @@ function formatReference(context: ScriptGenerationContext, entriesInput: readonl
       : ["- This project has no configured pause commands; do not invent one."]),
     "",
     "Section directives",
-    "- Use [section: Descriptive title] on its own line to mark a major topic.",
+    "- Use [section: Descriptive title] on its own line to mark a major topic."
+  ];
+}
+
+function formatReference(context: ScriptGenerationContext, entriesInput: readonly LexiconEntry[]): string[] {
+  const aliases = aliasSections(entriesInput);
+  return [
+    "SCRIPT FORMAT AND LEXICON",
+    "",
+    ...formatStructure(context),
     "",
     "Pronunciation lexicon",
     "- Preserve the written display text. StudyNarrator applies configured pronunciations during narration.",
@@ -149,27 +155,32 @@ function creationPrompt(context: ScriptGenerationContext, entries: readonly Lexi
   ].join("\n");
 }
 
-function updatePrompt(context: ScriptGenerationContext, entries: readonly LexiconEntry[]): string {
+function updatePrompt(context: ScriptGenerationContext): string {
   return [
-    "# StudyNarrator script update instructions",
+    "# StudyNarrator study guide conversion instructions",
     "",
-    "Update my existing StudyNarrator script according to the change request I provide. Preserve correct content and formatting that the request does not need to change.",
+    "Convert the existing study guide at the end of this prompt into a complete StudyNarrator audio script.",
     "",
-    "SCRIPT AND CHANGE REQUEST",
-    "[PASTE THE CURRENT SCRIPT AND DESCRIBE THE CHANGES TO MAKE HERE.]",
+    "AUDIO SCRIPT GOALS",
+    "- Preserve the study guide's facts, names, numbers, warnings, and technical distinctions.",
+    "- Organize the material into a coherent spoken lesson instead of reading outline fragments verbatim.",
+    "- Explain prerequisite ideas before dependent ideas.",
+    "- Use natural spoken language and reasonably short speaker turns.",
+    "- Use questions, corrections, comparisons, and recaps only when they improve learning.",
+    "- Convert useful tables, code, and visual material into clear spoken explanations.",
+    "- Do not invent facts or citations.",
     "",
-    "UPDATE RULES",
-    "- Return the complete revised script, not a patch or a summary.",
-    "- Preserve existing speaker, pause, section, and pronunciation directives unless the requested change requires an edit.",
-    "- Keep all unchanged facts, names, numbers, warnings, and technical distinctions intact.",
-    "- Do not invent facts, citations, or pronunciations.",
+    "SCRIPT FORMAT",
     "",
-    ...formatReference(context, entries),
+    ...formatStructure(context),
     "",
     "OUTPUT CONTRACT",
     "- Return only the complete raw StudyNarrator script.",
     "- Do not wrap the script in a Markdown code fence.",
     "- Do not add notes or commentary outside the script.",
+    "",
+    "EXISTING STUDY GUIDE",
+    "[INSERT EXISTING SCRIPT]",
     ""
   ].join("\n");
 }
@@ -181,7 +192,7 @@ export function buildExternalLlmPrompt(input: {
 }): string {
   const kind = ScriptPromptKindSchema.parse(input.kind);
   const context = ScriptGenerationContextSchema.parse(input.context);
-  return kind === "creation" ? creationPrompt(context, input.lexiconEntries) : updatePrompt(context, input.lexiconEntries);
+  return kind === "creation" ? creationPrompt(context, input.lexiconEntries) : updatePrompt(context);
 }
 
 export function buildSkillPackageFiles(input: {
@@ -203,7 +214,7 @@ export function buildSkillPackageFiles(input: {
       ].join("\n")
     },
     { path: "CREATION_PROMPT.md", content: creationPrompt(context, input.lexiconEntries) },
-    { path: "UPDATE_PROMPT.md", content: updatePrompt(context, input.lexiconEntries) },
+    { path: "UPDATE_PROMPT.md", content: updatePrompt(context) },
     { path: "SCRIPT_FORMAT.md", content: `# Script Format\n\n${format}\n` },
     {
       path: "LEXICON_ALIASES.md",
