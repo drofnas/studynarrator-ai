@@ -27,15 +27,24 @@ export const ScriptGenerationPromptRequestSchema = z.object({
   projectId: ProjectIdSchema.nullable(),
   kind: ScriptPromptKindSchema
 }).strict();
+export const ScriptGenerationPromptExportRequestSchema = z.object({
+  projectId: ProjectIdSchema.nullable(),
+  kind: ScriptPromptKindSchema,
+  content: z.string().min(1).optional()
+}).strict();
 
 export const ScriptGenerationPromptInputSchema = z.object({ kind: ScriptPromptKindSchema }).strict();
+export const ScriptGenerationPromptExportInputSchema = z.object({
+  kind: ScriptPromptKindSchema,
+  content: z.string().min(1).optional()
+}).strict();
 
 export const ScriptGenerationSkillRequestSchema = z.object({ projectId: ProjectIdSchema.nullable() }).strict();
 export const ScriptGenerationSkillInputSchema = z.object({}).strict();
 
 export interface ScriptGenerationClient {
   previewPrompt(projectId: string | null, kind: z.infer<typeof ScriptPromptKindSchema>): Promise<PromptDocument>;
-  exportPrompt(projectId: string | null, kind: z.infer<typeof ScriptPromptKindSchema>): Promise<FileExportResult>;
+  exportPrompt(projectId: string | null, kind: z.infer<typeof ScriptPromptKindSchema>, content?: string): Promise<FileExportResult>;
   exportSkillPackage(projectId: string | null): Promise<FileExportResult>;
 }
 

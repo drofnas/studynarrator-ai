@@ -49,10 +49,10 @@ export function createRestScriptGenerationClient(fetchInput: typeof fetch = fetc
       if (!response.ok) throw await failure(response);
       return PromptDocumentSchema.parse(await response.json() as unknown);
     },
-    async exportPrompt(projectIdInput, kindInput) {
+    async exportPrompt(projectIdInput, kindInput, content) {
       const kind = ScriptPromptKindSchema.parse(kindInput);
       return await download(await fetchInput(`${endpointRoot(projectIdInput)}/prompt-export`, {
-        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind })
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind, ...(content === undefined ? {} : { content }) })
       }), "study-narrator-prompt.md");
     },
     async exportSkillPackage(projectIdInput) {

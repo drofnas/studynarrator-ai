@@ -146,8 +146,8 @@ export function createPreloadBridge(invoke: (channel: string, input?: unknown) =
     async previewPrompt(projectId, kind) {
       return PromptDocumentSchema.parse(await invoke(SCRIPT_GENERATION_CHANNELS.previewPrompt, { projectId, kind }));
     },
-    async exportPrompt(projectId, kind) {
-      return FileExportResultSchema.parse(await invoke(SCRIPT_GENERATION_CHANNELS.exportPrompt, { projectId, kind }));
+    async exportPrompt(projectId, kind, content) {
+      return FileExportResultSchema.parse(await invoke(SCRIPT_GENERATION_CHANNELS.exportPrompt, { projectId, kind, ...(content === undefined ? {} : { content }) }));
     },
     async exportSkillPackage(projectId) {
       return FileExportResultSchema.parse(await invoke(SCRIPT_GENERATION_CHANNELS.exportSkillPackage, { projectId }));

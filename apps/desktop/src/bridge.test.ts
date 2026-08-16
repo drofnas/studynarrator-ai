@@ -203,6 +203,7 @@ describe("Electron boundary", () => {
     const invoke = vi.fn(async (channel: string) => {
       if (channel === SYSTEM_DIAGNOSTICS_CHANNEL) return diagnostics;
       if (channel === PERSISTENCE_CHANNELS.projectsList) return [];
+      if (channel === SCRIPT_GENERATION_CHANNELS.exportPrompt) return { disposition: "saved", fileName: "prompt.md" };
       if (channel === CONNECTION_CHANNELS.get) return {
         baseUrl: null, suppliedUrlForm: "unconfigured", configured: false, defaultModelId: null, defaultVoiceId: null,
         timeoutSeconds: 120, retryCount: 2, responseFormat: "wav", lastTestedAt: null, lastSuccessfulTestAt: null,
@@ -222,6 +223,8 @@ describe("Electron boundary", () => {
     expect(bridge.renders.renderAudioSource(renderJob.id)).toBe(`studynarrator-media://render/${renderJob.id}`);
     expect(bridge.renders.segmentAudioSource(renderJob.id, 3)).toBe(`studynarrator-media://segment/${renderJob.id}/3`);
     expect(() => bridge.renders.renderAudioSource("../outside")).toThrow();
+    await expect(bridge.scriptGeneration.exportPrompt(null, "update", "Edited prompt")).resolves.toEqual({ disposition: "saved", fileName: "prompt.md" });
+    expect(invoke).toHaveBeenCalledWith(SCRIPT_GENERATION_CHANNELS.exportPrompt, { projectId: null, kind: "update", content: "Edited prompt" });
   });
 
   it("rejects malformed IPC output", async () => {
@@ -387,7 +390,7 @@ describe("Electron boundary", () => {
       [RENDER_CHANNELS.waveform]: { renderId: renderJob.id },
       [RENDER_CHANNELS.exportSegment]: { renderId: renderJob.id, ordinal: 1 },
       [SCRIPT_GENERATION_CHANNELS.previewPrompt]: { projectId: null, kind: "creation" },
-      [SCRIPT_GENERATION_CHANNELS.exportPrompt]: { projectId: null, kind: "update" },
+      [SCRIPT_GENERATION_CHANNELS.exportPrompt]: { projectId: null, kind: "update", content: "Edited prompt" },
       [SCRIPT_GENERATION_CHANNELS.exportSkillPackage]: { projectId: null }
     };
     const invoked = new Set<string>();
@@ -402,6 +405,7 @@ describe("Electron boundary", () => {
       invoked.add(channel);
     }
     expect(invoked).toEqual(new Set(PUBLIC_IPC_CHANNEL_MANIFEST));
+    expect(scriptGeneration.resolvePromptExport).toHaveBeenCalledWith(null, "update", "Edited prompt");
 
     const secret = "test-secret-must-not-appear";
     for (const channel of Object.keys(inputs)) {

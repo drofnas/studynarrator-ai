@@ -1,4 +1,5 @@
 import { unzipSync, strFromU8 } from "fflate";
+import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_SYSTEM_TIMING, type ProjectDetail } from "@studynarrator/shared-types";
 import { createScriptGenerationService, type ScriptGenerationRepository } from "./scriptGeneration.js";
@@ -53,6 +54,21 @@ describe("script generation service", () => {
     expect(document.content).toContain("SQL → sequel");
     expect(getProject).not.toHaveBeenCalled();
     await expect(service.resolveSkillPackage(null)).resolves.toMatchObject({ fileName: "studynarrator-script-skill.zip" });
+  });
+
+  it("exports edited prompt content with the generated filename and a matching checksum", async () => {
+    const service = createScriptGenerationService({ repository: repository() });
+    const content = "Edited prompt content";
+    const file = await service.resolvePromptExport(project.id, "update", content);
+    expect(file.fileName).toBe("resume-unsafe-project-update-prompt.md");
+    expect(strFromU8(file.bytes)).toBe(content);
+    expect(file.checksum).toBe(createHash("sha256").update(content).digest("hex"));
+  });
+
+  it("falls back to the generated prompt when no export override is supplied", async () => {
+    const service = createScriptGenerationService({ repository: repository() });
+    const file = await service.resolvePromptExport(project.id, "creation");
+    expect(strFromU8(file.bytes)).toContain("KNOWLEDGE TO GATHER AND TEACH");
   });
 
   it("creates byte-identical ZIPs with both prompts, safe paths, and no saved script", async () => {

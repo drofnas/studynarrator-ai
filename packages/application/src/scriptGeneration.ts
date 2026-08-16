@@ -36,7 +36,7 @@ interface ResolvedGeneratedFile {
 
 export interface ScriptGenerationService {
   previewPrompt(projectId: string | null, kind: ScriptPromptKind): Promise<PromptDocument>;
-  resolvePromptExport(projectId: string | null, kind: ScriptPromptKind): Promise<ResolvedGeneratedFile>;
+  resolvePromptExport(projectId: string | null, kind: ScriptPromptKind, content?: string): Promise<ResolvedGeneratedFile>;
   resolveSkillPackage(projectId: string | null): Promise<ResolvedGeneratedFile>;
 }
 
@@ -106,13 +106,14 @@ export function createScriptGenerationService(dependencies: { repository: Script
         return await Promise.resolve(promptDocument(timing, project, kind, entries));
       } catch (error) { throw safeError(error); }
     },
-    async resolvePromptExport(projectIdInput, kindInput) {
+    async resolvePromptExport(projectIdInput, kindInput, contentInput) {
       try {
         const kind = ScriptPromptKindSchema.parse(kindInput);
         const { project, timing, entries } = load(projectIdInput);
         const document = promptDocument(timing, project, kind, entries);
-        const bytes = strToU8(document.content);
-        return await Promise.resolve({ fileName: document.fileName, mimeType: document.mimeType, bytes, checksum: document.checksum });
+        const content = contentInput ?? document.content;
+        const bytes = strToU8(content);
+        return await Promise.resolve({ fileName: document.fileName, mimeType: document.mimeType, bytes, checksum: sha256(content) });
       } catch (error) { throw safeError(error); }
     },
     async resolveSkillPackage(projectIdInput) {

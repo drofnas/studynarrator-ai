@@ -476,10 +476,10 @@ describe("REST API operation manifest", () => {
       mode: "segment", nodeOrdinal: 1
     })).body as unknown);
     await call("POST", "/api/script-generation/prompt-preview", 200, { kind: "creation" });
-    await call("POST", "/api/script-generation/prompt-export", 200, { kind: "update" });
+    expect((await call("POST", "/api/script-generation/prompt-export", 200, { kind: "update", content: "Edited default prompt" })).text).toBe("Edited default prompt");
     await call("POST", "/api/script-generation/skill-export", 200, {});
     await call("POST", `/api/projects/${created.id}/prompt-preview`, 200, { kind: "creation" });
-    await call("POST", `/api/projects/${created.id}/prompt-export`, 200, { kind: "update" });
+    expect((await call("POST", `/api/projects/${created.id}/prompt-export`, 200, { kind: "update", content: "Edited project prompt" })).text).toBe("Edited project prompt");
     await call("POST", `/api/projects/${created.id}/skill-export`, 200, {});
     const renderPlan = RenderPlanSchema.parse((await call("POST", `/api/projects/${created.id}/render-plans`, 201)).body as unknown);
     RenderPlanSummaryCollectionSchema.parse((await call("GET", `/api/projects/${created.id}/render-plans`, 200)).body as unknown);
