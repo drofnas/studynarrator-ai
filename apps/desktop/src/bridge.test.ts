@@ -53,8 +53,8 @@ const diagnostics = {
 const persistenceStatus = {
   contractVersion: 1 as const,
   state: "ready" as const,
-  databaseSchemaVersion: 2 as const,
-  targetDatabaseSchemaVersion: 2 as const,
+  databaseSchemaVersion: 3 as const,
+  targetDatabaseSchemaVersion: 3 as const,
   databasePath: "/tmp/studynarrator.sqlite",
   latestBackupPath: null
 };
