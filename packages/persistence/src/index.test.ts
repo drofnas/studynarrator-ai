@@ -38,12 +38,13 @@ describe("database baseline", () => {
     const first = await migrateDatabase({ Database: DatabaseAdapter, databasePath });
     expect(STUDYNARRATOR_MIGRATIONS.map(({ version, name }) => ({ version, name }))).toEqual([
       { version: 1, name: "v1-baseline" },
-      { version: 2, name: "project-speech-cache-lifecycle" }
+      { version: 2, name: "project-speech-cache-lifecycle" },
+      { version: 3, name: "global-named-sense-defaults" }
     ]);
-    expect(first.appliedVersions).toEqual([1, 2]);
-    expect(first.databaseSchemaVersion).toBe(2);
+    expect(first.appliedVersions).toEqual([1, 2, 3]);
+    expect(first.databaseSchemaVersion).toBe(3);
     expect(first.backupPath).toBeNull();
-    expect(first.database.prepare("SELECT version FROM schema_migrations").all()).toEqual([{ version: 1 }, { version: 2 }]);
+    expect(first.database.prepare("SELECT version FROM schema_migrations").all()).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }]);
     expect(first.database.prepare("SELECT singleton_id, base_url, supplied_url_form FROM speaches_connection").all()).toEqual([
       { singleton_id: 1, base_url: null, supplied_url_form: "unconfigured" }
     ]);
@@ -52,7 +53,10 @@ describe("database baseline", () => {
       { pause_id: "pause_medium", duration_ms: 750 },
       { pause_id: "pause_long", duration_ms: 1_500 }
     ]);
-    expect(first.database.prepare("SELECT display_text, spoken_text FROM lexicon_entries WHERE scope = 'global' ORDER BY ordinal").all()).toHaveLength(8);
+    expect(first.database.prepare("SELECT display_text, sense_id, spoken_text FROM lexicon_entries WHERE scope = 'global' ORDER BY ordinal").all()).toHaveLength(44);
+    expect(first.database.prepare("SELECT display_text, sense_id, spoken_text FROM lexicon_entries WHERE id = ?").get("10000000-0000-4000-8000-000000000009")).toEqual({
+      display_text: "resume", sense_id: "cv", spoken_text: "rez oo may"
+    });
     first.database.prepare("DELETE FROM lexicon_entries WHERE scope = 'global'").run();
     first.database.close();
 
@@ -60,6 +64,45 @@ describe("database baseline", () => {
     expect(second.appliedVersions).toEqual([]);
     expect(second.database.prepare("SELECT count(*) AS count FROM lexicon_entries WHERE scope = 'global'").get()).toEqual({ count: 0 });
     second.database.close();
+  });
+
+  it("adds named-sense defaults once to schema-v2 data without overwriting user choices", async () => {
+    const databasePath = await temporaryDatabase("studynarrator-v3-named-senses-");
+    const v2 = await migrateDatabase({
+      Database: DatabaseAdapter,
+      databasePath,
+      migrations: STUDYNARRATOR_MIGRATIONS.slice(0, 2)
+    });
+    v2.database.prepare("DELETE FROM lexicon_entries WHERE entry_type = 'namedSense'").run();
+    v2.database.prepare(`
+      INSERT INTO lexicon_entries (
+        id, scope, project_id, ordinal, entry_type, display_text, sense_id, spoken_text,
+        case_sensitive, whole_word, priority, enabled, notes, created_at, updated_at
+      ) VALUES (?, 'global', NULL, ?, 'exactTerm', ?, NULL, ?, 0, 1, 0, 0, '', ?, ?)
+    `).run("20000000-0000-4000-8000-000000000001", 8, "CLI", "C L I", "2026-08-12T12:00:00.000Z", "2026-08-12T12:00:00.000Z");
+    v2.database.prepare(`
+      INSERT INTO lexicon_entries (
+        id, scope, project_id, ordinal, entry_type, display_text, sense_id, spoken_text,
+        case_sensitive, whole_word, priority, enabled, notes, created_at, updated_at
+      ) VALUES (?, 'global', NULL, ?, 'namedSense', ?, ?, ?, 0, 1, 0, 0, '', ?, ?)
+    `).run("20000000-0000-4000-8000-000000000002", 9, "Resume", "CV", "my résumé", "2026-08-12T12:00:00.000Z", "2026-08-12T12:00:00.000Z");
+    v2.database.close();
+
+    const upgraded = await migrateDatabase({ Database: DatabaseAdapter, databasePath });
+    expect(upgraded.appliedVersions).toEqual([3]);
+    expect(upgraded.databaseSchemaVersion).toBe(3);
+    expect(upgraded.backupPath).toContain("-v2-to-v3-");
+    expect(upgraded.database.prepare("SELECT count(*) AS count FROM lexicon_entries WHERE entry_type = 'namedSense'").get()).toEqual({ count: 36 });
+    expect(upgraded.database.prepare("SELECT spoken_text, enabled FROM lexicon_entries WHERE id = ?").get("20000000-0000-4000-8000-000000000002")).toEqual({ spoken_text: "my résumé", enabled: 0 });
+    expect(upgraded.database.prepare("SELECT spoken_text, enabled FROM lexicon_entries WHERE id = ?").get("20000000-0000-4000-8000-000000000001")).toEqual({ spoken_text: "C L I", enabled: 0 });
+    upgraded.database.prepare("DELETE FROM lexicon_entries WHERE id = ?").run("10000000-0000-4000-8000-000000000010");
+    upgraded.database.close();
+
+    const reopened = await migrateDatabase({ Database: DatabaseAdapter, databasePath });
+    expect(reopened.appliedVersions).toEqual([]);
+    expect(reopened.database.prepare("SELECT count(*) AS count FROM lexicon_entries WHERE entry_type = 'namedSense'").get()).toEqual({ count: 35 });
+    expect(reopened.database.prepare("SELECT id FROM lexicon_entries WHERE id = ?").get("10000000-0000-4000-8000-000000000010")).toBeUndefined();
+    reopened.database.close();
   });
 
   it("contains only current tables and no legacy columns", async () => {
@@ -107,7 +150,7 @@ describe("database baseline", () => {
     baseline.database.prepare("INSERT INTO diagnostic_kv (key, value, created_at) VALUES ('fixture', 'safe', '2026-08-11T00:00:00.000Z')").run();
     baseline.database.close();
     const failing: Migration = {
-      version: 3,
+      version: 4,
       name: "intentional-test-failure",
       up(database) {
         database.exec("CREATE TABLE must_rollback (id TEXT); INSERT INTO missing_table VALUES (1);");
@@ -121,7 +164,7 @@ describe("database baseline", () => {
       failure = error as MigrationFailureError;
     }
     expect(failure).toBeInstanceOf(MigrationFailureError);
-    expect(failure?.backupPath).toContain("-v2-to-v3-");
+    expect(failure?.backupPath).toContain("-v3-to-v4-");
     expect((await stat(failure!.backupPath!)).mode & 0o777).toBe(0o600);
     expect((await readFile(failure!.backupPath!)).byteLength).toBeGreaterThan(0);
     const inspected = new Database(databasePath, { readonly: true });
@@ -132,6 +175,46 @@ describe("database baseline", () => {
 });
 
 describe("StudyNarratorRepository", () => {
+  it("round-trips editable, disabled, and deleted global named-sense entries", async () => {
+    const databasePath = await temporaryDatabase("studynarrator-global-named-sense-");
+    const first = await openStudyNarratorRepository({
+      Database: DatabaseAdapter,
+      databasePath,
+      now: () => new Date("2026-08-12T12:00:00.000Z"),
+      idFactory: ids(lexiconId)
+    });
+    expect(first.replaceGlobalLexicon([{
+      scope: "global",
+      entryType: "namedSense",
+      displayText: "resume",
+      senseId: "cv",
+      spokenText: "custom résumé",
+      enabled: false
+    }])).toMatchObject([{
+      id: lexiconId,
+      entryType: "namedSense",
+      displayText: "resume",
+      senseId: "cv",
+      spokenText: "custom résumé",
+      enabled: false
+    }]);
+    first.close();
+
+    const reopened = await openStudyNarratorRepository({ Database: DatabaseAdapter, databasePath });
+    expect(reopened.listGlobalLexicon()).toMatchObject([{
+      id: lexiconId,
+      entryType: "namedSense",
+      senseId: "cv",
+      enabled: false
+    }]);
+    reopened.replaceGlobalLexicon([]);
+    reopened.close();
+
+    const empty = await openStudyNarratorRepository({ Database: DatabaseAdapter, databasePath });
+    expect(empty.listGlobalLexicon()).toEqual([]);
+    empty.close();
+  });
+
   it("reconciles project cache keys and reverses queued deletion when a prior key is restored", async () => {
     const repository = await openStudyNarratorRepository({
       Database: DatabaseAdapter,
@@ -169,7 +252,7 @@ describe("StudyNarratorRepository", () => {
       now: () => new Date("2026-08-12T12:00:00.000Z"),
       idFactory: ids(projectId, lexiconId)
     });
-    expect(first.status()).toMatchObject({ contractVersion: 1, databaseSchemaVersion: 2 });
+    expect(first.status()).toMatchObject({ contractVersion: 1, databaseSchemaVersion: 3 });
     const created = first.createProject({ name: "Persistence restart proof", description: "Restart proof" });
     const source = "Résumé line\r\n\r\nSQL line 🧠";
     first.replaceProject(created.id, {
@@ -250,8 +333,18 @@ describe("StudyNarratorRepository", () => {
   it("persists marker evidence and durable render state", async () => {
     const databasePath = await temporaryDatabase("studynarrator-render-state-");
     const repository = await openStudyNarratorRepository({ Database: DatabaseAdapter, databasePath, idFactory: ids(projectId) });
-    expect(repository.runMarker()).toMatchObject({ markerKey: "runtime.storage-self-test", migrationVersion: 2 });
+    expect(repository.runMarker()).toMatchObject({ markerKey: "runtime.storage-self-test", migrationVersion: 3 });
     const project = repository.createProject({ name: "Rendered" });
+    repository.replaceProject(project.id, {
+      name: project.name,
+      description: project.description,
+      scriptSource: "First line\n\nThird line\n",
+      speakerMappings: [],
+      lexiconEntries: []
+    });
+    expect(repository.listProjects()).toEqual([
+      expect.objectContaining({ scriptLineCount: 4, audioDurationMs: null })
+    ]);
     const timestamp = "2026-08-13T12:00:00.000Z";
     const renderId = "00000000-0000-4000-8000-000000000020";
     const planId = "00000000-0000-4000-8000-000000000021";
@@ -282,6 +375,28 @@ describe("StudyNarratorRepository", () => {
       contractVersion: 1, id: artifactId, renderId, type: "mp3", fileName: "rendered.mp3",
       path: "/scoped/rendered.mp3", sizeBytes: 12, checksum: "a".repeat(64), durationMs: 1_000, createdAt: timestamp
     }]);
+    const failedRenderId = "00000000-0000-4000-8000-000000000023";
+    repository.createRenderJob({
+      contractVersion: 1, id: failedRenderId, projectId: project.id,
+      planId: "00000000-0000-4000-8000-000000000024", retryOfRenderId: null,
+      state: "failed", progress: { ...progress, phase: "failed" },
+      error: null, createdAt: "2026-08-13T13:00:00.000Z", startedAt: timestamp, finishedAt: "2026-08-13T13:00:00.000Z"
+    }, []);
+    const latestRenderId = "00000000-0000-4000-8000-000000000025";
+    repository.createRenderJob({
+      contractVersion: 1, id: latestRenderId, projectId: project.id,
+      planId: "00000000-0000-4000-8000-000000000026", retryOfRenderId: null,
+      state: "complete", progress: { ...progress, phase: "complete", completedChunks: 1 },
+      error: null, createdAt: "2026-08-13T14:00:00.000Z", startedAt: timestamp, finishedAt: "2026-08-13T14:00:00.000Z"
+    }, []);
+    repository.replaceRenderArtifacts(latestRenderId, [{
+      contractVersion: 1, id: "00000000-0000-4000-8000-000000000027", renderId: latestRenderId,
+      type: "mp3", fileName: "latest.mp3", path: "/scoped/latest.mp3", sizeBytes: 24,
+      checksum: "b".repeat(64), durationMs: 752_000, createdAt: "2026-08-13T14:00:00.000Z"
+    }]);
+    expect(repository.listProjects()).toEqual([
+      expect.objectContaining({ scriptLineCount: 4, audioDurationMs: 752_000 })
+    ]);
     repository.close();
 
     const reopened = await openStudyNarratorRepository({ Database: DatabaseAdapter, databasePath });

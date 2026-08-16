@@ -21,29 +21,44 @@ const context = ScriptGenerationContextSchema.parse({
 });
 
 describe("script generation", () => {
-  it("builds a stable creation boilerplate with a knowledge-input block and project lexicon", () => {
+  it("builds the fixed creation instructions with every user-input question", () => {
     const prompt = buildExternalLlmPrompt({ kind: "creation", context, lexiconEntries: entries });
-    expect(prompt).toContain("KNOWLEDGE TO GATHER AND TEACH");
-    expect(prompt).toContain("[REPLACE THIS BLOCK WITH THE TOPIC");
-    expect(prompt).toContain("[speaker_teacher]: Explains concepts clearly.");
-    expect(prompt).toContain("[pause_short]: Brief handoff.");
-    expect(prompt).toContain("{{resume|cv}}: pronounce as “project résumé”.");
-    expect(prompt).toContain("SQL → sequel");
-    expect(prompt).toContain("{{display text|new_sense_id}}");
-    expect(prompt).toContain("StudyNarrator will detect the new sense during import");
+    expect(prompt).toContain("# StudyNarrator Script Creation Instructions");
+    expect(prompt).toContain("## PRIMARY GOAL");
+    expect(prompt).toContain("# USER INPUT");
+    expect(prompt).toContain("## Topic or material to teach\n\n[WHAT SHOULD THE SCRIPT TEACH?]");
+    expect(prompt).toContain("## Learning goals or questions");
+    expect(prompt).toContain("## Audience and existing knowledge");
+    expect(prompt).toContain("## Desired depth, length, or emphasis");
+    expect(prompt).toContain("## Required topics, facts, or constraints");
+    expect(prompt).toContain("## Research requirements");
+    expect(prompt.trimEnd().endsWith("## Source material\n\n[PASTE SOURCE MATERIAL HERE AND/OR ATTACH RELEVANT FILES TO THE CONVERSATION.]")).toBe(true);
+    expect(prompt).toContain("`resume/cv` — a résumé or career document.");
+    expect(prompt).toContain("[speaker_narrator]");
+    expect(prompt).not.toContain("[speaker_teacher]");
+    expect(prompt).not.toContain("SQL → sequel");
+    expect(prompt).not.toContain("{{resume|cv}}");
+    expect(prompt).not.toContain("KNOWLEDGE TO GATHER AND TEACH");
     expect(prompt).not.toContain("SECRET_ALIAS");
     expect(prompt).not.toContain("```");
     expect(buildExternalLlmPrompt({ kind: "creation", context, lexiconEntries: entries })).toBe(prompt);
   });
 
-  it("builds a shorter update boilerplate with script and change-request placeholders", () => {
+  it("builds the fixed update instructions with the three handoff sections", () => {
     const prompt = buildExternalLlmPrompt({ kind: "update", context, lexiconEntries: entries });
-    expect(prompt).toContain("SCRIPT AND CHANGE REQUEST");
-    expect(prompt).toContain("[PASTE THE CURRENT SCRIPT AND DESCRIBE THE CHANGES TO MAKE HERE.]");
-    expect(prompt).toContain("Return the complete revised script, not a patch");
-    expect(prompt).toContain("[speaker_student]");
-    expect(prompt).toContain("SQL → sequel");
+    expect(prompt).toContain("# StudyNarrator Script Update Instructions");
+    expect(prompt).toContain("## UPDATE RULES");
+    expect(prompt).toContain("## Requested changes\n\n[DESCRIBE WHAT SHOULD BE ADDED, REMOVED, CORRECTED, EXPANDED, OR REORGANIZED.]");
+    expect(prompt).toContain("## Current StudyNarrator script\n\n[PASTE THE CURRENT SCRIPT HERE AND/OR ATTACH IT TO THE CONVERSATION.]");
+    expect(prompt.trimEnd().endsWith("## Additional requirements or source material\n\n[OPTIONAL — PROVIDE FACTS, RESEARCH, SOURCE MATERIAL, CONSTRAINTS, OR ATTACH RELEVANT FILES.]")).toBe(true);
+    expect(prompt).toContain("`resume/cv` — a résumé or career document.");
+    expect(prompt).toContain("[speaker_narrator]");
+    expect(prompt).toContain("[pause_short]");
+    expect(prompt).toContain("[section: Descriptive title]");
+    expect(prompt).not.toContain("[speaker_student]");
+    expect(prompt).not.toContain("SQL → sequel");
     expect(prompt).not.toContain("KNOWLEDGE TO GATHER AND TEACH");
+    expect(prompt).not.toContain("Convert the existing study guide");
   });
 
   it("rejects duplicate and invalid project-derived IDs", () => {
@@ -57,9 +72,14 @@ describe("script generation", () => {
       "SKILL.md", "CREATION_PROMPT.md", "UPDATE_PROMPT.md", "SCRIPT_FORMAT.md", "LEXICON_ALIASES.md", "examples/single-narrator.txt", "examples/two-speaker-study-guide.txt"
     ]);
     const combined = files.map(({ content }) => content).join("\n");
-    expect(combined).toContain("KNOWLEDGE TO GATHER AND TEACH");
-    expect(combined).toContain("SCRIPT AND CHANGE REQUEST");
+    expect(combined).toContain("# StudyNarrator Script Creation Instructions");
+    expect(combined).toContain("# StudyNarrator Script Update Instructions");
+    expect(combined).toContain("[WHAT SHOULD THE SCRIPT TEACH?]");
+    expect(combined).toContain("[DESCRIBE WHAT SHOULD BE ADDED, REMOVED, CORRECTED, EXPANDED, OR REORGANIZED.]");
     expect(combined).not.toContain("SECRET_ALIAS");
+    const update = files.find(({ path }) => path === "UPDATE_PROMPT.md");
+    expect(update?.content).not.toContain("SQL → sequel");
+    expect(update?.content).not.toContain("[speaker_teacher]");
     const single = buildSkillPackageFiles({ context: { ...context, speakers: [context.speakers[0]!] }, lexiconEntries: entries });
     expect(single.map(({ path }) => path)).not.toContain("examples/two-speaker-study-guide.txt");
   });

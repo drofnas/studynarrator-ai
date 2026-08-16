@@ -1,6 +1,11 @@
 import { chmod, mkdir, readdir, stat } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
-import { DATABASE_SCHEMA_VERSION, DEFAULT_GLOBAL_LEXICON, DEFAULT_SYSTEM_TIMING } from "@studynarrator/shared-types";
+import {
+  DATABASE_SCHEMA_VERSION,
+  DEFAULT_GLOBAL_LEXICON,
+  DEFAULT_GLOBAL_NAMED_SENSE_LEXICON,
+  DEFAULT_SYSTEM_TIMING
+} from "@studynarrator/shared-types";
 import { MigrationFailureError } from "./errors.js";
 
 interface StatementLike {
@@ -246,11 +251,44 @@ function applyBaseline(database: DatabaseLike): void {
     INSERT INTO lexicon_entries (
       id, scope, project_id, ordinal, entry_type, display_text, sense_id, spoken_text,
       case_sensitive, whole_word, priority, enabled, notes, created_at, updated_at
-    ) VALUES (?, 'global', NULL, ?, 'exactTerm', ?, NULL, ?, 0, 1, 0, 1, '', ?, ?)
+    ) VALUES (?, 'global', NULL, ?, ?, ?, ?, ?, 0, 1, 0, ?, '', ?, ?)
   `);
   DEFAULT_GLOBAL_LEXICON.forEach((entry, ordinal) => {
-    insertLexicon.run(entry.id, ordinal, entry.displayText, entry.spokenText, timestamp, timestamp);
+    insertLexicon.run(
+      entry.id,
+      ordinal,
+      entry.entryType,
+      entry.displayText,
+      entry.entryType === "namedSense" ? entry.senseId : null,
+      entry.spokenText,
+      entry.enabled ? 1 : 0,
+      timestamp,
+      timestamp
+    );
   });
+}
+
+function addGlobalNamedSenseDefaults(database: DatabaseLike): void {
+  const timestamp = new Date().toISOString();
+  const row = database.prepare("SELECT COALESCE(MAX(ordinal), -1) AS ordinal FROM lexicon_entries WHERE scope = 'global'").get() as { ordinal: number };
+  let ordinal = Number(row.ordinal) + 1;
+  const existing = database.prepare(`
+    SELECT id FROM lexicon_entries
+    WHERE scope = 'global' AND entry_type = 'namedSense'
+      AND lower(display_text) = lower(?) AND lower(sense_id) = lower(?)
+    LIMIT 1
+  `);
+  const insert = database.prepare(`
+    INSERT OR IGNORE INTO lexicon_entries (
+      id, scope, project_id, ordinal, entry_type, display_text, sense_id, spoken_text,
+      case_sensitive, whole_word, priority, enabled, notes, created_at, updated_at
+    ) VALUES (?, 'global', NULL, ?, 'namedSense', ?, ?, ?, 0, 1, 0, 1, '', ?, ?)
+  `);
+  for (const entry of DEFAULT_GLOBAL_NAMED_SENSE_LEXICON) {
+    if (existing.get(entry.displayText, entry.senseId)) continue;
+    const result = insert.run(entry.id, ordinal, entry.displayText, entry.senseId, entry.spokenText, timestamp, timestamp);
+    if (Number(result.changes ?? 0) > 0) ordinal += 1;
+  }
 }
 
 export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
@@ -270,7 +308,8 @@ export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
       );
       CREATE INDEX speech_cache_deletion_project_idx ON speech_cache_deletion_queue(project_id, queued_at);
     `);
-  } }
+  } },
+  { version: 3, name: "global-named-sense-defaults", up: addGlobalNamedSenseDefaults }
 ]);
 
 interface VersionRow { version: number }

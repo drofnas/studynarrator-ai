@@ -88,6 +88,29 @@ test.describe("Settings and connection diagnostics", () => {
     await expect(page.getByLabel("Default Voice")).toHaveValue("af_heart");
   });
 
+  test("restores saved connection fields after the application service briefly restarts", async ({ page, studyNarrator }) => {
+    let connectionLoads = 0;
+    await page.route("**/api/connection", async (route) => {
+      if (route.request().method() === "GET" && connectionLoads === 0) {
+        connectionLoads += 1;
+        await route.abort("connectionrefused");
+        return;
+      }
+      if (route.request().method() === "GET") connectionLoads += 1;
+      await route.continue();
+    });
+
+    await page.reload();
+    await expect(page.getByRole("status", { name: "Restoring connection settings" })).toBeVisible();
+    await expect(page.getByLabel("Address")).toHaveCount(0);
+    await expect(page.getByLabel("Address")).toHaveValue(studyNarrator.fakeSpeaches.baseUrl);
+    await expect(page.getByLabel("Model")).toHaveValue(modelId);
+    await expect(page.getByLabel("Default Voice")).toHaveValue("af_heart");
+    await expect(page.getByLabel("Timeout (seconds)")).toHaveValue("2");
+    await expect(page.getByLabel("Retries")).toHaveValue("0");
+    expect(connectionLoads).toBeGreaterThanOrEqual(2);
+  });
+
   test("groups, favorites, and auditions catalog voices while persisting settings", async ({ page, studyNarrator }) => {
     await page.route("**/api/connection/speech-catalog", async (route) => {
       const response = await route.fetch();
@@ -152,56 +175,75 @@ test.describe("Settings and connection diagnostics", () => {
     await openRoute(page, studyNarrator, "/settings/lexicon");
     const lexicon = page.getByRole("region", { name: "Global lexicon" });
     await expect(lexicon).toBeVisible();
-    await expect(lexicon.getByLabel("Script Text").nth(1)).toHaveValue("API");
-    await expect(lexicon.getByLabel("Spoken Text").nth(1)).toHaveValue("A P I");
-    await expect(lexicon.getByText(/complete words regardless of capitalization/u)).toBeVisible();
+    await expect(lexicon.getByText("44 entries")).toBeVisible();
+    const seeded = lexicon.getByRole("article", { name: "Lexicon entry resume/cv" });
+    await expect(seeded.getByLabel("Alias")).toHaveValue("resume/cv");
+    await expect(seeded.getByLabel("Spoken Text")).toHaveValue("rez oo may");
+    await expect(lexicon.getByText("{{resume|cv}}")).toBeVisible();
     await expect(lexicon.getByText(/Case sensitive|Whole word|Sense ID|Notes/u)).toHaveCount(0);
     await lexicon.getByRole("button", { name: "Add" }).click();
-    await expect(page.getByRole("alert")).toContainText("Script Text and Spoken Text are required.");
+    await expect(page.getByRole("alert")).toContainText("Alias and Spoken Text are required.");
 
-    await lexicon.getByLabel("Script Text").first().fill("api");
+    await lexicon.getByLabel("Alias").first().fill("RESUME/CV");
     await lexicon.getByLabel("Spoken Text").first().fill("duplicate");
     await lexicon.getByRole("button", { name: "Add" }).click();
     await expect(page.getByRole("alert")).toContainText("unique regardless of capitalization");
-    await lexicon.getByLabel("Script Text").first().fill("CLI");
-    await lexicon.getByLabel("Spoken Text").first().fill("C L I");
+    await lexicon.getByLabel("Alias").first().fill("demo/letter");
+    await lexicon.getByLabel("Spoken Text").first().fill("dee moh");
     await lexicon.getByRole("button", { name: "Add" }).click();
     await expect(page.getByText("Global pronunciation added.")).toBeVisible();
     await page.reload();
-    await expect(lexicon.getByRole("article", { name: "Lexicon entry CLI" })).toBeVisible();
+    await expect(lexicon.getByRole("article", { name: "Lexicon entry demo/letter" })).toBeVisible();
 
-    const entry = lexicon.getByRole("article", { name: "Lexicon entry CLI" });
+    const entry = lexicon.getByRole("article", { name: "Lexicon entry demo/letter" });
+    const aliasAutosave = page.waitForResponse((response) => response.url().endsWith("/api/lexicon/global") && response.request().method() === "PUT" && response.ok());
+    await entry.getByLabel("Alias").fill("demo/symbol");
+    await aliasAutosave;
+    const renamedEntry = lexicon.getByRole("article", { name: "Lexicon entry demo/symbol" });
     const textAutosave = page.waitForResponse((response) => response.url().endsWith("/api/lexicon/global") && response.request().method() === "PUT" && response.ok());
-    await entry.getByLabel("Spoken Text").fill("command line interface");
+    await renamedEntry.getByLabel("Spoken Text").fill("demonstration symbol");
     await textAutosave;
-    await expect(entry.getByText(/Saving…|Saved/u)).toHaveCount(0);
+    await expect(renamedEntry.getByText(/Saving…|Saved/u)).toHaveCount(0);
     const enablementAutosave = page.waitForResponse((response) => response.url().endsWith("/api/lexicon/global") && response.request().method() === "PUT" && response.ok());
-    await entry.getByRole("checkbox", { name: "Enabled" }).uncheck();
+    await renamedEntry.getByRole("checkbox", { name: "Enabled" }).uncheck();
     await enablementAutosave;
-    await expect(entry.getByText(/Saving…|Saved/u)).toHaveCount(0);
+    await expect(renamedEntry.getByText(/Saving…|Saved/u)).toHaveCount(0);
     await page.reload();
-    await expect(entry.getByLabel("Spoken Text")).toHaveValue("command line interface");
-    await expect(entry.getByRole("checkbox", { name: "Enabled" })).not.toBeChecked();
+    const persisted = lexicon.getByRole("article", { name: "Lexicon entry demo/symbol" });
+    await expect(persisted.getByLabel("Alias")).toHaveValue("demo/symbol");
+    await expect(persisted.getByLabel("Spoken Text")).toHaveValue("demonstration symbol");
+    await expect(persisted.getByRole("checkbox", { name: "Enabled" })).not.toBeChecked();
     await lexicon.getByLabel("Search global lexicon").fill("not present");
     await expect(lexicon.getByText("No matching global lexicon entries.")).toBeVisible();
     await lexicon.getByLabel("Search global lexicon").fill("");
-    await entry.getByRole("button", { name: "Delete" }).click();
-    await expect(entry).toHaveCount(0);
+    await persisted.getByRole("button", { name: "Delete" }).click();
+    await expect(persisted).toHaveCount(0);
+    await page.reload();
+    await expect(lexicon.getByRole("article", { name: "Lexicon entry demo/symbol" })).toHaveCount(0);
+
+    const seedDisable = page.waitForResponse((response) => response.url().endsWith("/api/lexicon/global") && response.request().method() === "PUT" && response.ok());
+    await seeded.getByRole("checkbox", { name: "Enabled" }).uncheck();
+    await seedDisable;
+    await page.reload();
+    await expect(seeded.getByRole("checkbox", { name: "Enabled" })).not.toBeChecked();
+    await seeded.getByRole("button", { name: "Delete" }).click();
+    await page.reload();
+    await expect(lexicon.getByRole("article", { name: "Lexicon entry resume/cv" })).toHaveCount(0);
 
     await page.route("**/api/lexicon/global", async (route) => {
       if (route.request().method() === "PUT") await route.abort();
       else await route.continue();
     });
-    await lexicon.getByLabel("Script Text").first().fill("GraphQL");
+    await lexicon.getByLabel("Alias").first().fill("GraphQL");
     await lexicon.getByLabel("Spoken Text").first().fill("graph Q L");
     await lexicon.getByRole("button", { name: "Add" }).click();
     await expect(page.getByRole("alert")).toBeVisible();
-    await expect(lexicon.getByLabel("Script Text").first()).toHaveValue("GraphQL");
+    await expect(lexicon.getByLabel("Alias").first()).toHaveValue("GraphQL");
   });
 });
 
 test.describe("Projects connected authoring", () => {
-  test("defaults and persists catalog voices in bounded editor panels without requesting TTS", async ({ page, studyNarrator }) => {
+  test("defaults and persists catalog voices while Details uses document scrolling without requesting TTS", async ({ page, studyNarrator }) => {
     await configureConnection(page, studyNarrator);
     studyNarrator.fakeSpeaches.reset();
     await page.reload();
@@ -284,16 +326,23 @@ test.describe("Projects connected authoring", () => {
     const detailsLayout = await page.evaluate(() => {
       const score = document.querySelector('[aria-label="Narration score content"]');
       const scorePanel = score?.closest("section");
-      if (!(score instanceof HTMLElement) || !(scorePanel instanceof HTMLElement)) throw new Error("Expected a bounded narration score panel.");
+      if (!(score instanceof HTMLElement) || !(scorePanel instanceof HTMLElement)) throw new Error("Expected a narration score panel.");
       return {
         scorePanelHeight: scorePanel.getBoundingClientRect().height,
-        scoreOverflows: score.scrollHeight > score.clientHeight
+        scoreOverflowY: getComputedStyle(score).overflowY,
+        scoreOverflows: score.scrollHeight > score.clientHeight + 1,
+        pageScrolls: document.documentElement.scrollHeight > document.documentElement.clientHeight
       };
     });
-    expect(detailsLayout.scorePanelHeight).toBeLessThanOrEqual(600);
-    expect(detailsLayout.scoreOverflows).toBe(true);
+    expect(detailsLayout.scorePanelHeight).toBeGreaterThan(600);
+    expect(detailsLayout.scoreOverflowY).toBe("visible");
+    expect(detailsLayout.scoreOverflows).toBe(false);
+    expect(detailsLayout.pageScrolls).toBe(true);
+    await expect(page.getByRole("heading", { name: "Sections" })).toHaveCount(0);
     await scoreBody.evaluate((element) => { element.scrollTop = 250; });
-    await expect.poll(() => scoreBody.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    await expect.poll(() => scoreBody.evaluate((element) => element.scrollTop)).toBe(0);
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
 
     await page.getByRole("button", { name: "Save now" }).click();
     await expect(page.getByText("All changes saved.")).toHaveCount(0);
@@ -301,7 +350,7 @@ test.describe("Projects connected authoring", () => {
     await expect(page.getByRole("tab", { name: "Details" })).toHaveAttribute("aria-selected", "true");
     await expect(page.getByLabel("Dry run ordered segment table")).toContainText("Welcome line 48.");
     await page.getByRole("tab", { name: "Script Editor" }).click();
-    await expect(page.getByText(`${longScript.length.toLocaleString()} characters`, { exact: false })).toBeVisible();
+    await expect(page.getByRole("group", { name: "Script statistics below editor" }).getByText(`${longScript.length.toLocaleString()} characters`)).toBeVisible();
     await page.getByRole("tab", { name: "Settings" }).click();
     await expect(page.getByLabel("Optional model override")).toHaveCount(0);
     await expect(page.getByLabel("Voice for speaker teacher")).toHaveValue("af_sky");
@@ -334,7 +383,21 @@ test.describe("Projects connected authoring", () => {
     const editor = source.locator("xpath=ancestor::div[contains(@class, 'cm-editor')]");
     const minimumEditorHeight = await editor.evaluate((element) => element.getBoundingClientRect().height);
     await source.fill(script);
-    await expect(page.getByText(`${script.length.toLocaleString()} characters`, { exact: false })).toBeVisible();
+    const topStatistics = page.getByRole("group", { name: "Script statistics above editor" });
+    const bottomStatistics = page.getByRole("group", { name: "Script statistics below editor" });
+    const wordCount = script.trim().split(/\s+/u).length;
+    for (const statistics of [topStatistics, bottomStatistics]) {
+      await expect(statistics.getByText(`${wordCount.toLocaleString()} words`)).toBeVisible();
+      await expect(statistics.getByText(`${script.length.toLocaleString()} characters`)).toBeVisible();
+    }
+    const [topBox, editorBox, bottomBox] = await Promise.all([topStatistics.boundingBox(), editor.boundingBox(), bottomStatistics.boundingBox()]);
+    expect(topBox).not.toBeNull();
+    expect(editorBox).not.toBeNull();
+    expect(bottomBox).not.toBeNull();
+    expect(topBox!.y + topBox!.height).toBeLessThan(editorBox!.y);
+    expect(topBox!.x).toBeGreaterThan(editorBox!.x + editorBox!.width / 2);
+    expect(bottomBox!.y).toBeGreaterThan(editorBox!.y + editorBox!.height);
+    expect(Math.abs(bottomBox!.x - editorBox!.x)).toBeLessThanOrEqual(1);
 
     const scroller = editor.locator(".cm-scroller");
     await expect(scroller).toHaveCount(1);
@@ -403,7 +466,11 @@ test.describe("Projects connected authoring", () => {
 
     await page.getByRole("button", { name: "Save now" }).click();
     await page.reload();
-    await expect(page.getByText(`${script.length.toLocaleString()} characters`, { exact: false })).toBeVisible();
+    for (const label of ["Script statistics above editor", "Script statistics below editor"]) {
+      const statistics = page.getByRole("group", { name: label });
+      await expect(statistics.getByText(`${wordCount.toLocaleString()} words`)).toBeVisible();
+      await expect(statistics.getByText(`${script.length.toLocaleString()} characters`)).toBeVisible();
+    }
     const reloadedSource = page.getByRole("textbox", { name: "Script source" });
     const reloadedEditor = reloadedSource.locator("xpath=ancestor::div[contains(@class, 'cm-editor')]");
     const reloadedScroller = reloadedEditor.locator(".cm-scroller");

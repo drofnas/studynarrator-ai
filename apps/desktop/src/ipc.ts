@@ -41,6 +41,7 @@ import {
   RedactedConnectionDiagnosticsSchema,
   SCRATCHPAD_CHANNELS,
   SCRIPT_GENERATION_CHANNELS,
+  ScriptGenerationPromptExportRequestSchema,
   ScriptGenerationPromptRequestSchema,
   ScriptGenerationSkillRequestSchema,
   PromptDocumentSchema,
@@ -381,8 +382,8 @@ export function registerScriptGenerationHandlers(
     return PromptDocumentSchema.parse(await generation.previewPrompt(projectId, kind));
   });
   handle(SCRIPT_GENERATION_CHANNELS.exportPrompt, async (input) => {
-    const { projectId, kind } = ScriptGenerationPromptRequestSchema.parse(input);
-    const file = await generation.resolvePromptExport(projectId, kind);
+    const { projectId, kind, content } = ScriptGenerationPromptExportRequestSchema.parse(input);
+    const file = await generation.resolvePromptExport(projectId, kind, content);
     const destination = await dialog.showSaveDialog({ defaultPath: file.fileName });
     if (destination.canceled || !destination.filePath) return FileExportResultSchema.parse({ disposition: "canceled", fileName: file.fileName });
     await writeFile(destination.filePath, file.bytes);

@@ -17,10 +17,11 @@ function stateLabel(state: PlaybackState): string {
   return `${state[0]?.toUpperCase() ?? ""}${state.slice(1)}`;
 }
 
-export function SharedAudioPlayer({ label, src, waveform }: {
+export function SharedAudioPlayer({ label, src, waveform, disabled = false }: {
   label: string;
   src: string;
   waveform?: RenderWaveform | null;
+  disabled?: boolean;
 }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [state, setState] = useState<PlaybackState>("loading");
@@ -54,6 +55,10 @@ export function SharedAudioPlayer({ label, src, waveform }: {
     setCurrentTime(0);
     setDuration(0);
   }, [src]);
+
+  useEffect(() => {
+    if (disabled) audioRef.current?.pause();
+  }, [disabled]);
 
   const seek = (next: number) => {
     const bounded = Math.max(0, Math.min(effectiveDuration, next));
@@ -99,14 +104,14 @@ export function SharedAudioPlayer({ label, src, waveform }: {
     }
   };
   const seekByPointer = (event: PointerEvent<HTMLDivElement>) => {
-    if (effectiveDuration <= 0) return;
+    if (disabled || effectiveDuration <= 0) return;
     const bounds = event.currentTarget.getBoundingClientRect();
     if (bounds.width <= 0) return;
     seek((event.clientX - bounds.left) / bounds.width * effectiveDuration);
   };
 
   return (
-    <section className={styles.player} aria-label={`Audio player for ${label}`}>
+    <section className={styles.player} data-disabled={disabled} aria-disabled={disabled} aria-label={`Audio player for ${label}`}>
       <audio
         ref={audioRef}
         src={src}
@@ -123,9 +128,9 @@ export function SharedAudioPlayer({ label, src, waveform }: {
       <div className={styles.transport}>
         {state === "playing"
           ? <button type="button" onClick={pause}>Pause</button>
-          : <button type="button" onClick={() => void play()} disabled={state === "loading" || state === "unavailable"}>Play</button>}
-        <button type="button" className={styles.secondary} onClick={stop} disabled={state === "loading" || state === "unavailable"}>Stop</button>
-        <button type="button" className={styles.secondary} onClick={() => void replay()} disabled={state === "loading" || state === "unavailable"}>Replay</button>
+          : <button type="button" onClick={() => void play()} disabled={disabled || state === "loading" || state === "unavailable"}>Play</button>}
+        <button type="button" className={styles.secondary} onClick={stop} disabled={disabled || state === "loading" || state === "unavailable"}>Stop</button>
+        <button type="button" className={styles.secondary} onClick={() => void replay()} disabled={disabled || state === "loading" || state === "unavailable"}>Replay</button>
       </div>
       <div className={styles.signal} role="group" aria-label={availableWaveform ? "Playback waveform" : "Playback progress"} onPointerDown={seekByPointer}>
         {availableWaveform
@@ -139,7 +144,7 @@ export function SharedAudioPlayer({ label, src, waveform }: {
           max={effectiveDuration || 0}
           step="0.01"
           value={Math.min(currentTime, effectiveDuration || 0)}
-          disabled={effectiveDuration <= 0 || state === "unavailable"}
+          disabled={disabled || effectiveDuration <= 0 || state === "unavailable"}
           onChange={(event) => seek(Number(event.target.value))}
           onKeyDown={seekByKeyboard}
         />
@@ -147,8 +152,8 @@ export function SharedAudioPlayer({ label, src, waveform }: {
       </div>
       <div className={styles.timeline} aria-label="Playback time"><span>{formatTime(currentTime)}</span><span>{formatTime(effectiveDuration)}</span></div>
       <div className={styles.volume}>
-        <button type="button" className={styles.secondary} onClick={toggleMute}>{muted ? "Unmute" : "Mute"}</button>
-        <label>Volume<input aria-label="Volume" type="range" min="0" max="1" step="0.05" value={volume} onChange={(event) => { const next = Number(event.target.value); setVolume(next); if (audioRef.current) audioRef.current.volume = next; }} /></label>
+        <button type="button" className={styles.secondary} onClick={toggleMute} disabled={disabled}>{muted ? "Unmute" : "Mute"}</button>
+        <label>Volume<input aria-label="Volume" type="range" min="0" max="1" step="0.05" value={volume} disabled={disabled} onChange={(event) => { const next = Number(event.target.value); setVolume(next); if (audioRef.current) audioRef.current.volume = next; }} /></label>
       </div>
       <p className={styles.state} role="status" aria-live="polite">{stateLabel(state)}</p>
     </section>

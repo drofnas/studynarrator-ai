@@ -14,6 +14,12 @@ test.describe("Render and listen", () => {
     studyNarrator.fakeSpeaches.reset();
 
     await openRoute(page, studyNarrator, `/projects/${created.id}?tab=render`);
+    await expect(page.getByRole("heading", { name: "Project details" })).toBeVisible();
+    await expect(page.getByLabel("Project name")).toHaveValue(created.name);
+    await expect(page.getByLabel("Description")).toHaveValue("One current render plan.");
+    await expect(page.getByRole("button", { name: "Save now" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Duplicate" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Delete" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Render and listen" })).toBeVisible();
     await expect(page.getByText(/first render may take longer while voice segments are generated/u)).toBeVisible();
     await expect(page.getByText(/Frozen render plan/u)).toHaveCount(0);

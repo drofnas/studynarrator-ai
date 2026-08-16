@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import "@/test/domGeometry.js";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { EditorView } from "@codemirror/view";
 import { Link, MemoryRouter, Route, Routes } from "react-router";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parseScript, resolveParagraphPauses, transformScript } from "@studynarrator/core";
 import { DEFAULT_SYSTEM_TIMING } from "@studynarrator/shared-types";
-import type { IgnoredDiagnosticCollection, PersistenceClient, ProjectDetail, ProjectPreviewResult, ProjectReplaceInput, ProjectPreviewClient, RenderClient, RenderPlan, RenderPlanClient, RenderPlanSummary, SpeachesConnection, SpeechCatalog, VoiceCatalog } from "@studynarrator/shared-types";
+import type { IgnoredDiagnosticCollection, PersistenceClient, ProjectDetail, ProjectPreviewResult, ProjectReplaceInput, ProjectPreviewClient, ProjectSummary, RenderClient, RenderJob, RenderPlan, RenderPlanClient, RenderPlanSummary, SpeachesConnection, SpeechCatalog, VoiceCatalog } from "@studynarrator/shared-types";
 import type { ScriptAnalyzer } from "@/workers/parser/parserClient.js";
 import type { ScriptAnalysisInput } from "@/workers/parser/parserWorkerProtocol.js";
 import { GLOBAL_VOICE_CATALOG_MODEL_ID } from "@/features/projects/projectAuthoring.js";
@@ -89,7 +89,7 @@ function summaryOf(plan: RenderPlan): RenderPlanSummary {
   };
 }
 
-function fixture(sourceProject = project) {
+function fixture(sourceProject = project, summaryOverrides: Partial<Pick<ProjectSummary, "scriptLineCount" | "audioDurationMs">> = {}) {
   let stored = structuredClone(sourceProject);
   let ignoredDiagnostics: Array<{ code: string; pattern: string }> = [];
   const replace = vi.fn(async (_id: string, input: ProjectReplaceInput) => {
@@ -109,7 +109,17 @@ function fixture(sourceProject = project) {
   const client: PersistenceClient = {
     status: vi.fn(),
     projects: {
-      list: vi.fn(async () => [{ id: stored.id, name: stored.name, description: stored.description, scriptHash: stored.scriptHash, createdAt: stored.createdAt, updatedAt: stored.updatedAt }]),
+      list: vi.fn(async () => [{
+        id: stored.id,
+        name: stored.name,
+        description: stored.description,
+        scriptHash: stored.scriptHash,
+        scriptLineCount: stored.scriptSource === "" ? null : stored.scriptSource.split("\n").length,
+        audioDurationMs: null,
+        ...summaryOverrides,
+        createdAt: stored.createdAt,
+        updatedAt: stored.updatedAt
+      }]),
       create,
       get: vi.fn(async () => structuredClone(stored)),
       replace,
@@ -176,6 +186,15 @@ function deferred<T>() {
   return { promise, resolve: resolvePromise };
 }
 
+function installAudioContext() {
+  const source = { buffer: null as AudioBuffer | null, connect: vi.fn(), disconnect: vi.fn(), start: vi.fn(), stop: vi.fn(), onended: null as (() => void) | null };
+  const context = { destination: {}, resume: vi.fn(async () => undefined), decodeAudioData: vi.fn(async () => ({} as AudioBuffer)), createBufferSource: vi.fn(() => source), close: vi.fn(async () => undefined) };
+  function FakeAudioContext() { return context; }
+  vi.stubGlobal("AudioContext", FakeAudioContext);
+  vi.stubGlobal("atob", (value: string) => Buffer.from(value, "base64").toString("binary"));
+  return { context, source };
+}
+
 async function openProjectTab(name: "Script Editor" | "Settings" | "Details" | "Render") {
   await userEvent.click(await screen.findByRole("tab", { name }));
 }
@@ -192,16 +211,22 @@ function replaceScriptSource(value: string): void {
   view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: value } });
 }
 
+beforeEach(() => {
+  vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => undefined);
+  vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => undefined);
+});
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("Projects workbench", () => {
   it("renders the project index ledger and creates from an expandable form", async () => {
-    const { client, analyze, create } = fixture();
+    const { client, analyze, create } = fixture({ ...project, description: "" }, { audioDurationMs: 752_000 });
     renderPage(client, analyze, { path: "/projects" });
 
     const table = await screen.findByRole("table");
-    expect(within(table).getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual(["Name", "Description", "Created", "Last updated", "Open"]);
-    expect(within(table).getByRole("rowheader", { name: "Authoring study" })).toBeInTheDocument();
+    expect(within(table).getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual(["Name", "Description", "Script Lines", "Audio Length"]);
+    const row = within(table).getByRole("row", { name: /Authoring study/u });
+    expect(within(row).getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["-", "3", "12:32"]);
+    expect(within(row).getByRole("link", { name: "Authoring study" })).toHaveAttribute("href", `/projects/${project.id}`);
     expect(screen.queryByText("Your projects")).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "New project" }));
@@ -241,6 +266,32 @@ describe("Projects workbench", () => {
     failed.client.projects.list = vi.fn(async () => { throw new Error("project index unavailable"); });
     renderPage(failed.client, failed.analyze, { path: "/projects" });
     expect(await screen.findByRole("alert")).toHaveTextContent("project index unavailable");
+  });
+
+  it("shows live word and character counts for the raw script source", async () => {
+    const { client, analyze } = fixture();
+    renderPage(client, analyze);
+
+    const statistics = await screen.findAllByRole("group", { name: /Script statistics/u });
+    expect(statistics).toHaveLength(2);
+    for (const item of statistics) {
+      expect(within(item).getByText("4 words")).toBeInTheDocument();
+      expect(within(item).getByText(`${project.scriptSource.length.toLocaleString()} characters`)).toBeInTheDocument();
+    }
+
+    const mixedWhitespace = "  [speaker_teacher]\nOne\t two  ";
+    replaceScriptSource(mixedWhitespace);
+    for (const item of statistics) {
+      expect(await within(item).findByText("3 words")).toBeInTheDocument();
+      expect(within(item).getByText(`${mixedWhitespace.length.toLocaleString()} characters`)).toBeInTheDocument();
+    }
+
+    const whitespaceOnly = " \n\t ";
+    replaceScriptSource(whitespaceOnly);
+    for (const item of statistics) {
+      expect(await within(item).findByText("0 words")).toBeInTheDocument();
+      expect(within(item).getByText(`${whitespaceOnly.length.toLocaleString()} characters`)).toBeInTheDocument();
+    }
   });
 
   it("keeps project lexicon changes isolated from global entries", async () => {
@@ -400,6 +451,10 @@ describe("Projects workbench", () => {
     renderPage(client, analyze);
 
     expect(await screen.findByRole("heading", { name: "Script editor" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Upload .txt")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Find text")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Replacement text")).not.toBeInTheDocument();
+    expect(screen.queryByText(/drop a UTF-8/u)).not.toBeInTheDocument();
     await waitFor(() => expect(analyze).toHaveBeenCalled());
     expect(screen.getByRole("region", { name: "Script editor content" })).toHaveAttribute("tabindex", "0");
     await openProjectTab("Details");
@@ -423,7 +478,7 @@ describe("Projects workbench", () => {
 
     const projectName = screen.getByLabelText("Project name");
     fireEvent.change(projectName, { target: { value: "Autosaved study" } });
-    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    expect(screen.queryByText(/Unsaved changes|Saving…|Save failed|Invalid changes/u)).not.toBeInTheDocument();
     await waitFor(() => expect(replace).toHaveBeenCalled(), { timeout: 2_000 });
     expect(replace.mock.calls.at(-1)?.[1]).toMatchObject({ name: "Autosaved study" });
     await waitFor(() => expect(screen.queryByText(/^Saved$/u)).not.toBeInTheDocument());
@@ -505,9 +560,14 @@ describe("Projects workbench", () => {
     const projectName = await screen.findByDisplayValue("Authoring study");
 
     fireEvent.change(projectName, { target: { value: "Revision one" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save now" }));
+    const saveButton = screen.getByRole("button", { name: "Save now" });
+    const initialClassName = saveButton.className;
+    fireEvent.click(saveButton);
     await waitFor(() => expect(replace).toHaveBeenCalledTimes(1));
+    expect(saveButton).toBeEnabled();
+    expect(saveButton.className).toBe(initialClassName);
     fireEvent.change(projectName, { target: { value: "Revision two" } });
+    fireEvent.click(saveButton);
     firstSave.resolve({ ...project, name: "Revision one", updatedAt: "2026-08-12T13:30:00.000Z" });
 
     await waitFor(() => expect(replace).toHaveBeenCalledTimes(2), { timeout: 2_000 });
@@ -531,11 +591,8 @@ describe("Projects workbench", () => {
     expect(replace.mock.invocationCallOrder[0]).toBeLessThan(duplicate.mock.invocationCallOrder[0]!);
   });
 
-  it("flushes pending edits before segment previews and exposes no project cache or pronunciation controls", async () => {
-    vi.stubGlobal("atob", (value: string) => Buffer.from(value, "base64").toString("binary"));
-    vi.stubGlobal("URL", { createObjectURL: vi.fn(() => "blob:project-preview"), revokeObjectURL: vi.fn() });
-    vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => undefined);
-    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => undefined);
+  it("flushes pending edits before inline segment playback and removes the outline and audible preview", async () => {
+    const { source } = installAudioContext();
     const { client, analyze, replace } = fixture(project);
     const connection: SpeachesConnection = {
       baseUrl: "http://127.0.0.1:8000", suppliedUrlForm: "root", configured: true, defaultModelId: "model", defaultVoiceId: "voice_teacher",
@@ -554,14 +611,19 @@ describe("Projects workbench", () => {
 
     fireEvent.change(await screen.findByDisplayValue("Offline fixture"), { target: { value: "Pending preview edit" } });
     await openProjectTab("Details");
-    await userEvent.click((await screen.findAllByRole("button", { name: "Preview" }))[0]!);
-    expect(await screen.findByRole("region", { name: "Project preview result" })).toHaveTextContent("Teacher Voice");
-    expect(screen.getByRole("region", { name: "Project preview result" })).toHaveTextContent("voice_teacher");
-    expect(screen.getByRole("region", { name: "Project preview result" })).toHaveTextContent("Cache miss");
+    expect(screen.queryByRole("heading", { name: "Sections" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Project outline")).not.toBeInTheDocument();
+    const playButton = (await screen.findAllByRole("button", { name: /Play narration row/u }))[0]!;
+    await userEvent.click(playButton);
+    expect(await screen.findByRole("button", { name: /Playing narration row/u })).toBeInTheDocument();
+    expect(source.start).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("region", { name: "Project preview result" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Audible preview")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Preview" })).not.toBeInTheDocument();
     expect(replace).toHaveBeenCalledWith(project.id, expect.objectContaining({ description: "Pending preview edit" }));
     expect(replace.mock.invocationCallOrder[0]).toBeLessThan(preview.mock.invocationCallOrder[0]!);
-    expect(screen.queryByRole("button", { name: "Clear this cached entry" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Clear project cache" })).not.toBeInTheDocument();
+    act(() => source.onended?.());
+    expect(screen.getAllByRole("button", { name: /Play narration row/u }).length).toBeGreaterThan(0);
 
     await openProjectTab("Settings");
     expect(screen.queryByLabelText("Pronunciation test")).not.toBeInTheDocument();
@@ -573,10 +635,69 @@ describe("Projects workbench", () => {
     const { client, analyze } = fixture();
     renderPage(client, analyze);
     await openProjectTab("Render");
+    expect(screen.getByRole("heading", { name: "Project details" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Project name")).toHaveValue(project.name);
+    expect(screen.getByLabelText("Description")).toHaveValue(project.description);
+    expect(screen.getByRole("button", { name: "Save now" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Duplicate" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Render and listen" })).toBeInTheDocument();
     expect(screen.getByText(/first render may take longer/u)).toBeInTheDocument();
     expect(screen.queryByText(/Frozen render plans/u)).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Saved render plans")).not.toBeInTheDocument();
+  });
+
+  it("starts rendering immediately, reports chunk progress, and restores prior audio after failure", async () => {
+    const { client, analyze } = fixture();
+    const priorJob: RenderJob = {
+      contractVersion: 1, id: "00000000-0000-4000-8000-000000000010", projectId: project.id, planId: "00000000-0000-4000-8000-000000000011",
+      retryOfRenderId: null, state: "complete",
+      progress: { phase: "complete", sectionTitle: null, sectionOrdinal: 1, sectionCount: 1, entryOrdinal: null, speechOrdinal: 1, speechCount: 1, chunkOrdinal: null, completedChunks: 1, totalChunks: 1, cacheHits: 0, cacheMisses: 1, ttsRequests: 1, speakerId: null, voiceId: null, excerpt: null, elapsedMs: 1_000 },
+      error: null, createdAt: "2026-08-12T13:00:00.000Z", startedAt: "2026-08-12T13:00:00.000Z", finishedAt: "2026-08-12T13:00:01.000Z"
+    };
+    const renderingJob: RenderJob = {
+      ...priorJob, id: "00000000-0000-4000-8000-000000000012", planId: "00000000-0000-4000-8000-000000000013", state: "synthesizing",
+      progress: { ...priorJob.progress, phase: "synthesizing", speechOrdinal: 12, speechCount: 300, chunkOrdinal: 1, completedChunks: 11, totalChunks: 300, elapsedMs: 500 },
+      createdAt: "2026-08-12T14:00:00.000Z", startedAt: "2026-08-12T14:00:00.000Z", finishedAt: null
+    };
+    const failedJob: RenderJob = {
+      ...renderingJob, state: "failed", progress: { ...renderingJob.progress, phase: "failed" },
+      error: { code: "RENDER_SYNTHESIS_FAILED", message: "Speech generation failed.", retryable: true, phase: "synthesizing", entryOrdinal: 12, chunkOrdinal: 1, sourceRange: null, speakerId: "teacher", voiceId: "voice_teacher" },
+      finishedAt: "2026-08-12T14:00:01.000Z"
+    };
+    const startRequest = deferred<RenderJob>();
+    const getRender = vi.fn(async () => failedJob);
+    const renderClient = {
+      start: vi.fn(() => startRequest.promise), startProject: vi.fn(() => startRequest.promise), list: vi.fn(async () => [priorJob]), get: getRender, cancel: vi.fn(), retry: vi.fn(),
+      listArtifacts: vi.fn(async () => []), exportArtifact: vi.fn(), exportAudio: vi.fn(), exportDetails: vi.fn(), listSegments: vi.fn(async () => []),
+      getWaveform: vi.fn(async () => ({ status: "unavailable" as const, renderId: priorJob.id, reason: "audioMissing" as const })),
+      renderAudioSource: vi.fn((renderId: string) => `/renders/${renderId}.mp3`), segmentAudioSource: vi.fn(), exportSegment: vi.fn()
+    } as unknown as RenderClient;
+    renderPage(client, analyze, { renderClient });
+    await openProjectTab("Render");
+    const player = await screen.findByLabelText("Audio player for Completed project render");
+    const renderButton = await screen.findByRole("button", { name: "Render" });
+    await waitFor(() => expect(renderButton).toBeEnabled());
+    fireEvent.click(renderButton);
+
+    expect(screen.getByRole("button", { name: "Rendering…" })).toBeDisabled();
+    expect(screen.getByText("Preparing render…")).toBeInTheDocument();
+    expect(screen.getByLabelText("Render chunk progress")).not.toHaveAttribute("value");
+    expect(player).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("button", { name: "Download" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Download Details" })).toBeDisabled();
+
+    await act(async () => { startRequest.resolve(renderingJob); await startRequest.promise; });
+    expect(await screen.findByText("Processing chunk 12 of 300")).toBeInTheDocument();
+    expect(screen.getByText("11 of 300 chunks complete")).toBeInTheDocument();
+    expect(screen.getByLabelText("Render chunk progress")).toHaveAttribute("max", "300");
+    expect(screen.getByLabelText("Render chunk progress")).toHaveAttribute("value", "11");
+
+    await waitFor(() => expect(getRender).toHaveBeenCalledWith(renderingJob.id), { timeout: 1_500 });
+    expect(await screen.findByRole("button", { name: "Try again" })).toBeEnabled();
+    expect(player).toHaveAttribute("aria-disabled", "false");
+    expect(screen.getByRole("button", { name: "Download" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Download Details" })).toBeEnabled();
   });
 
   it("starts the project render and exposes only completed playback and downloads", async () => {
@@ -631,8 +752,8 @@ describe("Projects workbench", () => {
     fireEvent.change(description, { target: { value: "Cannot save yet" } });
     fireEvent.click(screen.getByRole("button", { name: "Save now" }));
 
-    expect(await screen.findByText("Save failed")).toBeInTheDocument();
-    expect(screen.getByRole("alert")).toHaveTextContent("disk unavailable");
+    expect(await screen.findByRole("alert")).toHaveTextContent("disk unavailable");
+    expect(screen.queryByText("Save failed")).not.toBeInTheDocument();
     const beforeUnload = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(beforeUnload);
     expect(beforeUnload.defaultPrevented).toBe(true);
@@ -641,13 +762,4 @@ describe("Projects workbench", () => {
     expect(screen.queryByText("Settings destination")).not.toBeInTheDocument();
   });
 
-  it("imports strict UTF-8 text without changing Unicode or CRLF", async () => {
-    const { client, analyze } = fixture();
-    renderPage(client, analyze);
-    const upload = await screen.findByLabelText("Upload .txt");
-    const source = "[speaker_teacher] Résumé 🧠\r\n[pause_short]\r\nContinue.";
-    fireEvent.change(upload, { target: { files: [new File([source], "fixture.txt", { type: "text/plain" })] } });
-    await waitFor(() => expect(analyze.mock.calls.some(([input]) => input.source === source)).toBe(true));
-    expect(scriptEditorView().state.doc.toString()).toBe(source.replaceAll("\r\n", "\n"));
-  });
 });

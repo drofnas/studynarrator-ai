@@ -4,21 +4,16 @@ import { minimalSetup } from "codemirror";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import styles from "./ScriptSourceEditor.module.css";
 
-interface ScriptSourceSelection {
-  from: number;
-  to: number;
-}
-
 export interface ScriptSourceEditorHandle {
   focus(): void;
-  getSelection(): ScriptSourceSelection;
   setSelection(from: number, to?: number, options?: { scrollIntoView?: boolean }): void;
 }
 
 export const ScriptSourceEditor = forwardRef<ScriptSourceEditorHandle, {
   value: string;
   onChange: (value: string) => void;
-}>(function ScriptSourceEditor({ value, onChange }, ref) {
+  ariaLabel?: string;
+}>(function ScriptSourceEditor({ value, onChange, ariaLabel = "Script source" }, ref) {
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | undefined>(undefined);
   const synchronizingRef = useRef(false);
@@ -38,7 +33,7 @@ export const ScriptSourceEditor = forwardRef<ScriptSourceEditorHandle, {
         EditorView.lineWrapping,
         EditorState.tabSize.of(2),
         EditorView.contentAttributes.of({
-          "aria-label": "Script source",
+          "aria-label": ariaLabel,
           "aria-multiline": "true",
           spellcheck: "false"
         }),
@@ -67,7 +62,7 @@ export const ScriptSourceEditor = forwardRef<ScriptSourceEditorHandle, {
       viewRef.current = undefined;
       view.destroy();
     };
-  }, []);
+  }, [ariaLabel]);
 
   useEffect(() => {
     const view = viewRef.current;
@@ -83,10 +78,6 @@ export const ScriptSourceEditor = forwardRef<ScriptSourceEditorHandle, {
   useImperativeHandle(ref, () => ({
     focus() {
       viewRef.current?.focus();
-    },
-    getSelection() {
-      const selection = viewRef.current?.state.selection.main;
-      return selection ? { from: selection.from, to: selection.to } : { from: 0, to: 0 };
     },
     setSelection(from, to = from, options = {}) {
       const view = viewRef.current;

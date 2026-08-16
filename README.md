@@ -211,6 +211,8 @@ The connection is a singleton owned by the application installation. Projects do
 
 The primary navigation is **Prompt Kit**, **Projects**, **Quick Scratchpad**, and **Settings**, with **General**, **Voices**, **Lexicon**, **Timings**, and **System diagnostics** beneath Settings. Web requests use the manifest-backed `/api` surface for runtime diagnostics, projects, prompt export, previews, render plans and renders, pacing, preferences, the global lexicon, the singleton connection, setup, voice catalogs, Scratchpad, and speech-cache controls. Electron exposes the same operations through its validated public IPC manifest; operation names are contract-tested in both transports.
 
+New installations include editable Global Lexicon defaults for common acronyms and ambiguous pronunciations. Named-sense aliases use `word/sense` in Settings and resolve explicit script annotations such as `{{resume|cv}}`; users may edit, disable, or delete any default without the application restoring it on restart.
+
 ## Pre-release data reset
 
 All persisted contracts are at schema version 1: SQLite, project snapshots, diagnostics, parser grammar, script generation, preview, Scratchpad, and render plans. The repository intentionally supports only the current v1 shapes. Development databases, frozen plans, and cache metadata produced by earlier builds are rejected or treated as cache misses; the application never deletes or converts them automatically.

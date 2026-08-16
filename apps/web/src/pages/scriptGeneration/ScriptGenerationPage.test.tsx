@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import "@/test/domGeometry.js";
+import { EditorView } from "@codemirror/view";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -30,9 +32,9 @@ function fixture() {
     preferences: { getIgnoredDiagnostics: vi.fn(), replaceIgnoredDiagnostics: vi.fn() },
     globalLexicon: { list: vi.fn(async () => []), replace: vi.fn() }
   };
-  const creation = { kind: "creation" as const, fileName: "caching-creation-prompt.md", mimeType: "text/markdown; charset=utf-8" as const, content: "KNOWLEDGE TO GATHER AND TEACH\n[speaker_teacher]\nSQL → sequel\n{{display text|new_sense_id}}", checksum: "a".repeat(64) };
-  const update = { kind: "update" as const, fileName: "caching-update-prompt.md", mimeType: "text/markdown; charset=utf-8" as const, content: "SCRIPT AND CHANGE REQUEST\n[speaker_teacher]\nSQL → sequel", checksum: "b".repeat(64) };
-  const exportPrompt = vi.fn(async (_projectId: string | null, kind: "creation" | "update") => ({ disposition: "download" as const, fileName: kind === "creation" ? creation.fileName : update.fileName }));
+  const creation = { kind: "creation" as const, fileName: "caching-creation-prompt.md", mimeType: "text/markdown; charset=utf-8" as const, content: "# StudyNarrator Script Creation Instructions\n[speaker_narrator]\n`resume/cv`\n# USER INPUT\n## Topic or material to teach\n[WHAT SHOULD THE SCRIPT TEACH?]\n## Source material\n[PASTE SOURCE MATERIAL HERE AND/OR ATTACH RELEVANT FILES TO THE CONVERSATION.]", checksum: "a".repeat(64) };
+  const update = { kind: "update" as const, fileName: "caching-update-prompt.md", mimeType: "text/markdown; charset=utf-8" as const, content: "# StudyNarrator Script Update Instructions\n[speaker_narrator]\n[pause_short]\n[section: Topic]\n# USER INPUT\n## Requested changes\n[DESCRIBE WHAT SHOULD BE ADDED, REMOVED, CORRECTED, EXPANDED, OR REORGANIZED.]\n## Current StudyNarrator script\n[PASTE THE CURRENT SCRIPT HERE AND/OR ATTACH IT TO THE CONVERSATION.]", checksum: "b".repeat(64) };
+  const exportPrompt = vi.fn(async (_projectId: string | null, kind: "creation" | "update", _content?: string) => ({ disposition: "download" as const, fileName: kind === "creation" ? creation.fileName : update.fileName }));
   const exportSkillPackage = vi.fn(async () => ({ disposition: "download" as const, fileName: "caching-skill.zip" }));
   const previewPrompt = vi.fn(async (_projectId: string | null, kind: "creation" | "update") => kind === "creation" ? creation : update);
   const generation: ScriptGenerationClient = {
@@ -50,6 +52,18 @@ function renderPage(persistence: PersistenceClient, generation: ScriptGeneration
   </Routes></MemoryRouter>);
 }
 
+function editorView(name: string): EditorView {
+  const content = screen.getByRole("textbox", { name });
+  const view = EditorView.findFromDOM(content.closest(".cm-editor") as HTMLElement);
+  if (!view) throw new Error("Expected a CodeMirror editor view.");
+  return view;
+}
+
+function replaceEditorContent(name: string, content: string) {
+  const view = editorView(name);
+  act(() => view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: content } }));
+}
+
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe("script prompt kit", () => {
@@ -57,30 +71,69 @@ describe("script prompt kit", () => {
     const { persistence, generation, getProject, previewPrompt } = fixture();
     renderPage(persistence, generation);
     expect(await screen.findByRole("heading", { name: "Script prompt kit" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Create a script prompt preview")).toHaveTextContent("KNOWLEDGE TO GATHER AND TEACH");
-    expect(screen.getByLabelText("Create a script prompt preview")).toHaveTextContent("{{display text|new_sense_id}}");
+    const createTab = screen.getByRole("tab", { name: "Create Prompt" });
+    const updateTab = screen.getByRole("tab", { name: "Update Prompt" });
+    expect(createTab).toHaveAttribute("aria-selected", "true");
+    expect(updateTab).toHaveAttribute("aria-selected", "false");
+    expect(editorView("Create a script prompt editor").state.doc.toString()).toContain("# StudyNarrator Script Creation Instructions");
+    expect(editorView("Create a script prompt editor").state.doc.toString()).toContain("[WHAT SHOULD THE SCRIPT TEACH?]");
+    expect(screen.getByText(/questions to customize this prompt are in the USER INPUT section at the end/u)).toBeInTheDocument();
     expect(screen.queryByText(project.scriptSource)).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /Update a script/u }));
-    expect(screen.getByLabelText("Update a script prompt preview")).toHaveTextContent("SCRIPT AND CHANGE REQUEST");
-    expect(screen.getByText(/current script and the exact edits/u)).toBeInTheDocument();
+    await userEvent.click(updateTab);
+    expect(editorView("Update a script prompt editor").state.doc.toString()).toContain("[DESCRIBE WHAT SHOULD BE ADDED, REMOVED, CORRECTED, EXPANDED, OR REORGANIZED.]");
+    expect(editorView("Update a script prompt editor").state.doc.toString()).toContain("[PASTE THE CURRENT SCRIPT HERE AND/OR ATTACH IT TO THE CONVERSATION.]");
+    expect(editorView("Update a script prompt editor").state.doc.toString()).not.toContain("SQL → sequel");
+    expect(screen.getByText(/USER INPUT section at the end asks for the requested changes/u)).toBeInTheDocument();
+    expect(screen.getByRole("tablist", { name: "Choose a prompt template" })).toHaveTextContent("Create PromptUpdate Prompt");
+    expect(screen.getByText("Existing script", { exact: true })).toBeInTheDocument();
+    expect(screen.queryByText(/Blank page|Red pen|Included automatically/u)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "View Projects" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /both prompts/u })).not.toBeInTheDocument();
+    expect(screen.queryByText("a".repeat(12))).not.toBeInTheDocument();
     expect(getProject).not.toHaveBeenCalled();
     expect(previewPrompt).toHaveBeenCalledWith(null, "creation");
   });
 
-  it("copies and exports the selected prompt plus the combined kit", async () => {
-    const { persistence, generation, update, replaceProject, exportPrompt, exportSkillPackage } = fixture();
+  it("preserves independent drafts and copies and exports the selected edits", async () => {
+    const { persistence, generation, creation, update, replaceProject, exportPrompt, exportSkillPackage } = fixture();
     const writeText = vi.fn(async () => undefined);
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
     renderPage(persistence, generation);
     await screen.findByRole("heading", { name: "Script prompt kit" });
-    await userEvent.click(screen.getByRole("button", { name: /Update a script/u }));
+    const editedCreation = `${creation.content}\nCREATE EDIT`;
+    replaceEditorContent("Create a script prompt editor", editedCreation);
+    await userEvent.click(screen.getByRole("tab", { name: "Update Prompt" }));
+    const editedUpdate = `${update.content}\nUPDATE EDIT`;
+    replaceEditorContent("Update a script prompt editor", editedUpdate);
+    await userEvent.click(screen.getByRole("tab", { name: "Create Prompt" }));
+    expect(editorView("Create a script prompt editor").state.doc.toString()).toBe(editedCreation);
+    await userEvent.click(screen.getByRole("tab", { name: "Update Prompt" }));
+    expect(editorView("Update a script prompt editor").state.doc.toString()).toBe(editedUpdate);
     await userEvent.click(screen.getByRole("button", { name: "Copy update prompt" }));
-    expect(writeText).toHaveBeenCalledWith(update.content);
+    expect(writeText).toHaveBeenCalledWith(editedUpdate);
     await userEvent.click(screen.getByRole("button", { name: "Download update prompt" }));
-    await userEvent.click(screen.getByRole("button", { name: "Download both prompts as a kit" }));
-    expect(exportPrompt).toHaveBeenCalledWith(null, "update");
-    expect(exportSkillPackage).toHaveBeenCalledWith(null);
+    expect(exportPrompt).toHaveBeenCalledWith(null, "update", editedUpdate);
+    expect(exportSkillPackage).not.toHaveBeenCalled();
     expect(replaceProject).not.toHaveBeenCalled();
+  });
+
+  it("disables copy and export for an empty draft", async () => {
+    const { persistence, generation } = fixture();
+    renderPage(persistence, generation);
+    await screen.findByRole("heading", { name: "Script prompt kit" });
+    replaceEditorContent("Create a script prompt editor", "");
+    expect(screen.getByRole("button", { name: "Copy creation prompt" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Download creation prompt" })).toBeDisabled();
+  });
+
+  it("supports keyboard navigation between prompt tabs", async () => {
+    const { persistence, generation } = fixture();
+    renderPage(persistence, generation);
+    const createTab = await screen.findByRole("tab", { name: "Create Prompt" });
+    createTab.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(screen.getByRole("tab", { name: "Update Prompt" })).toHaveFocus();
+    expect(screen.getByRole("tab", { name: "Update Prompt" })).toHaveAttribute("aria-selected", "true");
   });
 
   it("reports clipboard denial without hiding either prompt", async () => {
@@ -90,7 +143,7 @@ describe("script prompt kit", () => {
     await screen.findByRole("heading", { name: "Script prompt kit" });
     await userEvent.click(screen.getByRole("button", { name: "Copy creation prompt" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Clipboard access was denied");
-    expect(screen.getByLabelText("Create a script prompt preview")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Create a script prompt editor" })).toBeInTheDocument();
   });
 
   it("keeps the existing project-specific route available", async () => {

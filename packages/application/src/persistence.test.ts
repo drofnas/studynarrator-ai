@@ -21,8 +21,8 @@ function repository() {
     status: vi.fn(() => ({
       contractVersion: 1 as const,
       state: "ready" as const,
-      databaseSchemaVersion: 2 as const,
-      targetDatabaseSchemaVersion: 2 as const,
+      databaseSchemaVersion: 3 as const,
+      targetDatabaseSchemaVersion: 3 as const,
       databasePath: "/tmp/studynarrator.sqlite",
       latestBackupPath: null
     })),
@@ -72,7 +72,13 @@ describe("persistence application service", () => {
     await service.preferences.getIgnoredDiagnostics();
     await service.preferences.replaceIgnoredDiagnostics([]);
     await service.globalLexicon.list();
-    await service.globalLexicon.replace([]);
+    await service.globalLexicon.replace([{
+      scope: "global",
+      entryType: "namedSense",
+      displayText: "resume",
+      senseId: "cv",
+      spokenText: "rez oo may"
+    }]);
 
     expect(source.status).toHaveBeenCalledOnce();
     expect(source.listProjects).toHaveBeenCalledOnce();
@@ -86,7 +92,10 @@ describe("persistence application service", () => {
     expect(source.getIgnoredDiagnostics).toHaveBeenCalledOnce();
     expect(source.replaceIgnoredDiagnostics).toHaveBeenCalledOnce();
     expect(source.listGlobalLexicon).toHaveBeenCalledOnce();
-    expect(source.replaceGlobalLexicon).toHaveBeenCalledOnce();
+    expect(source.replaceGlobalLexicon).toHaveBeenCalledWith([{
+      scope: "global", entryType: "namedSense", displayText: "resume", senseId: "cv", spokenText: "rez oo may",
+      caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: ""
+    }]);
     expect(liveMethods).toHaveLength(13);
   });
 
@@ -113,7 +122,7 @@ describe("persistence application service", () => {
       contractVersion: 1,
       state: "unavailable",
       databaseSchemaVersion: 2,
-      targetDatabaseSchemaVersion: 2,
+      targetDatabaseSchemaVersion: 3,
       databasePath: "/tmp/studynarrator.sqlite",
       latestBackupPath: "/tmp/backups/recovery.sqlite",
       code: "MIGRATION_FAILED",

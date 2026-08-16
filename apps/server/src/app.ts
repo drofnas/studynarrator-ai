@@ -28,6 +28,7 @@ import {
   RenderHistorySegmentCollectionSchema,
   RenderSegmentInputSchema,
   RenderWaveformSchema,
+  ScriptGenerationPromptExportInputSchema,
   ScriptGenerationPromptInputSchema,
   ScriptGenerationSkillInputSchema,
   RedactedConnectionDiagnosticsSchema,
@@ -406,8 +407,8 @@ export function createExpressApp(options: {
     });
     app.post("/api/script-generation/prompt-export", async (request, response, next) => {
       try {
-        const input = ScriptGenerationPromptInputSchema.parse(request.body);
-        sendGeneratedFile(response, await options.scriptGeneration!.resolvePromptExport(null, input.kind));
+        const input = ScriptGenerationPromptExportInputSchema.parse(request.body);
+        sendGeneratedFile(response, await options.scriptGeneration!.resolvePromptExport(null, input.kind, input.content));
       } catch (error) { next(error); }
     });
     app.post("/api/script-generation/skill-export", async (request, response, next) => {
@@ -424,8 +425,8 @@ export function createExpressApp(options: {
     });
     app.post("/api/projects/:projectId/prompt-export", async (request, response, next) => {
       try {
-        const input = ScriptGenerationPromptInputSchema.parse(request.body);
-        sendGeneratedFile(response, await options.scriptGeneration!.resolvePromptExport(ProjectIdSchema.parse(request.params.projectId), input.kind));
+        const input = ScriptGenerationPromptExportInputSchema.parse(request.body);
+        sendGeneratedFile(response, await options.scriptGeneration!.resolvePromptExport(ProjectIdSchema.parse(request.params.projectId), input.kind, input.content));
       } catch (error) { next(error); }
     });
     app.post("/api/projects/:projectId/skill-export", async (request, response, next) => {

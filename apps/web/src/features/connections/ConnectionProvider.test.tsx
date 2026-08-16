@@ -29,8 +29,11 @@ function Consumer() {
   const workspace = useConnections();
   return <div>
     <span>{workspace.catalog.status}</span>
+    <span>{workspace.loading ? "connection loading" : "connection loaded"}</span>
+    <span>{workspace.connection?.baseUrl ?? "connection missing"}</span>
     <button type="button" onClick={() => void workspace.discover({ baseUrl: connection.baseUrl!, timeoutSeconds: 120, retryCount: 2 })}>Load catalog</button>
     <button type="button" onClick={() => void workspace.test()}>Test connection</button>
+    <button type="button" onClick={() => void workspace.refresh()}>Refresh connection</button>
   </div>;
 }
 
@@ -56,5 +59,44 @@ describe("ConnectionProvider", () => {
     expect(discoverSpeechCatalog).toHaveBeenCalledWith({ baseUrl: connection.baseUrl, timeoutSeconds: 120, retryCount: 2 });
     await userEvent.click(screen.getByRole("button", { name: "Test connection" }));
     await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
+  });
+
+  it("recovers when the initial singleton load fails during an application restart", async () => {
+    const get = vi.fn<SpeachesConnectionClient["get"]>()
+      .mockRejectedValueOnce(new Error("Connection service restarted."))
+      .mockResolvedValue(connection);
+    const connectionClient: SpeachesConnectionClient = {
+      get, update: vi.fn(async () => connection), test: vi.fn(async () => summary), discoverSpeechCatalog: vi.fn(async () => catalog),
+      exportDiagnostics: vi.fn(),
+      getSetupState: vi.fn(async () => ({ onboardingCompletedAt: timestamp, client: "web" as const })),
+      completeOnboarding: vi.fn(async () => ({ onboardingCompletedAt: timestamp, client: "web" as const }))
+    };
+    const voiceCatalog: VoiceCatalogClient = { get: vi.fn(), replace: vi.fn() };
+    render(<ConnectionProvider connectionClient={connectionClient} voiceCatalog={voiceCatalog}><Consumer /></ConnectionProvider>);
+
+    expect(await screen.findByText(connection.baseUrl!)).toBeInTheDocument();
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(screen.getByText("connection loaded")).toBeInTheDocument();
+    expect(screen.queryByText("connection missing")).not.toBeInTheDocument();
+  });
+
+  it("keeps the last loaded singleton visible when a later refresh fails", async () => {
+    const get = vi.fn<SpeachesConnectionClient["get"]>()
+      .mockResolvedValueOnce(connection)
+      .mockRejectedValueOnce(new Error("Connection service restarted."));
+    const connectionClient: SpeachesConnectionClient = {
+      get, update: vi.fn(async () => connection), test: vi.fn(async () => summary), discoverSpeechCatalog: vi.fn(async () => catalog),
+      exportDiagnostics: vi.fn(),
+      getSetupState: vi.fn(async () => ({ onboardingCompletedAt: timestamp, client: "web" as const })),
+      completeOnboarding: vi.fn(async () => ({ onboardingCompletedAt: timestamp, client: "web" as const }))
+    };
+    const voiceCatalog: VoiceCatalogClient = { get: vi.fn(), replace: vi.fn() };
+    render(<ConnectionProvider connectionClient={connectionClient} voiceCatalog={voiceCatalog}><Consumer /></ConnectionProvider>);
+
+    expect(await screen.findByText(connection.baseUrl!)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Refresh connection" }));
+    await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
+    expect(screen.getByText(connection.baseUrl!)).toBeInTheDocument();
+    expect(screen.getByText("connection loaded")).toBeInTheDocument();
   });
 });

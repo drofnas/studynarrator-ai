@@ -16,7 +16,6 @@ import {
   type PersistenceClient,
   type ProjectDetail,
   type ProjectPreviewClient,
-  type ProjectPreviewResult,
   type RenderPlanClient,
   type RenderClient,
   type RenderJob,
@@ -34,8 +33,6 @@ import {
   GLOBAL_VOICE_CATALOG_MODEL_ID,
   materializeLexicon,
   paragraphPauseForAnalysis,
-  readUtf8TextFile,
-  replaceLiteral,
   resolveProjectSpeakerVoiceId,
   supportedProjectVoices,
   stripSingleSurroundingCodeFence,
@@ -46,8 +43,10 @@ import { useConnections } from "@/features/connections/ConnectionProvider.js";
 import { VoiceSelect } from "@/features/connections/VoiceSelect.js";
 import { presentVoices } from "@/features/connections/voicePresentation.js";
 import { LexiconEditor, type LexiconEditorValue } from "@/features/lexicon/LexiconEditor.js";
-import { PreviewResultCard } from "@/features/preview/PreviewResultCard.js";
+import { AuditionIcon } from "@/shared/audio/AuditionIcon.js";
 import { SharedAudioPlayer } from "@/shared/audio/SharedAudioPlayer.js";
+import { useAudioAudition } from "@/shared/audio/useAudioAudition.js";
+import { StickyTabBar } from "@/shared/ui/StickyTabBar.js";
 import { ScriptSourceEditor, type ScriptSourceEditorHandle } from "@/features/projects/ScriptSourceEditor.js";
 
 type SaveState = "saved" | "unsaved" | "saving" | "invalid" | "failed";
@@ -73,6 +72,38 @@ function sameDraft(left: ProjectDraft, right: ProjectDraft): boolean {
 }
 function message(error: unknown): string { return error instanceof Error ? error.message : "The operation failed."; }
 function diagnosticKey(item: IgnoredDiagnostic): string { return `${item.code}\u0000${item.pattern}`; }
+function formatAudioDuration(durationMs: number | null): string {
+  if (durationMs === null) return "-";
+  const totalSeconds = Math.floor(durationMs / 1_000);
+  return `${String(Math.floor(totalSeconds / 60))}:${String(totalSeconds % 60).padStart(2, "0")}`;
+}
+function countWords(source: string): number {
+  const trimmed = source.trim();
+  return trimmed === "" ? 0 : trimmed.split(/\s+/u).length;
+}
+function ScriptStatistics({ source, label }: { source: string; label: string }) {
+  return <div className={styles.sourceMetrics} role="group" aria-label={label}><span>{countWords(source).toLocaleString()} words</span><span>{source.length.toLocaleString()} characters</span></div>;
+}
+
+const terminalRenderStates = new Set<RenderJob["state"]>(["complete", "failed", "canceled"]);
+const renderPhaseLabels: Record<RenderJob["state"], string> = {
+  queued: "Queued…",
+  validating: "Validating render…",
+  synthesizing: "Synthesizing audio…",
+  assembling: "Assembling audio…",
+  normalizing: "Normalizing audio…",
+  encoding: "Encoding MP3…",
+  writing_artifacts: "Writing render files…",
+  complete: "Render complete",
+  failed: "Render failed",
+  canceled: "Render canceled"
+};
+
+function renderProgressLabel(job: RenderJob): string {
+  if (job.state !== "synthesizing" || job.progress.totalChunks === 0) return renderPhaseLabels[job.state];
+  const current = Math.min(job.progress.totalChunks, job.progress.completedChunks + 1);
+  return `Processing chunk ${String(current)} of ${String(job.progress.totalChunks)}`;
+}
 
 export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient, renderClient }: {
   client: PersistenceClient;
@@ -105,20 +136,16 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [newProjectOpen, setNewProjectOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const [replacement, setReplacement] = useState("");
-  const [caseSensitive, setCaseSensitive] = useState(true);
   const [cleanupUndo, setCleanupUndo] = useState<string>();
   const [voiceCatalog, setVoiceCatalog] = useState<VoiceCatalog | null>(null);
   const [voiceCatalogState, setVoiceCatalogState] = useState<VoiceCatalogState>("idle");
-  const [previewResult, setPreviewResult] = useState<ProjectPreviewResult>();
-  const [previewBusy, setPreviewBusy] = useState(false);
+  const { audition: segmentAudition, play: playSegmentAudition, stop: stopSegmentAudition } = useAudioAudition<number>();
   const [previewError, setPreviewError] = useState("");
-  const [, setRenderJobs] = useState<RenderJob[]>([]);
   const [selectedRenderJob, setSelectedRenderJob] = useState<RenderJob>();
+  const [completedRenderJob, setCompletedRenderJob] = useState<RenderJob>();
+  const [renderStarting, setRenderStarting] = useState(false);
   const [renderWaveform, setRenderWaveform] = useState<RenderWaveform>();
   const [renderError, setRenderError] = useState("");
-  const previewControllerRef = useRef<AbortController | null>(null);
   const editorRef = useRef<ScriptSourceEditorHandle>(null);
   const pendingFocusLineRef = useRef<number | undefined>(undefined);
   const tabRefs = useRef<Record<ProjectTab, HTMLButtonElement | null>>({ script: null, settings: null, details: null, render: null });
@@ -137,6 +164,7 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
   const voiceCatalogModelId = effectiveModelId ?? GLOBAL_VOICE_CATALOG_MODEL_ID;
   const voiceDefaultId = selectedConnection?.defaultVoiceId ?? GLOBAL_VOICE_CATALOG_DEFAULT_VOICE_ID;
   const speechCatalogState = connections.catalog;
+  const renderActive = renderStarting || Boolean(selectedRenderJob && !terminalRenderStates.has(selectedRenderJob.state));
 
   useEffect(() => {
     if (!selectedConnection?.baseUrl || speechCatalogState.status !== "idle") return;
@@ -216,8 +244,9 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
       draftRef.current = undefined;
       setAnalysis(undefined);
       setConfiguration({ speakers: [], pauses: [], sections: [] });
-      setRenderJobs([]);
       setSelectedRenderJob(undefined);
+      setCompletedRenderJob(undefined);
+      setRenderStarting(false);
       setRenderWaveform(undefined);
       return;
     }
@@ -246,8 +275,8 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
     setRenderError("");
     void renderClient.list(projectId).then((jobs) => {
       if (!active) return;
-      setRenderJobs(jobs);
       setSelectedRenderJob(jobs[0]);
+      setCompletedRenderJob(jobs.find(({ state }) => state === "complete"));
     }).catch((error: unknown) => { if (active) setRenderError(message(error)); });
     return () => { active = false; };
   }, [projectId, renderClient]);
@@ -259,18 +288,19 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
       void renderClient.get(selectedRenderJob.id).then((job) => {
         if (!active) return;
         setSelectedRenderJob(job);
-        setRenderJobs((current) => current.map((item) => item.id === job.id ? job : item));
+        if (job.state === "complete") setCompletedRenderJob(job);
       }).catch((error: unknown) => { if (active) setRenderError(message(error)); });
     }, 500);
     return () => { active = false; window.clearInterval(timer); };
   }, [renderClient, selectedRenderJob]);
 
   useEffect(() => {
-    if (!renderClient || selectedRenderJob?.state !== "complete") { setRenderWaveform(undefined); return; }
+    if (!renderClient || !completedRenderJob) { setRenderWaveform(undefined); return; }
     let active = true;
-    void renderClient.getWaveform(selectedRenderJob.id).then((waveform) => { if (active) setRenderWaveform(waveform); }).catch((error: unknown) => { if (active) setRenderError(message(error)); });
+    setRenderWaveform(undefined);
+    void renderClient.getWaveform(completedRenderJob.id).then((waveform) => { if (active) setRenderWaveform(waveform); }).catch((error: unknown) => { if (active) setRenderError(message(error)); });
     return () => { active = false; };
-  }, [renderClient, selectedRenderJob?.id, selectedRenderJob?.state]);
+  }, [completedRenderJob, renderClient]);
 
   const updateDraft = useCallback((updater: (current: ProjectDraft) => ProjectDraft, autosave = true) => {
     const current = draftRef.current;
@@ -360,12 +390,9 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
   useEffect(() => () => clearAutosave(), [clearAutosave]);
 
   useEffect(() => {
-    previewControllerRef.current?.abort();
-    setPreviewResult(undefined);
+    stopSegmentAudition();
     setPreviewError("");
-  }, [project?.id]);
-
-  useEffect(() => () => previewControllerRef.current?.abort(), []);
+  }, [project?.id, stopSegmentAudition]);
 
   useEffect(() => {
     if (!draft) return;
@@ -482,37 +509,6 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
     }, 0);
   }, [activeTab, draft]);
 
-  const findNext = () => {
-    const editor = editorRef.current;
-    if (!editor || !draft || !search) return;
-    const haystack = caseSensitive ? draft.scriptSource : draft.scriptSource.toLocaleLowerCase();
-    const needle = caseSensitive ? search : search.toLocaleLowerCase();
-    let index = haystack.indexOf(needle, editor.getSelection().to);
-    if (index < 0) index = haystack.indexOf(needle);
-    if (index >= 0) { editor.focus(); editor.setSelection(index, index + search.length, { scrollIntoView: true }); }
-  };
-
-  const replaceNext = () => {
-    const editor = editorRef.current;
-    if (!editor || !draft || !search) return;
-    const selection = editor.getSelection();
-    const selected = draft.scriptSource.slice(selection.from, selection.to);
-    const matches = caseSensitive ? selected === search : selected.toLocaleLowerCase() === search.toLocaleLowerCase();
-    if (!matches) { findNext(); return; }
-    const start = selection.from;
-    updateDraft((current) => ({ ...current, scriptSource: `${current.scriptSource.slice(0, start)}${replacement}${current.scriptSource.slice(selection.to)}` }));
-    window.setTimeout(() => { editor.focus(); editor.setSelection(start, start + replacement.length, { scrollIntoView: true }); }, 0);
-  };
-
-  const importFile = async (file: File | undefined) => {
-    if (!file) return;
-    try {
-      const source = await readUtf8TextFile(file);
-      updateDraft((current) => ({ ...current, scriptSource: source }));
-    }
-    catch (error) { setErrors([message(error)]); }
-  };
-
   const changeProjectLexicon = (value: LexiconEditorValue[]) => {
     updateDraft((current) => ({
       ...current,
@@ -557,38 +553,34 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
     );
   };
 
-  const runPreview = async (input: Parameters<ProjectPreviewClient["preview"]>[1]) => {
+  const runPreview = async (nodeOrdinal: number) => {
     if (!project || !await saveNow()) {
       setPreviewError("Save valid project changes before previewing.");
       return;
     }
-    previewControllerRef.current?.abort();
-    const controller = new AbortController();
-    previewControllerRef.current = controller;
-    setPreviewBusy(true);
     setPreviewError("");
     try {
-      const result = await previewClient.preview(project.id, input, controller.signal);
-      if (!controller.signal.aborted) setPreviewResult(result);
+      await playSegmentAudition(nodeOrdinal, async (signal) => (await previewClient.preview(project.id, { mode: "segment", nodeOrdinal }, signal)).audio);
     } catch (error) {
-      if (!controller.signal.aborted) setPreviewError(message(error));
-    } finally {
-      if (previewControllerRef.current === controller) { previewControllerRef.current = null; setPreviewBusy(false); }
+      setPreviewError(message(error));
     }
   };
 
   const startRender = async () => {
     if (!renderClient || !project) return;
+    setRenderStarting(true);
     setRenderError("");
-    setSelectedRenderJob(undefined);
-    setRenderWaveform(undefined);
     try {
       if (isDirty && !await saveNow()) throw new Error("Save valid project changes before rendering.");
       const job = await renderClient.startProject(project.id);
       setSelectedRenderJob(job);
-      setRenderJobs((current) => [job, ...current.filter(({ id }) => id !== job.id)]);
+      if (job.state === "complete") setCompletedRenderJob(job);
       setNotice("Rendering started.");
-    } catch (error) { setRenderError(message(error)); }
+    } catch (error) {
+      setRenderError(message(error));
+    } finally {
+      setRenderStarting(false);
+    }
   };
 
   const projectLexicon = draft?.lexiconEntries ?? [];
@@ -617,8 +609,8 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
         <div className={styles.sectionHeading}><div><span>Authoring ledger</span><h3 id="project-index-heading">All projects</h3></div><b>{projects.length}</b></div>
         <div className={styles.projectTableScroll} tabIndex={0}>
           <table className={styles.projectTable}>
-            <thead><tr><th scope="col">Name</th><th scope="col">Description</th><th scope="col">Created</th><th scope="col">Last updated</th><th scope="col"><span className={styles.visuallyHidden}>Open</span></th></tr></thead>
-            <tbody>{busy ? <tr><td colSpan={5}>Loading projects…</td></tr> : projects.length === 0 ? <tr><td colSpan={5}>No projects yet. Create the first study guide.</td></tr> : projects.map((item) => <tr key={item.id}><th scope="row">{item.name}</th><td>{item.description || "No description"}</td><td><time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString()}</time></td><td><time dateTime={item.updatedAt}>{new Date(item.updatedAt).toLocaleString()}</time></td><td><Link to={`/projects/${item.id}`}>Open</Link></td></tr>)}</tbody>
+            <thead><tr><th scope="col">Name</th><th scope="col">Description</th><th scope="col">Script Lines</th><th scope="col">Audio Length</th></tr></thead>
+            <tbody>{busy ? <tr><td colSpan={4}>Loading projects…</td></tr> : projects.length === 0 ? <tr><td colSpan={4}>No projects yet. Create the first study guide.</td></tr> : projects.map((item) => <tr className={styles.projectRow} key={item.id}><th scope="row"><Link className={styles.projectLink} to={`/projects/${item.id}`}>{item.name}</Link></th><td>{item.description || "-"}</td><td>{item.scriptLineCount?.toLocaleString() ?? "-"}</td><td>{formatAudioDuration(item.audioDurationMs)}</td></tr>)}</tbody>
           </table>
         </div>
       </section>
@@ -628,39 +620,38 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
   return (
     <div className={styles.page}>
       <Link className={styles.backLink} to="/projects">← Back to Projects</Link>
-      {activeTab !== "render" ? <header className={styles.pageHeader}>
+      <header className={styles.pageHeader}>
         <div><p className={styles.kicker}>Project workspace</p><h2>Project details</h2><p>Shape the script, assign voices, inspect the narration score, then render and listen.</p></div>
-      </header> : null}
+      </header>
       {errors.length > 0 ? <div className={styles.alert} role="alert"><strong>Review these items</strong><ul>{errors.map((item) => <li key={item}>{item}</li>)}</ul><button type="button" onClick={() => setErrors([])}>Dismiss</button></div> : null}
-      {activeTab !== "render" ? <p className={styles.notice} aria-live="polite">{notice}</p> : null}
+      <p className={styles.notice} aria-live="polite">{notice}</p>
 
       {draft && project ? <>
-        {activeTab !== "render" ? <section className={styles.projectIdentity} aria-label="Project details">
+        <section className={styles.projectIdentity} aria-label="Project details">
           <label>Project name<input value={draft.name} onChange={(event) => updateDraft((current) => ({ ...current, name: event.target.value }))} /></label>
           <label>Description<input value={draft.description} onChange={(event) => updateDraft((current) => ({ ...current, description: event.target.value }))} /></label>
-          <div className={styles.projectActions}><div className={styles.actionRow}><button type="button" onClick={() => void saveNow()} disabled={saveState === "saving"}>Save now</button><button type="button" className={styles.secondary} onClick={() => void duplicateProject()}>Duplicate</button><button type="button" className={styles.danger} onClick={() => void deleteProject()}>Delete</button></div><span className={styles.saveState} data-state={saveState} aria-live="polite">{saveState === "saved" ? "" : saveState === "saving" ? "Saving…" : saveState === "invalid" ? "Invalid changes" : saveState === "failed" ? "Save failed" : "Unsaved changes"}</span></div>
-        </section> : null}
-        <div className={styles.tabList} role="tablist" aria-label="Project workspace">
+          <div className={styles.projectActions}><div className={styles.actionRow}><button type="button" onClick={() => void saveNow()}>Save now</button><button type="button" className={styles.secondary} onClick={() => void duplicateProject()}>Duplicate</button><button type="button" className={styles.danger} onClick={() => void deleteProject()}>Delete</button></div></div>
+        </section>
+        <StickyTabBar label="Project workspace">
           {projectTabs.map(({ id, label }) => <button ref={(element) => { tabRefs.current[id] = element; }} type="button" role="tab" id={`project-tab-${id}`} aria-controls={`project-panel-${id}`} aria-selected={activeTab === id} tabIndex={activeTab === id ? 0 : -1} key={id} onClick={() => selectTab(id)} onKeyDown={(event) => moveTabFocus(event, id)}>{label}</button>)}
-        </div>
+        </StickyTabBar>
       </> : null}
 
       <div className={styles.tabPanel} role={draft && project ? "tabpanel" : undefined} id={draft && project ? `project-panel-${activeTab}` : undefined} aria-labelledby={draft && project ? `project-tab-${activeTab}` : undefined}>
       <div className={styles.workspace}>
         {!draft || !project ? <section className={styles.empty}><h3>{busy ? "Loading project" : "Project unavailable"}</h3><p>{busy ? "Opening the saved project workspace…" : "Return to the project index and choose another project."}</p></section> : <>
           {activeTab === "script" ? <main className={styles.editorColumn}>
-            {activeTab === "script" ? <section className={styles.scriptPanel} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void importFile(event.dataTransfer.files[0]); }}>
-              <div className={styles.sectionHeading}><div><span>Source</span><h3>Script editor</h3></div><label className={styles.fileButton}>Upload .txt<input type="file" accept=".txt,text/plain" onChange={(event) => void importFile(event.target.files?.[0])} /></label></div>
+            {activeTab === "script" ? <section className={styles.scriptPanel}>
+              <div className={styles.sectionHeading}><div><span>Source</span><h3>Script editor</h3></div><ScriptStatistics source={draft.scriptSource} label="Script statistics above editor" /></div>
               <div className={styles.panelScrollBody} role="region" aria-label="Script editor content" tabIndex={0}>
-                <div className={styles.searchBar}><input aria-label="Find text" placeholder="Find literal text" value={search} onChange={(event) => setSearch(event.target.value)} /><input aria-label="Replacement text" placeholder="Replace with" value={replacement} onChange={(event) => setReplacement(event.target.value)} /><label><input type="checkbox" checked={caseSensitive} onChange={(event) => setCaseSensitive(event.target.checked)} />Case sensitive</label><button type="button" onClick={findNext}>Find next</button><button type="button" onClick={replaceNext}>Replace next</button><button type="button" onClick={() => updateDraft((current) => ({ ...current, scriptSource: replaceLiteral(current.scriptSource, search, replacement, caseSensitive) }))}>Replace all</button></div>
                 <ScriptSourceEditor ref={editorRef} value={draft.scriptSource} onChange={(scriptSource) => updateDraft((current) => ({ ...current, scriptSource }))} />
-                <div className={styles.sourceActions}><span>{draft.scriptSource.length.toLocaleString()} characters · drop a UTF-8 .txt file anywhere in this panel</span>{cleanedFencedSource !== undefined ? <button type="button" className={styles.secondary} onClick={() => { setCleanupUndo(draft.scriptSource); updateDraft((current) => ({ ...current, scriptSource: cleanedFencedSource })); }}>Remove surrounding code fence</button> : null}{cleanupUndo !== undefined ? <button type="button" className={styles.secondary} onClick={() => { updateDraft((current) => ({ ...current, scriptSource: cleanupUndo })); setCleanupUndo(undefined); }}>Restore fenced source</button> : null}</div>
+                <div className={styles.sourceActions}><ScriptStatistics source={draft.scriptSource} label="Script statistics below editor" />{cleanedFencedSource !== undefined ? <button type="button" className={styles.secondary} onClick={() => { setCleanupUndo(draft.scriptSource); updateDraft((current) => ({ ...current, scriptSource: cleanedFencedSource })); }}>Remove surrounding code fence</button> : null}{cleanupUndo !== undefined ? <button type="button" className={styles.secondary} onClick={() => { updateDraft((current) => ({ ...current, scriptSource: cleanupUndo })); setCleanupUndo(undefined); }}>Restore fenced source</button> : null}</div>
               </div>
             </section> : null}
           </main> : null}
 
-          {activeTab === "settings" || activeTab === "details" ? <aside className={styles.configRail} aria-label={activeTab === "settings" ? "Project configuration" : "Project outline"}>
-            {activeTab === "settings" ? <section>
+          {activeTab === "settings" ? <aside className={styles.configRail} aria-label="Project configuration">
+            <section>
               <div className={styles.sectionHeading}><div><span>Discovered</span><h3>Speakers</h3></div><b>{configuration.speakers.filter(({ discovered }) => discovered).length}</b></div>
               <div className={styles.speakerTableScroll} role="region" aria-label="Project speakers" tabIndex={0}><table className={styles.speakerTable}>
                 <thead><tr><th scope="col">Name</th><th scope="col">Voice</th><th scope="col">Speed</th><th scope="col">Gain dB</th></tr></thead>
@@ -672,8 +663,7 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
                 </tr>)}</tbody>
               </table></div>
               {enabledVoices.length === 0 ? <p className={styles.voiceFieldMessage}>{!selectedConnection?.configured && voiceSelectionState === "ready" ? "The global voice catalog has no enabled voices." : voiceSelectionState === "failed" ? speechCatalogState?.status === "failed" ? speechCatalogState.error : "The global voice catalog could not be loaded." : voiceSelectionState === "modelUnavailable" ? "The selected model was not reported by Speaches." : voiceSelectionState === "noSupportedVoices" ? "Speaches reported no voices for the selected model." : voiceSelectionState === "ready" ? "The supported voices are disabled in Settings." : "Loading the selected model's supported voices."} {selectedConnection?.baseUrl ? <button type="button" onClick={() => void connections.discover({ baseUrl: selectedConnection.baseUrl!, timeoutSeconds: selectedConnection.timeoutSeconds, retryCount: selectedConnection.retryCount }).catch(() => undefined)}>Retry supported voices</button> : null} <button type="button" onClick={() => void navigate("/settings/voices")}>Open Settings</button></p> : null}
-            </section> : null}
-            {activeTab === "details" ? <section><div className={styles.sectionHeading}><div><span>Outline</span><h3>Sections</h3></div><b>{configuration.sections.length}</b></div>{configuration.sections.length === 0 ? <p>No sections discovered.</p> : configuration.sections.map((section) => <button type="button" className={styles.sectionLink} key={`${section.sourceLine}:${section.title}`} onClick={() => focusLine(section.sourceLine)}><strong>{section.title}</strong><span>Line {section.sourceLine} · {section.speechSegmentCount} speech segments</span></button>)}</section> : null}
+            </section>
           </aside> : null}
         </>}
       </div>
@@ -686,29 +676,33 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
         </section> : null}
 
         {previewError && activeTab === "details" ? <p className={styles.previewError} role="alert">{previewError} Your project and preview selection are unchanged.</p> : null}
-        {previewResult?.mode === "segment" && activeTab === "details" ? <PreviewResultCard result={previewResult} /> : null}
 
         {activeTab === "render" ? <section className={styles.renderPlansPanel} aria-labelledby="render-listen-heading">
           <div className={styles.sectionHeading}>
             <div><span>Project audio</span><h3 id="render-listen-heading">Render and listen</h3></div>
-            {renderClient ? <button type="button" disabled={!dryRun || dryRun.status === "blocked" || (selectedRenderJob ? !["complete", "failed", "canceled"].includes(selectedRenderJob.state) : false)} onClick={() => void startRender()}>{selectedRenderJob && !["complete", "failed", "canceled"].includes(selectedRenderJob.state) ? "Rendering…" : selectedRenderJob?.state === "failed" ? "Try again" : "Render"}</button> : null}
+            {renderClient ? <button type="button" disabled={!dryRun || dryRun.status === "blocked" || renderActive} onClick={() => void startRender()}>{renderActive ? "Rendering…" : selectedRenderJob?.state === "failed" ? "Try again" : "Render"}</button> : null}
           </div>
           <p>Create your audio, then listen or download it here. The first render may take longer while voice segments are generated; later edits are faster when unchanged segments can be reused.</p>
           {renderError ? <p className={styles.fieldError} role="alert">{renderError}</p> : null}
-          {selectedRenderJob && selectedRenderJob.state !== "complete" && selectedRenderJob.state !== "failed" && selectedRenderJob.state !== "canceled" ? <p aria-live="polite">Rendering…</p> : null}
+          {renderActive ? <div className={styles.renderProgress} aria-live="polite">
+            <div><strong>{renderStarting && (!selectedRenderJob || terminalRenderStates.has(selectedRenderJob.state)) ? "Preparing render…" : selectedRenderJob ? renderProgressLabel(selectedRenderJob) : "Preparing render…"}</strong>{selectedRenderJob && !terminalRenderStates.has(selectedRenderJob.state) && selectedRenderJob.progress.totalChunks > 0 ? <span>{selectedRenderJob.progress.completedChunks.toLocaleString()} of {selectedRenderJob.progress.totalChunks.toLocaleString()} chunks complete</span> : null}</div>
+            {selectedRenderJob && !terminalRenderStates.has(selectedRenderJob.state) && selectedRenderJob.progress.totalChunks > 0
+              ? <progress aria-label="Render chunk progress" max={selectedRenderJob.progress.totalChunks} value={selectedRenderJob.progress.completedChunks}>{Math.floor(selectedRenderJob.progress.completedChunks / selectedRenderJob.progress.totalChunks * 100)}%</progress>
+              : <progress aria-label="Render chunk progress">Preparing render</progress>}
+          </div> : null}
           {selectedRenderJob?.error ? <p className={styles.fieldError} role="alert">{selectedRenderJob.error.message}</p> : null}
-          {renderClient && selectedRenderJob?.state === "complete" ? <div className={styles.renderResult}>
-            <SharedAudioPlayer label="Completed project render" src={renderClient.renderAudioSource(selectedRenderJob.id)} {...(renderWaveform ? { waveform: renderWaveform } : {})} />
+          {renderClient && completedRenderJob ? <div className={styles.renderResult}>
+            <SharedAudioPlayer label="Completed project render" src={renderClient.renderAudioSource(completedRenderJob.id)} disabled={renderActive} {...(renderWaveform ? { waveform: renderWaveform } : {})} />
             <div className={styles.renderDownloads}>
-              <button type="button" className={styles.textLinkButton} onClick={() => void renderClient.exportDetails(selectedRenderJob.id).catch((error: unknown) => setRenderError(message(error)))}>Download Details</button>
-              <button type="button" onClick={() => void renderClient.exportAudio(selectedRenderJob.id).catch((error: unknown) => setRenderError(message(error)))}>Download</button>
+              <button type="button" className={styles.textLinkButton} disabled={renderActive} onClick={() => void renderClient.exportDetails(completedRenderJob.id).catch((error: unknown) => setRenderError(message(error)))}>Download Details</button>
+              <button type="button" disabled={renderActive} onClick={() => void renderClient.exportAudio(completedRenderJob.id).catch((error: unknown) => setRenderError(message(error)))}>Download</button>
             </div>
           </div> : null}
         </section> : null}
 
         {activeTab === "details" ? <section className={styles.validationPanel}>
           <div className={styles.sectionHeading}><div><span>Offline validation</span><h3>Narration score</h3></div><b>{dryRun?.rows.length ?? 0} ordered rows</b></div>
-          <div className={styles.panelScrollBody} role="region" aria-label="Narration score content" tabIndex={0}>
+          <div className={`${styles.panelScrollBody} ${styles.detailsBody}`} role="region" aria-label="Narration score content" tabIndex={0}>
             {analysisError ? <p className={styles.fieldError}>{analysisError}</p> : null}
             <div className={styles.validationSummary} data-state={dryRun?.status ?? "blocked"}><strong>{analysisState === "parsing" ? "Parsing…" : dryRun?.status === "ready" ? "Ready to render" : dryRun?.status === "readyWithWarnings" ? "Ready with warnings" : "Blocked by errors"}</strong><span>Connection availability is shown separately. This deterministic dry run still makes no TTS request.</span></div>
             {dryRun && dryRun.issues.length > 0 ? <ul className={styles.issues}>{dryRun.issues.map((issue, index) => {
@@ -721,7 +715,11 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
               {dryRun?.rows.map((row) => <div className={styles.scoreRow} data-type={row.type} data-valid={row.validationStatus} key={row.rowNumber}>
                 <button type="button" className={styles.rowFocus} aria-label={`Focus source line ${String(row.sourceRange.start.line)}`} onClick={() => focusLine(row.sourceRange.start.line)}>{String(row.rowNumber).padStart(2, "0")}</button>
                 <span className={styles.scoreType}>{row.type === "pause" ? `${row.origin} pause` : row.type}</span>
-                {row.type === "section" ? <><strong>{row.title}</strong><small>Line {row.sourceRange.start.line}</small></> : row.type === "pause" ? <><strong>{row.pauseId}</strong><small>{row.durationMs === null ? "Missing duration" : `${String(row.durationMs)} ms`}</small></> : <><span className={styles.speakerChip} aria-label={`Speaker ${row.speakerId}. ${row.voiceId ? `Voice ID ${row.voiceId}` : "Voice ID not configured"}`} title={row.voiceId ? `Voice ID: ${row.voiceId}` : "Voice ID not configured"}><span className={styles.speakerLabel} aria-hidden="true">speaker</span><span className={styles.speakerName} aria-hidden="true">{row.speakerId}</span></span><span>{row.originalText}</span><span>{row.readableText}</span><span>{row.ttsText}</span>{row.validationStatus === "valid" ? <button type="button" className={styles.previewButton} disabled={previewBusy} onClick={() => void runPreview({ mode: "segment", nodeOrdinal: row.nodeOrdinal })}>{previewBusy ? "Working…" : "Preview"}</button> : <span className={styles.previewUnavailable}>Unavailable</span>}</>}
+                {row.type === "section" ? <><strong>{row.title}</strong><small>Line {row.sourceRange.start.line}</small></> : row.type === "pause" ? <><strong>{row.pauseId}</strong><small>{row.durationMs === null ? "Missing duration" : `${String(row.durationMs)} ms`}</small></> : <><span className={styles.speakerChip} aria-label={`Speaker ${row.speakerId}. ${row.voiceId ? `Voice ID ${row.voiceId}` : "Voice ID not configured"}`} title={row.voiceId ? `Voice ID: ${row.voiceId}` : "Voice ID not configured"}><span className={styles.speakerLabel} aria-hidden="true">speaker</span><span className={styles.speakerName} aria-hidden="true">{row.speakerId}</span></span><span>{row.originalText}</span><span>{row.readableText}</span><span>{row.ttsText}</span>{row.validationStatus === "valid" ? (() => {
+                  const phase = segmentAudition?.key === row.nodeOrdinal ? segmentAudition.phase : "normal";
+                  const action = phase === "processing" ? "Preparing" : phase === "playing" ? "Playing" : "Play";
+                  return <button type="button" className={styles.previewButton} data-state={phase} aria-label={`${action} narration row ${String(row.rowNumber)}`} onClick={() => void runPreview(row.nodeOrdinal)}><AuditionIcon phase={phase} /></button>;
+                })() : <span className={styles.previewUnavailable}>Unavailable</span>}</>}
               </div>)}
             </div>
           </div>

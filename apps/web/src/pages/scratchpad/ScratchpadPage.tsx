@@ -1,12 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { transformScratchpadPassage, type LexiconEntry } from "@studynarrator/core";
 import type { PersistenceClient, ScratchpadClient, VoiceCatalog } from "@studynarrator/shared-types";
 import { useConnections } from "@/features/connections/ConnectionProvider.js";
 import { VoiceSelect } from "@/features/connections/VoiceSelect.js";
 import { presentVoices } from "@/features/connections/voicePresentation.js";
 import { supportedProjectVoices } from "@/features/projects/projectAuthoring.js";
-import { SharedAudioPlayer } from "@/shared/audio/SharedAudioPlayer.js";
-import { useScratchpadSession } from "@/features/scratchpad/ScratchpadSessionProvider.js";
+import { useAudioAudition } from "@/shared/audio/useAudioAudition.js";
 import { ErrorNotice } from "@/shared/ui/ErrorNotice.js";
 import styles from "./ScratchpadPage.module.css";
 
@@ -26,7 +25,7 @@ function message(error: unknown): string {
 
 export function ScratchpadPage({ client, persistence }: { client: ScratchpadClient; persistence: PersistenceClient }) {
   const connections = useConnections();
-  const session = useScratchpadSession();
+  const { play: playAudition } = useAudioAudition<"scratchpad">();
   const [modelId, setModelId] = useState("");
   const [voiceId, setVoiceId] = useState("");
   const [speed, setSpeed] = useState(1);
@@ -37,7 +36,6 @@ export function ScratchpadPage({ client, persistence }: { client: ScratchpadClie
   const [catalogState, setCatalogState] = useState<"idle" | "loading" | "ready" | "failed">("idle");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const controllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     void persistence.globalLexicon.list().then(setGlobalLexicon).catch(() => setGlobalLexicon([]));
@@ -68,8 +66,6 @@ export function ScratchpadPage({ client, persistence }: { client: ScratchpadClie
       else window.sessionStorage.removeItem(LAST_PASSAGE_STORAGE_KEY);
     } catch { /* Session storage can be unavailable in restricted browser contexts. */ }
   }, [text]);
-
-  useEffect(() => () => controllerRef.current?.abort(), []);
 
   const connection = connections.connection;
   const speechCatalogState = connections.catalog;
@@ -116,18 +112,14 @@ export function ScratchpadPage({ client, persistence }: { client: ScratchpadClie
 
   const synthesize = async () => {
     if (!ready) return;
-    controllerRef.current?.abort();
-    const controller = new AbortController();
-    controllerRef.current = controller;
     setBusy(true);
     setError("");
     try {
-      const result = await client.preview({ modelId, voiceId, speed, text, applyGlobalLexicon }, controller.signal);
-      if (!controller.signal.aborted) session.replace(result);
+      await playAudition("scratchpad", async (signal) => (await client.preview({ modelId, voiceId, speed, text, applyGlobalLexicon }, signal)).audio);
     } catch (reason) {
-      if (!controller.signal.aborted) setError(message(reason));
+      setError(message(reason));
     } finally {
-      if (controllerRef.current === controller) { controllerRef.current = null; setBusy(false); }
+      setBusy(false);
     }
   };
 
@@ -135,7 +127,6 @@ export function ScratchpadPage({ client, persistence }: { client: ScratchpadClie
     <div className={styles.page}>
       <header className={styles.pageHeader}>
         <div><p className={styles.kicker}>One passage · one request</p><h2>Quick Scratchpad</h2><p>Test a voice or pronunciation without touching a project.</p></div>
-        <div className={styles.connectionState} data-state={connections.shellState}><span>Active signal</span><strong>{connection?.baseUrl ? new URL(connection.baseUrl).host : "Not configured"}</strong><code>{connections.shellState}</code></div>
       </header>
 
       <section className={styles.controls} aria-label="Scratchpad synthesis controls">
@@ -161,13 +152,11 @@ export function ScratchpadPage({ client, persistence }: { client: ScratchpadClie
             <textarea id="scratchpad-text" maxLength={1200} value={text} onChange={(event) => setText(event.target.value)} placeholder="SQL indexes can improve database reads." />
             <label className={styles.lexiconToggle}><input type="checkbox" checked={applyGlobalLexicon} onChange={(event) => setApplyGlobalLexicon(event.target.checked)} />Apply global lexicon</label>
             {projection.error ? <p className={styles.fieldError} role="alert">{projection.error}</p> : null}
+            <div className={styles.passageActions}><button type="button" aria-busy={busy} onClick={() => void synthesize()} disabled={!ready || busy}>Render and Play</button></div>
           </section>
 
           {projection.result?.warnings.length ? <ul className={styles.warnings}>{projection.result.warnings.map((item) => <li key={`${item.code}:${String(item.line ?? 0)}:${item.message}`}>{item.message}</li>)}</ul> : null}
-          <div className={styles.synthesisBar}><div><span className={styles.step}>Audible proof</span><strong>{busy ? "Generating a validated WAV…" : "Ready for one fresh synthesis request"}</strong></div><button type="button" onClick={() => void synthesize()} disabled={!ready || busy}>{busy ? "Synthesizing…" : error ? "Retry synthesis" : "Synthesize passage"}</button></div>
           {error ? <ErrorNotice title="Synthesis did not complete">{error} Your passage and selections are ready to retry.</ErrorNotice> : null}
-
-          {session.active ? <SharedAudioPlayer label={`${session.active.result.voiceLabel} · ${session.active.result.voiceId}`} src={session.active.audioUrl} /> : null}
       </main>
     </div>
   );

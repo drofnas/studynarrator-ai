@@ -53,8 +53,8 @@ const diagnostics = {
 const persistenceStatus = {
   contractVersion: 1 as const,
   state: "ready" as const,
-  databaseSchemaVersion: 2 as const,
-  targetDatabaseSchemaVersion: 2 as const,
+  databaseSchemaVersion: 3 as const,
+  targetDatabaseSchemaVersion: 3 as const,
   databasePath: "/tmp/studynarrator.sqlite",
   latestBackupPath: null
 };
@@ -200,9 +200,17 @@ const scriptGeneration = {
 
 describe("Electron boundary", () => {
   it("exposes only the validated diagnostics and persistence operations", async () => {
+    const timestamp = "2026-08-12T12:00:00.000Z";
+    const namedSense = {
+      id: "global-resume-cv", scope: "global" as const, entryType: "namedSense" as const,
+      displayText: "resume", senseId: "cv", spokenText: "rez oo may", caseSensitive: false,
+      wholeWord: true, priority: 0, enabled: true, notes: "", createdAt: timestamp, updatedAt: timestamp
+    };
     const invoke = vi.fn(async (channel: string) => {
       if (channel === SYSTEM_DIAGNOSTICS_CHANNEL) return diagnostics;
       if (channel === PERSISTENCE_CHANNELS.projectsList) return [];
+      if (channel === PERSISTENCE_CHANNELS.globalLexiconReplace) return [namedSense];
+      if (channel === SCRIPT_GENERATION_CHANNELS.exportPrompt) return { disposition: "saved", fileName: "prompt.md" };
       if (channel === CONNECTION_CHANNELS.get) return {
         baseUrl: null, suppliedUrlForm: "unconfigured", configured: false, defaultModelId: null, defaultVoiceId: null,
         timeoutSeconds: 120, retryCount: 2, responseFormat: "wav", lastTestedAt: null, lastSuccessfulTestAt: null,
@@ -217,11 +225,19 @@ describe("Electron boundary", () => {
     expect(invoke).toHaveBeenCalledWith(SYSTEM_DIAGNOSTICS_CHANNEL);
     await expect(bridge.persistence.projects.list()).resolves.toEqual([]);
     expect(invoke).toHaveBeenCalledWith(PERSISTENCE_CHANNELS.projectsList);
+    await expect(bridge.persistence.globalLexicon.replace([{
+      scope: "global", entryType: "namedSense", displayText: "resume", senseId: "cv", spokenText: "rez oo may"
+    }])).resolves.toEqual([namedSense]);
+    expect(invoke).toHaveBeenCalledWith(PERSISTENCE_CHANNELS.globalLexiconReplace, [{
+      scope: "global", entryType: "namedSense", displayText: "resume", senseId: "cv", spokenText: "rez oo may"
+    }]);
     await expect(bridge.connection.get()).resolves.toMatchObject({ configured: false });
     expect(invoke).toHaveBeenCalledWith(CONNECTION_CHANNELS.get);
     expect(bridge.renders.renderAudioSource(renderJob.id)).toBe(`studynarrator-media://render/${renderJob.id}`);
     expect(bridge.renders.segmentAudioSource(renderJob.id, 3)).toBe(`studynarrator-media://segment/${renderJob.id}/3`);
     expect(() => bridge.renders.renderAudioSource("../outside")).toThrow();
+    await expect(bridge.scriptGeneration.exportPrompt(null, "update", "Edited prompt")).resolves.toEqual({ disposition: "saved", fileName: "prompt.md" });
+    expect(invoke).toHaveBeenCalledWith(SCRIPT_GENERATION_CHANNELS.exportPrompt, { projectId: null, kind: "update", content: "Edited prompt" });
   });
 
   it("rejects malformed IPC output", async () => {
@@ -307,11 +323,20 @@ describe("Electron boundary", () => {
     const setup = { onboardingCompletedAt: timestamp, client: "electron" as const };
     const catalog = { schemaVersion: 1 as const, modelId: "model", entries: [] };
     const speechCatalog = { schemaVersion: 1 as const, models: [{ modelId: "model", voices: [{ voiceId: "voice", name: "Voice", language: null, gender: null }] }] };
+    const namedSenseInput = [{
+      scope: "global" as const, entryType: "namedSense" as const, displayText: "resume", senseId: "cv", spokenText: "rez oo may"
+    }];
+    const namedSenseOutput = namedSenseInput.map((entry) => ({
+      ...entry, id: "global-resume-cv", caseSensitive: false as const, wholeWord: true as const,
+      priority: 0 as const, enabled: true, notes: "" as const, createdAt: timestamp, updatedAt: timestamp
+    }));
     persistence.projects.list.mockResolvedValue([{
       id: project.id,
       name: project.name,
       description: project.description,
       scriptHash: project.scriptHash,
+      scriptLineCount: null,
+      audioDurationMs: null,
       createdAt: project.createdAt,
       updatedAt: project.updatedAt
     }] as never);
@@ -322,7 +347,7 @@ describe("Electron boundary", () => {
     persistence.projects.delete.mockResolvedValue(undefined);
     persistence.settings.updatePacing.mockResolvedValue(DEFAULT_SYSTEM_TIMING);
     persistence.preferences.replaceIgnoredDiagnostics.mockResolvedValue([]);
-    persistence.globalLexicon.replace.mockResolvedValue([]);
+    persistence.globalLexicon.replace.mockResolvedValue(namedSenseOutput);
     connection.get.mockResolvedValue(storedConnection as never);
     connection.update.mockResolvedValue(storedConnection as never);
     connection.test.mockResolvedValue(summary as never);
@@ -359,7 +384,7 @@ describe("Electron boundary", () => {
       [PERSISTENCE_CHANNELS.projectsDelete]: { projectId: project.id },
       [PERSISTENCE_CHANNELS.pacingUpdate]: DEFAULT_SYSTEM_TIMING,
       [PERSISTENCE_CHANNELS.ignoredReplace]: [],
-      [PERSISTENCE_CHANNELS.globalLexiconReplace]: [],
+      [PERSISTENCE_CHANNELS.globalLexiconReplace]: namedSenseInput,
       [CONNECTION_CHANNELS.update]: connectionInput,
       [CONNECTION_CHANNELS.speechCatalogDiscover]: { baseUrl: "http://127.0.0.1:8000" },
       [CONNECTION_CHANNELS.voiceCatalogGet]: { modelId: "model" },
@@ -385,7 +410,7 @@ describe("Electron boundary", () => {
       [RENDER_CHANNELS.waveform]: { renderId: renderJob.id },
       [RENDER_CHANNELS.exportSegment]: { renderId: renderJob.id, ordinal: 1 },
       [SCRIPT_GENERATION_CHANNELS.previewPrompt]: { projectId: null, kind: "creation" },
-      [SCRIPT_GENERATION_CHANNELS.exportPrompt]: { projectId: null, kind: "update" },
+      [SCRIPT_GENERATION_CHANNELS.exportPrompt]: { projectId: null, kind: "update", content: "Edited prompt" },
       [SCRIPT_GENERATION_CHANNELS.exportSkillPackage]: { projectId: null }
     };
     const invoked = new Set<string>();
@@ -400,6 +425,11 @@ describe("Electron boundary", () => {
       invoked.add(channel);
     }
     expect(invoked).toEqual(new Set(PUBLIC_IPC_CHANNEL_MANIFEST));
+    expect(persistence.globalLexicon.replace).toHaveBeenCalledWith([{
+      scope: "global", entryType: "namedSense", displayText: "resume", senseId: "cv", spokenText: "rez oo may",
+      caseSensitive: false, wholeWord: true, priority: 0, enabled: true, notes: ""
+    }]);
+    expect(scriptGeneration.resolvePromptExport).toHaveBeenCalledWith(null, "update", "Edited prompt");
 
     const secret = "test-secret-must-not-appear";
     for (const channel of Object.keys(inputs)) {

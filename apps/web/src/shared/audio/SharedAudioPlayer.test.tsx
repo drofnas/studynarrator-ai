@@ -14,13 +14,16 @@ const waveform: RenderWaveform = {
   peaks: [0, 64, 255, 128]
 };
 
+const pauseAudio = vi.fn((_audio: HTMLMediaElement) => undefined);
+
 beforeEach(() => {
+  pauseAudio.mockReset();
   vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => undefined);
   vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(function (this: HTMLMediaElement) {
     fireEvent.play(this);
     return Promise.resolve();
   });
-  vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(function (this: HTMLMediaElement) { fireEvent.pause(this); });
+  vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(function (this: HTMLMediaElement) { pauseAudio(this); fireEvent.pause(this); });
 });
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
@@ -75,5 +78,20 @@ describe("SharedAudioPlayer", () => {
     fireEvent.error(container.querySelector("audio")!);
     expect(screen.getByRole("status")).toHaveTextContent("Playback unavailable");
     expect(screen.getByRole("button", { name: "Play" })).toBeDisabled();
+  });
+
+  it("pauses and disables every interaction while playback is unavailable during regeneration", () => {
+    const { container, rerender } = render(<SharedAudioPlayer label="Prior render" src="/prior.mp3" />);
+    const audio = loadAudio(container, 12);
+    rerender(<SharedAudioPlayer label="Prior render" src="/prior.mp3" disabled />);
+    expect(pauseAudio).toHaveBeenCalled();
+    expect(screen.getByLabelText("Audio player for Prior render")).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("button", { name: "Play" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Stop" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Replay" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Mute" })).toBeDisabled();
+    expect(screen.getByLabelText("Seek playback")).toBeDisabled();
+    expect(screen.getByLabelText("Volume")).toBeDisabled();
+    expect(audio.currentTime).toBe(0);
   });
 });

@@ -18,6 +18,7 @@ import { openStudyNarratorRepository, type DatabaseConstructor } from "@studynar
 import {
   BoundaryErrorSchema,
   DEFAULT_SYSTEM_TIMING,
+  GlobalLexiconEntryCollectionSchema,
   HealthSchema,
   ProjectDetailSchema,
   ProjectPreviewResultSchema,
@@ -334,8 +335,8 @@ describe("Express persistence API", () => {
     const persistence = createUnavailablePersistenceService({
       contractVersion: 1,
       state: "unavailable",
-      databaseSchemaVersion: 2,
-      targetDatabaseSchemaVersion: 2,
+      databaseSchemaVersion: 3,
+      targetDatabaseSchemaVersion: 3,
       databasePath: "/tmp/studynarrator.sqlite",
       latestBackupPath: "/tmp/backups/recovery.sqlite",
       code: "MIGRATION_FAILED",
@@ -455,8 +456,13 @@ describe("REST API operation manifest", () => {
     await call("PUT", "/api/settings/pacing", 200, DEFAULT_SYSTEM_TIMING);
     await call("GET", "/api/preferences/ignored-diagnostics", 200);
     await call("PUT", "/api/preferences/ignored-diagnostics", 200, []);
-    await call("GET", "/api/lexicon/global", 200);
-    await call("PUT", "/api/lexicon/global", 200, []);
+    GlobalLexiconEntryCollectionSchema.parse((await call("GET", "/api/lexicon/global", 200)).body as unknown);
+    const globalLexicon = GlobalLexiconEntryCollectionSchema.parse((await call("PUT", "/api/lexicon/global", 200, [{
+      scope: "global", entryType: "namedSense", displayText: "resume", senseId: "cv", spokenText: "rez oo may"
+    }])).body as unknown);
+    expect(globalLexicon).toMatchObject([{
+      scope: "global", entryType: "namedSense", displayText: "resume", senseId: "cv", spokenText: "rez oo may"
+    }]);
     await call("GET", "/api/connection", 200);
     await call("PUT", "/api/connection", 200, { baseUrl: "http://127.0.0.1:1/v1", defaultModelId: "model", defaultVoiceId: "voice" });
     SpeechCatalogSchema.parse((await call("POST", "/api/connection/speech-catalog", 200, { baseUrl: "http://127.0.0.1:1/v1" })).body as unknown);
@@ -476,10 +482,10 @@ describe("REST API operation manifest", () => {
       mode: "segment", nodeOrdinal: 1
     })).body as unknown);
     await call("POST", "/api/script-generation/prompt-preview", 200, { kind: "creation" });
-    await call("POST", "/api/script-generation/prompt-export", 200, { kind: "update" });
+    expect((await call("POST", "/api/script-generation/prompt-export", 200, { kind: "update", content: "Edited default prompt" })).text).toBe("Edited default prompt");
     await call("POST", "/api/script-generation/skill-export", 200, {});
     await call("POST", `/api/projects/${created.id}/prompt-preview`, 200, { kind: "creation" });
-    await call("POST", `/api/projects/${created.id}/prompt-export`, 200, { kind: "update" });
+    expect((await call("POST", `/api/projects/${created.id}/prompt-export`, 200, { kind: "update", content: "Edited project prompt" })).text).toBe("Edited project prompt");
     await call("POST", `/api/projects/${created.id}/skill-export`, 200, {});
     const renderPlan = RenderPlanSchema.parse((await call("POST", `/api/projects/${created.id}/render-plans`, 201)).body as unknown);
     RenderPlanSummaryCollectionSchema.parse((await call("GET", `/api/projects/${created.id}/render-plans`, 200)).body as unknown);
@@ -554,7 +560,7 @@ describe("REST API operation manifest", () => {
     expect(JSON.stringify(responses.map((response) => response.body as unknown))).not.toContain(secret);
 
     const unavailable = createUnavailablePersistenceService({
-      contractVersion: 1, state: "unavailable", databaseSchemaVersion: 1, targetDatabaseSchemaVersion: 2,
+      contractVersion: 1, state: "unavailable", databaseSchemaVersion: 1, targetDatabaseSchemaVersion: 3,
       databasePath: "/redacted/data.sqlite", latestBackupPath: null, code: "MIGRATION_FAILED", message: "Unavailable."
     });
     const degraded = await listen(createExpressApp({ service, persistence: unavailable, context }));

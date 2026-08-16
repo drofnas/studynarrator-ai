@@ -1,24 +1,27 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 import { Link, useParams } from "react-router";
 import type { PersistenceClient, ProjectDetail, PromptDocument, ScriptGenerationClient, ScriptPromptKind } from "@studynarrator/shared-types";
+import { ScriptSourceEditor } from "@/features/projects/ScriptSourceEditor.js";
+import { StickyTabBar } from "@/shared/ui/StickyTabBar.js";
 import styles from "./ScriptGenerationPage.module.css";
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : "StudyNarrator could not prepare the script prompts.";
 }
 
-const promptLabels: Record<ScriptPromptKind, { eyebrow: string; title: string; description: string }> = {
+const promptLabels: Record<ScriptPromptKind, { tab: string; eyebrow: string; title: string }> = {
   creation: {
-    eyebrow: "Blank page",
-    title: "Create a script",
-    description: "Add your topic, goals, and trusted sources to a complete script-authoring contract."
+    tab: "Create Prompt",
+    eyebrow: "New script",
+    title: "Create a script"
   },
   update: {
-    eyebrow: "Red pen",
-    title: "Update a script",
-    description: "Paste the current script and requested changes into a compact format-preserving contract."
+    tab: "Update Prompt",
+    eyebrow: "Existing script",
+    title: "Update a script"
   }
 };
+const promptKinds = Object.keys(promptLabels) as ScriptPromptKind[];
 
 export function ScriptGenerationPage({ persistence, generation }: {
   persistence: PersistenceClient;
@@ -27,116 +30,127 @@ export function ScriptGenerationPage({ persistence, generation }: {
   const { projectId: routeProjectId } = useParams();
   const projectId = routeProjectId ?? null;
   const [project, setProject] = useState<ProjectDetail>();
-  const [globalLexiconCount, setGlobalLexiconCount] = useState(0);
   const [documents, setDocuments] = useState<Partial<Record<ScriptPromptKind, PromptDocument>>>({});
+  const [drafts, setDrafts] = useState<Partial<Record<ScriptPromptKind, string>>>({});
   const [selected, setSelected] = useState<ScriptPromptKind>("creation");
   const [loadingError, setLoadingError] = useState("");
   const [operationError, setOperationError] = useState("");
   const [notice, setNotice] = useState("");
-  const [busy, setBusy] = useState<"copy" | "prompt" | "skill" | null>(null);
+  const [busy, setBusy] = useState<"copy" | "prompt" | null>(null);
 
   useEffect(() => {
     let active = true;
     setProject(undefined);
     setDocuments({});
+    setDrafts({});
     setLoadingError("");
     setOperationError("");
     setNotice("");
     void Promise.all([
       projectId ? persistence.projects.get(projectId) : Promise.resolve(undefined),
-      persistence.globalLexicon.list(),
       generation.previewPrompt(projectId, "creation"),
       generation.previewPrompt(projectId, "update")
-    ]).then(([loadedProject, globalLexicon, creation, update]) => {
+    ]).then(([loadedProject, creation, update]) => {
       if (!active) return;
       setProject(loadedProject);
-      setGlobalLexiconCount(globalLexicon.filter(({ enabled }) => enabled).length);
       setDocuments({ creation, update });
+      setDrafts({ creation: creation.content, update: update.content });
     }).catch((error: unknown) => { if (active) setLoadingError(message(error)); });
     return () => { active = false; };
   }, [generation, persistence, projectId]);
 
-  const document = documents[selected];
-  const enabledProjectLexicon = useMemo(() => project?.lexiconEntries.filter(({ enabled }) => enabled).length ?? 0, [project]);
+  const promptDocument = documents[selected];
+  const draft = drafts[selected] ?? "";
+
+  const selectPrompt = (kind: ScriptPromptKind) => {
+    setSelected(kind);
+    setNotice("");
+    setOperationError("");
+  };
+
+  const movePromptTab = (event: KeyboardEvent<HTMLButtonElement>, kind: ScriptPromptKind) => {
+    const currentIndex = promptKinds.indexOf(kind);
+    const targetIndex = event.key === "Home" ? 0
+      : event.key === "End" ? promptKinds.length - 1
+        : event.key === "ArrowRight" ? (currentIndex + 1) % promptKinds.length
+          : event.key === "ArrowLeft" ? (currentIndex - 1 + promptKinds.length) % promptKinds.length
+            : undefined;
+    if (targetIndex === undefined) return;
+    event.preventDefault();
+    const target = promptKinds[targetIndex]!;
+    selectPrompt(target);
+    document.getElementById(`prompt-tab-${target}`)?.focus();
+  };
 
   const copyPrompt = async () => {
-    if (!document) return;
+    if (!promptDocument || draft.length === 0) return;
     setBusy("copy"); setOperationError("");
     try {
-      await navigator.clipboard.writeText(document.content);
+      await navigator.clipboard.writeText(draft);
       setNotice(`${promptLabels[selected].title} prompt copied. Add your material in the marked block before sending it to an LLM.`);
     } catch { setOperationError("Clipboard access was denied. Download the prompt or copy it from the preview."); }
     finally { setBusy(null); }
   };
 
   const exportPrompt = async () => {
+    if (draft.length === 0) return;
     setBusy("prompt"); setOperationError("");
     try {
-      const result = await generation.exportPrompt(projectId, selected);
+      const result = await generation.exportPrompt(projectId, selected, draft);
       setNotice(result.disposition === "canceled" ? "Prompt export canceled." : `${result.fileName} ${result.disposition === "saved" ? "saved" : "downloaded"}.`);
     } catch (error) { setOperationError(message(error)); }
     finally { setBusy(null); }
   };
 
-  const exportSkill = async () => {
-    setBusy("skill"); setOperationError("");
-    try {
-      const result = await generation.exportSkillPackage(projectId);
-      setNotice(result.disposition === "canceled" ? "Prompt-kit export canceled." : `${result.fileName} ${result.disposition === "saved" ? "saved" : "downloaded"}. It contains both templates and no saved script.`);
-    } catch (error) { setOperationError(message(error)); }
-    finally { setBusy(null); }
-  };
-
   if (loadingError) return <section className={styles.loadingState} role="alert"><h2>Prompt kit unavailable</h2><p>{loadingError}</p><Link to="/projects">Return to Projects</Link></section>;
-  if (!documents.creation || !documents.update || !document || (projectId && !project)) return <section className={styles.loadingState} aria-live="polite"><h2>Preparing prompt kit</h2><p>Reading the script format and pronunciation lexicon…</p></section>;
+  if (!documents.creation || !documents.update || drafts.creation === undefined || drafts.update === undefined || !promptDocument || (projectId && !project)) return <section className={styles.loadingState} aria-live="polite"><h2>Preparing prompt kit</h2><p>Reading the script format and pronunciation lexicon…</p></section>;
 
   return <div className={styles.page}>
     <header className={styles.header}>
       <div><p className={styles.kicker}>External-LLM handoff</p><h2>Script prompt kit</h2><p>Copy a starting contract, add your subject matter or edit request, then use it with the LLM of your choice.</p></div>
-      <Link className={styles.backLink} to={project ? `/projects/${project.id}` : "/projects"}>{project ? `Back to ${project.name}` : "View Projects"}</Link>
+      {project ? <Link className={styles.backLink} to={`/projects/${project.id}`}>Back to {project.name}</Link> : null}
     </header>
 
-    <aside className={styles.selector} aria-label="Choose a prompt template">
-      <div className={styles.selectorHeading}><span>Choose one</span><h3>Where are you starting?</h3></div>
-      {(Object.keys(promptLabels) as ScriptPromptKind[]).map((kind) => <button
-        key={kind}
-        type="button"
-        className={selected === kind ? styles.selectedTemplate : styles.template}
-        aria-pressed={selected === kind}
-        onClick={() => { setSelected(kind); setNotice(""); setOperationError(""); }}
-      ><span>{promptLabels[kind].eyebrow}</span><strong>{promptLabels[kind].title}</strong><small>{promptLabels[kind].description}</small></button>)}
-
-      <section className={styles.context} aria-labelledby="included-heading">
-        <h3 id="included-heading">Included automatically</h3>
-        <dl>
-          <div><dt>Speakers</dt><dd>{project?.speakerMappings.length || 1}</dd></div>
-          <div><dt>Pauses</dt><dd>3 global presets</dd></div>
-          <div><dt>Lexicon</dt><dd>{enabledProjectLexicon + globalLexiconCount}</dd></div>
-        </dl>
-        <p>{project ? "This kit uses the project’s format plus enabled project and global lexicon entries." : "This kit uses StudyNarrator’s default narrator and pause commands plus enabled global lexicon entries."} You do not need to configure them again here.</p>
-      </section>
-
-      <button type="button" className={styles.packageButton} disabled={busy !== null} onClick={() => void exportSkill()}>{window.studyNarrator ? "Save both prompts as a kit" : "Download both prompts as a kit"}</button>
-    </aside>
-
-    <main className={styles.previewPanel}>
-      <div className={styles.previewHeading}>
-        <div><span>{promptLabels[selected].eyebrow}</span><h3>{promptLabels[selected].title}</h3></div>
-        <code>{document.checksum.slice(0, 12)}</code>
-      </div>
-      <p className={styles.instructions}>{selected === "creation"
-        ? "Replace the KNOWLEDGE TO GATHER AND TEACH block with your topic, learning goals, sources, and constraints."
-        : "Replace the SCRIPT AND CHANGE REQUEST block with the current script and the exact edits you want."}</p>
-      <div className={styles.actions}>
-        <button type="button" disabled={busy !== null} onClick={() => void copyPrompt()}>{busy === "copy" ? "Copying…" : `Copy ${selected} prompt`}</button>
-        <button type="button" className={styles.secondary} disabled={busy !== null} onClick={() => void exportPrompt()}>{window.studyNarrator ? `Save ${selected} prompt` : `Download ${selected} prompt`}</button>
-      </div>
-      {operationError ? <p className={styles.error} role="alert">{operationError}</p> : null}
-      <p className={styles.notice} aria-live="polite">{notice}</p>
-      <div className={styles.tape}>
-        <div aria-hidden="true">{selected.toUpperCase()} / MARKDOWN / {document.content.split("\n").length} LINES</div>
-        <pre tabIndex={0} aria-label={`${promptLabels[selected].title} prompt preview`}>{document.content}</pre>
-      </div>
-    </main>
+    <div className={styles.workspace}>
+      <StickyTabBar
+        label="Choose a prompt template"
+        actionsLabel="Prompt actions"
+        actions={<>
+          <button type="button" aria-label={`Copy ${selected} prompt`} title={`Copy ${selected} prompt`} aria-busy={busy === "copy"} disabled={busy !== null || draft.length === 0} onClick={() => void copyPrompt()}>
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="8" y="8" width="11" height="11" rx="1"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>
+          </button>
+          <button type="button" aria-label={`Download ${selected} prompt`} title={`Download ${selected} prompt`} aria-busy={busy === "prompt"} disabled={busy !== null || draft.length === 0} onClick={() => void exportPrompt()}>
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v9m-4-4 4 4 4-4"/></svg>
+          </button>
+        </>}
+      >
+        {promptKinds.map((kind) => <button
+          key={kind}
+          type="button"
+          role="tab"
+          id={`prompt-tab-${kind}`}
+          aria-controls="prompt-panel"
+          aria-selected={selected === kind}
+          tabIndex={selected === kind ? 0 : -1}
+          onClick={() => selectPrompt(kind)}
+          onKeyDown={(event) => movePromptTab(event, kind)}
+        >{promptLabels[kind].tab}</button>)}
+      </StickyTabBar>
+      <main className={styles.previewPanel} role="tabpanel" id="prompt-panel" aria-labelledby={`prompt-tab-${selected}`}>
+        <div className={styles.previewHeading}><span>{promptLabels[selected].eyebrow}</span><h3>{promptLabels[selected].title}</h3></div>
+        <p className={styles.instructions}>{selected === "creation"
+          ? "The questions to customize this prompt are in the USER INPUT section at the end. Replace the bracketed sample text with your answers, and delete any question sections you do not need."
+          : "The USER INPUT section at the end asks for the requested changes, current StudyNarrator script, and any additional requirements or source material. Replace the bracketed sample text, and delete any sections you do not need."}</p>
+        {operationError ? <p className={styles.error} role="alert">{operationError}</p> : null}
+        <p className={styles.notice} aria-live="polite">{notice}</p>
+        <ScriptSourceEditor
+          key={selected}
+          value={draft}
+          ariaLabel={`${promptLabels[selected].title} prompt editor`}
+          onChange={(content) => setDrafts((current) => ({ ...current, [selected]: content }))}
+        />
+        <div className={styles.editorMeta}><span>{draft.length.toLocaleString()} characters</span><span>{draft.split("\n").length.toLocaleString()} lines</span></div>
+      </main>
+    </div>
   </div>;
 }

@@ -8,6 +8,7 @@ export const FAKE_SPEACHES_SECONDARY_MODEL_ID = "speaches-ai/Piper-en_US-lessac-
 export const FAKE_SPEACHES_SECONDARY_VOICE_ID = "en_US-lessac-medium";
 const FAKE_SPEACHES_SCENARIOS = [
   "healthy",
+  "slow",
   "timeout",
   "unauthorized",
   "missing-model",
@@ -205,6 +206,7 @@ export async function startFakeSpeachesServer(options: { host?: string; port?: n
       return;
     }
     if (path === "/v1/audio/speech" && request.method === "POST") {
+      if (scenario === "slow") await new Promise((resolve) => setTimeout(resolve, 1_000));
       if (scenario === "rejected-voice") {
         log(422);
         sendJson(response, 422, { error: "voice rejected" });

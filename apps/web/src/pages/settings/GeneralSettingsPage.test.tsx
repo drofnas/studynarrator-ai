@@ -43,4 +43,23 @@ describe("General settings", () => {
     expect(await screen.findByText(/Cleared 2 cached speech entries/u)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Clear all cached speech" })).toBeDisabled();
   });
+
+  it("shows recovery state instead of empty fields until the saved connection returns", async () => {
+    let resolveConnection!: (value: typeof savedConnection) => void;
+    const recovered = new Promise<typeof savedConnection>((resolve) => { resolveConnection = resolve; });
+    const get = vi.fn()
+      .mockRejectedValueOnce(new Error("Connection service restarted."))
+      .mockImplementationOnce(async () => await recovered);
+    render(<ConnectionProvider connectionClient={connectionClient({ get })} voiceCatalog={voiceCatalog}><GeneralSettingsPage cacheClient={cacheClient} /></ConnectionProvider>);
+
+    expect(await screen.findByRole("status", { name: "Restoring connection settings" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Address")).not.toBeInTheDocument();
+    await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
+    resolveConnection(savedConnection);
+    expect(await screen.findByDisplayValue(savedConnection.baseUrl)).toBeInTheDocument();
+    expect(screen.getByLabelText("Model")).toHaveValue(savedConnection.defaultModelId);
+    expect(screen.getByLabelText("Default Voice")).toHaveValue(savedConnection.defaultVoiceId);
+    expect(screen.getByLabelText("Timeout (seconds)")).toHaveValue(savedConnection.timeoutSeconds);
+    expect(screen.getByLabelText("Retries")).toHaveValue(savedConnection.retryCount);
+  });
 });

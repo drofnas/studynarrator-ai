@@ -43,7 +43,7 @@ async function removeTestDirectory(dataDirectory: string): Promise<void> {
   if (!dataDirectory.startsWith(expectedPrefix)) {
     throw new Error(`Refusing to remove an unexpected Playwright directory: ${dataDirectory}`);
   }
-  await rm(dataDirectory, { recursive: true, force: true });
+  await rm(dataDirectory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }
 
 export const test = base.extend<{

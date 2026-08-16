@@ -23,6 +23,9 @@
 .profileList button[data-active="true"] { color: white; background: var(--ink); border-left: 5px solid var(--signal); }
 .profileList span { font-size: 0.67rem; }
 .connectionForm { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; padding: 16px; background: var(--mist); }
+.connectionLoading { display: grid; gap: 5px; padding: 16px; color: #557080; background: var(--mist); border-left: 5px solid var(--copper); }
+.connectionLoading strong { color: var(--ink); }
+.connectionLoading span { font-size: 0.76rem; }
 .connectionForm > label, .pacing label, .catalog > label { display: grid; gap: 5px; font-size: 0.74rem; font-weight: 800; }
 .connectionForm input, .connectionForm select, .catalog input, .catalog textarea, .pacing input, .pacing select { width: 100%; padding: 9px 10px; color: var(--ink); background: white; border: 1px solid #91a9b2; }
 .connectionForm input:disabled { color: #607481; background: #dbe4e6; }

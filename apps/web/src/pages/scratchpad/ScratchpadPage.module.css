@@ -1,13 +1,8 @@
 .page { display: grid; gap: 22px; }
-.pageHeader { display: flex; justify-content: space-between; gap: 32px; align-items: end; padding-bottom: 20px; border-bottom: 2px solid var(--ink); }
+.pageHeader { padding-bottom: 20px; border-bottom: 2px solid var(--ink); }
 .pageHeader h2 { margin: 0; font-family: "Avenir Next Condensed", "Arial Narrow", sans-serif; font-size: clamp(2.7rem, 6vw, 5.2rem); letter-spacing: -0.045em; line-height: 0.9; }
 .pageHeader p:last-child { max-width: 600px; margin: 12px 0 0; color: #557080; }
 .kicker, .step { display: block; margin: 0 0 7px; color: var(--signal); font: 800 0.66rem ui-monospace, monospace; letter-spacing: 0.12em; text-transform: uppercase; }
-.connectionState { display: grid; min-width: 230px; padding: 12px 15px; color: white; background: var(--ink); border-top: 5px solid var(--fault); }
-.connectionState[data-state="connected"] { border-color: var(--signal); }
-.connectionState span { color: #9ed8d3; font: 700 0.62rem ui-monospace, monospace; text-transform: uppercase; }
-.connectionState strong { margin: 5px 0; }
-.connectionState code { color: #c5d6dc; }
 .controls, .passagePanel { background: var(--paper); border: 1px solid var(--line); }
 .controls { padding: 18px; border-top: 5px solid var(--copper); }
 .setupHeading { display: flex; gap: 14px; align-items: baseline; }
@@ -26,8 +21,7 @@
 .passagePanel textarea { width: 100%; min-height: 210px; padding: 16px; color: #eaf6f5; background: #17354c; border: 3px solid #10293f; resize: vertical; font: 0.86rem/1.7 ui-monospace, monospace; }
 .passagePanel .lexiconToggle { display: flex; gap: 8px; align-items: center; justify-self: start; }
 .lexiconToggle input { width: auto; accent-color: var(--signal); }
+.passageActions { display: flex; justify-content: flex-end; margin-top: 14px; }
 .warnings { margin: 0; padding: 12px 16px 12px 36px; color: #7a431f; background: #fff1e6; border-left: 5px solid var(--copper); font-size: 0.75rem; }
-.synthesisBar { display: flex; justify-content: space-between; gap: 16px; align-items: center; padding: 15px 17px; background: #d9e6e8; border-left: 5px solid var(--signal); }
-.synthesisBar strong { display: block; font-size: 0.84rem; }
 @media (max-width: 980px) { .setupGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 760px) { .pageHeader, .synthesisBar { align-items: stretch; flex-direction: column; } .connectionState { min-width: 0; } .setupGrid { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .setupGrid { grid-template-columns: 1fr; } }
