@@ -252,6 +252,16 @@ describe("StudyNarratorRepository", () => {
     const repository = await openStudyNarratorRepository({ Database: DatabaseAdapter, databasePath, idFactory: ids(projectId) });
     expect(repository.runMarker()).toMatchObject({ markerKey: "runtime.storage-self-test", migrationVersion: 2 });
     const project = repository.createProject({ name: "Rendered" });
+    repository.replaceProject(project.id, {
+      name: project.name,
+      description: project.description,
+      scriptSource: "First line\n\nThird line\n",
+      speakerMappings: [],
+      lexiconEntries: []
+    });
+    expect(repository.listProjects()).toEqual([
+      expect.objectContaining({ scriptLineCount: 4, audioDurationMs: null })
+    ]);
     const timestamp = "2026-08-13T12:00:00.000Z";
     const renderId = "00000000-0000-4000-8000-000000000020";
     const planId = "00000000-0000-4000-8000-000000000021";
@@ -282,6 +292,28 @@ describe("StudyNarratorRepository", () => {
       contractVersion: 1, id: artifactId, renderId, type: "mp3", fileName: "rendered.mp3",
       path: "/scoped/rendered.mp3", sizeBytes: 12, checksum: "a".repeat(64), durationMs: 1_000, createdAt: timestamp
     }]);
+    const failedRenderId = "00000000-0000-4000-8000-000000000023";
+    repository.createRenderJob({
+      contractVersion: 1, id: failedRenderId, projectId: project.id,
+      planId: "00000000-0000-4000-8000-000000000024", retryOfRenderId: null,
+      state: "failed", progress: { ...progress, phase: "failed" },
+      error: null, createdAt: "2026-08-13T13:00:00.000Z", startedAt: timestamp, finishedAt: "2026-08-13T13:00:00.000Z"
+    }, []);
+    const latestRenderId = "00000000-0000-4000-8000-000000000025";
+    repository.createRenderJob({
+      contractVersion: 1, id: latestRenderId, projectId: project.id,
+      planId: "00000000-0000-4000-8000-000000000026", retryOfRenderId: null,
+      state: "complete", progress: { ...progress, phase: "complete", completedChunks: 1 },
+      error: null, createdAt: "2026-08-13T14:00:00.000Z", startedAt: timestamp, finishedAt: "2026-08-13T14:00:00.000Z"
+    }, []);
+    repository.replaceRenderArtifacts(latestRenderId, [{
+      contractVersion: 1, id: "00000000-0000-4000-8000-000000000027", renderId: latestRenderId,
+      type: "mp3", fileName: "latest.mp3", path: "/scoped/latest.mp3", sizeBytes: 24,
+      checksum: "b".repeat(64), durationMs: 752_000, createdAt: "2026-08-13T14:00:00.000Z"
+    }]);
+    expect(repository.listProjects()).toEqual([
+      expect.objectContaining({ scriptLineCount: 4, audioDurationMs: 752_000 })
+    ]);
     repository.close();
 
     const reopened = await openStudyNarratorRepository({ Database: DatabaseAdapter, databasePath });

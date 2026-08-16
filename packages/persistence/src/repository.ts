@@ -71,6 +71,11 @@ interface ProjectRow {
   updated_at: string;
 }
 
+interface ProjectSummaryRow extends Pick<ProjectRow, "id" | "name" | "description" | "script_hash" | "created_at" | "updated_at"> {
+  script_line_count: number | null;
+  audio_duration_ms: number | null;
+}
+
 interface SpeakerRow {
   speaker_id: string;
   display_name: string;
@@ -501,9 +506,35 @@ function createRepository(options: {
     },
     listProjects() {
       assertOpen();
-      const rows = database.prepare("SELECT id, name, description, script_hash, created_at, updated_at FROM projects ORDER BY updated_at DESC, id ASC").all() as Array<Pick<ProjectRow, "id" | "name" | "description" | "script_hash" | "created_at" | "updated_at">>;
+      const rows = database.prepare(`
+        SELECT
+          projects.id,
+          projects.name,
+          projects.description,
+          projects.script_hash,
+          CASE
+            WHEN projects.script_source = '' THEN NULL
+            ELSE length(projects.script_source) - length(replace(projects.script_source, char(10), '')) + 1
+          END AS script_line_count,
+          (
+            SELECT render_artifacts.duration_ms
+            FROM render_jobs
+            JOIN render_artifacts ON render_artifacts.render_id = render_jobs.id
+            WHERE render_jobs.project_id = projects.id
+              AND render_jobs.state = 'complete'
+              AND render_artifacts.artifact_type = 'mp3'
+              AND render_artifacts.duration_ms IS NOT NULL
+            ORDER BY render_jobs.created_at DESC, render_jobs.id ASC
+            LIMIT 1
+          ) AS audio_duration_ms,
+          projects.created_at,
+          projects.updated_at
+        FROM projects
+        ORDER BY projects.updated_at DESC, projects.id ASC
+      `).all() as ProjectSummaryRow[];
       return ProjectSummaryCollectionSchema.parse(rows.map((row) => ({
         id: row.id, name: row.name, description: row.description, scriptHash: row.script_hash,
+        scriptLineCount: row.script_line_count, audioDurationMs: row.audio_duration_ms,
         createdAt: row.created_at, updatedAt: row.updated_at
       })));
     },

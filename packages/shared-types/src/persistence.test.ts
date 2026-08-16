@@ -4,6 +4,7 @@ import {
   IgnoredDiagnosticCollectionSchema,
   ProjectLexiconAuthoringCollectionSchema,
   ProjectReplaceInputSchema,
+  ProjectSummaryCollectionSchema,
   SpeakerMappingCollectionSchema,
   SystemTimingConfigurationSchema
 } from "./persistence.js";
@@ -18,6 +19,23 @@ const validProject = {
 };
 
 describe("persistence contracts", () => {
+  it("accepts strict project summaries with derived index metadata", () => {
+    const summary = {
+      id: "00000000-0000-4000-8000-000000000001",
+      name: "Index metadata",
+      description: "",
+      scriptHash: "a".repeat(64),
+      scriptLineCount: 3,
+      audioDurationMs: 752_000,
+      createdAt: "2026-08-12T12:00:00.000Z",
+      updatedAt: "2026-08-12T12:00:00.000Z"
+    };
+
+    expect(ProjectSummaryCollectionSchema.parse([summary])).toEqual([summary]);
+    expect(ProjectSummaryCollectionSchema.parse([{ ...summary, scriptLineCount: null, audioDurationMs: null }])).toHaveLength(1);
+    expect(() => ProjectSummaryCollectionSchema.parse([{ ...summary, unknown: true }])).toThrow();
+  });
+
   it("accepts a strict complete aggregate and rejects project timing", () => {
     expect(ProjectReplaceInputSchema.parse(validProject)).toEqual(validProject);
     expect(() => ProjectReplaceInputSchema.parse({ ...validProject, unknown: true })).toThrow();

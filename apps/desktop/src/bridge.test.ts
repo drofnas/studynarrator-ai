@@ -312,6 +312,8 @@ describe("Electron boundary", () => {
       name: project.name,
       description: project.description,
       scriptHash: project.scriptHash,
+      scriptLineCount: null,
+      audioDurationMs: null,
       createdAt: project.createdAt,
       updatedAt: project.updatedAt
     }] as never);

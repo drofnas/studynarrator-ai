@@ -109,7 +109,16 @@ function fixture(sourceProject = project) {
   const client: PersistenceClient = {
     status: vi.fn(),
     projects: {
-      list: vi.fn(async () => [{ id: stored.id, name: stored.name, description: stored.description, scriptHash: stored.scriptHash, createdAt: stored.createdAt, updatedAt: stored.updatedAt }]),
+      list: vi.fn(async () => [{
+        id: stored.id,
+        name: stored.name,
+        description: stored.description,
+        scriptHash: stored.scriptHash,
+        scriptLineCount: stored.scriptSource === "" ? null : stored.scriptSource.split("\n").length,
+        audioDurationMs: null,
+        createdAt: stored.createdAt,
+        updatedAt: stored.updatedAt
+      }]),
       create,
       get: vi.fn(async () => structuredClone(stored)),
       replace,

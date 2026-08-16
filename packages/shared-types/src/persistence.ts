@@ -173,6 +173,8 @@ const ProjectSummarySchema = z.object({
   name: z.string().min(1),
   description: z.string(),
   scriptHash: z.string().regex(/^[a-f0-9]{64}$/u),
+  scriptLineCount: z.number().int().positive().nullable(),
+  audioDurationMs: z.number().int().nonnegative().nullable(),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema
 }).strict();
