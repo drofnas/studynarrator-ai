@@ -1,9 +1,8 @@
 import { readFile } from "node:fs/promises";
-import { strFromU8, unzipSync } from "fflate";
 import { continueOffline, expect, test } from "../support/studyNarratorTest.js";
 
 test.describe("external-LLM script generation", () => {
-  test("copies, downloads, and inspects creation, update, and reusable prompt-kit artifacts without TTS", async ({ page, request, context, studyNarrator }) => {
+  test("edits, copies, and downloads independent full-width prompts without TTS", async ({ page, request, context, studyNarrator }) => {
     await continueOffline(page, studyNarrator);
     const projectsResponse = await request.get(`${studyNarrator.baseUrl}/api/projects`);
     expect(await projectsResponse.json()).toEqual([]);
@@ -26,46 +25,68 @@ test.describe("external-LLM script generation", () => {
 
     await page.getByRole("link", { name: "Prompt Kit" }).click();
     await expect(page.getByRole("heading", { name: "Script prompt kit" })).toBeVisible();
-    const creationPreview = page.getByLabel("Create a script prompt preview");
-    await expect(creationPreview).toContainText("KNOWLEDGE TO GATHER AND TEACH");
-    await expect(creationPreview).toContainText("[speaker_narrator]");
-    await expect(creationPreview).toContainText("[pause_medium]");
-    await expect(creationPreview).toContainText("SQL → sequel");
-    await expect(creationPreview).toContainText("{{display text|new_sense_id}}");
+    const createTab = page.getByRole("tab", { name: /Create a script/u });
+    const updateTab = page.getByRole("tab", { name: /Update a script/u });
+    await expect(createTab).toHaveAttribute("aria-selected", "true");
+    const creationEditor = page.getByRole("textbox", { name: "Create a script prompt editor" });
+    await expect(creationEditor).toContainText("KNOWLEDGE TO GATHER AND TEACH");
+    await expect(creationEditor).toContainText("AUTHORING GOALS");
+
+    const [createBox, updateBox, tabListBox, panelBox] = await Promise.all([
+      createTab.boundingBox(), updateTab.boundingBox(), page.getByRole("tablist", { name: "Choose a prompt template" }).boundingBox(), page.getByRole("tabpanel").boundingBox()
+    ]);
+    if (!createBox || !updateBox || !tabListBox || !panelBox) throw new Error("Expected Prompt Kit layout boxes.");
+    expect(Math.abs(createBox.y - updateBox.y)).toBeLessThan(1);
+    expect(Math.abs(createBox.width - updateBox.width)).toBeLessThan(1);
+    expect(Math.abs(tabListBox.width - panelBox.width)).toBeLessThan(1);
+    const editorLayout = await page.getByRole("tabpanel").evaluate((panel) => {
+      const editor = panel.querySelector(".cm-editor");
+      const scroller = panel.querySelector(".cm-scroller");
+      if (!(editor instanceof HTMLElement) || !(scroller instanceof HTMLElement)) throw new Error("Expected CodeMirror layout elements.");
+      return {
+        availableWidth: panel.clientWidth,
+        editorWidth: editor.getBoundingClientRect().width,
+        editorMaxHeight: getComputedStyle(editor).maxHeight,
+        scrollerMaxHeight: getComputedStyle(scroller).maxHeight,
+        scrollerOverflowY: getComputedStyle(scroller).overflowY
+      };
+    });
+    expect(editorLayout.editorWidth).toBeGreaterThanOrEqual(editorLayout.availableWidth - 42);
+    expect(editorLayout.editorMaxHeight).toBe("none");
+    expect(editorLayout.scrollerMaxHeight).toBe("none");
+    expect(editorLayout.scrollerOverflowY).toBe("visible");
+    await expect(page.getByRole("link", { name: "View Projects" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /both prompts/u })).toHaveCount(0);
+
+    const editedCreation = "EDITED CREATION PROMPT";
+    await creationEditor.fill(editedCreation);
 
     await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: studyNarrator.baseUrl });
     await page.getByRole("button", { name: "Copy creation prompt" }).click();
     await expect(page.getByText("Create a script prompt copied.", { exact: false })).toBeVisible();
-    expect(await page.evaluate(async () => await navigator.clipboard.readText())).toContain("KNOWLEDGE TO GATHER AND TEACH");
+    expect(await page.evaluate(async () => await navigator.clipboard.readText())).toBe(editedCreation);
 
     const creationDownload = page.waitForEvent("download");
     await page.getByRole("button", { name: "Download creation prompt" }).click();
     const creation = await creationDownload;
     expect(creation.suggestedFilename()).toBe("studynarrator-creation-prompt.md");
     const creationText = await readFile(await creation.path(), "utf8");
-    expect(creationText).toContain("KNOWLEDGE TO GATHER AND TEACH");
+    expect(creationText).toBe(editedCreation);
 
-    await page.getByRole("button", { name: /Update a script/u }).click();
-    const updatePreview = page.getByLabel("Update a script prompt preview");
-    await expect(updatePreview).toContainText("SCRIPT AND CHANGE REQUEST");
-    await expect(updatePreview).toContainText("Return the complete revised script, not a patch");
+    await updateTab.click();
+    const updateEditor = page.getByRole("textbox", { name: "Update a script prompt editor" });
+    await expect(updateEditor).toContainText("SCRIPT AND CHANGE REQUEST");
+    await expect(updateEditor).toContainText("Return the complete revised script, not a patch");
+    const editedUpdate = "EDITED UPDATE PROMPT";
+    await updateEditor.fill(editedUpdate);
     const updateDownload = page.waitForEvent("download");
     await page.getByRole("button", { name: "Download update prompt" }).click();
     const update = await updateDownload;
     expect(update.suggestedFilename()).toBe("studynarrator-update-prompt.md");
     const updateText = await readFile(await update.path(), "utf8");
-    expect(updateText).toContain("[PASTE THE CURRENT SCRIPT AND DESCRIBE THE CHANGES TO MAKE HERE.]");
-
-    const skillDownload = page.waitForEvent("download");
-    await page.getByRole("button", { name: "Download both prompts as a kit" }).click();
-    const skill = await skillDownload;
-    expect(skill.suggestedFilename()).toBe("studynarrator-script-skill.zip");
-    const skillPath = await skill.path();
-    const files = unzipSync(await readFile(skillPath));
-    expect(Object.keys(files).sort()).toEqual(["CREATION_PROMPT.md", "LEXICON_ALIASES.md", "SCRIPT_FORMAT.md", "SKILL.md", "UPDATE_PROMPT.md", "examples/single-narrator.txt"]);
-    const skillText = Object.values(files).map((bytes) => strFromU8(bytes)).join("\n");
-    expect(skillText).toContain("[speaker_narrator]");
-    expect(skillText).toContain("SQL → sequel");
+    expect(updateText).toBe(editedUpdate);
+    await createTab.click();
+    await expect(page.getByRole("textbox", { name: "Create a script prompt editor" })).toHaveText(editedCreation);
 
     expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/speech"] ?? 0).toBe(0);
   });

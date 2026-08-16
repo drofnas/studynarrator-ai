@@ -32,6 +32,14 @@ describe("ScriptSourceEditor", () => {
     expect(editorView().state.doc.toString()).toBe("Replacement\nvalue");
   });
 
+  it("supports a contextual accessible label while preserving the project-editor default", () => {
+    const result = render(<ScriptSourceEditor value="Prompt" onChange={() => undefined} ariaLabel="Create a script prompt editor" />);
+    expect(screen.getByRole("textbox", { name: "Create a script prompt editor" })).toBeInTheDocument();
+
+    result.rerender(<ScriptSourceEditor value="Prompt" onChange={() => undefined} />);
+    expect(screen.getByRole("textbox", { name: "Script source" })).toBeInTheDocument();
+  });
+
   it("exposes focus and selection operations through its imperative handle", () => {
     const ref = createRef<ScriptSourceEditorHandle>();
     render(<ScriptSourceEditor ref={ref} value={"First\nSecond"} onChange={() => undefined} />);

@@ -12,7 +12,8 @@ export interface ScriptSourceEditorHandle {
 export const ScriptSourceEditor = forwardRef<ScriptSourceEditorHandle, {
   value: string;
   onChange: (value: string) => void;
-}>(function ScriptSourceEditor({ value, onChange }, ref) {
+  ariaLabel?: string;
+}>(function ScriptSourceEditor({ value, onChange, ariaLabel = "Script source" }, ref) {
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | undefined>(undefined);
   const synchronizingRef = useRef(false);
@@ -32,7 +33,7 @@ export const ScriptSourceEditor = forwardRef<ScriptSourceEditorHandle, {
         EditorView.lineWrapping,
         EditorState.tabSize.of(2),
         EditorView.contentAttributes.of({
-          "aria-label": "Script source",
+          "aria-label": ariaLabel,
           "aria-multiline": "true",
           spellcheck: "false"
         }),
@@ -61,7 +62,7 @@ export const ScriptSourceEditor = forwardRef<ScriptSourceEditorHandle, {
       viewRef.current = undefined;
       view.destroy();
     };
-  }, []);
+  }, [ariaLabel]);
 
   useEffect(() => {
     const view = viewRef.current;
