@@ -320,7 +320,7 @@ test.describe("Projects connected authoring", () => {
     expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/speech"] ?? 0).toBe(0);
   });
 
-  test("keeps wrapped logical line numbers aligned through scrolling and reload", async ({ page, studyNarrator }) => {
+  test("keeps wrapped logical line numbers aligned while the page owns scrolling", async ({ page, studyNarrator }) => {
     await continueOffline(page, studyNarrator);
     await createProject(page, "Wrapped line numbers");
     await page.setViewportSize({ width: 520, height: 800 });
@@ -331,24 +331,38 @@ test.describe("Projects connected authoring", () => {
     ];
     const script = logicalLines.join("\n");
     const source = page.getByRole("textbox", { name: "Script source" });
+    const editor = source.locator("xpath=ancestor::div[contains(@class, 'cm-editor')]");
+    const minimumEditorHeight = await editor.evaluate((element) => element.getBoundingClientRect().height);
     await source.fill(script);
     await expect(page.getByText(`${script.length.toLocaleString()} characters`, { exact: false })).toBeVisible();
 
-    const editor = source.locator("xpath=ancestor::div[contains(@class, 'cm-editor')]");
     const scroller = editor.locator(".cm-scroller");
     await expect(scroller).toHaveCount(1);
-    expect(await editor.evaluate((element) => {
+    const editorLayout = await editor.evaluate((element) => {
       const sharedScroller = element.querySelector(".cm-scroller");
       const gutters = element.querySelector(".cm-gutters");
-      return Boolean(sharedScroller && gutters && gutters.closest(".cm-scroller") === sharedScroller);
-    })).toBe(true);
+      if (!(sharedScroller instanceof HTMLElement) || !(gutters instanceof HTMLElement)) throw new Error("Expected the CodeMirror scroll surface and gutter.");
+      return {
+        editorHeight: element.getBoundingClientRect().height,
+        pageScrolls: document.documentElement.scrollHeight > document.documentElement.clientHeight,
+        scrollerOverflowY: getComputedStyle(sharedScroller).overflowY,
+        scrollerScrolls: sharedScroller.scrollHeight > sharedScroller.clientHeight + 1,
+        sharedSurface: gutters.closest(".cm-scroller") === sharedScroller
+      };
+    });
+    expect(editorLayout.editorHeight).toBeGreaterThan(minimumEditorHeight);
+    expect(editorLayout.pageScrolls).toBe(true);
+    expect(editorLayout.scrollerOverflowY).toBe("visible");
+    expect(editorLayout.scrollerScrolls).toBe(false);
+    expect(editorLayout.sharedSurface).toBe(true);
+
+    await editor.evaluate((element) => { window.scrollTo(0, element.getBoundingClientRect().top + window.scrollY); });
 
     const firstLineMetrics = await editor.locator(".cm-line").first().evaluate((line) => ({
       height: line.getBoundingClientRect().height,
       lineHeight: Number.parseFloat(getComputedStyle(line).lineHeight)
     }));
     expect(firstLineMetrics.height).toBeGreaterThan(firstLineMetrics.lineHeight * 2);
-    await scroller.evaluate((element) => { element.scrollTop = 0; });
     await expect.poll(async () => editor.evaluate((element) => [...element.querySelectorAll<HTMLElement>(".cm-lineNumbers .cm-gutterElement")]
       .filter((item) => getComputedStyle(item).visibility !== "hidden")
       .map((item) => item.textContent?.trim()).filter(Boolean))).toContain("3");
@@ -357,7 +371,7 @@ test.describe("Projects connected authoring", () => {
       .map((item) => item.textContent?.trim()).filter(Boolean));
     expect(visibleNumbers.slice(0, 3)).toEqual(["1", "2", "3"]);
 
-    await scroller.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+    await page.evaluate(() => { window.scrollTo(0, document.documentElement.scrollHeight); });
     await expect.poll(async () => editor.evaluate((element, lastLineNumber) => {
       const sourceLines = [...element.querySelectorAll<HTMLElement>(".cm-content .cm-line")];
       const gutterLine = [...element.querySelectorAll<HTMLElement>(".cm-lineNumbers .cm-gutterElement")]
@@ -370,11 +384,13 @@ test.describe("Projects connected authoring", () => {
     await page.reload();
     await expect(page.getByText(`${script.length.toLocaleString()} characters`, { exact: false })).toBeVisible();
     const reloadedSource = page.getByRole("textbox", { name: "Script source" });
-    await reloadedSource.scrollIntoViewIfNeeded();
     const reloadedEditor = reloadedSource.locator("xpath=ancestor::div[contains(@class, 'cm-editor')]");
     const reloadedScroller = reloadedEditor.locator(".cm-scroller");
-    await expect.poll(async () => reloadedScroller.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
-    await reloadedScroller.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+    await expect.poll(async () => reloadedScroller.evaluate((element) => ({
+      overflowY: getComputedStyle(element).overflowY,
+      scrolls: element.scrollHeight > element.clientHeight + 1
+    }))).toEqual({ overflowY: "visible", scrolls: false });
+    await page.evaluate(() => { window.scrollTo(0, document.documentElement.scrollHeight); });
     await expect.poll(async () => reloadedEditor.evaluate((element) => [...element.querySelectorAll<HTMLElement>(".cm-lineNumbers .cm-gutterElement")]
       .filter((item) => getComputedStyle(item).visibility !== "hidden")
       .map((item) => item.textContent?.trim()).filter(Boolean))).toContain(String(logicalLines.length));
