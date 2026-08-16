@@ -36,8 +36,8 @@ const unusedSpeechCache = {
   clearAll: vi.fn(), clearProject: vi.fn(), clearEntry: vi.fn()
 };
 const promptDocuments = {
-  creation: { kind: "creation" as const, fileName: "studynarrator-creation-prompt.md", mimeType: "text/markdown; charset=utf-8" as const, content: "KNOWLEDGE TO GATHER AND TEACH", checksum: "a".repeat(64) },
-  update: { kind: "update" as const, fileName: "studynarrator-update-prompt.md", mimeType: "text/markdown; charset=utf-8" as const, content: "[INSERT EXISTING SCRIPT]", checksum: "b".repeat(64) }
+  creation: { kind: "creation" as const, fileName: "studynarrator-creation-prompt.md", mimeType: "text/markdown; charset=utf-8" as const, content: "# StudyNarrator Script Creation Instructions", checksum: "a".repeat(64) },
+  update: { kind: "update" as const, fileName: "studynarrator-update-prompt.md", mimeType: "text/markdown; charset=utf-8" as const, content: "# StudyNarrator Script Update Instructions", checksum: "b".repeat(64) }
 };
 const unusedPromptPreview = vi.fn(async (_projectId: string | null, kind: "creation" | "update") => promptDocuments[kind]);
 const unusedScriptGeneration = { previewPrompt: unusedPromptPreview, exportPrompt: vi.fn(), exportSkillPackage: vi.fn() };

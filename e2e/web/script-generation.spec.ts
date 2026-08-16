@@ -29,8 +29,8 @@ test.describe("external-LLM script generation", () => {
     const updateTab = page.getByRole("tab", { name: "Update Prompt" });
     await expect(createTab).toHaveAttribute("aria-selected", "true");
     const creationEditor = page.getByRole("textbox", { name: "Create a script prompt editor" });
-    await expect(creationEditor).toContainText("KNOWLEDGE TO GATHER AND TEACH");
-    await expect(creationEditor).toContainText("AUTHORING GOALS");
+    await expect(creationEditor).toContainText("# StudyNarrator Script Creation Instructions");
+    await expect(page.getByText(/questions to customize this prompt are in the USER INPUT section at the end/u)).toBeVisible();
 
     const tabList = page.getByRole("tablist", { name: "Choose a prompt template" });
     const promptActions = page.getByRole("group", { name: "Prompt actions" });
@@ -65,6 +65,8 @@ test.describe("external-LLM script generation", () => {
     await expect(page.getByRole("link", { name: "View Projects" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: /both prompts/u })).toHaveCount(0);
 
+    await creationEditor.press("Meta+ArrowDown");
+    await expect(creationEditor).toContainText("[PASTE SOURCE MATERIAL HERE AND/OR ATTACH RELEVANT FILES TO THE CONVERSATION.]");
     const editedCreation = "EDITED CREATION PROMPT";
     await creationEditor.fill(editedCreation);
 
@@ -82,9 +84,10 @@ test.describe("external-LLM script generation", () => {
 
     await updateTab.click();
     const updateEditor = page.getByRole("textbox", { name: "Update a script prompt editor" });
-    await expect(updateEditor).toContainText("Convert the existing study guide");
+    await expect(updateEditor).toContainText("# StudyNarrator Script Update Instructions");
+    await expect(page.getByText(/USER INPUT section at the end asks for the requested changes/u)).toBeVisible();
     await updateEditor.press("Meta+ArrowDown");
-    await expect(updateEditor).toContainText("[INSERT EXISTING SCRIPT]");
+    await expect(updateEditor).toContainText("[OPTIONAL — PROVIDE FACTS, RESEARCH, SOURCE MATERIAL, CONSTRAINTS, OR ATTACH RELEVANT FILES.]");
     const editedUpdate = "EDITED UPDATE PROMPT";
     await updateEditor.fill(editedUpdate);
     const updateDownload = page.waitForEvent("download");

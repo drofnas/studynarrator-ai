@@ -210,8 +210,11 @@ test.describe("Electron acceptance", () => {
     await page.getByRole("link", { name: "Prompt Kit" }).click();
     await expect(page.getByRole("heading", { name: "Script prompt kit" })).toBeVisible();
     const creationEditor = page.getByRole("textbox", { name: "Create a script prompt editor" });
-    await expect(creationEditor).toContainText("KNOWLEDGE TO GATHER AND TEACH");
-    await expect(creationEditor).toContainText("AUTHORING GOALS");
+    await expect(creationEditor).toContainText("# StudyNarrator Script Creation Instructions");
+    await expect(page.getByText(/questions to customize this prompt are in the USER INPUT section at the end/u)).toBeVisible();
+    await expect(creationEditor).toContainText("## AUTHORING RULES");
+    await creationEditor.press("Meta+ArrowDown");
+    await expect(creationEditor).toContainText("[PASTE SOURCE MATERIAL HERE AND/OR ATTACH RELEVANT FILES TO THE CONVERSATION.]");
     const editedCreation = "EDITED DESKTOP CREATION PROMPT";
     await creationEditor.fill(editedCreation);
 
@@ -228,7 +231,8 @@ test.describe("Electron acceptance", () => {
     await page.getByRole("tab", { name: "Update Prompt" }).click();
     const updateEditor = page.getByRole("textbox", { name: "Update a script prompt editor" });
     await updateEditor.press("Meta+ArrowDown");
-    await expect(updateEditor).toContainText("[INSERT EXISTING SCRIPT]");
+    await expect(updateEditor).toContainText("[OPTIONAL — PROVIDE FACTS, RESEARCH, SOURCE MATERIAL, CONSTRAINTS, OR ATTACH RELEVANT FILES.]");
+    await expect(page.getByText(/USER INPUT section at the end asks for the requested changes/u)).toBeVisible();
     const editedUpdate = "EDITED DESKTOP UPDATE PROMPT";
     await updateEditor.fill(editedUpdate);
     await page.getByRole("button", { name: "Download update prompt" }).click();

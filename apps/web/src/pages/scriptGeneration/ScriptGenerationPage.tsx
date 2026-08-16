@@ -139,8 +139,8 @@ export function ScriptGenerationPage({ persistence, generation }: {
       <main className={styles.previewPanel} role="tabpanel" id="prompt-panel" aria-labelledby={`prompt-tab-${selected}`}>
         <div className={styles.previewHeading}><span>{promptLabels[selected].eyebrow}</span><h3>{promptLabels[selected].title}</h3></div>
         <p className={styles.instructions}>{selected === "creation"
-          ? "Replace the KNOWLEDGE TO GATHER AND TEACH block with your topic, learning goals, sources, and constraints."
-          : "Replace the INSERT EXISTING SCRIPT callout at the bottom with the study guide you want converted."}</p>
+          ? "The questions to customize this prompt are in the USER INPUT section at the end. Replace the bracketed sample text with your answers, and delete any question sections you do not need."
+          : "The USER INPUT section at the end asks for the requested changes, current StudyNarrator script, and any additional requirements or source material. Replace the bracketed sample text, and delete any sections you do not need."}</p>
         {operationError ? <p className={styles.error} role="alert">{operationError}</p> : null}
         <p className={styles.notice} aria-live="polite">{notice}</p>
         <ScriptSourceEditor
