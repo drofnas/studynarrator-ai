@@ -272,19 +272,26 @@ describe("Projects workbench", () => {
     const { client, analyze } = fixture();
     renderPage(client, analyze);
 
-    const statistics = await screen.findByRole("group", { name: "Script statistics" });
-    expect(within(statistics).getByText("4 words")).toBeInTheDocument();
-    expect(within(statistics).getByText(`${project.scriptSource.length.toLocaleString()} characters`)).toBeInTheDocument();
+    const statistics = await screen.findAllByRole("group", { name: /Script statistics/u });
+    expect(statistics).toHaveLength(2);
+    for (const item of statistics) {
+      expect(within(item).getByText("4 words")).toBeInTheDocument();
+      expect(within(item).getByText(`${project.scriptSource.length.toLocaleString()} characters`)).toBeInTheDocument();
+    }
 
     const mixedWhitespace = "  [speaker_teacher]\nOne\t two  ";
     replaceScriptSource(mixedWhitespace);
-    expect(await within(statistics).findByText("3 words")).toBeInTheDocument();
-    expect(within(statistics).getByText(`${mixedWhitespace.length.toLocaleString()} characters`)).toBeInTheDocument();
+    for (const item of statistics) {
+      expect(await within(item).findByText("3 words")).toBeInTheDocument();
+      expect(within(item).getByText(`${mixedWhitespace.length.toLocaleString()} characters`)).toBeInTheDocument();
+    }
 
     const whitespaceOnly = " \n\t ";
     replaceScriptSource(whitespaceOnly);
-    expect(await within(statistics).findByText("0 words")).toBeInTheDocument();
-    expect(within(statistics).getByText(`${whitespaceOnly.length.toLocaleString()} characters`)).toBeInTheDocument();
+    for (const item of statistics) {
+      expect(await within(item).findByText("0 words")).toBeInTheDocument();
+      expect(within(item).getByText(`${whitespaceOnly.length.toLocaleString()} characters`)).toBeInTheDocument();
+    }
   });
 
   it("keeps project lexicon changes isolated from global entries", async () => {

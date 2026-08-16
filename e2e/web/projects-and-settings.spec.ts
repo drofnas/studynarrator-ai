@@ -350,7 +350,7 @@ test.describe("Projects connected authoring", () => {
     await expect(page.getByRole("tab", { name: "Details" })).toHaveAttribute("aria-selected", "true");
     await expect(page.getByLabel("Dry run ordered segment table")).toContainText("Welcome line 48.");
     await page.getByRole("tab", { name: "Script Editor" }).click();
-    await expect(page.getByText(`${longScript.length.toLocaleString()} characters`, { exact: false })).toBeVisible();
+    await expect(page.getByRole("group", { name: "Script statistics below editor" }).getByText(`${longScript.length.toLocaleString()} characters`)).toBeVisible();
     await page.getByRole("tab", { name: "Settings" }).click();
     await expect(page.getByLabel("Optional model override")).toHaveCount(0);
     await expect(page.getByLabel("Voice for speaker teacher")).toHaveValue("af_sky");
@@ -383,10 +383,21 @@ test.describe("Projects connected authoring", () => {
     const editor = source.locator("xpath=ancestor::div[contains(@class, 'cm-editor')]");
     const minimumEditorHeight = await editor.evaluate((element) => element.getBoundingClientRect().height);
     await source.fill(script);
-    const statistics = page.getByRole("group", { name: "Script statistics" });
+    const topStatistics = page.getByRole("group", { name: "Script statistics above editor" });
+    const bottomStatistics = page.getByRole("group", { name: "Script statistics below editor" });
     const wordCount = script.trim().split(/\s+/u).length;
-    await expect(statistics.getByText(`${wordCount.toLocaleString()} words`)).toBeVisible();
-    await expect(statistics.getByText(`${script.length.toLocaleString()} characters`)).toBeVisible();
+    for (const statistics of [topStatistics, bottomStatistics]) {
+      await expect(statistics.getByText(`${wordCount.toLocaleString()} words`)).toBeVisible();
+      await expect(statistics.getByText(`${script.length.toLocaleString()} characters`)).toBeVisible();
+    }
+    const [topBox, editorBox, bottomBox] = await Promise.all([topStatistics.boundingBox(), editor.boundingBox(), bottomStatistics.boundingBox()]);
+    expect(topBox).not.toBeNull();
+    expect(editorBox).not.toBeNull();
+    expect(bottomBox).not.toBeNull();
+    expect(topBox!.y + topBox!.height).toBeLessThan(editorBox!.y);
+    expect(topBox!.x).toBeGreaterThan(editorBox!.x + editorBox!.width / 2);
+    expect(bottomBox!.y).toBeGreaterThan(editorBox!.y + editorBox!.height);
+    expect(Math.abs(bottomBox!.x - editorBox!.x)).toBeLessThanOrEqual(1);
 
     const scroller = editor.locator(".cm-scroller");
     await expect(scroller).toHaveCount(1);
@@ -455,8 +466,11 @@ test.describe("Projects connected authoring", () => {
 
     await page.getByRole("button", { name: "Save now" }).click();
     await page.reload();
-    await expect(page.getByRole("group", { name: "Script statistics" }).getByText(`${wordCount.toLocaleString()} words`)).toBeVisible();
-    await expect(page.getByRole("group", { name: "Script statistics" }).getByText(`${script.length.toLocaleString()} characters`)).toBeVisible();
+    for (const label of ["Script statistics above editor", "Script statistics below editor"]) {
+      const statistics = page.getByRole("group", { name: label });
+      await expect(statistics.getByText(`${wordCount.toLocaleString()} words`)).toBeVisible();
+      await expect(statistics.getByText(`${script.length.toLocaleString()} characters`)).toBeVisible();
+    }
     const reloadedSource = page.getByRole("textbox", { name: "Script source" });
     const reloadedEditor = reloadedSource.locator("xpath=ancestor::div[contains(@class, 'cm-editor')]");
     const reloadedScroller = reloadedEditor.locator(".cm-scroller");

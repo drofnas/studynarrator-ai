@@ -81,6 +81,9 @@ function countWords(source: string): number {
   const trimmed = source.trim();
   return trimmed === "" ? 0 : trimmed.split(/\s+/u).length;
 }
+function ScriptStatistics({ source, label }: { source: string; label: string }) {
+  return <div className={styles.sourceMetrics} role="group" aria-label={label}><span>{countWords(source).toLocaleString()} words</span><span>{source.length.toLocaleString()} characters</span></div>;
+}
 
 const terminalRenderStates = new Set<RenderJob["state"]>(["complete", "failed", "canceled"]);
 const renderPhaseLabels: Record<RenderJob["state"], string> = {
@@ -639,10 +642,10 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
         {!draft || !project ? <section className={styles.empty}><h3>{busy ? "Loading project" : "Project unavailable"}</h3><p>{busy ? "Opening the saved project workspace…" : "Return to the project index and choose another project."}</p></section> : <>
           {activeTab === "script" ? <main className={styles.editorColumn}>
             {activeTab === "script" ? <section className={styles.scriptPanel}>
-              <div className={styles.sectionHeading}><div><span>Source</span><h3>Script editor</h3></div></div>
+              <div className={styles.sectionHeading}><div><span>Source</span><h3>Script editor</h3></div><ScriptStatistics source={draft.scriptSource} label="Script statistics above editor" /></div>
               <div className={styles.panelScrollBody} role="region" aria-label="Script editor content" tabIndex={0}>
                 <ScriptSourceEditor ref={editorRef} value={draft.scriptSource} onChange={(scriptSource) => updateDraft((current) => ({ ...current, scriptSource }))} />
-                <div className={styles.sourceActions}><div className={styles.sourceMetrics} role="group" aria-label="Script statistics"><span>{countWords(draft.scriptSource).toLocaleString()} words</span><span>{draft.scriptSource.length.toLocaleString()} characters</span></div>{cleanedFencedSource !== undefined ? <button type="button" className={styles.secondary} onClick={() => { setCleanupUndo(draft.scriptSource); updateDraft((current) => ({ ...current, scriptSource: cleanedFencedSource })); }}>Remove surrounding code fence</button> : null}{cleanupUndo !== undefined ? <button type="button" className={styles.secondary} onClick={() => { updateDraft((current) => ({ ...current, scriptSource: cleanupUndo })); setCleanupUndo(undefined); }}>Restore fenced source</button> : null}</div>
+                <div className={styles.sourceActions}><ScriptStatistics source={draft.scriptSource} label="Script statistics below editor" />{cleanedFencedSource !== undefined ? <button type="button" className={styles.secondary} onClick={() => { setCleanupUndo(draft.scriptSource); updateDraft((current) => ({ ...current, scriptSource: cleanedFencedSource })); }}>Remove surrounding code fence</button> : null}{cleanupUndo !== undefined ? <button type="button" className={styles.secondary} onClick={() => { updateDraft((current) => ({ ...current, scriptSource: cleanupUndo })); setCleanupUndo(undefined); }}>Restore fenced source</button> : null}</div>
               </div>
             </section> : null}
           </main> : null}
