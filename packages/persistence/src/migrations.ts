@@ -400,6 +400,8 @@ export async function migrateDatabase(options: {
 
   let currentVersion = 0;
   let backupPath: string | null = null;
+  let failedMigration: { version: number; name: string } | null = null;
+  const readFailedMigration = (): typeof failedMigration => failedMigration;
   const appliedVersions: number[] = [];
 
   try {
@@ -431,6 +433,7 @@ export async function migrateDatabase(options: {
         appliedVersions.push(migration.version);
       } catch (error) {
         try { database.exec("ROLLBACK;"); } catch { /* transaction did not start */ }
+        failedMigration = { version: migration.version, name: migration.name };
         throw error;
       }
     }
@@ -438,13 +441,19 @@ export async function migrateDatabase(options: {
     await chmod(options.databasePath, 0o600);
     backupPath ??= await latestBackup(options.databasePath);
     return { database, databasePath: options.databasePath, databaseSchemaVersion: currentVersion, appliedVersions, backupPath };
-  } catch {
+  } catch (error) {
     database.close();
+    const failedMigrationInfo = readFailedMigration();
+    const detail = failedMigrationInfo === null
+      ? ""
+      : ` The failure occurred while applying migration ${String(failedMigrationInfo.version)} (${failedMigrationInfo.name}).`;
     throw new MigrationFailureError(
-      "StudyNarrator could not migrate its database. The previous data remains recoverable from the protected backup.",
+      `StudyNarrator could not migrate its database. The previous data remains recoverable from the protected backup.${detail}`,
       options.databasePath,
       backupPath,
-      currentVersion
+      currentVersion,
+      failedMigrationInfo,
+      { cause: error }
     );
   }
 }
