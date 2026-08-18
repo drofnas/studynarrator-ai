@@ -15,7 +15,7 @@ export class MigrationFailureError extends Error {
     readonly backupPath: string | null,
     readonly databaseSchemaVersion: number | null,
     readonly failedMigration: { version: number; name: string } | null = null,
-    options: { cause?: unknown } = {}
+    options: { cause?: unknown } = {},
   ) {
     super(message, options);
   }
