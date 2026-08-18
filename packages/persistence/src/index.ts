@@ -16,9 +16,7 @@ export {
   type DatabaseLike,
   type Migration,
 } from "./migrations.js";
-export {
-  restoreDatabaseFromBackup,
-} from "./restore.js";
+export { restoreDatabaseFromBackup } from "./restore.js";
 export {
   openStudyNarratorRepository,
   type StudyNarratorRepository,

@@ -50,7 +50,10 @@ function recoveryHeading(page: Page) {
 }
 
 const test = baseTest.extend({
-  studyNarratorSetup: async ({ studyNarratorEnvironment: _environment }, use) => {
+  studyNarratorSetup: async (
+    { studyNarratorEnvironment: _environment },
+    use,
+  ) => {
     await use(async (setup: StudyNarratorSetup) => {
       const {
         databasePath,
