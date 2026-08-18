@@ -382,6 +382,14 @@ function padVersion(version: number): string {
   return String(version).padStart(4, "0");
 }
 
+// SQLite creates `-wal`/`-shm` sidecars next to a WAL-mode database when a
+// connection opens it (for example during a restore integrity check). A
+// sidecar that happens to inherit a backup filename must never be reported
+// as a backup.
+function isBackupSidecar(fileName: string): boolean {
+  return fileName.endsWith("-wal") || fileName.endsWith("-shm");
+}
+
 function backupFilename(
   databasePath: string,
   from: number,
@@ -398,8 +406,8 @@ async function latestBackup(databasePath: string): Promise<string | null> {
   const backupDirectory = join(dirname(databasePath), "backups");
   try {
     const stem = `${basename(databasePath, extname(databasePath))}-v`;
-    const names = (await readdir(backupDirectory)).filter((name) =>
-      name.startsWith(stem),
+    const names = (await readdir(backupDirectory)).filter(
+      (name) => name.startsWith(stem) && !isBackupSidecar(name),
     );
     if (names.length === 0) return null;
     const dated = await Promise.all(
@@ -448,6 +456,7 @@ export async function listBackups(
   for (const fileName of names) {
     const match = BACKUP_FILE_PATTERN.exec(fileName);
     if (match?.groups === undefined) continue;
+    if (isBackupSidecar(fileName)) continue;
     const path = join(backupDirectory, fileName);
     let stats;
     try {

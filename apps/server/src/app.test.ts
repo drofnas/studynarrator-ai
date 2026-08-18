@@ -15,6 +15,7 @@ import {
   type DiagnosticsContext,
 } from "@studynarrator/application";
 import {
+  BackupRestoreError,
   openStudyNarratorRepository,
   type DatabaseConstructor,
 } from "@studynarrator/persistence";
@@ -689,6 +690,60 @@ describe("Express persistence API", () => {
         code: "PERSISTENCE_UNAVAILABLE",
         message:
           "Persistence is unavailable until the database migration is repaired.",
+      },
+    });
+  });
+
+  it("returns a specific 422 when a selected backup cannot be restored", async () => {
+    const { service } = await fixture();
+    const backupPath =
+      "/tmp/backups/studynarrator-v3-to-v3-2026-08-12T12-00-00-000Z.sqlite";
+    const persistence = createUnavailablePersistenceService(
+      {
+        contractVersion: 1,
+        state: "unavailable",
+        databaseSchemaVersion: 99,
+        targetDatabaseSchemaVersion: 3,
+        databasePath: "/tmp/studynarrator.sqlite",
+        latestBackupPath: backupPath,
+        code: "SCHEMA_TOO_NEW",
+        message: "This data was created by a newer version.",
+        availableBackups: [
+          {
+            path: backupPath,
+            fromVersion: 3,
+            createdAt: "2026-08-12T12:00:00.000Z",
+            sizeBytes: 4096,
+          },
+        ],
+      },
+      {
+        backups: {
+          list: async () => [],
+          restore: () => {
+            throw new BackupRestoreError(
+              "The selected backup could not be verified and was not restored.",
+            );
+          },
+        },
+      },
+    );
+    const app = await listen(
+      createExpressApp({ service, persistence, context }),
+    );
+    const response = BoundaryErrorSchema.parse(
+      (
+        await request(app)
+          .post("/api/persistence/backups/restore")
+          .send({ backupPath })
+          .expect(422)
+      ).body as unknown,
+    );
+    expect(response).toEqual({
+      error: {
+        code: "BACKUP_RESTORE_FAILED",
+        message:
+          "The selected backup could not be verified and was not restored.",
       },
     });
   });

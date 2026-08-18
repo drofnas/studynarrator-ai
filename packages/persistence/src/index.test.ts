@@ -1297,4 +1297,39 @@ describe("backup retention", () => {
     expect(retained).toEqual([legacyPath]);
     await stat(legacyPath);
   });
+
+  it("ignores sqlite wal and shm sidecars that inherit a backup filename", async () => {
+    const home = await makeHome("studynarrator-sidecar-backups-");
+    await mkdir(home.backupDirectory, { mode: 0o700 });
+    const backup = await writeBackup(home.backupDirectory, 3, 3, hour(1));
+    // Opening a WAL-mode backup while verifying restore integrity creates
+    // `-wal`/`-shm` siblings next to the real backup file.
+    const walPath = `${backup}-wal`;
+    const shmPath = `${backup}-shm`;
+    await writeFile(walPath, "stale-wal");
+    await writeFile(shmPath, "stale-shm");
+    // Sidecars land newest, so without the filter they would win the
+    // latest-backup and listing order.
+    await utimes(walPath, hour(5), hour(5));
+    await utimes(shmPath, hour(6), hour(6));
+
+    const backups = await listBackups(home.databasePath);
+    expect(backups).toEqual([
+      {
+        path: backup,
+        fileName: backup.split("/").pop() as string,
+        fromVersion: 3,
+        toVersion: 3,
+        createdAt: hour(1).toISOString(),
+        sizeBytes: 21,
+      },
+    ]);
+
+    // Sidecars are never prune candidates.
+    const { removed, retained } = await pruneBackups(home.databasePath);
+    expect(removed).toEqual([]);
+    expect(retained).toEqual([backup]);
+    await stat(walPath);
+    await stat(shmPath);
+  });
 });

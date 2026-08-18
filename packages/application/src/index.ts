@@ -114,7 +114,6 @@ export {
       PersistenceUnavailableError,
       createPersistenceService,
       createUnavailablePersistenceService,
-      type PersistenceBackupsProvider,
       type PersistenceRepository,
 } from "./persistence.js";
 export {

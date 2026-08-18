@@ -18,7 +18,6 @@ export {
 } from "./migrations.js";
 export {
   restoreDatabaseFromBackup,
-  type BackupRestoreResult,
 } from "./restore.js";
 export {
   openStudyNarratorRepository,

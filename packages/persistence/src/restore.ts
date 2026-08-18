@@ -3,7 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { BackupRestoreError } from "./errors.js";
 
-export interface BackupRestoreResult {
+interface BackupRestoreResult {
   restoredFrom: string;
   safetyCopyPath: string;
 }

@@ -1109,6 +1109,13 @@ export function createExpressApp(options: {
       code = "PERSISTENCE_UNAVAILABLE";
       message =
         "Persistence is unavailable until the database migration is repaired.";
+    } else if (errorRecord?.code === "BACKUP_RESTORE_FAILED") {
+      status = 422;
+      code = "BACKUP_RESTORE_FAILED";
+      message =
+        typeof errorRecord.message === "string"
+          ? errorRecord.message
+          : "The selected backup could not be restored.";
     } else if (errorRecord?.code === "CONNECTION_POLICY") {
       status = 409;
       code = "CONNECTION_POLICY";

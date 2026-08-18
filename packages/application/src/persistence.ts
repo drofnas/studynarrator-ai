@@ -60,7 +60,7 @@ export class PersistenceUnavailableError extends Error {
   readonly code = "PERSISTENCE_UNAVAILABLE";
 }
 
-export interface PersistenceBackupsProvider {
+interface PersistenceBackupsProvider {
   list(): Promise<readonly PersistenceBackup[]>;
   restore(
     input: PersistenceBackupRestoreInput,

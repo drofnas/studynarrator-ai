@@ -566,7 +566,7 @@ export const PersistenceReadyStatusSchema = z
   })
   .strict();
 
-export const PersistenceBackupSchema = z
+const PersistenceBackupSchema = z
   .object({
     path: z.string().min(1),
     fromVersion: z.number().int().nonnegative(),
@@ -621,6 +621,10 @@ export const PersistenceStatusSchema = z.discriminatedUnion("state", [
   PersistenceUnavailableStatusSchema,
 ]);
 export type PersistenceStatus = z.infer<typeof PersistenceStatusSchema>;
+export type PersistenceUnavailableStatus = Extract<
+  PersistenceStatus,
+  { state: "unavailable" }
+>;
 
 interface ProjectsClient {
   list(): Promise<ProjectSummary[]>;
