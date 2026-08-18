@@ -660,7 +660,7 @@ interface GlobalLexiconClient {
 
 export interface PersistenceClient {
   status(): Promise<PersistenceStatus>;
-  backups: PersistenceBackupsClient;
+  backups?: PersistenceBackupsClient;
   projects: ProjectsClient;
   settings: PersistenceSettingsClient;
   preferences: PreferencesClient;

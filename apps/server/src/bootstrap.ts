@@ -19,10 +19,22 @@ import {
   type DiagnosticsContext,
   type DiagnosticRepository,
   type RenderService,
-  type StorageCheck
+  type StorageCheck,
 } from "@studynarrator/application";
-import { MigrationFailureError, openStudyNarratorRepository } from "@studynarrator/persistence";
-import { DATABASE_SCHEMA_VERSION, PERSISTENCE_CONTRACT_VERSION, type PersistenceClient } from "@studynarrator/shared-types";
+import {
+  DATABASE_SCHEMA_VERSION,
+  PERSISTENCE_CONTRACT_VERSION,
+  type PersistenceBackupsClient,
+  type PersistenceClient,
+} from "@studynarrator/shared-types";
+import {
+  MigrationFailureError,
+  PersistenceConflictError,
+  SchemaTooNewError,
+  listBackups,
+  openStudyNarratorRepository,
+  restoreDatabaseFromBackup,
+} from "@studynarrator/persistence";
 import { createFfmpegProbe } from "@studynarrator/runtime";
 import { createRenderPlanStore } from "@studynarrator/rendering";
 import { resolveServerRuntimeConfiguration } from "./runtimeConfig.js";
@@ -31,12 +43,18 @@ const repositoryRoot = resolve(import.meta.dirname, "../../..");
 
 export function resolveServerDataDirectory(environment = process.env): string {
   return environment.STUDYNARRATOR_DATA_DIR
-    ? resolve(environment.INIT_CWD ?? repositoryRoot, environment.STUDYNARRATOR_DATA_DIR)
+    ? resolve(
+        environment.INIT_CWD ?? repositoryRoot,
+        environment.STUDYNARRATOR_DATA_DIR,
+      )
     : resolve(repositoryRoot, ".tmp/dev/web");
 }
 
 export async function createServerServices(environment = process.env) {
-  const runtimeConfiguration = resolveServerRuntimeConfiguration(environment, repositoryRoot);
+  const runtimeConfiguration = resolveServerRuntimeConfiguration(
+    environment,
+    repositoryRoot,
+  );
   const dataDirectory = resolveServerDataDirectory(environment);
   const databasePath = resolve(dataDirectory, "studynarrator.sqlite");
   const cache = createApplicationSpeechCache(dataDirectory);
@@ -52,58 +70,121 @@ export async function createServerServices(environment = process.env) {
   let renders: RenderService | undefined;
   let scriptGeneration;
   try {
-    const openedRepository = await openStudyNarratorRepository({ Database, databasePath });
+    const openedRepository = await openStudyNarratorRepository({
+      Database,
+      databasePath,
+    });
     repository = openedRepository;
-    persistence = createPersistenceService(openedRepository, { projectSpeechCacheKeys: createProjectSpeechCacheKeyPlanner(openedRepository) });
+    const backups: PersistenceBackupsClient = {
+      list: () => listBackups(databasePath),
+      restore: () => {
+        throw new PersistenceConflictError(
+          "Close StudyNarrator before restoring a backup; the database must not be open.",
+        );
+      },
+    };
+    persistence = createPersistenceService(openedRepository, {
+      projectSpeechCacheKeys:
+        createProjectSpeechCacheKeyPlanner(openedRepository),
+      backups,
+    });
     const context = {
       client: "web" as const,
       nodeVersion: process.versions.node,
-      electronVersion: null
+      electronVersion: null,
     };
     connection = createConnectionService({
       repository: openedRepository,
-      context
+      context,
     });
-    voiceCatalog = createVoiceCatalogService({ repository: openedRepository, bundledCatalogs: BUNDLED_VOICE_CATALOGS });
-    const speech = createCachedSpeechSynthesis({ repository: openedRepository, cache });
-    scratchpad = createScratchpadService({ repository: openedRepository, cache });
-    projectPreview = createProjectPreviewService({ repository: openedRepository, speech });
-    const planStore = createRenderPlanStore(resolve(dataDirectory, "render-plans"));
-    await planStore.migrateLegacy?.(openedRepository.listProjects().flatMap(({ id }) => openedRepository.listRenderJobs(id)));
+    voiceCatalog = createVoiceCatalogService({
+      repository: openedRepository,
+      bundledCatalogs: BUNDLED_VOICE_CATALOGS,
+    });
+    const speech = createCachedSpeechSynthesis({
+      repository: openedRepository,
+      cache,
+    });
+    scratchpad = createScratchpadService({
+      repository: openedRepository,
+      cache,
+    });
+    projectPreview = createProjectPreviewService({
+      repository: openedRepository,
+      speech,
+    });
+    const planStore = createRenderPlanStore(
+      resolve(dataDirectory, "render-plans"),
+    );
+    await planStore.migrateLegacy?.(
+      openedRepository
+        .listProjects()
+        .flatMap(({ id }) => openedRepository.listRenderJobs(id)),
+    );
     renderPlans = createRenderPlanService({
       repository: openedRepository,
       cache,
-      store: planStore
+      store: planStore,
     });
-    scriptGeneration = createScriptGenerationService({ repository: openedRepository });
+    scriptGeneration = createScriptGenerationService({
+      repository: openedRepository,
+    });
     renders = await createRenderService({
       repository: openedRepository,
       plans: planStore,
       renderPlans,
       speech,
       dataDirectory,
-      ...(environment.STUDYNARRATOR_FFMPEG_PATH ? { ffmpegPath: environment.STUDYNARRATOR_FFMPEG_PATH } : {})
+      ...(environment.STUDYNARRATOR_FFMPEG_PATH
+        ? { ffmpegPath: environment.STUDYNARRATOR_FFMPEG_PATH }
+        : {}),
     });
   } catch (error) {
-    if (!(error instanceof MigrationFailureError)) throw error;
+    if (
+      !(error instanceof MigrationFailureError) &&
+      !(error instanceof SchemaTooNewError)
+    )
+      throw error;
+    const recoveryBackupPath =
+      error instanceof SchemaTooNewError
+        ? (error.backups[0]?.path ?? null)
+        : error.backupPath;
+    const availableBackups = await listBackups(error.databasePath);
     storageFailure = {
       status: "fail",
       code: error.code,
       message: error.message,
       databasePath: error.databasePath,
-      recoveryBackupPath: error.backupPath
+      recoveryBackupPath,
     };
-    persistence = createUnavailablePersistenceService({
-      contractVersion: PERSISTENCE_CONTRACT_VERSION,
-      state: "unavailable",
-      databaseSchemaVersion: error.databaseSchemaVersion,
-      targetDatabaseSchemaVersion: DATABASE_SCHEMA_VERSION,
-      databasePath: error.databasePath,
-      latestBackupPath: error.backupPath,
-      code: "MIGRATION_FAILED",
-      message: error.message
-    });
-    repository = { runMarker: () => { throw error; }, close: () => undefined };
+    const backups: PersistenceBackupsClient = {
+      list: () => listBackups(databasePath),
+      restore: (input) =>
+        restoreDatabaseFromBackup({
+          databasePath,
+          backupPath: input.backupPath,
+        }),
+    };
+    persistence = createUnavailablePersistenceService(
+      {
+        contractVersion: PERSISTENCE_CONTRACT_VERSION,
+        state: "unavailable",
+        databaseSchemaVersion: error.databaseSchemaVersion,
+        targetDatabaseSchemaVersion: DATABASE_SCHEMA_VERSION,
+        databasePath: error.databasePath,
+        latestBackupPath: recoveryBackupPath,
+        code: error.code,
+        message: error.message,
+        availableBackups,
+      },
+      { backups },
+    );
+    repository = {
+      runMarker: () => {
+        throw error;
+      },
+      close: () => undefined,
+    };
   }
   const service = createSystemService({
     repository,
@@ -111,8 +192,8 @@ export async function createServerServices(environment = process.env) {
     ffmpegProbe: createFfmpegProbe(
       environment.STUDYNARRATOR_FFMPEG_PATH
         ? { executable: environment.STUDYNARRATOR_FFMPEG_PATH }
-        : {}
-    )
+        : {},
+    ),
   });
   const context: DiagnosticsContext = {
     client: "web",
@@ -124,7 +205,7 @@ export async function createServerServices(environment = process.env) {
     platform: process.platform,
     architecture: process.arch,
     dataDirectory,
-    sourceRevision: runtimeConfiguration.sourceRevision
+    sourceRevision: runtimeConfiguration.sourceRevision,
   };
   return {
     service,
@@ -141,6 +222,6 @@ export async function createServerServices(environment = process.env) {
     dispose: async () => {
       await renders?.close();
       repository.close();
-    }
+    },
   };
 }

@@ -2,6 +2,9 @@ import {
   GlobalLexiconEntryCollectionSchema,
   GlobalLexiconReplaceInputSchema,
   IgnoredDiagnosticCollectionSchema,
+  PersistenceBackupCollectionSchema,
+  PersistenceBackupRestoreInputSchema,
+  PersistenceBackupRestoreResultSchema,
   PersistenceStatusSchema,
   ProjectCreateInputSchema,
   ProjectDetailSchema,
@@ -12,6 +15,9 @@ import {
   SystemTimingConfigurationSchema,
   type GlobalLexiconReplaceInput,
   type IgnoredDiagnosticCollection,
+  type PersistenceBackup,
+  type PersistenceBackupRestoreInput,
+  type PersistenceBackupRestoreResult,
   type PersistenceClient,
   type PersistenceStatus,
   type ProjectCreateInput,
@@ -19,7 +25,7 @@ import {
   type ProjectDuplicateInput,
   type ProjectReplaceInput,
   type ProjectSummary,
-  type SystemTimingConfiguration
+  type SystemTimingConfiguration,
 } from "@studynarrator/shared-types";
 import type { LexiconEntry } from "@studynarrator/core";
 
@@ -28,13 +34,24 @@ export interface PersistenceRepository {
   listProjects(): ProjectSummary[];
   createProject(input: ProjectCreateInput): ProjectDetail;
   getProject(projectId: string): ProjectDetail;
-  replaceProject(projectId: string, input: ProjectReplaceInput, speechCacheKeys?: readonly string[]): ProjectDetail;
-  duplicateProject(projectId: string, input: ProjectDuplicateInput): ProjectDetail;
+  replaceProject(
+    projectId: string,
+    input: ProjectReplaceInput,
+    speechCacheKeys?: readonly string[],
+  ): ProjectDetail;
+  duplicateProject(
+    projectId: string,
+    input: ProjectDuplicateInput,
+  ): ProjectDetail;
   deleteProject(projectId: string): void;
   getSystemPacing(): SystemTimingConfiguration;
-  updateSystemPacing(input: SystemTimingConfiguration): SystemTimingConfiguration;
+  updateSystemPacing(
+    input: SystemTimingConfiguration,
+  ): SystemTimingConfiguration;
   getIgnoredDiagnostics(): IgnoredDiagnosticCollection;
-  replaceIgnoredDiagnostics(input: IgnoredDiagnosticCollection): IgnoredDiagnosticCollection;
+  replaceIgnoredDiagnostics(
+    input: IgnoredDiagnosticCollection,
+  ): IgnoredDiagnosticCollection;
   listGlobalLexicon(): LexiconEntry[];
   replaceGlobalLexicon(input: GlobalLexiconReplaceInput): LexiconEntry[];
 }
@@ -43,74 +60,196 @@ export class PersistenceUnavailableError extends Error {
   readonly code = "PERSISTENCE_UNAVAILABLE";
 }
 
-export function createPersistenceService(repository: PersistenceRepository, options: {
-  projectSpeechCacheKeys?: (input: ProjectReplaceInput) => readonly string[] | undefined;
-} = {}): PersistenceClient {
-  const execute = <T>(operation: () => T): Promise<T> => Promise.resolve().then(operation);
+export interface PersistenceBackupsProvider {
+  list(): Promise<readonly PersistenceBackup[]>;
+  restore(
+    input: PersistenceBackupRestoreInput,
+  ): Promise<PersistenceBackupRestoreResult>;
+}
+
+export function createPersistenceService(
+  repository: PersistenceRepository,
+  options: {
+    projectSpeechCacheKeys?: (
+      input: ProjectReplaceInput,
+    ) => readonly string[] | undefined;
+    backups?: PersistenceBackupsProvider;
+  } = {},
+): PersistenceClient {
+  const execute = <T>(operation: () => T | Promise<T>): Promise<Awaited<T>> =>
+    Promise.resolve().then(operation) as Promise<Awaited<T>>;
   return {
     status() {
       return execute(() => PersistenceStatusSchema.parse(repository.status()));
     },
+    backups: {
+      list() {
+        return execute(async () =>
+          PersistenceBackupCollectionSchema.parse(
+            (await options.backups?.list()) ?? [],
+          ),
+        );
+      },
+      restore(input) {
+        return execute(async () => {
+          const provider = options.backups;
+          if (!provider)
+            throw new PersistenceUnavailableError(
+              "Backup restore is not available in this context.",
+            );
+          return PersistenceBackupRestoreResultSchema.parse(
+            await provider.restore(
+              PersistenceBackupRestoreInputSchema.parse(input),
+            ),
+          );
+        });
+      },
+    },
     projects: {
       list() {
-        return execute(() => ProjectSummaryCollectionSchema.parse(repository.listProjects()));
+        return execute(() =>
+          ProjectSummaryCollectionSchema.parse(repository.listProjects()),
+        );
       },
       create(input) {
-        return execute(() => ProjectDetailSchema.parse(repository.createProject(ProjectCreateInputSchema.parse(input))));
+        return execute(() =>
+          ProjectDetailSchema.parse(
+            repository.createProject(ProjectCreateInputSchema.parse(input)),
+          ),
+        );
       },
       get(projectId) {
-        return execute(() => ProjectDetailSchema.parse(repository.getProject(ProjectIdSchema.parse(projectId))));
+        return execute(() =>
+          ProjectDetailSchema.parse(
+            repository.getProject(ProjectIdSchema.parse(projectId)),
+          ),
+        );
       },
       replace(projectId, input) {
         return execute(() => {
           const parsed = ProjectReplaceInputSchema.parse(input);
-          return ProjectDetailSchema.parse(repository.replaceProject(ProjectIdSchema.parse(projectId), parsed, options.projectSpeechCacheKeys?.(parsed)));
+          return ProjectDetailSchema.parse(
+            repository.replaceProject(
+              ProjectIdSchema.parse(projectId),
+              parsed,
+              options.projectSpeechCacheKeys?.(parsed),
+            ),
+          );
         });
       },
       duplicate(projectId, input) {
-        return execute(() => ProjectDetailSchema.parse(repository.duplicateProject(ProjectIdSchema.parse(projectId), ProjectDuplicateInputSchema.parse(input))));
+        return execute(() =>
+          ProjectDetailSchema.parse(
+            repository.duplicateProject(
+              ProjectIdSchema.parse(projectId),
+              ProjectDuplicateInputSchema.parse(input),
+            ),
+          ),
+        );
       },
       delete(projectId) {
-        return execute(() => { repository.deleteProject(ProjectIdSchema.parse(projectId)); });
-      }
+        return execute(() => {
+          repository.deleteProject(ProjectIdSchema.parse(projectId));
+        });
+      },
     },
     settings: {
       getPacing() {
-        return execute(() => SystemTimingConfigurationSchema.parse(repository.getSystemPacing()));
+        return execute(() =>
+          SystemTimingConfigurationSchema.parse(repository.getSystemPacing()),
+        );
       },
       updatePacing(input) {
-        return execute(() => SystemTimingConfigurationSchema.parse(repository.updateSystemPacing(SystemTimingConfigurationSchema.parse(input))));
-      }
+        return execute(() =>
+          SystemTimingConfigurationSchema.parse(
+            repository.updateSystemPacing(
+              SystemTimingConfigurationSchema.parse(input),
+            ),
+          ),
+        );
+      },
     },
     preferences: {
       getIgnoredDiagnostics() {
-        return execute(() => IgnoredDiagnosticCollectionSchema.parse(repository.getIgnoredDiagnostics()));
+        return execute(() =>
+          IgnoredDiagnosticCollectionSchema.parse(
+            repository.getIgnoredDiagnostics(),
+          ),
+        );
       },
       replaceIgnoredDiagnostics(input) {
-        return execute(() => IgnoredDiagnosticCollectionSchema.parse(repository.replaceIgnoredDiagnostics(IgnoredDiagnosticCollectionSchema.parse(input))));
-      }
+        return execute(() =>
+          IgnoredDiagnosticCollectionSchema.parse(
+            repository.replaceIgnoredDiagnostics(
+              IgnoredDiagnosticCollectionSchema.parse(input),
+            ),
+          ),
+        );
+      },
     },
     globalLexicon: {
       list() {
-        return execute(() => GlobalLexiconEntryCollectionSchema.parse(repository.listGlobalLexicon()));
+        return execute(() =>
+          GlobalLexiconEntryCollectionSchema.parse(
+            repository.listGlobalLexicon(),
+          ),
+        );
       },
       replace(input) {
-        return execute(() => GlobalLexiconEntryCollectionSchema.parse(repository.replaceGlobalLexicon(GlobalLexiconReplaceInputSchema.parse(input))));
-      }
-    }
+        return execute(() =>
+          GlobalLexiconEntryCollectionSchema.parse(
+            repository.replaceGlobalLexicon(
+              GlobalLexiconReplaceInputSchema.parse(input),
+            ),
+          ),
+        );
+      },
+    },
   };
 }
 
-export function createUnavailablePersistenceService(statusInput: PersistenceStatus): PersistenceClient {
+export function createUnavailablePersistenceService(
+  statusInput: PersistenceStatus,
+  options: { backups?: PersistenceBackupsProvider } = {},
+): PersistenceClient {
   const status = PersistenceStatusSchema.parse(statusInput);
-  const unavailable = (): Promise<never> => Promise.reject(
-    new PersistenceUnavailableError("Persistence is unavailable until the database migration is repaired.")
-  );
+  const unavailable = (): Promise<never> =>
+    Promise.reject(
+      new PersistenceUnavailableError(
+        "Persistence is unavailable until the database migration is repaired.",
+      ),
+    );
   return {
-    status() { return Promise.resolve(status); },
-    projects: { list: unavailable, create: unavailable, get: unavailable, replace: unavailable, duplicate: unavailable, delete: unavailable },
+    status() {
+      return Promise.resolve(status);
+    },
+    backups: {
+      list() {
+        return Promise.resolve(
+          options.backups?.list() ?? ([] as readonly PersistenceBackup[]),
+        ).then((backups) => PersistenceBackupCollectionSchema.parse(backups));
+      },
+      restore(input) {
+        const provider = options.backups;
+        if (!provider) return unavailable();
+        return Promise.resolve(
+          provider.restore(PersistenceBackupRestoreInputSchema.parse(input)),
+        ).then((result) => PersistenceBackupRestoreResultSchema.parse(result));
+      },
+    },
+    projects: {
+      list: unavailable,
+      create: unavailable,
+      get: unavailable,
+      replace: unavailable,
+      duplicate: unavailable,
+      delete: unavailable,
+    },
     settings: { getPacing: unavailable, updatePacing: unavailable },
-    preferences: { getIgnoredDiagnostics: unavailable, replaceIgnoredDiagnostics: unavailable },
-    globalLexicon: { list: unavailable, replace: unavailable }
+    preferences: {
+      getIgnoredDiagnostics: unavailable,
+      replaceIgnoredDiagnostics: unavailable,
+    },
+    globalLexicon: { list: unavailable, replace: unavailable },
   };
 }
