@@ -26,9 +26,6 @@ import {
   ProjectPreviewResultSchema,
   ProjectReplaceInputSchema,
   ProjectSummaryCollectionSchema,
-  RenderPlanIdSchema,
-  RenderPlanSchema,
-  RenderPlanSummaryCollectionSchema,
   RenderArtifactIdSchema,
   RenderArtifactCollectionSchema,
   RenderIdSchema,
@@ -57,7 +54,6 @@ import {
   type SpeachesConnectionClient,
   type PersistenceClient,
   type ProjectPreviewClient,
-  type RenderPlanClient,
   type ScratchpadClient,
   type SpeechCacheClient,
   type SystemDiagnostics,
@@ -146,7 +142,6 @@ export function createExpressApp(options: {
   voiceCatalog?: VoiceCatalogClient;
   scratchpad?: ScratchpadClient;
   projectPreview?: ProjectPreviewClient;
-  renderPlans?: RenderPlanClient;
   renders?: RenderService;
   speechCache?: SpeechCacheClient;
   scriptGeneration?: ScriptGenerationService;
@@ -584,56 +579,6 @@ export function createExpressApp(options: {
     );
   }
 
-  if (options.renderPlans) {
-    app.post(
-      "/api/projects/:projectId/render-plans",
-      async (request, response, next) => {
-        try {
-          response
-            .status(201)
-            .json(
-              RenderPlanSchema.parse(
-                await options.renderPlans!.create(
-                  ProjectIdSchema.parse(request.params.projectId),
-                ),
-              ),
-            );
-        } catch (error) {
-          next(error);
-        }
-      },
-    );
-    app.get(
-      "/api/projects/:projectId/render-plans",
-      async (request, response, next) => {
-        try {
-          response.json(
-            RenderPlanSummaryCollectionSchema.parse(
-              await options.renderPlans!.list(
-                ProjectIdSchema.parse(request.params.projectId),
-              ),
-            ),
-          );
-        } catch (error) {
-          next(error);
-        }
-      },
-    );
-    app.get("/api/render-plans/:planId", async (request, response, next) => {
-      try {
-        response.json(
-          RenderPlanSchema.parse(
-            await options.renderPlans!.get(
-              RenderPlanIdSchema.parse(request.params.planId),
-            ),
-          ),
-        );
-      } catch (error) {
-        next(error);
-      }
-    });
-  }
-
   if (options.renders) {
     app.post(
       "/api/projects/:projectId/renders",
@@ -643,26 +588,8 @@ export function createExpressApp(options: {
             .status(202)
             .json(
               RenderJobSchema.parse(
-                await options.renders!.startProject!(
+                await options.renders!.startProject(
                   ProjectIdSchema.parse(request.params.projectId),
-                ),
-              ),
-            );
-        } catch (error) {
-          next(error);
-        }
-      },
-    );
-    app.post(
-      "/api/render-plans/:planId/renders",
-      async (request, response, next) => {
-        try {
-          response
-            .status(202)
-            .json(
-              RenderJobSchema.parse(
-                await options.renders!.start(
-                  RenderPlanIdSchema.parse(request.params.planId),
                 ),
               ),
             );

@@ -16,7 +16,6 @@ import {
   type PersistenceClient,
   type ProjectDetail,
   type ProjectPreviewClient,
-  type RenderPlanClient,
   type RenderClient,
   type RenderJob,
   type RenderWaveform,
@@ -105,11 +104,10 @@ function renderProgressLabel(job: RenderJob): string {
   return `Processing chunk ${String(current)} of ${String(job.progress.totalChunks)}`;
 }
 
-export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient, renderClient }: {
+export function ProjectsPage({ client, analyzer, previewClient, renderClient }: {
   client: PersistenceClient;
   analyzer: ScriptAnalyzer;
   previewClient: ProjectPreviewClient;
-  renderPlanClient: RenderPlanClient;
   renderClient?: RenderClient;
 }) {
   const connections = useConnections();
@@ -157,7 +155,6 @@ export function ProjectsPage({ client, analyzer, previewClient, renderPlanClient
   const saveNowRef = useRef<() => Promise<boolean>>(() => Promise.resolve(false));
 
   draftRef.current = draft;
-  void renderPlanClient;
   const isDirty = saveState === "unsaved" || saveState === "saving" || saveState === "invalid" || saveState === "failed";
   const selectedConnection = connections.connection;
   const effectiveModelId = selectedConnection?.defaultModelId ?? null;

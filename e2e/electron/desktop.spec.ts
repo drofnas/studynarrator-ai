@@ -41,7 +41,7 @@ test.describe("Electron acceptance", () => {
       };
     });
     expect(bridgeShape).toEqual({
-      bridge: ["connection", "persistence", "projectPreview", "renderPlans", "renders", "scratchpad", "scriptGeneration", "speechCache", "system", "voiceCatalog"],
+      bridge: ["connection", "persistence", "projectPreview", "renders", "scratchpad", "scriptGeneration", "speechCache", "system", "voiceCatalog"],
       hasRequire: false,
       hasProcess: false,
       frozen: true
@@ -142,8 +142,8 @@ test.describe("Electron acceptance", () => {
     await expect(page.getByRole("button", { name: "Download", exact: true })).toBeVisible({ timeout: 20_000 });
     const projectId = page.url().match(/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/u)?.[0];
     if (!projectId) throw new Error("Project route did not contain a project ID.");
-    const firstPlans = await page.evaluate(async (id) => await (window as typeof window & { studyNarrator: StudyNarratorBridge }).studyNarrator.renderPlans.list(id), projectId);
-    expect(firstPlans).toHaveLength(1);
+    const firstRenders = await page.evaluate(async (id) => await (window as typeof window & { studyNarrator: StudyNarratorBridge }).studyNarrator.renders.list(id), projectId);
+    expect(firstRenders).toHaveLength(1);
     expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/speech"] ?? 0).toBe(2);
 
     page = await electronStudyNarrator.relaunch();
@@ -162,9 +162,9 @@ test.describe("Electron acceptance", () => {
     await page.getByRole("tab", { name: "Render" }).click();
     await page.getByRole("button", { name: "Render" }).click();
     await expect(page.getByRole("button", { name: "Download", exact: true })).toBeVisible({ timeout: 20_000 });
-    const currentPlans = await page.evaluate(async (id) => await (window as typeof window & { studyNarrator: StudyNarratorBridge }).studyNarrator.renderPlans.list(id), projectId);
-    expect(currentPlans).toHaveLength(1);
-    expect(currentPlans[0]!.id).toBe(firstPlans[0]!.id);
+    const currentRenders = await page.evaluate(async (id) => await (window as typeof window & { studyNarrator: StudyNarratorBridge }).studyNarrator.renders.list(id), projectId);
+    expect(currentRenders).toHaveLength(1);
+    expect(currentRenders[0]!.id).toBe(firstRenders[0]!.id);
     expect(studyNarrator.fakeSpeaches.getState().counters["/v1/audio/speech"] ?? 0).toBe(2);
   });
 

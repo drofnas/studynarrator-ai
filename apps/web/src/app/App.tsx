@@ -3,7 +3,6 @@ import type {
   PersistenceClient,
   ProjectPreviewClient,
   RenderClient,
-  RenderPlanClient,
   ScratchpadClient,
   ScriptGenerationClient,
   SpeechCacheClient,
@@ -24,7 +23,6 @@ interface AppProps {
   scratchpad: ScratchpadClient;
   projectPreview: ProjectPreviewClient;
   speechCache: SpeechCacheClient;
-  renderPlans: RenderPlanClient;
   renders?: RenderClient;
   scriptGeneration: ScriptGenerationClient;
   analyzer: ScriptAnalyzer;
@@ -39,7 +37,6 @@ export function App({
   scratchpad,
   projectPreview,
   speechCache,
-  renderPlans,
   renders,
   scriptGeneration,
 }: AppProps) {
@@ -56,7 +53,6 @@ export function App({
           scratchpad={scratchpad}
           projectPreview={projectPreview}
           speechCache={speechCache}
-          renderPlans={renderPlans}
           scriptGeneration={scriptGeneration}
           {...(renders ? { renders } : {})}
         />

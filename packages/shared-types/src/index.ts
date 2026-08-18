@@ -5,7 +5,6 @@ import type {
 } from "./connections.js";
 import { type PersistenceClient } from "./persistence.js";
 import type { ProjectPreviewClient, SpeechCacheClient } from "./preview.js";
-import type { RenderPlanClient } from "./renderPlan.js";
 import type { RenderClient } from "./render.js";
 import type { ScratchpadClient } from "./scratchpad.js";
 import type { ScriptGenerationClient } from "./scriptGeneration.js";
@@ -136,7 +135,6 @@ export interface StudyNarratorBridge {
   scratchpad: ScratchpadClient;
   projectPreview: ProjectPreviewClient;
   speechCache: SpeechCacheClient;
-  renderPlans: RenderPlanClient;
   renders: RenderClient;
   scriptGeneration: ScriptGenerationClient;
 }

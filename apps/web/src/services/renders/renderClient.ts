@@ -23,9 +23,6 @@ async function read<T>(response: Response, parse: (input: unknown) => T): Promis
 
 export function createRestRenderClient(fetchInput: typeof fetch = fetch): RenderClient {
   return {
-    async start(planId) {
-      return await read(await fetchInput(`/api/render-plans/${encodeURIComponent(planId)}/renders`, { method: "POST" }), (body) => RenderJobSchema.parse(body));
-    },
     async startProject(projectId) {
       return await read(await fetchInput(`/api/projects/${encodeURIComponent(projectId)}/renders`, { method: "POST" }), (body) => RenderJobSchema.parse(body));
     },

@@ -4,7 +4,6 @@ import {
   DEFAULT_SYSTEM_TIMING,
   PERSISTENCE_CHANNELS,
   PROJECT_PREVIEW_CHANNELS,
-  RENDER_PLAN_CHANNELS,
   RENDER_CHANNELS,
   SCRATCHPAD_CHANNELS,
   SCRIPT_GENERATION_CHANNELS,
@@ -18,7 +17,6 @@ import {
   registerDiagnosticsHandler,
   registerPersistenceHandlers,
   registerProjectPreviewHandlers,
-  registerRenderPlanHandlers,
   registerRenderHandlers,
   registerScratchpadHandlers,
   registerScriptGenerationHandlers,
@@ -182,43 +180,11 @@ const speechCache = {
   clearProject: vi.fn(async () => cleanupResult),
   clearEntry: vi.fn(async () => cleanupResult),
 };
-const renderPlan = {
-  schemaVersion: 1 as const,
-  id: "00000000-0000-4000-8000-000000000002",
-  projectId: "00000000-0000-4000-8000-000000000001",
-  createdAt: "2026-08-12T12:00:00.000Z",
-  snapshotHash: "b".repeat(64),
-  planHash: "c".repeat(64),
-  scriptHash: "a".repeat(64),
-  entries: [],
-  summary: {
-    sectionCount: 0,
-    speechCount: 0,
-    pauseCount: 0,
-    cacheHits: 0,
-    cacheMisses: 0,
-    silenceDurationMs: 0,
-  },
-};
-const renderPlanSummary = {
-  id: renderPlan.id,
-  projectId: renderPlan.projectId,
-  createdAt: renderPlan.createdAt,
-  snapshotHash: renderPlan.snapshotHash,
-  planHash: renderPlan.planHash,
-  scriptHash: renderPlan.scriptHash,
-  summary: renderPlan.summary,
-};
-const renderPlans = {
-  create: vi.fn(async () => renderPlan),
-  list: vi.fn(async () => [renderPlanSummary]),
-  get: vi.fn(async () => renderPlan),
-};
 const renderJob = {
   contractVersion: 1 as const,
   id: "00000000-0000-4000-8000-000000000003",
-  projectId: renderPlan.projectId,
-  planId: renderPlan.id,
+  projectId: "00000000-0000-4000-8000-000000000001",
+  planId: "00000000-0000-4000-8000-000000000011",
   retryOfRenderId: null,
   state: "complete" as const,
   progress: {
@@ -241,9 +207,9 @@ const renderJob = {
     elapsedMs: 1,
   },
   error: null,
-  createdAt: renderPlan.createdAt,
-  startedAt: renderPlan.createdAt,
-  finishedAt: renderPlan.createdAt,
+  createdAt: "2026-08-12T12:00:00.000Z",
+  startedAt: "2026-08-12T12:00:00.000Z",
+  finishedAt: "2026-08-12T12:00:00.000Z",
 };
 const renderArtifact = {
   contractVersion: 1 as const,
@@ -254,7 +220,7 @@ const renderArtifact = {
   sizeBytes: 3,
   checksum: "a".repeat(64),
   durationMs: 1,
-  createdAt: renderPlan.createdAt,
+  createdAt: "2026-08-12T12:00:00.000Z",
 };
 const renders = {
   start: vi.fn(async () => renderJob),
@@ -344,6 +310,7 @@ describe("Electron boundary", () => {
       updatedAt: timestamp,
     };
     const invoke = vi.fn(async (channel: string) => {
+      if (channel === RENDER_CHANNELS.startProject) return renderJob;
       if (channel === SYSTEM_DIAGNOSTICS_CHANNEL) return diagnostics;
       if (channel === PERSISTENCE_CHANNELS.projectsList) return [];
       if (channel === PERSISTENCE_CHANNELS.globalLexiconReplace)
@@ -377,7 +344,6 @@ describe("Electron boundary", () => {
       "scratchpad",
       "projectPreview",
       "speechCache",
-      "renderPlans",
       "renders",
       "scriptGeneration",
     ]);
@@ -467,7 +433,6 @@ describe("Electron boundary", () => {
     registerScratchpadHandlers(ipcMain, scratchpad);
     registerProjectPreviewHandlers(ipcMain, projectPreview);
     registerSpeechCacheHandlers(ipcMain, speechCache);
-    registerRenderPlanHandlers(ipcMain, renderPlans);
     registerRenderHandlers(ipcMain, renders as never, saveDialog);
     registerScriptGenerationHandlers(ipcMain, scriptGeneration, saveDialog);
     expect([...handlers.keys()]).toEqual(PUBLIC_IPC_CHANNEL_MANIFEST);
@@ -652,7 +617,6 @@ describe("Electron boundary", () => {
     registerScratchpadHandlers(ipcMain, scratchpad);
     registerProjectPreviewHandlers(ipcMain, projectPreview);
     registerSpeechCacheHandlers(ipcMain, speechCache);
-    registerRenderPlanHandlers(ipcMain, renderPlans);
     registerRenderHandlers(ipcMain, renders as never, saveDialog);
     registerScriptGenerationHandlers(ipcMain, scriptGeneration, saveDialog);
     const projectReplace = {
@@ -704,10 +668,6 @@ describe("Electron boundary", () => {
       },
       [SPEECH_CACHE_CHANNELS.clearProject]: { projectId: project.id },
       [SPEECH_CACHE_CHANNELS.clearEntry]: { cacheKey: "a".repeat(64) },
-      [RENDER_PLAN_CHANNELS.create]: { projectId: project.id },
-      [RENDER_PLAN_CHANNELS.list]: { projectId: project.id },
-      [RENDER_PLAN_CHANNELS.get]: { planId: renderPlan.id },
-      [RENDER_CHANNELS.start]: { planId: renderPlan.id },
       [RENDER_CHANNELS.startProject]: { projectId: project.id },
       [RENDER_CHANNELS.list]: { projectId: project.id },
       [RENDER_CHANNELS.get]: { renderId: renderJob.id },

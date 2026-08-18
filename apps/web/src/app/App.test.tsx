@@ -137,11 +137,6 @@ function renderApp(
         scratchpad={unusedScratchpad}
         projectPreview={unusedProjectPreview}
         speechCache={unusedSpeechCache}
-        renderPlans={{
-          create: vi.fn(),
-          list: vi.fn(async () => []),
-          get: vi.fn(),
-        }}
         scriptGeneration={unusedScriptGeneration}
       />
     </MemoryRouter>,

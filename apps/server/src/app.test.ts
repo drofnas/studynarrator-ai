@@ -29,8 +29,6 @@ import {
   ProjectDetailSchema,
   ProjectPreviewResultSchema,
   ProjectSummaryCollectionSchema,
-  RenderPlanSchema,
-  RenderPlanSummaryCollectionSchema,
   RuntimeSchema,
   SpeechCacheCleanupResultSchema,
   SpeechCacheStatusSchema,
@@ -257,53 +255,18 @@ async function fixture() {
     }),
   };
   const renderPlanId = "00000000-0000-4000-8000-000000000002";
-  const renderPlanFor = (projectId: string) => ({
-    schemaVersion: 1 as const,
-    id: renderPlanId,
-    projectId,
+  const renderFixture = {
+    projectId: "00000000-0000-4000-8000-000000000001",
+    planId: renderPlanId,
     createdAt: "2026-08-12T12:00:00.000Z",
-    snapshotHash: "b".repeat(64),
-    planHash: "c".repeat(64),
-    scriptHash: "a".repeat(64),
-    entries: [],
-    summary: {
-      sectionCount: 0,
-      speechCount: 0,
-      pauseCount: 0,
-      cacheHits: 0,
-      cacheMisses: 0,
-      silenceDurationMs: 0,
-    },
-  });
-  let lastRenderPlan = renderPlanFor("00000000-0000-4000-8000-000000000001");
-  const renderPlans = {
-    create: async (projectId: string) => {
-      lastRenderPlan = renderPlanFor(projectId);
-      return lastRenderPlan;
-    },
-    list: async (projectId: string) =>
-      lastRenderPlan.projectId === projectId
-        ? [
-            {
-              id: lastRenderPlan.id,
-              projectId: lastRenderPlan.projectId,
-              createdAt: lastRenderPlan.createdAt,
-              snapshotHash: lastRenderPlan.snapshotHash,
-              planHash: lastRenderPlan.planHash,
-              scriptHash: lastRenderPlan.scriptHash,
-              summary: lastRenderPlan.summary,
-            },
-          ]
-        : [],
-    get: async () => lastRenderPlan,
   };
   const renderId = "00000000-0000-4000-8000-000000000003";
   const artifactId = "00000000-0000-4000-8000-000000000004";
   const renderJob = () => ({
     contractVersion: 1 as const,
     id: renderId,
-    projectId: lastRenderPlan.projectId,
-    planId: lastRenderPlan.id,
+    projectId: renderFixture.projectId,
+    planId: renderFixture.planId,
     retryOfRenderId: null,
     state: "complete" as const,
     progress: {
@@ -326,9 +289,9 @@ async function fixture() {
       elapsedMs: 1,
     },
     error: null,
-    createdAt: lastRenderPlan.createdAt,
-    startedAt: lastRenderPlan.createdAt,
-    finishedAt: lastRenderPlan.createdAt,
+    createdAt: renderFixture.createdAt,
+    startedAt: renderFixture.createdAt,
+    finishedAt: renderFixture.createdAt,
   });
   const artifact = {
     contractVersion: 1 as const,
@@ -339,10 +302,9 @@ async function fixture() {
     sizeBytes: 1,
     checksum: "d".repeat(64),
     durationMs: null,
-    createdAt: lastRenderPlan.createdAt,
+    createdAt: renderFixture.createdAt,
   };
   const renders = {
-    start: async () => renderJob(),
     startProject: async () => renderJob(),
     list: async () => [renderJob()],
     get: async () => renderJob(),
@@ -395,7 +357,6 @@ async function fixture() {
     scratchpad,
     projectPreview,
     speechCache,
-    renderPlans,
     renders,
     scriptGeneration,
     app: await listen(
@@ -407,7 +368,6 @@ async function fixture() {
         scratchpad,
         projectPreview,
         speechCache,
-        renderPlans,
         renders,
         scriptGeneration,
         context,
@@ -837,7 +797,6 @@ describe("REST API operation manifest", () => {
       scratchpad,
       projectPreview,
       speechCache,
-      renderPlans,
       renders,
       scriptGeneration,
     } = await fixture();
@@ -849,7 +808,6 @@ describe("REST API operation manifest", () => {
       scratchpad,
       projectPreview,
       speechCache,
-      renderPlans,
       renders,
       scriptGeneration,
       context,
@@ -868,10 +826,10 @@ describe("REST API operation manifest", () => {
       ({ method, path }) => `${method} ${path}`,
     );
     expect(registered.sort()).toEqual([...declared].sort());
-    expect(new Set(declared).size).toBe(57);
+    expect(new Set(declared).size).toBe(53);
   });
 
-  it("exercises a successful schema-valid response for all 57 operations", async () => {
+  it("exercises a successful schema-valid response for all 53 operations", async () => {
     const { app } = await fixture();
     const covered = new Set<string>();
     const call = async (
@@ -882,14 +840,6 @@ describe("REST API operation manifest", () => {
     ) => {
       covered.add(
         `${method} ${path
-          .replace(
-            /^\/api\/render-plans\/[0-9a-f-]{36}\/renders$/u,
-            "/api/render-plans/:planId/renders",
-          )
-          .replace(
-            /^\/api\/render-plans\/[0-9a-f-]{36}$/u,
-            "/api/render-plans/:planId",
-          )
           .replace(
             /^\/api\/render-artifacts\/[0-9a-f-]{36}$/u,
             "/api/render-artifacts/:artifactId",
@@ -1045,22 +995,9 @@ describe("REST API operation manifest", () => {
       ).text,
     ).toBe("Edited project prompt");
     await call("POST", `/api/projects/${created.id}/skill-export`, 200, {});
-    const renderPlan = RenderPlanSchema.parse(
-      (await call("POST", `/api/projects/${created.id}/render-plans`, 201))
-        .body as unknown,
-    );
-    RenderPlanSummaryCollectionSchema.parse(
-      (await call("GET", `/api/projects/${created.id}/render-plans`, 200))
-        .body as unknown,
-    );
-    RenderPlanSchema.parse(
-      (await call("GET", `/api/render-plans/${renderPlan.id}`, 200))
-        .body as unknown,
-    );
     const render = (
-      await call("POST", `/api/render-plans/${renderPlan.id}/renders`, 202)
+      await call("POST", `/api/projects/${created.id}/renders`, 202)
     ).body as { id: string };
-    await call("POST", `/api/projects/${created.id}/renders`, 202);
     await call("GET", `/api/projects/${created.id}/renders`, 200);
     await call("GET", `/api/renders/${render.id}`, 200);
     await call("POST", `/api/renders/${render.id}/cancel`, 200);
@@ -1172,10 +1109,6 @@ describe("REST API operation manifest", () => {
         .post("/api/projects/00000000-0000-4000-8000-000000000001/skill-export")
         .send({ sourceMaterial: secret })
         .expect(400),
-      request(app).post("/api/projects/not-a-uuid/render-plans").expect(400),
-      request(app).get("/api/projects/not-a-uuid/render-plans").expect(400),
-      request(app).get("/api/render-plans/not-a-uuid").expect(400),
-      request(app).post("/api/render-plans/not-a-uuid/renders").expect(400),
       request(app).get("/api/projects/not-a-uuid/renders").expect(400),
       request(app).get("/api/renders/not-a-uuid").expect(400),
       request(app).post("/api/renders/not-a-uuid/cancel").expect(400),

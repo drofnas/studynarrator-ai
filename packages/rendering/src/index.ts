@@ -1,18 +1,25 @@
 import { createHash, randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { constants } from "node:fs";
-import { chmod, lstat, mkdir, open, readdir, rename, rm, unlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  lstat,
+  mkdir,
+  open,
+  readdir,
+  rename,
+  rm,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { join, resolve } from "node:path";
 import {
   ProjectSnapshotSchema,
   RenderIdSchema,
-  RenderPlanIdSchema,
   RenderPlanSchema,
-  RenderPlanSummaryCollectionSchema,
   type ProjectSnapshot,
   type RenderPlan,
-  type RenderPlanSummary,
-  type SilenceAsset
+  type SilenceAsset,
 } from "@studynarrator/shared-types";
 
 export const SPEECH_CACHE_SCHEMA_VERSION = 1;
@@ -23,9 +30,24 @@ const CACHE_KEY_PATTERN = /^[a-f0-9]{64}$/u;
 const SHARD_PATTERN = /^[a-f0-9]{2}$/u;
 const MAX_CACHE_METADATA_BYTES = 64 * 1024;
 const METADATA_KEYS = new Set([
-  "schemaVersion", "normalizationVersion", "chunkingVersion", "adapterId", "adapterVersion",
-  "serverIdentityHash", "modelId", "voiceId", "speed", "textHash", "responseFormat",
-  "key", "audioChecksum", "byteLength", "createdAt", "lastUsedAt", "projectIds", "scratchpadUsed"
+  "schemaVersion",
+  "normalizationVersion",
+  "chunkingVersion",
+  "adapterId",
+  "adapterVersion",
+  "serverIdentityHash",
+  "modelId",
+  "voiceId",
+  "speed",
+  "textHash",
+  "responseFormat",
+  "key",
+  "audioChecksum",
+  "byteLength",
+  "createdAt",
+  "lastUsedAt",
+  "projectIds",
+  "scratchpadUsed",
 ]);
 
 export interface SpeechCacheKeyInput {
@@ -39,7 +61,8 @@ export interface SpeechCacheKeyInput {
   responseFormat: "wav";
 }
 
-interface NormalizedSpeechCacheInput extends Omit<SpeechCacheKeyInput, "serverIdentity" | "text"> {
+interface NormalizedSpeechCacheInput
+  extends Omit<SpeechCacheKeyInput, "serverIdentity" | "text"> {
   serverIdentityHash: string;
   normalizedText: string;
   textHash: string;
@@ -50,7 +73,8 @@ export interface SpeechCacheUsage {
   scratchpad?: boolean;
 }
 
-interface SpeechCacheEntryMetadata extends Omit<NormalizedSpeechCacheInput, "normalizedText"> {
+interface SpeechCacheEntryMetadata
+  extends Omit<NormalizedSpeechCacheInput, "normalizedText"> {
   schemaVersion: typeof SPEECH_CACHE_SCHEMA_VERSION;
   normalizationVersion: typeof SPEECH_NORMALIZATION_VERSION;
   chunkingVersion: typeof SPEECH_CHUNKING_VERSION;
@@ -90,19 +114,31 @@ export interface SpeechCache {
   getOrCreate(
     input: SpeechCacheKeyInput,
     usage: SpeechCacheUsage,
-    synthesize: (normalizedText: string, signal: AbortSignal) => Promise<Uint8Array>,
-    signal?: AbortSignal
+    synthesize: (
+      normalizedText: string,
+      signal: AbortSignal,
+    ) => Promise<Uint8Array>,
+    signal?: AbortSignal,
   ): Promise<CachedSpeechResult>;
-  inspect(input: SpeechCacheKeyInput, signal?: AbortSignal): Promise<{ key: string; status: "hit" | "miss" }>;
+  inspect(
+    input: SpeechCacheKeyInput,
+    signal?: AbortSignal,
+  ): Promise<{ key: string; status: "hit" | "miss" }>;
   status(): Promise<SpeechCacheStatus>;
   clearAll(): Promise<SpeechCacheCleanupResult>;
   clearProject(projectId: string): Promise<SpeechCacheCleanupResult>;
   clearEntry(key: string): Promise<SpeechCacheCleanupResult>;
-  releaseProjectEntry?(projectId: string, key: string): Promise<SpeechCacheCleanupResult & { deferred: boolean }>;
+  releaseProjectEntry?(
+    projectId: string,
+    key: string,
+  ): Promise<SpeechCacheCleanupResult & { deferred: boolean }>;
   retainScratchpad(key: string): Promise<SpeechCacheCleanupResult>;
 }
 
-type CachedAudioValidator = (bytes: Uint8Array, signal?: AbortSignal) => Promise<boolean>;
+type CachedAudioValidator = (
+  bytes: Uint8Array,
+  signal?: AbortSignal,
+) => Promise<boolean>;
 
 interface SessionCounters {
   hits: number;
@@ -127,15 +163,30 @@ export function normalizeSpeechText(value: string): string {
   return value.normalize("NFC").replace(/\r\n?/gu, "\n").trim();
 }
 
-function normalizeSpeechCacheInput(input: SpeechCacheKeyInput): NormalizedSpeechCacheInput {
+function normalizeSpeechCacheInput(
+  input: SpeechCacheKeyInput,
+): NormalizedSpeechCacheInput {
   const normalizedText = normalizeSpeechText(input.text);
-  if (!input.adapterId.trim() || !Number.isInteger(input.adapterVersion) || input.adapterVersion < 1) {
+  if (
+    !input.adapterId.trim() ||
+    !Number.isInteger(input.adapterVersion) ||
+    input.adapterVersion < 1
+  ) {
     throw new Error("Speech cache adapter identity is invalid.");
   }
-  if (!input.serverIdentity.trim() || !input.modelId.trim() || !input.voiceId.trim()) {
+  if (
+    !input.serverIdentity.trim() ||
+    !input.modelId.trim() ||
+    !input.voiceId.trim()
+  ) {
     throw new Error("Speech cache synthesis identity is incomplete.");
   }
-  if (!Number.isFinite(input.speed) || input.speed <= 0 || input.speed > 4 || !normalizedText) {
+  if (
+    !Number.isFinite(input.speed) ||
+    input.speed <= 0 ||
+    input.speed > 4 ||
+    !normalizedText
+  ) {
     throw new Error("Speech cache synthesis input is invalid.");
   }
   return {
@@ -147,89 +198,133 @@ function normalizeSpeechCacheInput(input: SpeechCacheKeyInput): NormalizedSpeech
     speed: input.speed,
     normalizedText,
     textHash: sha256(normalizedText),
-    responseFormat: input.responseFormat
+    responseFormat: input.responseFormat,
   };
 }
 
 export function createSpeechCacheKey(input: SpeechCacheKeyInput): string {
   const normalized = normalizeSpeechCacheInput(input);
-  return sha256(JSON.stringify({
-    schemaVersion: SPEECH_CACHE_SCHEMA_VERSION,
-    normalizationVersion: SPEECH_NORMALIZATION_VERSION,
-    chunkingVersion: SPEECH_CHUNKING_VERSION,
-    adapterId: normalized.adapterId,
-    adapterVersion: normalized.adapterVersion,
-    serverIdentityHash: normalized.serverIdentityHash,
-    modelId: normalized.modelId,
-    voiceId: normalized.voiceId,
-    speed: normalized.speed,
-    textHash: normalized.textHash,
-    responseFormat: normalized.responseFormat
-  }));
+  return sha256(
+    JSON.stringify({
+      schemaVersion: SPEECH_CACHE_SCHEMA_VERSION,
+      normalizationVersion: SPEECH_NORMALIZATION_VERSION,
+      chunkingVersion: SPEECH_CHUNKING_VERSION,
+      adapterId: normalized.adapterId,
+      adapterVersion: normalized.adapterVersion,
+      serverIdentityHash: normalized.serverIdentityHash,
+      modelId: normalized.modelId,
+      voiceId: normalized.voiceId,
+      speed: normalized.speed,
+      textHash: normalized.textHash,
+      responseFormat: normalized.responseFormat,
+    }),
+  );
 }
 
 function assertCacheKey(value: string): string {
-  if (!CACHE_KEY_PATTERN.test(value)) throw new Error("Speech cache key is invalid.");
+  if (!CACHE_KEY_PATTERN.test(value))
+    throw new Error("Speech cache key is invalid.");
   return value;
 }
 
 function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string" && item.length > 0);
+  return (
+    Array.isArray(value) &&
+    value.every((item) => typeof item === "string" && item.length > 0)
+  );
 }
 
 function parseMetadata(value: unknown): SpeechCacheEntryMetadata | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const item = value as Record<string, unknown>;
-  if (Object.keys(item).length !== METADATA_KEYS.size || Object.keys(item).some((key) => !METADATA_KEYS.has(key))
-    || item.schemaVersion !== SPEECH_CACHE_SCHEMA_VERSION
-    || item.normalizationVersion !== SPEECH_NORMALIZATION_VERSION
-    || item.chunkingVersion !== SPEECH_CHUNKING_VERSION
-    || typeof item.key !== "string" || !CACHE_KEY_PATTERN.test(item.key)
-    || typeof item.adapterId !== "string" || !item.adapterId
-    || typeof item.adapterVersion !== "number" || !Number.isInteger(item.adapterVersion)
-    || typeof item.serverIdentityHash !== "string" || !CACHE_KEY_PATTERN.test(item.serverIdentityHash)
-    || typeof item.modelId !== "string" || !item.modelId
-    || typeof item.voiceId !== "string" || !item.voiceId
-    || typeof item.speed !== "number" || !Number.isFinite(item.speed)
-    || item.responseFormat !== "wav"
-    || typeof item.textHash !== "string" || !CACHE_KEY_PATTERN.test(item.textHash)
-    || typeof item.audioChecksum !== "string" || !CACHE_KEY_PATTERN.test(item.audioChecksum)
-    || typeof item.byteLength !== "number" || !Number.isInteger(item.byteLength) || item.byteLength < 1 || item.byteLength > MAX_CACHED_SPEECH_BYTES
-    || typeof item.createdAt !== "string" || !Number.isFinite(Date.parse(item.createdAt))
-    || typeof item.lastUsedAt !== "string" || !Number.isFinite(Date.parse(item.lastUsedAt))
-    || !isStringArray(item.projectIds)
-    || typeof item.scratchpadUsed !== "boolean") return null;
+  if (
+    Object.keys(item).length !== METADATA_KEYS.size ||
+    Object.keys(item).some((key) => !METADATA_KEYS.has(key)) ||
+    item.schemaVersion !== SPEECH_CACHE_SCHEMA_VERSION ||
+    item.normalizationVersion !== SPEECH_NORMALIZATION_VERSION ||
+    item.chunkingVersion !== SPEECH_CHUNKING_VERSION ||
+    typeof item.key !== "string" ||
+    !CACHE_KEY_PATTERN.test(item.key) ||
+    typeof item.adapterId !== "string" ||
+    !item.adapterId ||
+    typeof item.adapterVersion !== "number" ||
+    !Number.isInteger(item.adapterVersion) ||
+    typeof item.serverIdentityHash !== "string" ||
+    !CACHE_KEY_PATTERN.test(item.serverIdentityHash) ||
+    typeof item.modelId !== "string" ||
+    !item.modelId ||
+    typeof item.voiceId !== "string" ||
+    !item.voiceId ||
+    typeof item.speed !== "number" ||
+    !Number.isFinite(item.speed) ||
+    item.responseFormat !== "wav" ||
+    typeof item.textHash !== "string" ||
+    !CACHE_KEY_PATTERN.test(item.textHash) ||
+    typeof item.audioChecksum !== "string" ||
+    !CACHE_KEY_PATTERN.test(item.audioChecksum) ||
+    typeof item.byteLength !== "number" ||
+    !Number.isInteger(item.byteLength) ||
+    item.byteLength < 1 ||
+    item.byteLength > MAX_CACHED_SPEECH_BYTES ||
+    typeof item.createdAt !== "string" ||
+    !Number.isFinite(Date.parse(item.createdAt)) ||
+    typeof item.lastUsedAt !== "string" ||
+    !Number.isFinite(Date.parse(item.lastUsedAt)) ||
+    !isStringArray(item.projectIds) ||
+    typeof item.scratchpadUsed !== "boolean"
+  )
+    return null;
   return item as unknown as SpeechCacheEntryMetadata;
 }
 
-function metadataMatchesInput(metadata: SpeechCacheEntryMetadata, input: NormalizedSpeechCacheInput): boolean {
-  return metadata.adapterId === input.adapterId
-    && metadata.adapterVersion === input.adapterVersion
-    && metadata.serverIdentityHash === input.serverIdentityHash
-    && metadata.modelId === input.modelId
-    && metadata.voiceId === input.voiceId
-    && metadata.speed === input.speed
-    && metadata.textHash === input.textHash
-    && metadata.responseFormat === input.responseFormat;
+function metadataMatchesInput(
+  metadata: SpeechCacheEntryMetadata,
+  input: NormalizedSpeechCacheInput,
+): boolean {
+  return (
+    metadata.adapterId === input.adapterId &&
+    metadata.adapterVersion === input.adapterVersion &&
+    metadata.serverIdentityHash === input.serverIdentityHash &&
+    metadata.modelId === input.modelId &&
+    metadata.voiceId === input.voiceId &&
+    metadata.speed === input.speed &&
+    metadata.textHash === input.textHash &&
+    metadata.responseFormat === input.responseFormat
+  );
 }
 
-function mergedUsage(metadata: SpeechCacheEntryMetadata, usage: SpeechCacheUsage, lastUsedAt: string): SpeechCacheEntryMetadata {
+function mergedUsage(
+  metadata: SpeechCacheEntryMetadata,
+  usage: SpeechCacheUsage,
+  lastUsedAt: string,
+): SpeechCacheEntryMetadata {
   const projectIds = new Set(metadata.projectIds);
   if (usage.projectId) projectIds.add(usage.projectId);
   return {
     ...metadata,
     lastUsedAt,
-    projectIds: [...projectIds].sort((left, right) => left.localeCompare(right, "en-US")),
-    scratchpadUsed: metadata.scratchpadUsed || usage.scratchpad === true
+    projectIds: [...projectIds].sort((left, right) =>
+      left.localeCompare(right, "en-US"),
+    ),
+    scratchpadUsed: metadata.scratchpadUsed || usage.scratchpad === true,
   };
 }
 
-function mergedUsages(metadata: SpeechCacheEntryMetadata, usages: readonly SpeechCacheUsage[], lastUsedAt: string): SpeechCacheEntryMetadata {
-  return usages.reduce((current, usage) => mergedUsage(current, usage, lastUsedAt), metadata);
+function mergedUsages(
+  metadata: SpeechCacheEntryMetadata,
+  usages: readonly SpeechCacheUsage[],
+  lastUsedAt: string,
+): SpeechCacheEntryMetadata {
+  return usages.reduce(
+    (current, usage) => mergedUsage(current, usage, lastUsedAt),
+    metadata,
+  );
 }
 
 function aborted(signal?: AbortSignal): Error {
-  return signal?.reason instanceof Error ? signal.reason : new DOMException("The operation was aborted.", "AbortError");
+  return signal?.reason instanceof Error
+    ? signal.reason
+    : new DOMException("The operation was aborted.", "AbortError");
 }
 
 async function missing(path: string): Promise<boolean> {
@@ -252,16 +347,28 @@ async function regularFile(path: string): Promise<boolean> {
   }
 }
 
-async function readBoundedFile(path: string, maximumBytes: number): Promise<Buffer> {
+async function readBoundedFile(
+  path: string,
+  maximumBytes: number,
+): Promise<Buffer> {
   const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     const details = await handle.stat();
-    if (!details.isFile() || details.size < 1 || details.size > maximumBytes) throw new Error("Speech cache file size is invalid.");
+    if (!details.isFile() || details.size < 1 || details.size > maximumBytes)
+      throw new Error("Speech cache file size is invalid.");
     const bytes = Buffer.allocUnsafe(details.size);
     let offset = 0;
     while (offset < bytes.byteLength) {
-      const { bytesRead } = await handle.read(bytes, offset, bytes.byteLength - offset, offset);
-      if (bytesRead === 0) throw new Error("Speech cache file was truncated during its bounded read.");
+      const { bytesRead } = await handle.read(
+        bytes,
+        offset,
+        bytes.byteLength - offset,
+        offset,
+      );
+      if (bytesRead === 0)
+        throw new Error(
+          "Speech cache file was truncated during its bounded read.",
+        );
       offset += bytesRead;
     }
     return bytes;
@@ -273,7 +380,8 @@ async function readBoundedFile(path: string, maximumBytes: number): Promise<Buff
 async function safeUnlink(path: string): Promise<void> {
   try {
     const entry = await lstat(path);
-    if (!entry.isFile() && !entry.isSymbolicLink()) throw new Error("Refusing to remove an unsafe speech cache path.");
+    if (!entry.isFile() && !entry.isSymbolicLink())
+      throw new Error("Refusing to remove an unsafe speech cache path.");
     await unlink(path);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -286,36 +394,56 @@ export function createSpeechCache(options: {
   now?: () => Date;
   createId?: () => string;
 }): SpeechCache {
-  if (!options.rootDirectory.trim()) throw new Error("Speech cache root is required.");
+  if (!options.rootDirectory.trim())
+    throw new Error("Speech cache root is required.");
   const now = options.now ?? (() => new Date());
   const createId = options.createId ?? randomUUID;
   const flights = new Map<string, Flight>();
   const cleanups = new Map<string, Promise<void>>();
-  const counters: SessionCounters = { hits: 0, misses: 0, writes: 0, corruptMisses: 0 };
+  const counters: SessionCounters = {
+    hits: 0,
+    misses: 0,
+    writes: 0,
+    corruptMisses: 0,
+  };
 
   const paths = (keyValue: string) => {
     const key = assertCacheKey(keyValue);
     const directory = join(options.rootDirectory, key.slice(0, 2));
-    return { key, directory, audio: join(directory, `${key}.wav`), metadata: join(directory, `${key}.json`) };
+    return {
+      key,
+      directory,
+      audio: join(directory, `${key}.wav`),
+      metadata: join(directory, `${key}.json`),
+    };
   };
 
   const ensureDirectory = async (directory: string) => {
     await mkdir(options.rootDirectory, { recursive: true, mode: 0o700 });
     const root = await lstat(options.rootDirectory);
-    if (!root.isDirectory() || root.isSymbolicLink()) throw new Error("Speech cache root must be a real directory.");
+    if (!root.isDirectory() || root.isSymbolicLink())
+      throw new Error("Speech cache root must be a real directory.");
     await chmod(options.rootDirectory, 0o700);
     await mkdir(directory, { recursive: true, mode: 0o700 });
     const shard = await lstat(directory);
-    if (!shard.isDirectory() || shard.isSymbolicLink()) throw new Error("Speech cache shard must be a real directory.");
+    if (!shard.isDirectory() || shard.isSymbolicLink())
+      throw new Error("Speech cache shard must be a real directory.");
     await chmod(directory, 0o700);
   };
 
   const writeMetadata = async (metadata: SpeechCacheEntryMetadata) => {
     const entryPaths = paths(metadata.key);
     await ensureDirectory(entryPaths.directory);
-    const temporary = join(entryPaths.directory, `${metadata.key}.${createId()}.tmp.json`);
+    const temporary = join(
+      entryPaths.directory,
+      `${metadata.key}.${createId()}.tmp.json`,
+    );
     try {
-      await writeFile(temporary, `${JSON.stringify(metadata)}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
+      await writeFile(temporary, `${JSON.stringify(metadata)}\n`, {
+        encoding: "utf8",
+        mode: 0o600,
+        flag: "wx",
+      });
       await chmod(temporary, 0o600);
       await rename(temporary, entryPaths.metadata);
     } catch (error) {
@@ -324,13 +452,18 @@ export function createSpeechCache(options: {
     }
   };
 
-  const removeEntry = async (keyValue: string): Promise<SpeechCacheCleanupResult> => {
+  const removeEntry = async (
+    keyValue: string,
+  ): Promise<SpeechCacheCleanupResult> => {
     const entryPaths = paths(keyValue);
     let bytesFreed = 0;
     let found = false;
     try {
       const audio = await lstat(entryPaths.audio);
-      if (!audio.isFile() && !audio.isSymbolicLink()) throw new Error("Refusing to remove an unsafe speech cache audio path.");
+      if (!audio.isFile() && !audio.isSymbolicLink())
+        throw new Error(
+          "Refusing to remove an unsafe speech cache audio path.",
+        );
       bytesFreed = audio.isSymbolicLink() ? 0 : audio.size;
       found = true;
     } catch (error) {
@@ -347,7 +480,7 @@ export function createSpeechCache(options: {
     normalized: NormalizedSpeechCacheInput,
     usages: readonly SpeechCacheUsage[],
     signal?: AbortSignal,
-    touch = true
+    touch = true,
   ): Promise<CachedSpeechResult | null> => {
     const entryPaths = paths(key);
     const audioExists = await regularFile(entryPaths.audio);
@@ -362,20 +495,35 @@ export function createSpeechCache(options: {
       if (signal?.aborted) throw aborted(signal);
       const [metadataJson, audioBuffer] = await Promise.all([
         readBoundedFile(entryPaths.metadata, MAX_CACHE_METADATA_BYTES),
-        readBoundedFile(entryPaths.audio, MAX_CACHED_SPEECH_BYTES)
+        readBoundedFile(entryPaths.audio, MAX_CACHED_SPEECH_BYTES),
       ]);
-      const metadata = parseMetadata(JSON.parse(metadataJson.toString("utf8")) as unknown);
-      if (!metadata || metadata.key !== key || !metadataMatchesInput(metadata, normalized)
-        || metadata.byteLength !== audioBuffer.byteLength || metadata.audioChecksum !== sha256(audioBuffer)) {
+      const metadata = parseMetadata(
+        JSON.parse(metadataJson.toString("utf8")) as unknown,
+      );
+      if (
+        !metadata ||
+        metadata.key !== key ||
+        !metadataMatchesInput(metadata, normalized) ||
+        metadata.byteLength !== audioBuffer.byteLength ||
+        metadata.audioChecksum !== sha256(audioBuffer)
+      ) {
         throw new Error("Cached speech metadata failed integrity validation.");
       }
-      if (!(await options.validateAudio(audioBuffer, signal))) throw new Error("Cached speech audio failed decoding validation.");
-      const updated = touch ? mergedUsages(metadata, usages, now().toISOString()) : metadata;
+      if (!(await options.validateAudio(audioBuffer, signal)))
+        throw new Error("Cached speech audio failed decoding validation.");
+      const updated = touch
+        ? mergedUsages(metadata, usages, now().toISOString())
+        : metadata;
       if (touch) {
         await writeMetadata(updated);
         counters.hits += 1;
       }
-      return { key, status: "hit", bytes: new Uint8Array(audioBuffer), metadata: updated };
+      return {
+        key,
+        status: "hit",
+        bytes: new Uint8Array(audioBuffer),
+        metadata: updated,
+      };
     } catch {
       if (signal?.aborted) throw aborted(signal);
       if (touch) counters.corruptMisses += 1;
@@ -389,10 +537,12 @@ export function createSpeechCache(options: {
     normalized: NormalizedSpeechCacheInput,
     bytes: Uint8Array,
     usages: readonly SpeechCacheUsage[],
-    signal?: AbortSignal
+    signal?: AbortSignal,
   ): Promise<SpeechCacheEntryMetadata> => {
-    if (bytes.byteLength < 1 || bytes.byteLength > MAX_CACHED_SPEECH_BYTES) throw new Error("Synthesized speech exceeds the cache size limit.");
-    if (!(await options.validateAudio(bytes, signal))) throw new Error("Synthesized speech failed cache validation.");
+    if (bytes.byteLength < 1 || bytes.byteLength > MAX_CACHED_SPEECH_BYTES)
+      throw new Error("Synthesized speech exceeds the cache size limit.");
+    if (!(await options.validateAudio(bytes, signal)))
+      throw new Error("Synthesized speech failed cache validation.");
     if (signal?.aborted) throw aborted(signal);
     const entryPaths = paths(key);
     await ensureDirectory(entryPaths.directory);
@@ -405,7 +555,7 @@ export function createSpeechCache(options: {
       voiceId: normalized.voiceId,
       speed: normalized.speed,
       textHash: normalized.textHash,
-      responseFormat: normalized.responseFormat
+      responseFormat: normalized.responseFormat,
     };
     const metadata: SpeechCacheEntryMetadata = {
       schemaVersion: SPEECH_CACHE_SCHEMA_VERSION,
@@ -417,15 +567,29 @@ export function createSpeechCache(options: {
       byteLength: bytes.byteLength,
       createdAt,
       lastUsedAt: createdAt,
-      projectIds: [...new Set(usages.flatMap((usage) => usage.projectId ? [usage.projectId] : []))].sort((left, right) => left.localeCompare(right, "en-US")),
-      scratchpadUsed: usages.some((usage) => usage.scratchpad === true)
+      projectIds: [
+        ...new Set(
+          usages.flatMap((usage) => (usage.projectId ? [usage.projectId] : [])),
+        ),
+      ].sort((left, right) => left.localeCompare(right, "en-US")),
+      scratchpadUsed: usages.some((usage) => usage.scratchpad === true),
     };
     const suffix = createId();
-    const temporaryAudio = join(entryPaths.directory, `${key}.${suffix}.tmp.wav`);
-    const temporaryMetadata = join(entryPaths.directory, `${key}.${suffix}.tmp.json`);
+    const temporaryAudio = join(
+      entryPaths.directory,
+      `${key}.${suffix}.tmp.wav`,
+    );
+    const temporaryMetadata = join(
+      entryPaths.directory,
+      `${key}.${suffix}.tmp.json`,
+    );
     try {
       await writeFile(temporaryAudio, bytes, { mode: 0o600, flag: "wx" });
-      await writeFile(temporaryMetadata, `${JSON.stringify(metadata)}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
+      await writeFile(temporaryMetadata, `${JSON.stringify(metadata)}\n`, {
+        encoding: "utf8",
+        mode: 0o600,
+        flag: "wx",
+      });
       await chmod(temporaryAudio, 0o600);
       await chmod(temporaryMetadata, 0o600);
       await rename(temporaryAudio, entryPaths.audio);
@@ -433,7 +597,10 @@ export function createSpeechCache(options: {
       counters.writes += 1;
       return metadata;
     } catch (error) {
-      await Promise.all([safeUnlink(temporaryAudio).catch(() => undefined), safeUnlink(temporaryMetadata).catch(() => undefined)]);
+      await Promise.all([
+        safeUnlink(temporaryAudio).catch(() => undefined),
+        safeUnlink(temporaryMetadata).catch(() => undefined),
+      ]);
       throw error;
     }
   };
@@ -442,8 +609,11 @@ export function createSpeechCache(options: {
     key: string,
     normalized: NormalizedSpeechCacheInput,
     usages: readonly SpeechCacheUsage[],
-    synthesize: (normalizedText: string, signal: AbortSignal) => Promise<Uint8Array>,
-    signal: AbortSignal
+    synthesize: (
+      normalizedText: string,
+      signal: AbortSignal,
+    ) => Promise<Uint8Array>,
+    signal: AbortSignal,
   ): Promise<CachedSpeechResult> => {
     const cached = await loadEntry(key, normalized, usages, signal);
     if (cached) return cached;
@@ -453,14 +623,21 @@ export function createSpeechCache(options: {
     return { key, status: "miss", bytes, metadata };
   };
 
-  const waitForFlight = async (flight: Flight, signal?: AbortSignal): Promise<CachedSpeechResult> => {
+  const waitForFlight = async (
+    flight: Flight,
+    signal?: AbortSignal,
+  ): Promise<CachedSpeechResult> => {
     if (signal?.aborted) throw aborted(signal);
     flight.waiters += 1;
     try {
       if (!signal) return await flight.promise;
       return await Promise.race([
         flight.promise,
-        new Promise<never>((_resolve, reject) => signal.addEventListener("abort", () => reject(aborted(signal)), { once: true }))
+        new Promise<never>((_resolve, reject) =>
+          signal.addEventListener("abort", () => reject(aborted(signal)), {
+            once: true,
+          }),
+        ),
       ]);
     } finally {
       flight.waiters -= 1;
@@ -485,9 +662,15 @@ export function createSpeechCache(options: {
         waiters: 0,
         usages: [usage],
         settled: false,
-        promise: Promise.resolve(undefined as never)
+        promise: Promise.resolve(undefined as never),
       };
-      flight.promise = produce(key, normalized, flight.usages, synthesize, controller.signal).finally(() => {
+      flight.promise = produce(
+        key,
+        normalized,
+        flight.usages,
+        synthesize,
+        controller.signal,
+      ).finally(() => {
         flight.settled = true;
         flights.delete(key);
       });
@@ -509,14 +692,30 @@ export function createSpeechCache(options: {
       let entryCount = 0;
       for (const key of keys) {
         const entryPaths = paths(key);
-        if (!(await regularFile(entryPaths.audio)) || !(await regularFile(entryPaths.metadata))) continue;
+        if (
+          !(await regularFile(entryPaths.audio)) ||
+          !(await regularFile(entryPaths.metadata))
+        )
+          continue;
         try {
-          const metadata = parseMetadata(JSON.parse((await readBoundedFile(entryPaths.metadata, MAX_CACHE_METADATA_BYTES)).toString("utf8")) as unknown);
+          const metadata = parseMetadata(
+            JSON.parse(
+              (
+                await readBoundedFile(
+                  entryPaths.metadata,
+                  MAX_CACHE_METADATA_BYTES,
+                )
+              ).toString("utf8"),
+            ) as unknown,
+          );
           if (!metadata || metadata.key !== key) continue;
           totalBytes += metadata.byteLength;
           entryCount += 1;
-          if (lastUsedAt === null || metadata.lastUsedAt > lastUsedAt) lastUsedAt = metadata.lastUsedAt;
-        } catch { /* invalid entries are reported as misses when accessed */ }
+          if (lastUsedAt === null || metadata.lastUsedAt > lastUsedAt)
+            lastUsedAt = metadata.lastUsedAt;
+        } catch {
+          /* invalid entries are reported as misses when accessed */
+        }
       }
       return {
         entryCount,
@@ -526,7 +725,7 @@ export function createSpeechCache(options: {
         sessionMisses: counters.misses,
         sessionWrites: counters.writes,
         sessionCorruptMisses: counters.corruptMisses,
-        inFlight: flights.size
+        inFlight: flights.size,
       };
     },
     async clearAll() {
@@ -540,19 +739,31 @@ export function createSpeechCache(options: {
       return { entriesRemoved, bytesFreed };
     },
     async clearProject(projectId) {
-      if (!projectId.trim()) throw new Error("Project ID is required for cache cleanup.");
+      if (!projectId.trim())
+        throw new Error("Project ID is required for cache cleanup.");
       let entriesRemoved = 0;
       let bytesFreed = 0;
       for (const key of await listKeys()) {
         const entryPaths = paths(key);
         if (!(await regularFile(entryPaths.metadata))) continue;
         try {
-          const metadata = parseMetadata(JSON.parse((await readBoundedFile(entryPaths.metadata, MAX_CACHE_METADATA_BYTES)).toString("utf8")) as unknown);
+          const metadata = parseMetadata(
+            JSON.parse(
+              (
+                await readBoundedFile(
+                  entryPaths.metadata,
+                  MAX_CACHE_METADATA_BYTES,
+                )
+              ).toString("utf8"),
+            ) as unknown,
+          );
           if (!metadata?.projectIds.includes(projectId)) continue;
           const removed = await removeEntry(key);
           entriesRemoved += removed.entriesRemoved;
           bytesFreed += removed.bytesFreed;
-        } catch { /* malformed metadata has no trusted project association */ }
+        } catch {
+          /* malformed metadata has no trusted project association */
+        }
       }
       return { entriesRemoved, bytesFreed };
     },
@@ -560,18 +771,35 @@ export function createSpeechCache(options: {
       return await removeEntry(assertCacheKey(key));
     },
     async releaseProjectEntry(projectId, keyValue) {
-      if (!projectId.trim()) throw new Error("Project ID is required for cache cleanup.");
+      if (!projectId.trim())
+        throw new Error("Project ID is required for cache cleanup.");
       const key = assertCacheKey(keyValue);
-      if (flights.has(key) || cleanups.has(key)) return { entriesRemoved: 0, bytesFreed: 0, deferred: true };
+      if (flights.has(key) || cleanups.has(key))
+        return { entriesRemoved: 0, bytesFreed: 0, deferred: true };
       let finishCleanup: () => void = () => undefined;
-      const cleanup = new Promise<void>((resolveCleanup) => { finishCleanup = resolveCleanup; });
+      const cleanup = new Promise<void>((resolveCleanup) => {
+        finishCleanup = resolveCleanup;
+      });
       cleanups.set(key, cleanup);
       try {
         const entryPaths = paths(key);
-        if (!(await regularFile(entryPaths.metadata))) return { entriesRemoved: 0, bytesFreed: 0, deferred: false };
-        const metadata = parseMetadata(JSON.parse((await readBoundedFile(entryPaths.metadata, MAX_CACHE_METADATA_BYTES)).toString("utf8")) as unknown);
-        if (!metadata || !metadata.projectIds.includes(projectId)) return { entriesRemoved: 0, bytesFreed: 0, deferred: false };
-        const projectIds = metadata.projectIds.filter((candidate) => candidate !== projectId);
+        if (!(await regularFile(entryPaths.metadata)))
+          return { entriesRemoved: 0, bytesFreed: 0, deferred: false };
+        const metadata = parseMetadata(
+          JSON.parse(
+            (
+              await readBoundedFile(
+                entryPaths.metadata,
+                MAX_CACHE_METADATA_BYTES,
+              )
+            ).toString("utf8"),
+          ) as unknown,
+        );
+        if (!metadata || !metadata.projectIds.includes(projectId))
+          return { entriesRemoved: 0, bytesFreed: 0, deferred: false };
+        const projectIds = metadata.projectIds.filter(
+          (candidate) => candidate !== projectId,
+        );
         if (projectIds.length > 0 || metadata.scratchpadUsed) {
           await writeMetadata({ ...metadata, projectIds });
           return { entriesRemoved: 0, bytesFreed: 0, deferred: false };
@@ -593,7 +821,16 @@ export function createSpeechCache(options: {
         const entryPaths = paths(key);
         if (!(await regularFile(entryPaths.metadata))) continue;
         try {
-          const metadata = parseMetadata(JSON.parse((await readBoundedFile(entryPaths.metadata, MAX_CACHE_METADATA_BYTES)).toString("utf8")) as unknown);
+          const metadata = parseMetadata(
+            JSON.parse(
+              (
+                await readBoundedFile(
+                  entryPaths.metadata,
+                  MAX_CACHE_METADATA_BYTES,
+                )
+              ).toString("utf8"),
+            ) as unknown,
+          );
           if (!metadata?.scratchpadUsed) continue;
           if (metadata.projectIds.length > 0) {
             await writeMetadata({ ...metadata, scratchpadUsed: false });
@@ -602,24 +839,35 @@ export function createSpeechCache(options: {
           const removed = await removeEntry(key);
           entriesRemoved += removed.entriesRemoved;
           bytesFreed += removed.bytesFreed;
-        } catch { /* malformed metadata has no trusted Scratchpad association */ }
+        } catch {
+          /* malformed metadata has no trusted Scratchpad association */
+        }
       }
       return { entriesRemoved, bytesFreed };
-    }
+    },
   };
 
   async function listKeys(): Promise<string[]> {
     if (await missing(options.rootDirectory)) return [];
     const root = await lstat(options.rootDirectory);
-    if (!root.isDirectory() || root.isSymbolicLink()) throw new Error("Speech cache root must be a real directory.");
+    if (!root.isDirectory() || root.isSymbolicLink())
+      throw new Error("Speech cache root must be a real directory.");
     const keys = new Set<string>();
-    for (const shard of await readdir(options.rootDirectory, { withFileTypes: true })) {
+    for (const shard of await readdir(options.rootDirectory, {
+      withFileTypes: true,
+    })) {
       if (!SHARD_PATTERN.test(shard.name)) continue;
-      if (!shard.isDirectory() || shard.isSymbolicLink()) throw new Error("Speech cache contains an unsafe shard.");
-      for (const file of await readdir(join(options.rootDirectory, shard.name), { withFileTypes: true })) {
-        if (file.isSymbolicLink()) throw new Error("Speech cache contains an unsafe entry.");
+      if (!shard.isDirectory() || shard.isSymbolicLink())
+        throw new Error("Speech cache contains an unsafe shard.");
+      for (const file of await readdir(
+        join(options.rootDirectory, shard.name),
+        { withFileTypes: true },
+      )) {
+        if (file.isSymbolicLink())
+          throw new Error("Speech cache contains an unsafe entry.");
         const match = /^([a-f0-9]{64})\.(?:wav|json)$/u.exec(file.name);
-        if (file.isFile() && match?.[1]?.startsWith(shard.name)) keys.add(match[1]);
+        if (file.isFile() && match?.[1]?.startsWith(shard.name))
+          keys.add(match[1]);
       }
     }
     return [...keys].sort();
@@ -650,10 +898,21 @@ function processError(name: string): Error {
   return new Error(`${name} could not complete the audio operation.`);
 }
 
-async function runAudioProcess(command: string, args: readonly string[], signal?: AbortSignal): Promise<string> {
-  if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new DOMException("The operation was aborted.", "AbortError");
+async function runAudioProcess(
+  command: string,
+  args: readonly string[],
+  signal?: AbortSignal,
+): Promise<string> {
+  if (signal?.aborted)
+    throw signal.reason instanceof Error
+      ? signal.reason
+      : new DOMException("The operation was aborted.", "AbortError");
   return await new Promise<string>((resolveProcess, reject) => {
-    const child = spawn(command, args, { shell: false, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    const child = spawn(command, args, {
+      shell: false,
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+    });
     let stdout = "";
     let stderrBytes = 0;
     let settled = false;
@@ -665,14 +924,31 @@ async function runAudioProcess(command: string, args: readonly string[], signal?
     };
     const onAbort = () => {
       child.kill("SIGKILL");
-      finish(() => reject(signal?.reason instanceof Error ? signal.reason : new DOMException("The operation was aborted.", "AbortError")));
+      finish(() =>
+        reject(
+          signal?.reason instanceof Error
+            ? signal.reason
+            : new DOMException("The operation was aborted.", "AbortError"),
+        ),
+      );
     };
     signal?.addEventListener("abort", onAbort, { once: true });
     child.stdout.setEncoding("utf8");
-    child.stdout.on("data", (chunk: string) => { if (stdout.length < 256_000) stdout += chunk.slice(0, 256_000 - stdout.length); });
-    child.stderr.on("data", (chunk: Buffer) => { stderrBytes += chunk.byteLength; });
+    child.stdout.on("data", (chunk: string) => {
+      if (stdout.length < 256_000)
+        stdout += chunk.slice(0, 256_000 - stdout.length);
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderrBytes += chunk.byteLength;
+    });
     child.once("error", () => finish(() => reject(processError(command))));
-    child.once("close", (code) => finish(() => code === 0 && stderrBytes <= 256_000 ? resolveProcess(stdout) : reject(processError(command))));
+    child.once("close", (code) =>
+      finish(() =>
+        code === 0 && stderrBytes <= 256_000
+          ? resolveProcess(stdout)
+          : reject(processError(command)),
+      ),
+    );
   });
 }
 
@@ -686,23 +962,53 @@ export async function extractWaveformPeaks(options: {
 }): Promise<WaveformPeaks> {
   const maxPeaks = options.maxPeaks ?? 1_024;
   const sampleRate = options.sampleRate ?? 8_000;
-  if (!Number.isInteger(maxPeaks) || maxPeaks < 1 || maxPeaks > 1_024) throw new Error("Waveform peak count is invalid.");
-  if (!Number.isInteger(sampleRate) || sampleRate < 1_000 || sampleRate > 48_000) throw new Error("Waveform sample rate is invalid.");
+  if (!Number.isInteger(maxPeaks) || maxPeaks < 1 || maxPeaks > 1_024)
+    throw new Error("Waveform peak count is invalid.");
+  if (
+    !Number.isInteger(sampleRate) ||
+    sampleRate < 1_000 ||
+    sampleRate > 48_000
+  )
+    throw new Error("Waveform sample rate is invalid.");
   const probe = await probeAudioFile({
     inputPath: options.inputPath,
     ...(options.ffprobePath ? { ffprobePath: options.ffprobePath } : {}),
-    ...(options.signal ? { signal: options.signal } : {})
+    ...(options.signal ? { signal: options.signal } : {}),
   });
-  if (!probe.decodable) throw new Error("Waveform source audio did not decode.");
-  if (options.signal?.aborted) throw options.signal.reason instanceof Error ? options.signal.reason : new DOMException("The operation was aborted.", "AbortError");
+  if (!probe.decodable)
+    throw new Error("Waveform source audio did not decode.");
+  if (options.signal?.aborted)
+    throw options.signal.reason instanceof Error
+      ? options.signal.reason
+      : new DOMException("The operation was aborted.", "AbortError");
 
   return await new Promise<WaveformPeaks>((resolvePeaks, reject) => {
-    const child = spawn(options.ffmpegPath ?? "ffmpeg", [
-      "-v", "error", "-i", options.inputPath, "-map", "0:a:0", "-ac", "1", "-ar", String(sampleRate),
-      "-f", "s16le", "-acodec", "pcm_s16le", "pipe:1"
-    ], { shell: false, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    const child = spawn(
+      options.ffmpegPath ?? "ffmpeg",
+      [
+        "-v",
+        "error",
+        "-i",
+        options.inputPath,
+        "-map",
+        "0:a:0",
+        "-ac",
+        "1",
+        "-ar",
+        String(sampleRate),
+        "-f",
+        "s16le",
+        "-acodec",
+        "pcm_s16le",
+        "pipe:1",
+      ],
+      { shell: false, stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
+    );
     const peaks: number[] = [];
-    let samplesPerPeak = Math.max(1, Math.ceil((probe.durationMs / 1_000 * sampleRate) / maxPeaks));
+    let samplesPerPeak = Math.max(
+      1,
+      Math.ceil(((probe.durationMs / 1_000) * sampleRate) / maxPeaks),
+    );
     let bucketSamples = 0;
     let bucketPeak = 0;
     let trailingByte: number | null = null;
@@ -717,7 +1023,8 @@ export async function extractWaveformPeaks(options: {
     };
     const compact = () => {
       const compacted: number[] = [];
-      for (let index = 0; index < peaks.length; index += 2) compacted.push(Math.max(peaks[index] ?? 0, peaks[index + 1] ?? 0));
+      for (let index = 0; index < peaks.length; index += 2)
+        compacted.push(Math.max(peaks[index] ?? 0, peaks[index + 1] ?? 0));
       peaks.splice(0, peaks.length, ...compacted);
       samplesPerPeak *= 2;
     };
@@ -728,83 +1035,193 @@ export async function extractWaveformPeaks(options: {
       bucketPeak = 0;
     };
     const acceptSample = (sample: number) => {
-      bucketPeak = Math.max(bucketPeak, Math.min(255, Math.round(Math.abs(sample) / 32_768 * 255)));
+      bucketPeak = Math.max(
+        bucketPeak,
+        Math.min(255, Math.round((Math.abs(sample) / 32_768) * 255)),
+      );
       bucketSamples += 1;
       if (bucketSamples >= samplesPerPeak) emitPeak();
     };
     const onAbort = () => {
       child.kill("SIGKILL");
-      finish(() => reject(options.signal?.reason instanceof Error ? options.signal.reason : new DOMException("The operation was aborted.", "AbortError")));
+      finish(() =>
+        reject(
+          options.signal?.reason instanceof Error
+            ? options.signal.reason
+            : new DOMException("The operation was aborted.", "AbortError"),
+        ),
+      );
     };
     options.signal?.addEventListener("abort", onAbort, { once: true });
     child.stdout.on("data", (chunk: Buffer) => {
       let offset = 0;
       if (trailingByte !== null && chunk.byteLength > 0) {
-        const unsigned = trailingByte | chunk[0]! << 8;
+        const unsigned = trailingByte | (chunk[0]! << 8);
         acceptSample(unsigned >= 0x8000 ? unsigned - 0x10000 : unsigned);
         trailingByte = null;
         offset = 1;
       }
-      for (; offset + 1 < chunk.byteLength; offset += 2) acceptSample(chunk.readInt16LE(offset));
+      for (; offset + 1 < chunk.byteLength; offset += 2)
+        acceptSample(chunk.readInt16LE(offset));
       if (offset < chunk.byteLength) trailingByte = chunk[offset]!;
     });
-    child.stderr.on("data", (chunk: Buffer) => { stderrBytes += chunk.byteLength; });
-    child.once("error", () => finish(() => reject(processError(options.ffmpegPath ?? "ffmpeg"))));
-    child.once("close", (code) => finish(() => {
-      if (code !== 0 || stderrBytes > 256_000) reject(processError(options.ffmpegPath ?? "ffmpeg"));
-      else {
-        if (bucketSamples > 0) emitPeak();
-        while (peaks.length > maxPeaks) compact();
-        resolvePeaks({ durationMs: probe.durationMs, sampleRate, peaks: peaks.length > 0 ? peaks : [0] });
-      }
-    }));
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderrBytes += chunk.byteLength;
+    });
+    child.once("error", () =>
+      finish(() => reject(processError(options.ffmpegPath ?? "ffmpeg"))),
+    );
+    child.once("close", (code) =>
+      finish(() => {
+        if (code !== 0 || stderrBytes > 256_000)
+          reject(processError(options.ffmpegPath ?? "ffmpeg"));
+        else {
+          if (bucketSamples > 0) emitPeak();
+          while (peaks.length > maxPeaks) compact();
+          resolvePeaks({
+            durationMs: probe.durationMs,
+            sampleRate,
+            peaks: peaks.length > 0 ? peaks : [0],
+          });
+        }
+      }),
+    );
   });
 }
 
 export async function normalizeSpeechWav(options: {
-  inputPath: string; outputPath: string; gainDb: number; ffmpegPath?: string; signal?: AbortSignal;
+  inputPath: string;
+  outputPath: string;
+  gainDb: number;
+  ffmpegPath?: string;
+  signal?: AbortSignal;
 }): Promise<void> {
-  await runAudioProcess(options.ffmpegPath ?? "ffmpeg", [
-    "-y", "-v", "error", "-i", options.inputPath,
-    "-af", `volume=${String(options.gainDb)}dB,alimiter=limit=0.95`,
-    "-ar", String(RENDER_PLAN_SAMPLE_RATE), "-ac", String(RENDER_PLAN_CHANNELS),
-    "-c:a", "pcm_s16le", options.outputPath
-  ], options.signal);
+  await runAudioProcess(
+    options.ffmpegPath ?? "ffmpeg",
+    [
+      "-y",
+      "-v",
+      "error",
+      "-i",
+      options.inputPath,
+      "-af",
+      `volume=${String(options.gainDb)}dB,alimiter=limit=0.95`,
+      "-ar",
+      String(RENDER_PLAN_SAMPLE_RATE),
+      "-ac",
+      String(RENDER_PLAN_CHANNELS),
+      "-c:a",
+      "pcm_s16le",
+      options.outputPath,
+    ],
+    options.signal,
+  );
 }
 
 export async function concatenateWavs(options: {
-  listPath: string; outputPath: string; ffmpegPath?: string; signal?: AbortSignal;
+  listPath: string;
+  outputPath: string;
+  ffmpegPath?: string;
+  signal?: AbortSignal;
 }): Promise<void> {
-  await runAudioProcess(options.ffmpegPath ?? "ffmpeg", [
-    "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", options.listPath,
-    "-ar", String(RENDER_PLAN_SAMPLE_RATE), "-ac", String(RENDER_PLAN_CHANNELS),
-    "-c:a", "pcm_s16le", options.outputPath
-  ], options.signal);
+  await runAudioProcess(
+    options.ffmpegPath ?? "ffmpeg",
+    [
+      "-y",
+      "-v",
+      "error",
+      "-f",
+      "concat",
+      "-safe",
+      "0",
+      "-i",
+      options.listPath,
+      "-ar",
+      String(RENDER_PLAN_SAMPLE_RATE),
+      "-ac",
+      String(RENDER_PLAN_CHANNELS),
+      "-c:a",
+      "pcm_s16le",
+      options.outputPath,
+    ],
+    options.signal,
+  );
 }
 
 export async function encodeMp3(options: {
-  inputPath: string; outputPath: string; ffmpegPath?: string; signal?: AbortSignal;
+  inputPath: string;
+  outputPath: string;
+  ffmpegPath?: string;
+  signal?: AbortSignal;
 }): Promise<void> {
-  await runAudioProcess(options.ffmpegPath ?? "ffmpeg", [
-    "-y", "-v", "error", "-i", options.inputPath, "-c:a", "libmp3lame", "-b:a", "192k", options.outputPath
-  ], options.signal);
+  await runAudioProcess(
+    options.ffmpegPath ?? "ffmpeg",
+    [
+      "-y",
+      "-v",
+      "error",
+      "-i",
+      options.inputPath,
+      "-c:a",
+      "libmp3lame",
+      "-b:a",
+      "192k",
+      options.outputPath,
+    ],
+    options.signal,
+  );
 }
 
 export async function probeAudioFile(options: {
-  inputPath: string; ffprobePath?: string; signal?: AbortSignal;
+  inputPath: string;
+  ffprobePath?: string;
+  signal?: AbortSignal;
 }): Promise<AudioProbeMetadata> {
-  const stdout = await runAudioProcess(options.ffprobePath ?? "ffprobe", [
-    "-v", "error", "-show_entries", "format=format_name,duration,bit_rate:stream=codec_type", "-of", "json", options.inputPath
-  ], options.signal);
+  const stdout = await runAudioProcess(
+    options.ffprobePath ?? "ffprobe",
+    [
+      "-v",
+      "error",
+      "-show_entries",
+      "format=format_name,duration,bit_rate:stream=codec_type",
+      "-of",
+      "json",
+      options.inputPath,
+    ],
+    options.signal,
+  );
   try {
-    const value = JSON.parse(stdout) as { format?: { format_name?: unknown; duration?: unknown; bit_rate?: unknown }; streams?: Array<{ codec_type?: unknown }> };
-    const duration = typeof value.format?.duration === "string" ? Number(value.format.duration) : Number.NaN;
-    const bitRate = typeof value.format?.bit_rate === "string" ? Number(value.format.bit_rate) : null;
+    const value = JSON.parse(stdout) as {
+      format?: {
+        format_name?: unknown;
+        duration?: unknown;
+        bit_rate?: unknown;
+      };
+      streams?: Array<{ codec_type?: unknown }>;
+    };
+    const duration =
+      typeof value.format?.duration === "string"
+        ? Number(value.format.duration)
+        : Number.NaN;
+    const bitRate =
+      typeof value.format?.bit_rate === "string"
+        ? Number(value.format.bit_rate)
+        : null;
     return {
-      decodable: value.streams?.some(({ codec_type }) => codec_type === "audio") === true && Number.isFinite(duration),
-      durationMs: Number.isFinite(duration) ? Math.max(0, Math.round(duration * 1_000)) : 0,
-      bitRate: bitRate !== null && Number.isFinite(bitRate) ? Math.round(bitRate) : null,
-      formatName: typeof value.format?.format_name === "string" ? value.format.format_name : null
+      decodable:
+        value.streams?.some(({ codec_type }) => codec_type === "audio") ===
+          true && Number.isFinite(duration),
+      durationMs: Number.isFinite(duration)
+        ? Math.max(0, Math.round(duration * 1_000))
+        : 0,
+      bitRate:
+        bitRate !== null && Number.isFinite(bitRate)
+          ? Math.round(bitRate)
+          : null,
+      formatName:
+        typeof value.format?.format_name === "string"
+          ? value.format.format_name
+          : null,
     };
   } catch {
     return { decodable: false, durationMs: 0, bitRate: null, formatName: null };
@@ -816,32 +1233,55 @@ function hashJson(value: unknown): string {
 }
 
 type ProjectSnapshotWithoutHash = ProjectSnapshot extends infer T
-  ? T extends { snapshotHash: string } ? Omit<T, "snapshotHash"> : never
+  ? T extends { snapshotHash: string }
+    ? Omit<T, "snapshotHash">
+    : never
   : never;
 
-export function withProjectSnapshotHash(input: ProjectSnapshotWithoutHash): ProjectSnapshot {
-  const normalized = ProjectSnapshotSchema.parse({ ...input, snapshotHash: "0".repeat(64) });
+export function withProjectSnapshotHash(
+  input: ProjectSnapshotWithoutHash,
+): ProjectSnapshot {
+  const normalized = ProjectSnapshotSchema.parse({
+    ...input,
+    snapshotHash: "0".repeat(64),
+  });
   const { snapshotHash: _snapshotHash, ...payload } = normalized;
   void _snapshotHash;
-  return ProjectSnapshotSchema.parse({ ...payload, snapshotHash: hashJson(payload) });
+  return ProjectSnapshotSchema.parse({
+    ...payload,
+    snapshotHash: hashJson(payload),
+  });
 }
 
-export function withRenderPlanHash(input: Omit<RenderPlan, "planHash">): RenderPlan {
-  const normalized = RenderPlanSchema.parse({ ...input, planHash: "0".repeat(64) });
+export function withRenderPlanHash(
+  input: Omit<RenderPlan, "planHash">,
+): RenderPlan {
+  const normalized = RenderPlanSchema.parse({
+    ...input,
+    planHash: "0".repeat(64),
+  });
   const { planHash: _planHash, ...payload } = normalized;
   void _planHash;
   return RenderPlanSchema.parse({ ...payload, planHash: hashJson(payload) });
 }
 
-export function createPcmSilence(durationMs: number): { bytes: Uint8Array | null; asset: SilenceAsset | null } {
-  if (!Number.isInteger(durationMs) || durationMs < 0 || durationMs > 30_000) throw new Error("Silence duration must be an integer from 0 through 30000 milliseconds.");
+export function createPcmSilence(durationMs: number): {
+  bytes: Uint8Array | null;
+  asset: SilenceAsset | null;
+} {
+  if (!Number.isInteger(durationMs) || durationMs < 0 || durationMs > 30_000)
+    throw new Error(
+      "Silence duration must be an integer from 0 through 30000 milliseconds.",
+    );
   if (durationMs === 0) return { bytes: null, asset: null };
-  const frameCount = RENDER_PLAN_SAMPLE_RATE * durationMs / 1_000;
-  const dataLength = frameCount * RENDER_PLAN_CHANNELS * (RENDER_PLAN_BITS_PER_SAMPLE / 8);
+  const frameCount = (RENDER_PLAN_SAMPLE_RATE * durationMs) / 1_000;
+  const dataLength =
+    frameCount * RENDER_PLAN_CHANNELS * (RENDER_PLAN_BITS_PER_SAMPLE / 8);
   const bytes = new Uint8Array(44 + dataLength);
   const view = new DataView(bytes.buffer);
   const ascii = (offset: number, value: string) => {
-    for (let index = 0; index < value.length; index += 1) bytes[offset + index] = value.charCodeAt(index);
+    for (let index = 0; index < value.length; index += 1)
+      bytes[offset + index] = value.charCodeAt(index);
   };
   ascii(0, "RIFF");
   view.setUint32(4, 36 + dataLength, true);
@@ -851,8 +1291,18 @@ export function createPcmSilence(durationMs: number): { bytes: Uint8Array | null
   view.setUint16(20, 1, true);
   view.setUint16(22, RENDER_PLAN_CHANNELS, true);
   view.setUint32(24, RENDER_PLAN_SAMPLE_RATE, true);
-  view.setUint32(28, RENDER_PLAN_SAMPLE_RATE * RENDER_PLAN_CHANNELS * (RENDER_PLAN_BITS_PER_SAMPLE / 8), true);
-  view.setUint16(32, RENDER_PLAN_CHANNELS * (RENDER_PLAN_BITS_PER_SAMPLE / 8), true);
+  view.setUint32(
+    28,
+    RENDER_PLAN_SAMPLE_RATE *
+      RENDER_PLAN_CHANNELS *
+      (RENDER_PLAN_BITS_PER_SAMPLE / 8),
+    true,
+  );
+  view.setUint16(
+    32,
+    RENDER_PLAN_CHANNELS * (RENDER_PLAN_BITS_PER_SAMPLE / 8),
+    true,
+  );
   view.setUint16(34, RENDER_PLAN_BITS_PER_SAMPLE, true);
   ascii(36, "data");
   view.setUint32(40, dataLength, true);
@@ -866,20 +1316,28 @@ export function createPcmSilence(durationMs: number): { bytes: Uint8Array | null
       sampleRate: RENDER_PLAN_SAMPLE_RATE,
       channels: RENDER_PLAN_CHANNELS,
       bitsPerSample: RENDER_PLAN_BITS_PER_SAMPLE,
-      frameCount
-    }
+      frameCount,
+    },
   };
 }
 
 export interface RenderPlanStore {
-  save(snapshot: ProjectSnapshot, plan: RenderPlan, silenceAssets: ReadonlyMap<string, Uint8Array>): Promise<RenderPlan>;
-  list(projectId: string): Promise<RenderPlanSummary[]>;
-  get(planId: string): Promise<RenderPlan>;
-  load(planId: string): Promise<{ snapshot: ProjectSnapshot; plan: RenderPlan; silenceAssets: ReadonlyMap<string, Uint8Array> }>;
-  snapshotJob(renderId: string, planId: string): Promise<void>;
+  /** Freezes the computed plan, snapshot, and silence assets as an immutable per-render job snapshot. */
+  snapshotJob(
+    renderId: string,
+    snapshot: ProjectSnapshot,
+    plan: RenderPlan,
+    silenceAssets: ReadonlyMap<string, Uint8Array>,
+  ): Promise<void>;
+  /** Copies an established job snapshot into a new job directory, reusing the identical silence bytes. */
   cloneJobSnapshot(renderId: string, sourceRenderId: string): Promise<void>;
-  loadJob(renderId: string): Promise<{ snapshot: ProjectSnapshot; plan: RenderPlan; silenceAssets: ReadonlyMap<string, Uint8Array> }>;
-  migrateLegacy?(jobs: readonly { id: string; projectId: string; planId: string }[]): Promise<{ snapshotsCreated: number; plansRemoved: number }>;
+  loadJob(
+    renderId: string,
+  ): Promise<{
+    snapshot: ProjectSnapshot;
+    plan: RenderPlan;
+    silenceAssets: ReadonlyMap<string, Uint8Array>;
+  }>;
 }
 
 function verifiedSnapshotHash(snapshot: ProjectSnapshot): boolean {
@@ -892,16 +1350,26 @@ function verifiedPlanHash(plan: RenderPlan): boolean {
   return planHash === hashJson(payload);
 }
 
-async function boundedRead(path: string, maximumBytes: number): Promise<Uint8Array> {
+async function boundedRead(
+  path: string,
+  maximumBytes: number,
+): Promise<Uint8Array> {
   const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     const details = await handle.stat();
-    if (!details.isFile() || details.size < 1 || details.size > maximumBytes) throw new Error("Render plan artifact size is invalid.");
+    if (!details.isFile() || details.size < 1 || details.size > maximumBytes)
+      throw new Error("Render plan artifact size is invalid.");
     const bytes = new Uint8Array(details.size);
     let offset = 0;
     while (offset < bytes.byteLength) {
-      const { bytesRead } = await handle.read(bytes, offset, bytes.byteLength - offset, offset);
-      if (bytesRead === 0) throw new Error("Render plan artifact was truncated.");
+      const { bytesRead } = await handle.read(
+        bytes,
+        offset,
+        bytes.byteLength - offset,
+        offset,
+      );
+      if (bytesRead === 0)
+        throw new Error("Render plan artifact was truncated.");
       offset += bytesRead;
     }
     return bytes;
@@ -911,48 +1379,81 @@ async function boundedRead(path: string, maximumBytes: number): Promise<Uint8Arr
 }
 
 async function boundedJson(path: string): Promise<unknown> {
-  return JSON.parse(new TextDecoder().decode(await boundedRead(path, MAX_RENDER_PLAN_JSON_BYTES))) as unknown;
+  return JSON.parse(
+    new TextDecoder().decode(
+      await boundedRead(path, MAX_RENDER_PLAN_JSON_BYTES),
+    ),
+  ) as unknown;
 }
 
-export function createRenderPlanStore(rootDirectoryInput: string): RenderPlanStore {
+export function createRenderPlanStore(
+  rootDirectoryInput: string,
+): RenderPlanStore {
   const rootDirectory = resolve(rootDirectoryInput);
-  if (!rootDirectoryInput.trim() || rootDirectory === resolve("/")) throw new Error("Render plan root must be a scoped directory.");
+  if (!rootDirectoryInput.trim() || rootDirectory === resolve("/"))
+    throw new Error("Render plan root must be a scoped directory.");
 
   const ensureRoot = async () => {
     await mkdir(rootDirectory, { recursive: true, mode: 0o700 });
     const root = await lstat(rootDirectory);
-    if (!root.isDirectory() || root.isSymbolicLink()) throw new Error("Render plan root must be a real directory.");
+    if (!root.isDirectory() || root.isSymbolicLink())
+      throw new Error("Render plan root must be a real directory.");
     await chmod(rootDirectory, 0o700);
   };
 
   const jobsDirectory = join(rootDirectory, ".jobs");
-  const readBundleAt = async (directory: string, expectedPlanId?: string): Promise<{ snapshot: ProjectSnapshot; plan: RenderPlan }> => {
+  const readBundleAt = async (
+    directory: string,
+    expectedPlanId?: string,
+  ): Promise<{ snapshot: ProjectSnapshot; plan: RenderPlan }> => {
     const details = await lstat(directory);
-    if (!details.isDirectory() || details.isSymbolicLink()) throw new Error("Render plan directory is unsafe.");
-    const snapshot = ProjectSnapshotSchema.parse(await boundedJson(join(directory, "project-snapshot.json")));
-    const plan = RenderPlanSchema.parse(await boundedJson(join(directory, "render-plan.json")));
-    if ((expectedPlanId !== undefined && plan.id !== expectedPlanId) || snapshot.project.id !== plan.projectId || snapshot.project.scriptHash !== plan.scriptHash || snapshot.snapshotHash !== plan.snapshotHash
-      || !verifiedSnapshotHash(snapshot) || !verifiedPlanHash(plan)) throw new Error("Render plan hashes are inconsistent.");
+    if (!details.isDirectory() || details.isSymbolicLink())
+      throw new Error("Render plan directory is unsafe.");
+    const snapshot = ProjectSnapshotSchema.parse(
+      await boundedJson(join(directory, "project-snapshot.json")),
+    );
+    const plan = RenderPlanSchema.parse(
+      await boundedJson(join(directory, "render-plan.json")),
+    );
+    if (
+      (expectedPlanId !== undefined && plan.id !== expectedPlanId) ||
+      snapshot.project.id !== plan.projectId ||
+      snapshot.project.scriptHash !== plan.scriptHash ||
+      snapshot.snapshotHash !== plan.snapshotHash ||
+      !verifiedSnapshotHash(snapshot) ||
+      !verifiedPlanHash(plan)
+    )
+      throw new Error("Render plan hashes are inconsistent.");
     const silenceDirectory = join(directory, "silence");
-    const silenceEntries = plan.entries.filter((entry) => entry.type === "pause" && entry.silence !== null);
+    const silenceEntries = plan.entries.filter(
+      (entry) => entry.type === "pause" && entry.silence !== null,
+    );
     if (silenceEntries.length > 0) {
       const silenceDetails = await lstat(silenceDirectory);
-      if (!silenceDetails.isDirectory() || silenceDetails.isSymbolicLink()) throw new Error("Render plan silence directory is unsafe.");
+      if (!silenceDetails.isDirectory() || silenceDetails.isSymbolicLink())
+        throw new Error("Render plan silence directory is unsafe.");
     }
     for (const entry of silenceEntries) {
       const asset = entry.type === "pause" ? entry.silence : null;
       if (!asset) continue;
-      const bytes = await boundedRead(join(directory, asset.relativePath), asset.byteLength);
-      if (bytes.byteLength !== asset.byteLength || sha256(bytes) !== asset.checksum) throw new Error("Render plan silence checksum is invalid.");
+      const bytes = await boundedRead(
+        join(directory, asset.relativePath),
+        asset.byteLength,
+      );
+      if (
+        bytes.byteLength !== asset.byteLength ||
+        sha256(bytes) !== asset.checksum
+      )
+        throw new Error("Render plan silence checksum is invalid.");
     }
     return { snapshot, plan };
   };
-  const readBundle = async (planIdInput: string) => {
-    const planId = RenderPlanIdSchema.parse(planIdInput);
-    return await readBundleAt(join(rootDirectory, planId), planId);
-  };
-
-  const writeBundle = async (directory: string, snapshot: ProjectSnapshot, plan: RenderPlan, silenceAssets: ReadonlyMap<string, Uint8Array>) => {
+  const writeBundle = async (
+    directory: string,
+    snapshot: ProjectSnapshot,
+    plan: RenderPlan,
+    silenceAssets: ReadonlyMap<string, Uint8Array>,
+  ) => {
     const parent = resolve(directory, "..");
     await mkdir(parent, { recursive: true, mode: 0o700 });
     const temporaryDirectory = join(parent, `${plan.id}.${randomUUID()}.tmp`);
@@ -961,76 +1462,89 @@ export function createRenderPlanStore(rootDirectoryInput: string): RenderPlanSto
     try {
       await mkdir(temporaryDirectory, { mode: 0o700 });
       await mkdir(join(temporaryDirectory, "silence"), { mode: 0o700 });
-      await writeFile(join(temporaryDirectory, "project-snapshot.json"), `${JSON.stringify(snapshot, null, 2)}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
-      await writeFile(join(temporaryDirectory, "render-plan.json"), `${JSON.stringify(plan, null, 2)}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
-      const expected = new Map(plan.entries.flatMap((entry) => entry.type === "pause" && entry.silence ? [[entry.silence.checksum, entry.silence] as const] : []));
+      await writeFile(
+        join(temporaryDirectory, "project-snapshot.json"),
+        `${JSON.stringify(snapshot, null, 2)}\n`,
+        { encoding: "utf8", mode: 0o600, flag: "wx" },
+      );
+      await writeFile(
+        join(temporaryDirectory, "render-plan.json"),
+        `${JSON.stringify(plan, null, 2)}\n`,
+        { encoding: "utf8", mode: 0o600, flag: "wx" },
+      );
+      const expected = new Map(
+        plan.entries.flatMap((entry) =>
+          entry.type === "pause" && entry.silence
+            ? [[entry.silence.checksum, entry.silence] as const]
+            : [],
+        ),
+      );
       for (const [checksum, asset] of expected) {
         const bytes = silenceAssets.get(checksum);
-        if (!bytes || bytes.byteLength !== asset.byteLength || sha256(bytes) !== checksum) throw new Error("Render plan silence bytes do not match the manifest.");
-        await writeFile(join(temporaryDirectory, asset.relativePath), bytes, { mode: 0o600, flag: "wx" });
+        if (
+          !bytes ||
+          bytes.byteLength !== asset.byteLength ||
+          sha256(bytes) !== checksum
+        )
+          throw new Error(
+            "Render plan silence bytes do not match the manifest.",
+          );
+        await writeFile(join(temporaryDirectory, asset.relativePath), bytes, {
+          mode: 0o600,
+          flag: "wx",
+        });
       }
-      if (!(await missing(directory))) { await rename(directory, backupDirectory); backedUp = true; }
+      if (!(await missing(directory))) {
+        await rename(directory, backupDirectory);
+        backedUp = true;
+      }
       await rename(temporaryDirectory, directory);
       if (backedUp) await rm(backupDirectory, { recursive: true });
     } catch (error) {
-      await rm(temporaryDirectory, { recursive: true, force: true }).catch(() => undefined);
-      if (backedUp && await missing(directory)) await rename(backupDirectory, directory).catch(() => undefined);
+      await rm(temporaryDirectory, { recursive: true, force: true }).catch(
+        () => undefined,
+      );
+      if (backedUp && (await missing(directory)))
+        await rename(backupDirectory, directory).catch(() => undefined);
       throw error;
     }
   };
 
   return {
-    async save(snapshotInput, planInput, silenceAssets) {
+    async snapshotJob(renderIdInput, snapshotInput, planInput, silenceAssets) {
+      const renderId = RenderIdSchema.parse(renderIdInput);
       const snapshot = ProjectSnapshotSchema.parse(snapshotInput);
       const plan = RenderPlanSchema.parse(planInput);
-      if (!verifiedSnapshotHash(snapshot) || !verifiedPlanHash(plan) || snapshot.snapshotHash !== plan.snapshotHash
-        || snapshot.project.id !== plan.projectId || snapshot.project.scriptHash !== plan.scriptHash) {
-        throw new Error("Render plan cannot be saved with inconsistent hashes.");
+      if (
+        !verifiedSnapshotHash(snapshot) ||
+        !verifiedPlanHash(plan) ||
+        snapshot.snapshotHash !== plan.snapshotHash ||
+        snapshot.project.id !== plan.projectId ||
+        snapshot.project.scriptHash !== plan.scriptHash
+      ) {
+        throw new Error(
+          "Render plan snapshot cannot be frozen with inconsistent hashes.",
+        );
       }
       await ensureRoot();
-      await writeBundle(join(rootDirectory, plan.id), snapshot, plan, silenceAssets);
-      return plan;
-    },
-    async list(projectId) {
-      await ensureRoot();
-      const summaries: RenderPlanSummary[] = [];
-      for (const entry of await readdir(rootDirectory, { withFileTypes: true })) {
-        if (!entry.isDirectory() || entry.isSymbolicLink() || !RenderPlanIdSchema.safeParse(entry.name).success) continue;
-        const { plan } = await readBundle(entry.name);
-        if (plan.projectId === projectId) {
-          summaries.push({
-            id: plan.id, projectId: plan.projectId, createdAt: plan.createdAt, snapshotHash: plan.snapshotHash,
-            planHash: plan.planHash, scriptHash: plan.scriptHash, summary: plan.summary
-          });
-        }
-      }
-      summaries.sort((left, right) => right.createdAt.localeCompare(left.createdAt) || left.id.localeCompare(right.id));
-      return RenderPlanSummaryCollectionSchema.parse(summaries.slice(0, 1));
-    },
-    async get(planId) {
-      await ensureRoot();
-      return (await readBundle(planId)).plan;
-    },
-    async load(planId) {
-      await ensureRoot();
-      const bundle = await readBundle(planId);
-      const directory = join(rootDirectory, bundle.plan.id);
-      const silenceAssets = new Map<string, Uint8Array>();
-      for (const entry of bundle.plan.entries) {
-        if (entry.type !== "pause" || !entry.silence || silenceAssets.has(entry.silence.checksum)) continue;
-        silenceAssets.set(entry.silence.checksum, await boundedRead(join(directory, entry.silence.relativePath), entry.silence.byteLength));
-      }
-      return { ...bundle, silenceAssets };
-    },
-    async snapshotJob(renderIdInput, planIdInput) {
-      const renderId = RenderIdSchema.parse(renderIdInput);
-      const loaded = await this.load(RenderPlanIdSchema.parse(planIdInput));
-      await writeBundle(join(jobsDirectory, renderId), loaded.snapshot, loaded.plan, loaded.silenceAssets);
+      await writeBundle(
+        join(jobsDirectory, renderId),
+        snapshot,
+        plan,
+        silenceAssets,
+      );
     },
     async cloneJobSnapshot(renderIdInput, sourceRenderIdInput) {
       const renderId = RenderIdSchema.parse(renderIdInput);
-      const loaded = await this.loadJob(RenderIdSchema.parse(sourceRenderIdInput));
-      await writeBundle(join(jobsDirectory, renderId), loaded.snapshot, loaded.plan, loaded.silenceAssets);
+      const loaded = await this.loadJob(
+        RenderIdSchema.parse(sourceRenderIdInput),
+      );
+      await writeBundle(
+        join(jobsDirectory, renderId),
+        loaded.snapshot,
+        loaded.plan,
+        loaded.silenceAssets,
+      );
     },
     async loadJob(renderIdInput) {
       const renderId = RenderIdSchema.parse(renderIdInput);
@@ -1038,46 +1552,21 @@ export function createRenderPlanStore(rootDirectoryInput: string): RenderPlanSto
       const directory = join(jobsDirectory, renderId);
       const silenceAssets = new Map<string, Uint8Array>();
       for (const entry of bundle.plan.entries) {
-        if (entry.type !== "pause" || !entry.silence || silenceAssets.has(entry.silence.checksum)) continue;
-        silenceAssets.set(entry.silence.checksum, await boundedRead(join(directory, entry.silence.relativePath), entry.silence.byteLength));
+        if (
+          entry.type !== "pause" ||
+          !entry.silence ||
+          silenceAssets.has(entry.silence.checksum)
+        )
+          continue;
+        silenceAssets.set(
+          entry.silence.checksum,
+          await boundedRead(
+            join(directory, entry.silence.relativePath),
+            entry.silence.byteLength,
+          ),
+        );
       }
       return { ...bundle, silenceAssets };
     },
-    async migrateLegacy(jobs) {
-      await ensureRoot();
-      const bundles: Array<{ directory: string; plan: RenderPlan }> = [];
-      for (const entry of await readdir(rootDirectory, { withFileTypes: true })) {
-        if (!entry.isDirectory() || entry.isSymbolicLink() || !RenderPlanIdSchema.safeParse(entry.name).success) continue;
-        const loaded = await readBundle(entry.name);
-        bundles.push({ directory: join(rootDirectory, entry.name), plan: loaded.plan });
-      }
-
-      let snapshotsCreated = 0;
-      for (const job of jobs) {
-        const renderId = RenderIdSchema.parse(job.id);
-        const planId = RenderPlanIdSchema.parse(job.planId);
-        const snapshotDirectory = join(jobsDirectory, renderId);
-        if (await missing(snapshotDirectory)) {
-          if (!bundles.some(({ plan }) => plan.id === planId && plan.projectId === job.projectId)) {
-            throw new Error(`Legacy render plan ${planId} is unavailable for render ${renderId}.`);
-          }
-          await this.snapshotJob(renderId, planId);
-          snapshotsCreated += 1;
-        }
-        const snapshot = await this.loadJob(renderId);
-        if (snapshot.plan.id !== planId || snapshot.plan.projectId !== job.projectId) {
-          throw new Error(`Legacy render snapshot ${renderId} does not match its job.`);
-        }
-      }
-
-      const newestByProject = new Map<string, RenderPlan>();
-      for (const { plan } of bundles) {
-        const current = newestByProject.get(plan.projectId);
-        if (!current || plan.createdAt > current.createdAt || (plan.createdAt === current.createdAt && plan.id < current.id)) newestByProject.set(plan.projectId, plan);
-      }
-      const superseded = bundles.filter(({ plan }) => newestByProject.get(plan.projectId)?.id !== plan.id);
-      for (const { directory } of superseded) await rm(directory, { recursive: true });
-      return { snapshotsCreated, plansRemoved: superseded.length };
-    }
   };
 }

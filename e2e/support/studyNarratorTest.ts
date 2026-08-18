@@ -130,9 +130,6 @@ export const test = base.extend<{
         ...(services.projectPreview === undefined
           ? {}
           : { projectPreview: services.projectPreview }),
-        ...(services.renderPlans === undefined
-          ? {}
-          : { renderPlans: services.renderPlans }),
         ...(services.renders === undefined
           ? {}
           : { renders: services.renders }),

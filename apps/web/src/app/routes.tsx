@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes, useLocation } from "react-router";
-import type { PersistenceClient, ProjectPreviewClient, RenderClient, RenderPlanClient, ScratchpadClient, ScriptGenerationClient, SpeechCacheClient, SystemClient } from "@studynarrator/shared-types";
+import type { PersistenceClient, ProjectPreviewClient, RenderClient, ScratchpadClient, ScriptGenerationClient, SpeechCacheClient, SystemClient } from "@studynarrator/shared-types";
 import { DiagnosticsPage } from "@/pages/diagnostics/DiagnosticsPage.js";
 import { ProjectsPage } from "@/pages/projects/ProjectsPage.js";
 import { OnboardingPage } from "@/pages/onboarding/OnboardingPage.js";
@@ -33,12 +33,11 @@ interface AppRoutesProps {
   scratchpad: ScratchpadClient;
   projectPreview: ProjectPreviewClient;
   speechCache: SpeechCacheClient;
-  renderPlans: RenderPlanClient;
   renders?: RenderClient;
   scriptGeneration: ScriptGenerationClient;
 }
 
-export function AppRoutes({ analyzer, client, persistence, scratchpad, projectPreview, speechCache, renderPlans, renders, scriptGeneration }: AppRoutesProps) {
+export function AppRoutes({ analyzer, client, persistence, scratchpad, projectPreview, speechCache, renders, scriptGeneration }: AppRoutesProps) {
   const location = useLocation();
   const connections = useConnections();
   if (!connections.loading && connections.setup?.onboardingCompletedAt === null && location.pathname !== APP_PATHS.onboarding) {
@@ -49,8 +48,8 @@ export function AppRoutes({ analyzer, client, persistence, scratchpad, projectPr
       <Route element={<AppShell />}>
         <Route index element={<Navigate to={APP_PATHS.projects} replace />} />
         <Route path={APP_PATHS.onboarding} element={<OnboardingPage />} />
-        <Route path={APP_PATHS.projects} element={<ProjectsPage analyzer={analyzer} client={persistence} previewClient={projectPreview} renderPlanClient={renderPlans} {...(renders ? { renderClient: renders } : {})} />} />
-        <Route path={`${APP_PATHS.projects}/:projectId`} element={<ProjectsPage analyzer={analyzer} client={persistence} previewClient={projectPreview} renderPlanClient={renderPlans} {...(renders ? { renderClient: renders } : {})} />} />
+        <Route path={APP_PATHS.projects} element={<ProjectsPage analyzer={analyzer} client={persistence} previewClient={projectPreview} {...(renders ? { renderClient: renders } : {})} />} />
+        <Route path={`${APP_PATHS.projects}/:projectId`} element={<ProjectsPage analyzer={analyzer} client={persistence} previewClient={projectPreview} {...(renders ? { renderClient: renders } : {})} />} />
         <Route path={`${APP_PATHS.projects}/:projectId/script-generation`} element={<ScriptGenerationPage persistence={persistence} generation={scriptGeneration} />} />
         <Route path={APP_PATHS.scriptPrompts} element={<ScriptGenerationPage persistence={persistence} generation={scriptGeneration} />} />
         <Route path={APP_PATHS.settings} element={<Navigate to={APP_PATHS.settingsGeneral} replace />} />

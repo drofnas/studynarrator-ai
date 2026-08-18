@@ -8,7 +8,7 @@ import {
   createPersistenceService,
   createProjectPreviewService,
   createProjectSpeechCacheKeyPlanner,
-  createRenderPlanService,
+  createRenderPlanComputer,
   createRenderService,
   createScratchpadService,
   createScriptGenerationService,
@@ -66,7 +66,6 @@ export async function createServerServices(environment = process.env) {
   let voiceCatalog;
   let scratchpad;
   let projectPreview;
-  let renderPlans;
   let renders: RenderService | undefined;
   let scriptGeneration;
   try {
@@ -116,15 +115,9 @@ export async function createServerServices(environment = process.env) {
     const planStore = createRenderPlanStore(
       resolve(dataDirectory, "render-plans"),
     );
-    await planStore.migrateLegacy?.(
-      openedRepository
-        .listProjects()
-        .flatMap(({ id }) => openedRepository.listRenderJobs(id)),
-    );
-    renderPlans = createRenderPlanService({
+    const planComputer = createRenderPlanComputer({
       repository: openedRepository,
       cache,
-      store: planStore,
     });
     scriptGeneration = createScriptGenerationService({
       repository: openedRepository,
@@ -132,7 +125,7 @@ export async function createServerServices(environment = process.env) {
     renders = await createRenderService({
       repository: openedRepository,
       plans: planStore,
-      renderPlans,
+      planComputer,
       speech,
       dataDirectory,
       ...(environment.STUDYNARRATOR_FFMPEG_PATH
@@ -214,7 +207,6 @@ export async function createServerServices(environment = process.env) {
     voiceCatalog,
     scratchpad,
     projectPreview,
-    renderPlans,
     renders,
     scriptGeneration,
     speechCache,

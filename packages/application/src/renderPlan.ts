@@ -17,7 +17,6 @@ import {
   RenderPlanIdSchema,
   type ProjectSnapshot,
   type RenderPlan,
-  type RenderPlanClient,
   type RenderPlanEntry,
   type SystemTimingConfiguration,
   type SystemTransitionPauseSetting,
@@ -27,7 +26,6 @@ import {
   SPEECH_CHUNKING_VERSION,
   SPEECH_NORMALIZATION_VERSION,
   createPcmSilence,
-  type RenderPlanStore,
   type SpeechCache,
   withProjectSnapshotHash,
   withRenderPlanHash,
@@ -380,47 +378,6 @@ export function createRenderPlanComputer(dependencies: {
           },
         });
         return { snapshot, plan, silenceAssets };
-      } catch (error) {
-        throw safeError(error);
-      }
-    },
-  };
-}
-
-export function createRenderPlanService(dependencies: {
-  repository: RenderPlanRepository;
-  cache: SpeechCache;
-  store: RenderPlanStore;
-  createId?: () => string;
-  now?: () => Date;
-}): RenderPlanClient {
-  const computer = createRenderPlanComputer({
-    repository: dependencies.repository,
-    cache: dependencies.cache,
-    ...(dependencies.createId === undefined
-      ? {}
-      : { createId: dependencies.createId }),
-    ...(dependencies.now === undefined ? {} : { now: dependencies.now }),
-  });
-  return {
-    async create(projectId) {
-      const computed = await computer.compute(projectId);
-      return await dependencies.store.save(
-        computed.snapshot,
-        computed.plan,
-        computed.silenceAssets,
-      );
-    },
-    async list(projectId) {
-      try {
-        return await dependencies.store.list(ProjectIdSchema.parse(projectId));
-      } catch (error) {
-        throw safeError(error);
-      }
-    },
-    async get(planId) {
-      try {
-        return await dependencies.store.get(RenderPlanIdSchema.parse(planId));
       } catch (error) {
         throw safeError(error);
       }

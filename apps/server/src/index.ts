@@ -6,7 +6,18 @@ import { resolveServerRuntimeConfiguration } from "./runtimeConfig.js";
 
 const configuration = resolveServerRuntimeConfiguration();
 const runtime = await createServerServices();
-const { service, persistence, connection, voiceCatalog, scratchpad, projectPreview, renderPlans, renders, scriptGeneration, speechCache, context } = runtime;
+const {
+  service,
+  persistence,
+  connection,
+  voiceCatalog,
+  scratchpad,
+  projectPreview,
+  renders,
+  scriptGeneration,
+  speechCache,
+  context,
+} = runtime;
 const application = createExpressApp({
   service,
   persistence,
@@ -15,20 +26,33 @@ const application = createExpressApp({
   ...(voiceCatalog === undefined ? {} : { voiceCatalog }),
   ...(scratchpad === undefined ? {} : { scratchpad }),
   ...(projectPreview === undefined ? {} : { projectPreview }),
-  ...(renderPlans === undefined ? {} : { renderPlans }),
   ...(renders === undefined ? {} : { renders }),
   ...(scriptGeneration === undefined ? {} : { scriptGeneration }),
-  speechCache
+  speechCache,
 });
-const webEntryPoint = resolve(configuration.webDistributionDirectory, "index.html");
+const webEntryPoint = resolve(
+  configuration.webDistributionDirectory,
+  "index.html",
+);
 if (existsSync(webEntryPoint)) {
-  attachStaticWebApplication(application, configuration.webDistributionDirectory);
+  attachStaticWebApplication(
+    application,
+    configuration.webDistributionDirectory,
+  );
 } else if (configuration.requireWebDistribution) {
-  throw new Error(`StudyNarrator Web distribution is missing at ${webEntryPoint}.`);
+  throw new Error(
+    `StudyNarrator Web distribution is missing at ${webEntryPoint}.`,
+  );
 }
-const server = application.listen(configuration.port, configuration.host, () => {
-  console.log(`StudyNarrator ${configuration.distribution} server listening on http://${configuration.host}:${String(configuration.port)}`);
-});
+const server = application.listen(
+  configuration.port,
+  configuration.host,
+  () => {
+    console.log(
+      `StudyNarrator ${configuration.distribution} server listening on http://${configuration.host}:${String(configuration.port)}`,
+    );
+  },
+);
 
 function shutdown() {
   server.close(() => {

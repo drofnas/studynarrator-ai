@@ -21,11 +21,6 @@ import {
   ProjectPreviewResultSchema,
   ProjectReplaceRequestSchema,
   ProjectSummaryCollectionSchema,
-  RENDER_PLAN_CHANNELS,
-  RenderPlanIdInputSchema,
-  RenderPlanProjectInputSchema,
-  RenderPlanSchema,
-  RenderPlanSummaryCollectionSchema,
   RENDER_CHANNELS,
   RenderArtifactCollectionSchema,
   RenderArtifactExportResultSchema,
@@ -34,7 +29,6 @@ import {
   RenderIdInputSchema,
   RenderJobCollectionSchema,
   RenderJobSchema,
-  RenderPlanInputSchema,
   RenderProjectInputSchema,
   RenderSegmentInputSchema,
   RenderWaveformSchema,
@@ -65,7 +59,6 @@ import {
   type SpeachesConnectionClient,
   type PersistenceClient,
   type ProjectPreviewClient,
-  type RenderPlanClient,
   type ScratchpadClient,
   type SpeechCacheClient,
   type VoiceCatalogClient,
@@ -84,7 +77,6 @@ export const PUBLIC_IPC_CHANNEL_MANIFEST = Object.freeze([
   ...Object.values(SCRATCHPAD_CHANNELS),
   ...Object.values(PROJECT_PREVIEW_CHANNELS),
   ...Object.values(SPEECH_CACHE_CHANNELS),
-  ...Object.values(RENDER_PLAN_CHANNELS),
   ...Object.values(RENDER_CHANNELS),
   ...Object.values(SCRIPT_GENERATION_CHANNELS),
 ]);
@@ -438,58 +430,6 @@ export function registerSpeechCacheHandlers(
   });
 }
 
-export function registerRenderPlanHandlers(
-  ipcMain: IpcMainLike,
-  renderPlans: RenderPlanClient,
-) {
-  const handle = (
-    channel: string,
-    listener: (input: unknown) => Promise<unknown>,
-  ) => {
-    ipcMain.removeHandler(channel);
-    ipcMain.handle(channel, async (_event, input) => {
-      try {
-        return await listener(input);
-      } catch (error) {
-        const record =
-          error && typeof error === "object"
-            ? (error as Record<string, unknown>)
-            : undefined;
-        /* eslint-disable preserve-caught-error */
-        if (record && Array.isArray(record.issues))
-          throw new Error(
-            "The request does not match the render plan contract.",
-          );
-        if (
-          typeof record?.code === "string" &&
-          record.code.startsWith("RENDER_PLAN_") &&
-          typeof record.message === "string"
-        ) {
-          throw new Error(record.message);
-        }
-        throw new Error(
-          "StudyNarrator could not complete the render plan operation.",
-        );
-        /* eslint-enable preserve-caught-error */
-      }
-    });
-  };
-  handle(RENDER_PLAN_CHANNELS.create, async (input) => {
-    const { projectId } = RenderPlanProjectInputSchema.parse(input);
-    return RenderPlanSchema.parse(await renderPlans.create(projectId));
-  });
-  handle(RENDER_PLAN_CHANNELS.list, async (input) => {
-    const { projectId } = RenderPlanProjectInputSchema.parse(input);
-    return RenderPlanSummaryCollectionSchema.parse(
-      await renderPlans.list(projectId),
-    );
-  });
-  handle(RENDER_PLAN_CHANNELS.get, async (input) => {
-    const { planId } = RenderPlanIdInputSchema.parse(input);
-    return RenderPlanSchema.parse(await renderPlans.get(planId));
-  });
-}
-
 export function registerRenderHandlers(
   ipcMain: IpcMainLike,
   renders: RenderService,
@@ -522,13 +462,9 @@ export function registerRenderHandlers(
       }
     });
   };
-  handle(RENDER_CHANNELS.start, async (input) => {
-    const { planId } = RenderPlanInputSchema.parse(input);
-    return RenderJobSchema.parse(await renders.start(planId));
-  });
   handle(RENDER_CHANNELS.startProject, async (input) => {
     const { projectId } = RenderProjectInputSchema.parse(input);
-    return RenderJobSchema.parse(await renders.startProject!(projectId));
+    return RenderJobSchema.parse(await renders.startProject(projectId));
   });
   handle(RENDER_CHANNELS.list, async (input) => {
     const { projectId } = RenderProjectInputSchema.parse(input);

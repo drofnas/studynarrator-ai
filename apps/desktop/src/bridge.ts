@@ -13,9 +13,6 @@ import {
   PROJECT_PREVIEW_CHANNELS,
   ProjectPreviewResultSchema,
   ProjectSummaryCollectionSchema,
-  RENDER_PLAN_CHANNELS,
-  RenderPlanSchema,
-  RenderPlanSummaryCollectionSchema,
   RENDER_CHANNELS,
   RenderArtifactCollectionSchema,
   RenderArtifactExportResultSchema,
@@ -42,7 +39,6 @@ import {
   type SpeachesConnectionClient,
   type PersistenceClient,
   type ProjectPreviewClient,
-  type RenderPlanClient,
   type RenderClient,
   type ScratchpadClient,
   type ScriptGenerationClient,
@@ -240,29 +236,7 @@ export function createPreloadBridge(
       );
     },
   };
-  const renderPlans: RenderPlanClient = {
-    async create(projectId) {
-      return RenderPlanSchema.parse(
-        await invoke(RENDER_PLAN_CHANNELS.create, { projectId }),
-      );
-    },
-    async list(projectId) {
-      return RenderPlanSummaryCollectionSchema.parse(
-        await invoke(RENDER_PLAN_CHANNELS.list, { projectId }),
-      );
-    },
-    async get(planId) {
-      return RenderPlanSchema.parse(
-        await invoke(RENDER_PLAN_CHANNELS.get, { planId }),
-      );
-    },
-  };
   const renders: RenderClient = {
-    async start(planId) {
-      return RenderJobSchema.parse(
-        await invoke(RENDER_CHANNELS.start, { planId }),
-      );
-    },
     async startProject(projectId) {
       return RenderJobSchema.parse(
         await invoke(RENDER_CHANNELS.startProject, { projectId }),
@@ -372,7 +346,6 @@ export function createPreloadBridge(
     scratchpad: Object.freeze(scratchpad),
     projectPreview: Object.freeze(projectPreview),
     speechCache: Object.freeze(speechCache),
-    renderPlans: Object.freeze(renderPlans),
     renders: Object.freeze(renders),
     scriptGeneration: Object.freeze(scriptGeneration),
   });
