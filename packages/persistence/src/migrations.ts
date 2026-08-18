@@ -1,6 +1,9 @@
 import { chmod, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve } from "node:path";
-import { DATABASE_SCHEMA_VERSION } from "@studynarrator/shared-types";
+import {
+  DATABASE_SCHEMA_VERSION,
+  type PersistenceBackup,
+} from "@studynarrator/shared-types";
 import { MigrationFailureError, SchemaTooNewError } from "./errors.js";
 import {
   V1_GLOBAL_EXACT_TERM_LEXICON,
@@ -472,6 +475,24 @@ export async function listBackups(
         left.record.fileName.localeCompare(right.record.fileName),
     )
     .map(({ record }) => record);
+}
+
+/**
+ * The persisted records carry bookkeeping extras (`fileName`, `toVersion`)
+ * that are not part of the shared wire contract, so clients that parse
+ * against the strict `PersistenceBackup` schema need this projection.
+ */
+export async function listPersistenceBackups(
+  databasePath: string,
+): Promise<PersistenceBackup[]> {
+  return (await listBackups(databasePath)).map(
+    ({ path, fromVersion, createdAt, sizeBytes }) => ({
+      path,
+      fromVersion,
+      createdAt,
+      sizeBytes,
+    }),
+  );
 }
 
 export async function pruneBackups(

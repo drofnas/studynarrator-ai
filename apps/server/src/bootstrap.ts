@@ -31,7 +31,7 @@ import {
   MigrationFailureError,
   PersistenceConflictError,
   SchemaTooNewError,
-  listBackups,
+  listPersistenceBackups,
   openStudyNarratorRepository,
   restoreDatabaseFromBackup,
 } from "@studynarrator/persistence";
@@ -76,7 +76,7 @@ export async function createServerServices(environment = process.env) {
     });
     repository = openedRepository;
     const backups: PersistenceBackupsClient = {
-      list: () => listBackups(databasePath),
+      list: () => listPersistenceBackups(databasePath),
       restore: () => {
         throw new PersistenceConflictError(
           "Close StudyNarrator before restoring a backup; the database must not be open.",
@@ -149,7 +149,7 @@ export async function createServerServices(environment = process.env) {
       error instanceof SchemaTooNewError
         ? (error.backups[0]?.path ?? null)
         : error.backupPath;
-    const availableBackups = await listBackups(error.databasePath);
+    const availableBackups = await listPersistenceBackups(error.databasePath);
     storageFailure = {
       status: "fail",
       code: error.code,
@@ -158,7 +158,7 @@ export async function createServerServices(environment = process.env) {
       recoveryBackupPath,
     };
     const backups: PersistenceBackupsClient = {
-      list: () => listBackups(databasePath),
+      list: () => listPersistenceBackups(databasePath),
       restore: (input) =>
         restoreDatabaseFromBackup({
           databasePath,

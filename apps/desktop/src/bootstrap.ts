@@ -19,16 +19,34 @@ import {
   type DiagnosticsContext,
   type DiagnosticRepository,
   type RenderService,
-  type StorageCheck
+  type StorageCheck,
 } from "@studynarrator/application";
-import { MigrationFailureError, openStudyNarratorRepository } from "@studynarrator/persistence";
-import { DATABASE_SCHEMA_VERSION, PERSISTENCE_CONTRACT_VERSION, type PersistenceClient } from "@studynarrator/shared-types";
+import {
+  MigrationFailureError,
+  PersistenceConflictError,
+  SchemaTooNewError,
+  listPersistenceBackups,
+  openStudyNarratorRepository,
+  restoreDatabaseFromBackup,
+} from "@studynarrator/persistence";
+import {
+  DATABASE_SCHEMA_VERSION,
+  PERSISTENCE_CONTRACT_VERSION,
+  type PersistenceBackupsClient,
+  type PersistenceClient,
+} from "@studynarrator/shared-types";
 import { createFfmpegProbe } from "@studynarrator/runtime";
 import { createRenderPlanStore } from "@studynarrator/rendering";
 
-export function resolveDesktopDataDirectory(defaultDataDirectory: string, environment: NodeJS.ProcessEnv): string {
+export function resolveDesktopDataDirectory(
+  defaultDataDirectory: string,
+  environment: NodeJS.ProcessEnv,
+): string {
   return environment.STUDYNARRATOR_DATA_DIR
-    ? resolve(environment.INIT_CWD ?? process.cwd(), environment.STUDYNARRATOR_DATA_DIR)
+    ? resolve(
+        environment.INIT_CWD ?? process.cwd(),
+        environment.STUDYNARRATOR_DATA_DIR,
+      )
     : resolve(defaultDataDirectory);
 }
 
@@ -37,7 +55,10 @@ export async function createDesktopServices(options: {
   environment?: NodeJS.ProcessEnv;
 }) {
   const environment = options.environment ?? process.env;
-  const dataDirectory = resolveDesktopDataDirectory(options.defaultDataDirectory, environment);
+  const dataDirectory = resolveDesktopDataDirectory(
+    options.defaultDataDirectory,
+    environment,
+  );
   const databasePath = resolve(dataDirectory, "studynarrator.sqlite");
   let storageFailure: StorageCheck | undefined;
   let persistence: PersistenceClient;
@@ -52,58 +73,120 @@ export async function createDesktopServices(options: {
   const cache = createApplicationSpeechCache(dataDirectory);
   const speechCache = createSpeechCacheService(cache);
   try {
-    const openedRepository = await openStudyNarratorRepository({ Database, databasePath });
+    const openedRepository = await openStudyNarratorRepository({
+      Database,
+      databasePath,
+    });
     repository = openedRepository;
-    persistence = createPersistenceService(openedRepository, { projectSpeechCacheKeys: createProjectSpeechCacheKeyPlanner(openedRepository) });
+    const backups: PersistenceBackupsClient = {
+      list: () => listPersistenceBackups(databasePath),
+      restore: () => {
+        throw new PersistenceConflictError(
+          "Close StudyNarrator before restoring a backup; the database must not be open.",
+        );
+      },
+    };
+    persistence = createPersistenceService(openedRepository, {
+      projectSpeechCacheKeys:
+        createProjectSpeechCacheKeyPlanner(openedRepository),
+      backups,
+    });
     const context = {
       client: "electron" as const,
       nodeVersion: process.versions.node,
-      electronVersion: process.versions.electron ?? null
+      electronVersion: process.versions.electron ?? null,
     };
     connection = createConnectionService({
       repository: openedRepository,
-      context
+      context,
     });
-    voiceCatalog = createVoiceCatalogService({ repository: openedRepository, bundledCatalogs: BUNDLED_VOICE_CATALOGS });
-    const speech = createCachedSpeechSynthesis({ repository: openedRepository, cache });
-    scratchpad = createScratchpadService({ repository: openedRepository, cache });
-    projectPreview = createProjectPreviewService({ repository: openedRepository, speech });
-    const planStore = createRenderPlanStore(resolve(dataDirectory, "render-plans"));
-    await planStore.migrateLegacy?.(openedRepository.listProjects().flatMap(({ id }) => openedRepository.listRenderJobs(id)));
+    voiceCatalog = createVoiceCatalogService({
+      repository: openedRepository,
+      bundledCatalogs: BUNDLED_VOICE_CATALOGS,
+    });
+    const speech = createCachedSpeechSynthesis({
+      repository: openedRepository,
+      cache,
+    });
+    scratchpad = createScratchpadService({
+      repository: openedRepository,
+      cache,
+    });
+    projectPreview = createProjectPreviewService({
+      repository: openedRepository,
+      speech,
+    });
+    const planStore = createRenderPlanStore(
+      resolve(dataDirectory, "render-plans"),
+    );
+    await planStore.migrateLegacy?.(
+      openedRepository
+        .listProjects()
+        .flatMap(({ id }) => openedRepository.listRenderJobs(id)),
+    );
     renderPlans = createRenderPlanService({
       repository: openedRepository,
       cache,
-      store: planStore
+      store: planStore,
     });
-    scriptGeneration = createScriptGenerationService({ repository: openedRepository });
+    scriptGeneration = createScriptGenerationService({
+      repository: openedRepository,
+    });
     renders = await createRenderService({
       repository: openedRepository,
       plans: planStore,
       renderPlans,
       speech,
       dataDirectory,
-      ...(environment.STUDYNARRATOR_FFMPEG_PATH ? { ffmpegPath: environment.STUDYNARRATOR_FFMPEG_PATH } : {})
+      ...(environment.STUDYNARRATOR_FFMPEG_PATH
+        ? { ffmpegPath: environment.STUDYNARRATOR_FFMPEG_PATH }
+        : {}),
     });
   } catch (error) {
-    if (!(error instanceof MigrationFailureError)) throw error;
+    if (
+      !(error instanceof MigrationFailureError) &&
+      !(error instanceof SchemaTooNewError)
+    )
+      throw error;
+    const recoveryBackupPath =
+      error instanceof SchemaTooNewError
+        ? (error.backups[0]?.path ?? null)
+        : error.backupPath;
     storageFailure = {
       status: "fail",
       code: error.code,
       message: error.message,
       databasePath: error.databasePath,
-      recoveryBackupPath: error.backupPath
+      recoveryBackupPath,
     };
-    persistence = createUnavailablePersistenceService({
-      contractVersion: PERSISTENCE_CONTRACT_VERSION,
-      state: "unavailable",
-      databaseSchemaVersion: error.databaseSchemaVersion,
-      targetDatabaseSchemaVersion: DATABASE_SCHEMA_VERSION,
-      databasePath: error.databasePath,
-      latestBackupPath: error.backupPath,
-      code: "MIGRATION_FAILED",
-      message: error.message
-    });
-    repository = { runMarker: () => { throw error; }, close: () => undefined };
+    const backups: PersistenceBackupsClient = {
+      list: () => listPersistenceBackups(databasePath),
+      restore: (input) =>
+        restoreDatabaseFromBackup({
+          databasePath,
+          backupPath: input.backupPath,
+        }),
+    };
+    persistence = createUnavailablePersistenceService(
+      {
+        contractVersion: PERSISTENCE_CONTRACT_VERSION,
+        state: "unavailable",
+        databaseSchemaVersion: error.databaseSchemaVersion,
+        targetDatabaseSchemaVersion: DATABASE_SCHEMA_VERSION,
+        databasePath: error.databasePath,
+        latestBackupPath: recoveryBackupPath,
+        code: error.code,
+        message: error.message,
+        availableBackups: await listPersistenceBackups(databasePath),
+      },
+      { backups },
+    );
+    repository = {
+      runMarker: () => {
+        throw error;
+      },
+      close: () => undefined,
+    };
   }
   const service = createSystemService({
     repository,
@@ -111,8 +194,8 @@ export async function createDesktopServices(options: {
     ffmpegProbe: createFfmpegProbe(
       environment.STUDYNARRATOR_FFMPEG_PATH
         ? { executable: environment.STUDYNARRATOR_FFMPEG_PATH }
-        : {}
-    )
+        : {},
+    ),
   });
   const context: DiagnosticsContext = {
     client: "electron",
@@ -124,11 +207,24 @@ export async function createDesktopServices(options: {
     platform: process.platform,
     architecture: process.arch,
     dataDirectory,
-    sourceRevision: environment.STUDYNARRATOR_SOURCE_REVISION?.trim() || "development"
+    sourceRevision:
+      environment.STUDYNARRATOR_SOURCE_REVISION?.trim() || "development",
   };
   return {
-    service, persistence, connection, voiceCatalog, scratchpad, projectPreview, renderPlans, renders, scriptGeneration,
-    speechCache, context,
-    dispose: async () => { await renders?.close(); repository.close(); }
+    service,
+    persistence,
+    connection,
+    voiceCatalog,
+    scratchpad,
+    projectPreview,
+    renderPlans,
+    renders,
+    scriptGeneration,
+    speechCache,
+    context,
+    dispose: async () => {
+      await renders?.close();
+      repository.close();
+    },
   };
 }

@@ -71,7 +71,6 @@ import {
   type ScriptGenerationService,
   type SystemService,
 } from "@studynarrator/application";
-import { BackupRestoreError } from "@studynarrator/persistence";
 
 function streamRenderMedia(
   request: Request,

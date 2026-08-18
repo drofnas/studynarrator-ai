@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_SYSTEM_TIMING,
   type IgnoredDiagnosticCollection,
+  type PersistenceClient,
   type SystemTimingConfiguration,
 } from "@studynarrator/shared-types";
 import { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
@@ -41,9 +42,7 @@ function backupsProvider(
   };
 }
 
-function requireBackups(
-  client: import("@studynarrator/shared-types").PersistenceClient,
-) {
+function requireBackups(client: PersistenceClient) {
   if (client.backups === undefined)
     throw new Error("persistence.backups client is required");
   return client.backups;

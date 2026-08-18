@@ -7,6 +7,7 @@ export {
 } from "./errors.js";
 export {
   listBackups,
+  listPersistenceBackups,
   migrateDatabase,
   pruneBackups,
   STUDYNARRATOR_MIGRATIONS,
