@@ -19,7 +19,7 @@ import {
   type RenderPlanStore,
 } from "@studynarrator/rendering";
 import { createRenderService, type RenderRepository } from "./render.js";
-import { type ComputedRenderPlan } from "./renderPlan.js";
+import type { ComputedRenderPlan } from "./renderPlan.js";
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -301,8 +301,7 @@ async function terminal(
 
 describe("render coordinator", () => {
   it("synthesizes, normalizes, encodes, validates, and atomically publishes the v1 bundle", async () => {
-    const { service, repository, dataDirectory, projectId } =
-      await fixture();
+    const { service, repository, dataDirectory, projectId } = await fixture();
     const started = await service.startProject(projectId);
     await expect(service.startProject(projectId)).resolves.toHaveProperty(
       "id",
