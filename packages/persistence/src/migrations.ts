@@ -348,63 +348,6 @@ export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
 interface VersionRow {
   version: number;
 }
-interface NameRow {
-  name: string;
-}
-
-const BASELINE_TABLES = Object.freeze([
-  "connection_setup",
-  "diagnostic_kv",
-  "ignored_diagnostic_patterns",
-  "lexicon_entries",
-  "project_speech_cache_keys",
-  "projects",
-  "render_artifacts",
-  "render_jobs",
-  "render_segments",
-  "schema_migrations",
-  "speaches_connection",
-  "speaker_mappings",
-  "speech_cache_deletion_queue",
-  "system_pause_presets",
-  "system_timing",
-  "voice_catalog_overrides",
-]);
-
-function validateBaselineSchema(database: DatabaseLike): void {
-  const tables = (
-    database
-      .prepare(`
-    SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name
-  `)
-      .all() as NameRow[]
-  ).map(({ name }) => name);
-  if (JSON.stringify(tables) !== JSON.stringify(BASELINE_TABLES)) {
-    throw new Error(
-      "The database does not match the StudyNarrator v1 baseline.",
-    );
-  }
-  const projectColumns = (
-    database.prepare("PRAGMA table_info(projects)").all() as NameRow[]
-  ).map(({ name }) => name);
-  if (
-    JSON.stringify(projectColumns) !==
-    JSON.stringify([
-      "id",
-      "name",
-      "description",
-      "script_source",
-      "script_hash",
-      "created_at",
-      "updated_at",
-    ])
-  ) {
-    throw new Error(
-      "The projects table does not match the StudyNarrator v1 baseline.",
-    );
-  }
-}
-
 interface MigrationResult {
   database: DatabaseLike;
   databasePath: string;
@@ -459,7 +402,11 @@ async function latestBackup(databasePath: string): Promise<string | null> {
         return { path, modifiedAt: (await stat(path)).mtimeMs };
       }),
     );
-    dated.sort((left, right) => left.modifiedAt - right.modifiedAt || left.path.localeCompare(right.path));
+    dated.sort(
+      (left, right) =>
+        left.modifiedAt - right.modifiedAt ||
+        left.path.localeCompare(right.path),
+    );
     return dated.at(-1)!.path;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
@@ -560,7 +507,6 @@ export async function migrateDatabase(options: {
         throw error;
       }
     }
-    if (options.migrations === undefined) validateBaselineSchema(database);
     await chmod(options.databasePath, 0o600);
     backupPath ??= await latestBackup(options.databasePath);
     return {
