@@ -1,0 +1,611 @@
+// Frozen seed data for database migrations.
+//
+// DO NOT EDIT existing values in this file. These literals record what a
+// migration inserted at the time it shipped. Changing them changes history and
+// makes freshly created databases diverge from migrated ones.
+//
+// To change application defaults, edit packages/shared-types/src/persistence.ts
+// and add a NEW migration that reconciles existing rows.
+
+
+export const V1_SYSTEM_TIMING = {
+  pausePresets: [
+    {
+      pauseId: "pause_short",
+      durationMs: 350,
+      description: "Brief thinking beat or speaker handoff."
+    },
+    {
+      pauseId: "pause_medium",
+      durationMs: 750,
+      description: "Paragraph or subtopic separation."
+    },
+    {
+      pauseId: "pause_long",
+      durationMs: 1500,
+      description: "Major subject or section separation."
+    }
+  ],
+  transitionPauses: {
+    paragraph: {
+      mode: "preset",
+      pauseId: "pause_medium"
+    },
+    speakerChange: {
+      mode: "none"
+    },
+    section: {
+      mode: "none"
+    }
+  }
+};
+
+export const V1_GLOBAL_EXACT_TERM_LEXICON = [
+    {
+    id: "10000000-0000-4000-8000-000000000001",
+    scope: "global",
+    entryType: "exactTerm",
+    displayText: "API",
+    spokenText: "A P I",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000002",
+    scope: "global",
+    entryType: "exactTerm",
+    displayText: "URL",
+    spokenText: "U R L",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000003",
+    scope: "global",
+    entryType: "exactTerm",
+    displayText: "HTTP",
+    spokenText: "H T T P",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000004",
+    scope: "global",
+    entryType: "exactTerm",
+    displayText: "HTTPS",
+    spokenText: "H T T P S",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000005",
+    scope: "global",
+    entryType: "exactTerm",
+    displayText: "JSON",
+    spokenText: "jay son",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000006",
+    scope: "global",
+    entryType: "exactTerm",
+    displayText: "SQL",
+    spokenText: "S Q L",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000007",
+    scope: "global",
+    entryType: "exactTerm",
+    displayText: "PostgreSQL",
+    spokenText: "post gres Q L",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000008",
+    scope: "global",
+    entryType: "exactTerm",
+    displayText: "GitHub",
+    spokenText: "git hub",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+];
+
+export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
+    {
+    id: "10000000-0000-4000-8000-000000000009",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "resume",
+    senseId: "cv",
+    spokenText: "rez oo may",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000010",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "resume",
+    senseId: "continue",
+    spokenText: "ree zoom",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000011",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "read",
+    senseId: "present",
+    spokenText: "reed",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000012",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "read",
+    senseId: "past",
+    spokenText: "red",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000013",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "lead",
+    senseId: "guide",
+    spokenText: "leed",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000014",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "lead",
+    senseId: "metal",
+    spokenText: "led",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000015",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "live",
+    senseId: "exist",
+    spokenText: "liv",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000016",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "live",
+    senseId: "realtime",
+    spokenText: "lyve",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000017",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "record",
+    senseId: "noun",
+    spokenText: "reck erd",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000018",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "record",
+    senseId: "verb",
+    spokenText: "ree cord",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000019",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "project",
+    senseId: "noun",
+    spokenText: "prah jekt",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000020",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "project",
+    senseId: "verb",
+    spokenText: "pruh jekt",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000021",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "object",
+    senseId: "thing",
+    spokenText: "ob jekt",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000022",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "object",
+    senseId: "oppose",
+    spokenText: "ub jekt",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000023",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "subject",
+    senseId: "topic",
+    spokenText: "sub jekt",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000024",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "subject",
+    senseId: "expose",
+    spokenText: "sub jekt",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000025",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "present",
+    senseId: "current",
+    spokenText: "prez ent",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000026",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "present",
+    senseId: "give",
+    spokenText: "pree zent",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000027",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "content",
+    senseId: "material",
+    spokenText: "con tent",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000028",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "content",
+    senseId: "satisfied",
+    spokenText: "kun tent",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000029",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "minute",
+    senseId: "time",
+    spokenText: "min it",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000030",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "minute",
+    senseId: "tiny",
+    spokenText: "my noot",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000031",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "close",
+    senseId: "near",
+    spokenText: "klohs",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000032",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "close",
+    senseId: "shut",
+    spokenText: "klohz",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000033",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "use",
+    senseId: "noun",
+    spokenText: "yoos",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000034",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "use",
+    senseId: "verb",
+    spokenText: "yooz",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000035",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "attribute",
+    senseId: "property",
+    spokenText: "at trih byoot",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000036",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "attribute",
+    senseId: "assign",
+    spokenText: "uh trib yoot",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000037",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "import",
+    senseId: "noun",
+    spokenText: "im port",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000038",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "import",
+    senseId: "verb",
+    spokenText: "im port",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000039",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "export",
+    senseId: "noun",
+    spokenText: "eks port",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000040",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "export",
+    senseId: "verb",
+    spokenText: "ik sport",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000041",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "row",
+    senseId: "line",
+    spokenText: "roh",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000042",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "row",
+    senseId: "argument",
+    spokenText: "rau",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000043",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "axes",
+    senseId: "math",
+    spokenText: "ak seez",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+    {
+    id: "10000000-0000-4000-8000-000000000044",
+    scope: "global",
+    entryType: "namedSense",
+    displayText: "axes",
+    senseId: "tools",
+    spokenText: "ak siz",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: ""
+  },
+];

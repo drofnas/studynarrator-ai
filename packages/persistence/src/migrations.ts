@@ -1,12 +1,12 @@
 import { chmod, mkdir, readdir, stat } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
-import {
-  DATABASE_SCHEMA_VERSION,
-  DEFAULT_GLOBAL_LEXICON,
-  DEFAULT_GLOBAL_NAMED_SENSE_LEXICON,
-  DEFAULT_SYSTEM_TIMING,
-} from "@studynarrator/shared-types";
+import { DATABASE_SCHEMA_VERSION } from "@studynarrator/shared-types";
 import { MigrationFailureError } from "./errors.js";
+import {
+  V1_GLOBAL_EXACT_TERM_LEXICON,
+  V1_SYSTEM_TIMING,
+  V3_GLOBAL_NAMED_SENSE_LEXICON,
+} from "./migrationSeeds.js";
 
 interface StatementLike {
   run(...parameters: unknown[]): { changes?: number | bigint };
@@ -228,11 +228,15 @@ function applyBaseline(database: DatabaseLike): void {
     .run(timestamp);
 
   const transition = (
-    setting: typeof DEFAULT_SYSTEM_TIMING.transitionPauses.paragraph,
+    setting: {
+      mode: string;
+      pauseId?: string;
+      durationMs?: number;
+    },
   ): [string, string | null, number | null] => {
     if (setting.mode === "none") return [setting.mode, null, null];
-    if (setting.mode === "preset") return [setting.mode, setting.pauseId, null];
-    return [setting.mode, null, setting.durationMs];
+    if (setting.mode === "preset") return [setting.mode, setting.pauseId ?? null, null];
+    return [setting.mode, null, setting.durationMs ?? null];
   };
   database
     .prepare(`
@@ -244,15 +248,15 @@ function applyBaseline(database: DatabaseLike): void {
     ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
     .run(
-      ...transition(DEFAULT_SYSTEM_TIMING.transitionPauses.paragraph),
-      ...transition(DEFAULT_SYSTEM_TIMING.transitionPauses.speakerChange),
-      ...transition(DEFAULT_SYSTEM_TIMING.transitionPauses.section),
+      ...transition(V1_SYSTEM_TIMING.transitionPauses.paragraph),
+      ...transition(V1_SYSTEM_TIMING.transitionPauses.speakerChange),
+      ...transition(V1_SYSTEM_TIMING.transitionPauses.section),
       timestamp,
     );
   const insertPause = database.prepare(
     "INSERT INTO system_pause_presets (pause_id, ordinal, duration_ms, description) VALUES (?, ?, ?, ?)",
   );
-  DEFAULT_SYSTEM_TIMING.pausePresets.forEach((pause, ordinal) => {
+  V1_SYSTEM_TIMING.pausePresets.forEach((pause, ordinal) => {
     insertPause.run(
       pause.pauseId,
       ordinal,
@@ -266,13 +270,13 @@ function applyBaseline(database: DatabaseLike): void {
       case_sensitive, whole_word, priority, enabled, notes, created_at, updated_at
     ) VALUES (?, 'global', NULL, ?, ?, ?, ?, ?, 0, 1, 0, ?, '', ?, ?)
   `);
-  DEFAULT_GLOBAL_LEXICON.forEach((entry, ordinal) => {
+  V1_GLOBAL_EXACT_TERM_LEXICON.forEach((entry, ordinal) => {
     insertLexicon.run(
       entry.id,
       ordinal,
       entry.entryType,
       entry.displayText,
-      entry.entryType === "namedSense" ? entry.senseId : null,
+      null,
       entry.spokenText,
       entry.enabled ? 1 : 0,
       timestamp,
@@ -301,7 +305,7 @@ function addGlobalNamedSenseDefaults(database: DatabaseLike): void {
       case_sensitive, whole_word, priority, enabled, notes, created_at, updated_at
     ) VALUES (?, 'global', NULL, ?, 'namedSense', ?, ?, ?, 0, 1, 0, 1, '', ?, ?)
   `);
-  for (const entry of DEFAULT_GLOBAL_NAMED_SENSE_LEXICON) {
+  for (const entry of V3_GLOBAL_NAMED_SENSE_LEXICON) {
     if (existing.get(entry.displayText, entry.senseId)) continue;
     const result = insert.run(
       entry.id,

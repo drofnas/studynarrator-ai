@@ -115,6 +115,67 @@ describe("database baseline", () => {
     second.database.close();
   });
 
+  it("seeds the same global lexicon rows a pre-change database contains", async () => {
+    const databasePath = await temporaryDatabase("studynarrator-frozen-seed-");
+    const first = await migrateDatabase({
+      Database: DatabaseAdapter,
+      databasePath,
+    });
+    expect(
+      first.database
+        .prepare(
+          "SELECT id, entry_type, display_text, sense_id, spoken_text FROM lexicon_entries WHERE scope = 'global' ORDER BY id",
+        )
+        .all(),
+    ).toEqual([
+        { id: "10000000-0000-4000-8000-000000000001", entry_type: "exactTerm", display_text: "API", sense_id: null, spoken_text: "A P I" },
+        { id: "10000000-0000-4000-8000-000000000002", entry_type: "exactTerm", display_text: "URL", sense_id: null, spoken_text: "U R L" },
+        { id: "10000000-0000-4000-8000-000000000003", entry_type: "exactTerm", display_text: "HTTP", sense_id: null, spoken_text: "H T T P" },
+        { id: "10000000-0000-4000-8000-000000000004", entry_type: "exactTerm", display_text: "HTTPS", sense_id: null, spoken_text: "H T T P S" },
+        { id: "10000000-0000-4000-8000-000000000005", entry_type: "exactTerm", display_text: "JSON", sense_id: null, spoken_text: "jay son" },
+        { id: "10000000-0000-4000-8000-000000000006", entry_type: "exactTerm", display_text: "SQL", sense_id: null, spoken_text: "S Q L" },
+        { id: "10000000-0000-4000-8000-000000000007", entry_type: "exactTerm", display_text: "PostgreSQL", sense_id: null, spoken_text: "post gres Q L" },
+        { id: "10000000-0000-4000-8000-000000000008", entry_type: "exactTerm", display_text: "GitHub", sense_id: null, spoken_text: "git hub" },
+        { id: "10000000-0000-4000-8000-000000000009", entry_type: "namedSense", display_text: "resume", sense_id: "cv", spoken_text: "rez oo may" },
+        { id: "10000000-0000-4000-8000-000000000010", entry_type: "namedSense", display_text: "resume", sense_id: "continue", spoken_text: "ree zoom" },
+        { id: "10000000-0000-4000-8000-000000000011", entry_type: "namedSense", display_text: "read", sense_id: "present", spoken_text: "reed" },
+        { id: "10000000-0000-4000-8000-000000000012", entry_type: "namedSense", display_text: "read", sense_id: "past", spoken_text: "red" },
+        { id: "10000000-0000-4000-8000-000000000013", entry_type: "namedSense", display_text: "lead", sense_id: "guide", spoken_text: "leed" },
+        { id: "10000000-0000-4000-8000-000000000014", entry_type: "namedSense", display_text: "lead", sense_id: "metal", spoken_text: "led" },
+        { id: "10000000-0000-4000-8000-000000000015", entry_type: "namedSense", display_text: "live", sense_id: "exist", spoken_text: "liv" },
+        { id: "10000000-0000-4000-8000-000000000016", entry_type: "namedSense", display_text: "live", sense_id: "realtime", spoken_text: "lyve" },
+        { id: "10000000-0000-4000-8000-000000000017", entry_type: "namedSense", display_text: "record", sense_id: "noun", spoken_text: "reck erd" },
+        { id: "10000000-0000-4000-8000-000000000018", entry_type: "namedSense", display_text: "record", sense_id: "verb", spoken_text: "ree cord" },
+        { id: "10000000-0000-4000-8000-000000000019", entry_type: "namedSense", display_text: "project", sense_id: "noun", spoken_text: "prah jekt" },
+        { id: "10000000-0000-4000-8000-000000000020", entry_type: "namedSense", display_text: "project", sense_id: "verb", spoken_text: "pruh jekt" },
+        { id: "10000000-0000-4000-8000-000000000021", entry_type: "namedSense", display_text: "object", sense_id: "thing", spoken_text: "ob jekt" },
+        { id: "10000000-0000-4000-8000-000000000022", entry_type: "namedSense", display_text: "object", sense_id: "oppose", spoken_text: "ub jekt" },
+        { id: "10000000-0000-4000-8000-000000000023", entry_type: "namedSense", display_text: "subject", sense_id: "topic", spoken_text: "sub jekt" },
+        { id: "10000000-0000-4000-8000-000000000024", entry_type: "namedSense", display_text: "subject", sense_id: "expose", spoken_text: "sub jekt" },
+        { id: "10000000-0000-4000-8000-000000000025", entry_type: "namedSense", display_text: "present", sense_id: "current", spoken_text: "prez ent" },
+        { id: "10000000-0000-4000-8000-000000000026", entry_type: "namedSense", display_text: "present", sense_id: "give", spoken_text: "pree zent" },
+        { id: "10000000-0000-4000-8000-000000000027", entry_type: "namedSense", display_text: "content", sense_id: "material", spoken_text: "con tent" },
+        { id: "10000000-0000-4000-8000-000000000028", entry_type: "namedSense", display_text: "content", sense_id: "satisfied", spoken_text: "kun tent" },
+        { id: "10000000-0000-4000-8000-000000000029", entry_type: "namedSense", display_text: "minute", sense_id: "time", spoken_text: "min it" },
+        { id: "10000000-0000-4000-8000-000000000030", entry_type: "namedSense", display_text: "minute", sense_id: "tiny", spoken_text: "my noot" },
+        { id: "10000000-0000-4000-8000-000000000031", entry_type: "namedSense", display_text: "close", sense_id: "near", spoken_text: "klohs" },
+        { id: "10000000-0000-4000-8000-000000000032", entry_type: "namedSense", display_text: "close", sense_id: "shut", spoken_text: "klohz" },
+        { id: "10000000-0000-4000-8000-000000000033", entry_type: "namedSense", display_text: "use", sense_id: "noun", spoken_text: "yoos" },
+        { id: "10000000-0000-4000-8000-000000000034", entry_type: "namedSense", display_text: "use", sense_id: "verb", spoken_text: "yooz" },
+        { id: "10000000-0000-4000-8000-000000000035", entry_type: "namedSense", display_text: "attribute", sense_id: "property", spoken_text: "at trih byoot" },
+        { id: "10000000-0000-4000-8000-000000000036", entry_type: "namedSense", display_text: "attribute", sense_id: "assign", spoken_text: "uh trib yoot" },
+        { id: "10000000-0000-4000-8000-000000000037", entry_type: "namedSense", display_text: "import", sense_id: "noun", spoken_text: "im port" },
+        { id: "10000000-0000-4000-8000-000000000038", entry_type: "namedSense", display_text: "import", sense_id: "verb", spoken_text: "im port" },
+        { id: "10000000-0000-4000-8000-000000000039", entry_type: "namedSense", display_text: "export", sense_id: "noun", spoken_text: "eks port" },
+        { id: "10000000-0000-4000-8000-000000000040", entry_type: "namedSense", display_text: "export", sense_id: "verb", spoken_text: "ik sport" },
+        { id: "10000000-0000-4000-8000-000000000041", entry_type: "namedSense", display_text: "row", sense_id: "line", spoken_text: "roh" },
+        { id: "10000000-0000-4000-8000-000000000042", entry_type: "namedSense", display_text: "row", sense_id: "argument", spoken_text: "rau" },
+        { id: "10000000-0000-4000-8000-000000000043", entry_type: "namedSense", display_text: "axes", sense_id: "math", spoken_text: "ak seez" },
+        { id: "10000000-0000-4000-8000-000000000044", entry_type: "namedSense", display_text: "axes", sense_id: "tools", spoken_text: "ak siz" },
+    ]);
+    first.database.close();
+  });
+
   it("adds named-sense defaults once to schema-v2 data without overwriting user choices", async () => {
     const databasePath = await temporaryDatabase(
       "studynarrator-v3-named-senses-",
