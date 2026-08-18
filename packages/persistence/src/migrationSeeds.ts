@@ -7,41 +7,40 @@
 // To change application defaults, edit packages/shared-types/src/persistence.ts
 // and add a NEW migration that reconciles existing rows.
 
-
 export const V1_SYSTEM_TIMING = {
   pausePresets: [
     {
       pauseId: "pause_short",
       durationMs: 350,
-      description: "Brief thinking beat or speaker handoff."
+      description: "Brief thinking beat or speaker handoff.",
     },
     {
       pauseId: "pause_medium",
       durationMs: 750,
-      description: "Paragraph or subtopic separation."
+      description: "Paragraph or subtopic separation.",
     },
     {
       pauseId: "pause_long",
       durationMs: 1500,
-      description: "Major subject or section separation."
-    }
+      description: "Major subject or section separation.",
+    },
   ],
   transitionPauses: {
     paragraph: {
       mode: "preset",
-      pauseId: "pause_medium"
+      pauseId: "pause_medium",
     },
     speakerChange: {
-      mode: "none"
+      mode: "none",
     },
     section: {
-      mode: "none"
-    }
-  }
+      mode: "none",
+    },
+  },
 };
 
 export const V1_GLOBAL_EXACT_TERM_LEXICON = [
-    {
+  {
     id: "10000000-0000-4000-8000-000000000001",
     scope: "global",
     entryType: "exactTerm",
@@ -51,9 +50,9 @@ export const V1_GLOBAL_EXACT_TERM_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000002",
     scope: "global",
     entryType: "exactTerm",
@@ -63,9 +62,9 @@ export const V1_GLOBAL_EXACT_TERM_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000003",
     scope: "global",
     entryType: "exactTerm",
@@ -75,9 +74,9 @@ export const V1_GLOBAL_EXACT_TERM_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000004",
     scope: "global",
     entryType: "exactTerm",
@@ -87,9 +86,9 @@ export const V1_GLOBAL_EXACT_TERM_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000005",
     scope: "global",
     entryType: "exactTerm",
@@ -99,9 +98,9 @@ export const V1_GLOBAL_EXACT_TERM_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000006",
     scope: "global",
     entryType: "exactTerm",
@@ -111,9 +110,9 @@ export const V1_GLOBAL_EXACT_TERM_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000007",
     scope: "global",
     entryType: "exactTerm",
@@ -123,9 +122,9 @@ export const V1_GLOBAL_EXACT_TERM_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000008",
     scope: "global",
     entryType: "exactTerm",
@@ -135,12 +134,12 @@ export const V1_GLOBAL_EXACT_TERM_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
 ];
 
 export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
-    {
+  {
     id: "10000000-0000-4000-8000-000000000009",
     scope: "global",
     entryType: "namedSense",
@@ -151,9 +150,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000010",
     scope: "global",
     entryType: "namedSense",
@@ -164,9 +163,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000011",
     scope: "global",
     entryType: "namedSense",
@@ -177,9 +176,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000012",
     scope: "global",
     entryType: "namedSense",
@@ -190,9 +189,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000013",
     scope: "global",
     entryType: "namedSense",
@@ -203,9 +202,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000014",
     scope: "global",
     entryType: "namedSense",
@@ -216,9 +215,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000015",
     scope: "global",
     entryType: "namedSense",
@@ -229,9 +228,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000016",
     scope: "global",
     entryType: "namedSense",
@@ -242,9 +241,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000017",
     scope: "global",
     entryType: "namedSense",
@@ -255,9 +254,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000018",
     scope: "global",
     entryType: "namedSense",
@@ -268,9 +267,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000019",
     scope: "global",
     entryType: "namedSense",
@@ -281,9 +280,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000020",
     scope: "global",
     entryType: "namedSense",
@@ -294,9 +293,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000021",
     scope: "global",
     entryType: "namedSense",
@@ -307,9 +306,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000022",
     scope: "global",
     entryType: "namedSense",
@@ -320,9 +319,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000023",
     scope: "global",
     entryType: "namedSense",
@@ -333,9 +332,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000024",
     scope: "global",
     entryType: "namedSense",
@@ -346,9 +345,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000025",
     scope: "global",
     entryType: "namedSense",
@@ -359,9 +358,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000026",
     scope: "global",
     entryType: "namedSense",
@@ -372,9 +371,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000027",
     scope: "global",
     entryType: "namedSense",
@@ -385,9 +384,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000028",
     scope: "global",
     entryType: "namedSense",
@@ -398,9 +397,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000029",
     scope: "global",
     entryType: "namedSense",
@@ -411,9 +410,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000030",
     scope: "global",
     entryType: "namedSense",
@@ -424,9 +423,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000031",
     scope: "global",
     entryType: "namedSense",
@@ -437,9 +436,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000032",
     scope: "global",
     entryType: "namedSense",
@@ -450,9 +449,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000033",
     scope: "global",
     entryType: "namedSense",
@@ -463,9 +462,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000034",
     scope: "global",
     entryType: "namedSense",
@@ -476,9 +475,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000035",
     scope: "global",
     entryType: "namedSense",
@@ -489,9 +488,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000036",
     scope: "global",
     entryType: "namedSense",
@@ -502,9 +501,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000037",
     scope: "global",
     entryType: "namedSense",
@@ -515,9 +514,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000038",
     scope: "global",
     entryType: "namedSense",
@@ -528,9 +527,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000039",
     scope: "global",
     entryType: "namedSense",
@@ -541,9 +540,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000040",
     scope: "global",
     entryType: "namedSense",
@@ -554,9 +553,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000041",
     scope: "global",
     entryType: "namedSense",
@@ -567,9 +566,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000042",
     scope: "global",
     entryType: "namedSense",
@@ -580,9 +579,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000043",
     scope: "global",
     entryType: "namedSense",
@@ -593,9 +592,9 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
-    {
+  {
     id: "10000000-0000-4000-8000-000000000044",
     scope: "global",
     entryType: "namedSense",
@@ -606,6 +605,6 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
-    notes: ""
+    notes: "",
   },
 ];

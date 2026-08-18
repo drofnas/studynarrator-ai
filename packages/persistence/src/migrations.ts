@@ -227,15 +227,14 @@ function applyBaseline(database: DatabaseLike): void {
   `)
     .run(timestamp);
 
-  const transition = (
-    setting: {
-      mode: string;
-      pauseId?: string;
-      durationMs?: number;
-    },
-  ): [string, string | null, number | null] => {
+  const transition = (setting: {
+    mode: string;
+    pauseId?: string;
+    durationMs?: number;
+  }): [string, string | null, number | null] => {
     if (setting.mode === "none") return [setting.mode, null, null];
-    if (setting.mode === "preset") return [setting.mode, setting.pauseId ?? null, null];
+    if (setting.mode === "preset")
+      return [setting.mode, setting.pauseId ?? null, null];
     return [setting.mode, null, setting.durationMs ?? null];
   };
   database
