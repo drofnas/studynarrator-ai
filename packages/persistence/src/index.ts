@@ -1,7 +1,7 @@
 export {
   MigrationFailureError,
   PersistenceConflictError,
-  PersistenceNotFoundError
+  PersistenceNotFoundError,
 } from "./errors.js";
 export {
   listBackups,
@@ -11,9 +11,9 @@ export {
   type BackupRecord,
   type DatabaseConstructor,
   type DatabaseLike,
-  type Migration
+  type Migration,
 } from "./migrations.js";
 export {
   openStudyNarratorRepository,
-  type StudyNarratorRepository
+  type StudyNarratorRepository,
 } from "./repository.js";
