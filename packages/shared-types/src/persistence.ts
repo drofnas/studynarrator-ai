@@ -298,8 +298,8 @@ export const EmptyResponseSchema = z.object({}).strict();
 export const PersistenceReadyStatusSchema = z.object({
   contractVersion: z.literal(PERSISTENCE_CONTRACT_VERSION),
   state: z.literal("ready"),
-  databaseSchemaVersion: z.literal(DATABASE_SCHEMA_VERSION),
-  targetDatabaseSchemaVersion: z.literal(DATABASE_SCHEMA_VERSION),
+  databaseSchemaVersion: z.number().int().positive(),
+  targetDatabaseSchemaVersion: z.number().int().positive(),
   databasePath: z.string().min(1),
   latestBackupPath: z.string().min(1).nullable()
 }).strict();
@@ -308,7 +308,7 @@ const PersistenceUnavailableStatusSchema = z.object({
   contractVersion: z.literal(PERSISTENCE_CONTRACT_VERSION),
   state: z.literal("unavailable"),
   databaseSchemaVersion: z.number().int().nonnegative().nullable(),
-  targetDatabaseSchemaVersion: z.literal(DATABASE_SCHEMA_VERSION),
+  targetDatabaseSchemaVersion: z.number().int().positive(),
   databasePath: z.string().min(1),
   latestBackupPath: z.string().min(1).nullable(),
   code: z.literal("MIGRATION_FAILED"),

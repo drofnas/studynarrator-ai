@@ -322,6 +322,7 @@ function lexiconBehaviorMatches(existing: LexiconEntry, authored: LexiconEntryAu
 function createRepository(options: {
   database: DatabaseLike;
   databasePath: string;
+  databaseSchemaVersion: number;
   latestBackupPath: string | null;
   now: () => Date;
   idFactory: () => string;
@@ -477,7 +478,7 @@ function createRepository(options: {
       return PersistenceReadyStatusSchema.parse({
         contractVersion: PERSISTENCE_CONTRACT_VERSION,
         state: "ready",
-        databaseSchemaVersion: DATABASE_SCHEMA_VERSION,
+        databaseSchemaVersion: options.databaseSchemaVersion,
         targetDatabaseSchemaVersion: DATABASE_SCHEMA_VERSION,
         databasePath: options.databasePath,
         latestBackupPath: options.latestBackupPath
@@ -920,6 +921,7 @@ export async function openStudyNarratorRepository(options: {
   return createRepository({
     database: migrated.database,
     databasePath: migrated.databasePath,
+    databaseSchemaVersion: migrated.databaseSchemaVersion,
     latestBackupPath: migrated.backupPath,
     now,
     idFactory: options.idFactory ?? randomUUID

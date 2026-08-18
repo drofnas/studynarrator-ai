@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { SpeachesConnectionClient, VoiceCatalogClient } from "./connections.js";
-import { DATABASE_SCHEMA_VERSION, type PersistenceClient } from "./persistence.js";
+import { type PersistenceClient } from "./persistence.js";
 import type { ProjectPreviewClient, SpeechCacheClient } from "./preview.js";
 import type { RenderPlanClient } from "./renderPlan.js";
 import type { RenderClient } from "./render.js";
@@ -50,7 +50,7 @@ const StorageCheckSchema = z.discriminatedUnion("status", [
     status: z.literal("pass"),
     driver: z.literal("better-sqlite3"),
     sqliteVersion: z.string().min(1),
-    migrationVersion: z.literal(DATABASE_SCHEMA_VERSION),
+    migrationVersion: z.number().int().positive(),
     databasePath: z.string().min(1),
     latestBackupPath: z.string().min(1).nullable(),
     markerKey: z.literal("runtime.storage-self-test"),

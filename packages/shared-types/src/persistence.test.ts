@@ -9,7 +9,8 @@ import {
   ProjectReplaceInputSchema,
   ProjectSummaryCollectionSchema,
   SpeakerMappingCollectionSchema,
-  SystemTimingConfigurationSchema
+  SystemTimingConfigurationSchema,
+  PersistenceStatusSchema
 } from "./persistence.js";
 import { SpeachesConnectionAuthoringSchema } from "./connections.js";
 
@@ -166,5 +167,28 @@ describe("persistence contracts", () => {
       defaultModelId: "speaches-ai/Kokoro-82M-v1.0-ONNX",
       defaultVoiceId: "af_heart"
     })).toBeDefined();
+  });
+});
+
+describe("PersistenceStatusSchema", () => {
+  const base = {
+    contractVersion: 1,
+    databasePath: "/tmp/studynarrator/studynarrator.sqlite",
+    latestBackupPath: null as string | null
+  };
+
+  it("accepts a ready status where the database version differs from the target (mismatch is reportable)", () => {
+    const mismatch = PersistenceStatusSchema.parse({
+      ...base,
+      state: "ready",
+      databaseSchemaVersion: 2,
+      targetDatabaseSchemaVersion: 3
+    });
+    expect(mismatch.databaseSchemaVersion).toBe(2);
+  });
+
+  it("rejects non-positive or missing schema versions in the ready status", () => {
+    expect(() => PersistenceStatusSchema.parse({ ...base, state: "ready", databaseSchemaVersion: 0, targetDatabaseSchemaVersion: 3 })).toThrow();
+    expect(() => PersistenceStatusSchema.parse({ ...base, state: "ready", databaseSchemaVersion: -1, targetDatabaseSchemaVersion: 3 })).toThrow();
   });
 });
