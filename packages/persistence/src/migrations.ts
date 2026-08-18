@@ -1,7 +1,7 @@
 import { chmod, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { DATABASE_SCHEMA_VERSION } from "@studynarrator/shared-types";
-import { MigrationFailureError } from "./errors.js";
+import { MigrationFailureError, SchemaTooNewError } from "./errors.js";
 import {
   V1_GLOBAL_EXACT_TERM_LEXICON,
   V1_SYSTEM_TIMING,
@@ -558,8 +558,11 @@ export async function migrateDatabase(options: {
       currentVersion = Number(row.version);
     }
     if (currentVersion > targetVersion)
-      throw new Error(
-        "The database schema is newer than this application supports.",
+      throw new SchemaTooNewError(
+        options.databasePath,
+        currentVersion,
+        targetVersion,
+        await listBackups(options.databasePath),
       );
 
     if (existed && currentVersion < targetVersion) {
@@ -621,6 +624,7 @@ export async function migrateDatabase(options: {
     };
   } catch (error) {
     database.close();
+    if (error instanceof SchemaTooNewError) throw error;
     const failedMigrationInfo = readFailedMigration();
     const detail =
       failedMigrationInfo === null

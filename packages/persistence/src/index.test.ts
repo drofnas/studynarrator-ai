@@ -18,6 +18,7 @@ import {
   STUDYNARRATOR_MIGRATIONS,
   migrateDatabase,
   openStudyNarratorRepository,
+  SchemaTooNewError,
   type BackupRecord,
   type DatabaseConstructor,
   type Migration,
@@ -618,9 +619,18 @@ describe("database baseline", () => {
     `);
       old.close();
 
-      await expect(
-        migrateDatabase({ Database: DatabaseAdapter, databasePath }),
-      ).rejects.toBeInstanceOf(MigrationFailureError);
+      if (version > 3) {
+        await expect(
+          migrateDatabase({ Database: DatabaseAdapter, databasePath }),
+        ).rejects.toBeInstanceOf(SchemaTooNewError);
+        await expect(
+          migrateDatabase({ Database: DatabaseAdapter, databasePath }),
+        ).rejects.toMatchObject({ code: "SCHEMA_TOO_NEW" });
+      } else {
+        await expect(
+          migrateDatabase({ Database: DatabaseAdapter, databasePath }),
+        ).rejects.toBeInstanceOf(MigrationFailureError);
+      }
       const inspected = new Database(databasePath, { readonly: true });
       expect(
         inspected.prepare("SELECT value FROM preserved_development_data").get(),

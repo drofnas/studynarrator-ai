@@ -24,6 +24,8 @@ export const PERSISTENCE_CHANNELS = Object.freeze({
   ignoredReplace: "preferences.ignored.replace",
   globalLexiconList: "lexicon.global.list",
   globalLexiconReplace: "lexicon.global.replace",
+  backupsList: "persistence.backups.list",
+  backupsRestore: "persistence.backups.restore",
 } as const);
 
 export const ProjectIdSchema = z.uuid();
@@ -564,6 +566,35 @@ export const PersistenceReadyStatusSchema = z
   })
   .strict();
 
+export const PersistenceBackupSchema = z
+  .object({
+    path: z.string().min(1),
+    fromVersion: z.number().int().nonnegative(),
+    createdAt: z.iso.datetime(),
+    sizeBytes: z.number().int().nonnegative(),
+  })
+  .strict();
+export type PersistenceBackup = z.infer<typeof PersistenceBackupSchema>;
+export const PersistenceBackupCollectionSchema = z.array(
+  PersistenceBackupSchema,
+);
+
+export const PersistenceBackupRestoreInputSchema = z
+  .object({ backupPath: z.string().min(1) })
+  .strict();
+export type PersistenceBackupRestoreInput = z.infer<
+  typeof PersistenceBackupRestoreInputSchema
+>;
+export const PersistenceBackupRestoreResultSchema = z
+  .object({
+    restoredFrom: z.string().min(1),
+    safetyCopyPath: z.string().min(1),
+  })
+  .strict();
+export type PersistenceBackupRestoreResult = z.infer<
+  typeof PersistenceBackupRestoreResultSchema
+>;
+
 const PersistenceUnavailableStatusSchema = z
   .object({
     contractVersion: z.literal(PERSISTENCE_CONTRACT_VERSION),
@@ -572,10 +603,18 @@ const PersistenceUnavailableStatusSchema = z
     targetDatabaseSchemaVersion: z.number().int().positive(),
     databasePath: z.string().min(1),
     latestBackupPath: z.string().min(1).nullable(),
-    code: z.literal("MIGRATION_FAILED"),
+    code: z.enum(["MIGRATION_FAILED", "SCHEMA_TOO_NEW"]),
     message: z.string().min(1),
+    availableBackups: PersistenceBackupCollectionSchema.default([]),
   })
   .strict();
+
+export interface PersistenceBackupsClient {
+  list(): Promise<PersistenceBackup[]>;
+  restore(
+    input: PersistenceBackupRestoreInput,
+  ): Promise<PersistenceBackupRestoreResult>;
+}
 
 export const PersistenceStatusSchema = z.discriminatedUnion("state", [
   PersistenceReadyStatusSchema,
@@ -621,6 +660,7 @@ interface GlobalLexiconClient {
 
 export interface PersistenceClient {
   status(): Promise<PersistenceStatus>;
+  backups: PersistenceBackupsClient;
   projects: ProjectsClient;
   settings: PersistenceSettingsClient;
   preferences: PreferencesClient;

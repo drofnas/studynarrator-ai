@@ -1,7 +1,9 @@
 export {
+  BackupRestoreError,
   MigrationFailureError,
   PersistenceConflictError,
   PersistenceNotFoundError,
+  SchemaTooNewError,
 } from "./errors.js";
 export {
   listBackups,
@@ -13,6 +15,10 @@ export {
   type DatabaseLike,
   type Migration,
 } from "./migrations.js";
+export {
+  restoreDatabaseFromBackup,
+  type BackupRestoreResult,
+} from "./restore.js";
 export {
   openStudyNarratorRepository,
   type StudyNarratorRepository,

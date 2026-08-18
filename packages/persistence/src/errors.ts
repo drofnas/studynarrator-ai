@@ -20,3 +20,27 @@ export class MigrationFailureError extends Error {
     super(message, options);
   }
 }
+
+export class SchemaTooNewError extends Error {
+  readonly code = "SCHEMA_TOO_NEW";
+
+  constructor(
+    readonly databasePath: string,
+    readonly databaseSchemaVersion: number,
+    readonly supportedSchemaVersion: number,
+    readonly backups: readonly {
+      path: string;
+      fromVersion: number;
+      createdAt: string;
+    }[],
+  ) {
+    super(
+      `This data was created by a newer version of StudyNarrator (database format ${String(databaseSchemaVersion)}). ` +
+        `This version supports format ${String(supportedSchemaVersion)}.`,
+    );
+  }
+}
+
+export class BackupRestoreError extends Error {
+  readonly code = "BACKUP_RESTORE_FAILED";
+}
