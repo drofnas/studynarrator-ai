@@ -91,7 +91,7 @@ describe("database baseline", () => {
     const upgraded = await migrateDatabase({ Database: DatabaseAdapter, databasePath });
     expect(upgraded.appliedVersions).toEqual([3]);
     expect(upgraded.databaseSchemaVersion).toBe(3);
-    expect(upgraded.backupPath).toContain("-v2-to-v3-");
+    expect(upgraded.backupPath).toContain("-v0002-to-v0003-");
     expect(upgraded.database.prepare("SELECT count(*) AS count FROM lexicon_entries WHERE entry_type = 'namedSense'").get()).toEqual({ count: 36 });
     expect(upgraded.database.prepare("SELECT spoken_text, enabled FROM lexicon_entries WHERE id = ?").get("20000000-0000-4000-8000-000000000002")).toEqual({ spoken_text: "my résumé", enabled: 0 });
     expect(upgraded.database.prepare("SELECT spoken_text, enabled FROM lexicon_entries WHERE id = ?").get("20000000-0000-4000-8000-000000000001")).toEqual({ spoken_text: "C L I", enabled: 0 });
@@ -164,7 +164,7 @@ describe("database baseline", () => {
       failure = error as MigrationFailureError;
     }
     expect(failure).toBeInstanceOf(MigrationFailureError);
-    expect(failure?.backupPath).toContain("-v3-to-v4-");
+    expect(failure?.backupPath).toContain("-v0003-to-v0004-");
     expect((await stat(failure!.backupPath!)).mode & 0o777).toBe(0o600);
     expect((await readFile(failure!.backupPath!)).byteLength).toBeGreaterThan(0);
     const inspected = new Database(databasePath, { readonly: true });

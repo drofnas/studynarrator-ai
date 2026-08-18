@@ -4,7 +4,7 @@ import {
   DATABASE_SCHEMA_VERSION,
   DEFAULT_GLOBAL_LEXICON,
   DEFAULT_GLOBAL_NAMED_SENSE_LEXICON,
-  DEFAULT_SYSTEM_TIMING
+  DEFAULT_SYSTEM_TIMING,
 } from "@studynarrator/shared-types";
 import { MigrationFailureError } from "./errors.js";
 
@@ -23,7 +23,7 @@ export interface DatabaseLike {
 }
 
 export interface DatabaseConstructor {
-  new(path: string): DatabaseLike;
+  new (path: string): DatabaseLike;
 }
 
 export interface Migration {
@@ -211,41 +211,54 @@ const BASELINE_SCHEMA_SQL = `
 function applyBaseline(database: DatabaseLike): void {
   database.exec(BASELINE_SCHEMA_SQL);
   const timestamp = new Date().toISOString();
-  database.prepare(`
+  database
+    .prepare(`
     INSERT INTO speaches_connection (
       singleton_id, base_url, default_model_id, default_voice_id, timeout_seconds, retry_count,
       response_format, supplied_url_form, last_tested_at, last_successful_test_at,
       last_test_summary_json, created_at, updated_at
     ) VALUES (1, NULL, NULL, NULL, 120, 2, 'wav', 'unconfigured', NULL, NULL, NULL, ?, ?)
-  `).run(timestamp, timestamp);
-  database.prepare(`
+  `)
+    .run(timestamp, timestamp);
+  database
+    .prepare(`
     INSERT INTO connection_setup (singleton_id, onboarding_completed_at, updated_at)
     VALUES (1, NULL, ?)
-  `).run(timestamp);
+  `)
+    .run(timestamp);
 
-  const transition = (setting: typeof DEFAULT_SYSTEM_TIMING.transitionPauses.paragraph): [string, string | null, number | null] => {
+  const transition = (
+    setting: typeof DEFAULT_SYSTEM_TIMING.transitionPauses.paragraph,
+  ): [string, string | null, number | null] => {
     if (setting.mode === "none") return [setting.mode, null, null];
     if (setting.mode === "preset") return [setting.mode, setting.pauseId, null];
     return [setting.mode, null, setting.durationMs];
   };
-  database.prepare(`
+  database
+    .prepare(`
     INSERT INTO system_timing (
       singleton_id,
       paragraph_transition_mode, paragraph_transition_pause_id, paragraph_transition_duration_ms,
       speaker_change_transition_mode, speaker_change_transition_pause_id, speaker_change_transition_duration_ms,
       section_transition_mode, section_transition_pause_id, section_transition_duration_ms, updated_at
     ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    ...transition(DEFAULT_SYSTEM_TIMING.transitionPauses.paragraph),
-    ...transition(DEFAULT_SYSTEM_TIMING.transitionPauses.speakerChange),
-    ...transition(DEFAULT_SYSTEM_TIMING.transitionPauses.section),
-    timestamp
-  );
+  `)
+    .run(
+      ...transition(DEFAULT_SYSTEM_TIMING.transitionPauses.paragraph),
+      ...transition(DEFAULT_SYSTEM_TIMING.transitionPauses.speakerChange),
+      ...transition(DEFAULT_SYSTEM_TIMING.transitionPauses.section),
+      timestamp,
+    );
   const insertPause = database.prepare(
-    "INSERT INTO system_pause_presets (pause_id, ordinal, duration_ms, description) VALUES (?, ?, ?, ?)"
+    "INSERT INTO system_pause_presets (pause_id, ordinal, duration_ms, description) VALUES (?, ?, ?, ?)",
   );
   DEFAULT_SYSTEM_TIMING.pausePresets.forEach((pause, ordinal) => {
-    insertPause.run(pause.pauseId, ordinal, pause.durationMs, pause.description);
+    insertPause.run(
+      pause.pauseId,
+      ordinal,
+      pause.durationMs,
+      pause.description,
+    );
   });
   const insertLexicon = database.prepare(`
     INSERT INTO lexicon_entries (
@@ -263,14 +276,18 @@ function applyBaseline(database: DatabaseLike): void {
       entry.spokenText,
       entry.enabled ? 1 : 0,
       timestamp,
-      timestamp
+      timestamp,
     );
   });
 }
 
 function addGlobalNamedSenseDefaults(database: DatabaseLike): void {
   const timestamp = new Date().toISOString();
-  const row = database.prepare("SELECT COALESCE(MAX(ordinal), -1) AS ordinal FROM lexicon_entries WHERE scope = 'global'").get() as { ordinal: number };
+  const row = database
+    .prepare(
+      "SELECT COALESCE(MAX(ordinal), -1) AS ordinal FROM lexicon_entries WHERE scope = 'global'",
+    )
+    .get() as { ordinal: number };
   let ordinal = Number(row.ordinal) + 1;
   const existing = database.prepare(`
     SELECT id FROM lexicon_entries
@@ -286,15 +303,26 @@ function addGlobalNamedSenseDefaults(database: DatabaseLike): void {
   `);
   for (const entry of DEFAULT_GLOBAL_NAMED_SENSE_LEXICON) {
     if (existing.get(entry.displayText, entry.senseId)) continue;
-    const result = insert.run(entry.id, ordinal, entry.displayText, entry.senseId, entry.spokenText, timestamp, timestamp);
+    const result = insert.run(
+      entry.id,
+      ordinal,
+      entry.displayText,
+      entry.senseId,
+      entry.spokenText,
+      timestamp,
+      timestamp,
+    );
     if (Number(result.changes ?? 0) > 0) ordinal += 1;
   }
 }
 
 export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
   { version: 1, name: "v1-baseline", up: applyBaseline },
-  { version: 2, name: "project-speech-cache-lifecycle", up(database) {
-    database.exec(`
+  {
+    version: 2,
+    name: "project-speech-cache-lifecycle",
+    up(database) {
+      database.exec(`
       CREATE TABLE project_speech_cache_keys (
         project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
         cache_key TEXT NOT NULL CHECK (length(cache_key) = 64),
@@ -308,31 +336,72 @@ export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
       );
       CREATE INDEX speech_cache_deletion_project_idx ON speech_cache_deletion_queue(project_id, queued_at);
     `);
-  } },
-  { version: 3, name: "global-named-sense-defaults", up: addGlobalNamedSenseDefaults }
+    },
+  },
+  {
+    version: 3,
+    name: "global-named-sense-defaults",
+    up: addGlobalNamedSenseDefaults,
+  },
 ]);
 
-interface VersionRow { version: number }
-interface NameRow { name: string }
+interface VersionRow {
+  version: number;
+}
+interface NameRow {
+  name: string;
+}
 
 const BASELINE_TABLES = Object.freeze([
-  "connection_setup", "diagnostic_kv", "ignored_diagnostic_patterns", "lexicon_entries", "project_speech_cache_keys", "projects",
-  "render_artifacts", "render_jobs", "render_segments", "schema_migrations", "speaches_connection",
-  "speaker_mappings", "speech_cache_deletion_queue", "system_pause_presets", "system_timing", "voice_catalog_overrides"
+  "connection_setup",
+  "diagnostic_kv",
+  "ignored_diagnostic_patterns",
+  "lexicon_entries",
+  "project_speech_cache_keys",
+  "projects",
+  "render_artifacts",
+  "render_jobs",
+  "render_segments",
+  "schema_migrations",
+  "speaches_connection",
+  "speaker_mappings",
+  "speech_cache_deletion_queue",
+  "system_pause_presets",
+  "system_timing",
+  "voice_catalog_overrides",
 ]);
 
 function validateBaselineSchema(database: DatabaseLike): void {
-  const tables = (database.prepare(`
+  const tables = (
+    database
+      .prepare(`
     SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name
-  `).all() as NameRow[]).map(({ name }) => name);
+  `)
+      .all() as NameRow[]
+  ).map(({ name }) => name);
   if (JSON.stringify(tables) !== JSON.stringify(BASELINE_TABLES)) {
-    throw new Error("The database does not match the StudyNarrator v1 baseline.");
+    throw new Error(
+      "The database does not match the StudyNarrator v1 baseline.",
+    );
   }
-  const projectColumns = (database.prepare("PRAGMA table_info(projects)").all() as NameRow[]).map(({ name }) => name);
-  if (JSON.stringify(projectColumns) !== JSON.stringify([
-    "id", "name", "description", "script_source", "script_hash", "created_at", "updated_at"
-  ])) {
-    throw new Error("The projects table does not match the StudyNarrator v1 baseline.");
+  const projectColumns = (
+    database.prepare("PRAGMA table_info(projects)").all() as NameRow[]
+  ).map(({ name }) => name);
+  if (
+    JSON.stringify(projectColumns) !==
+    JSON.stringify([
+      "id",
+      "name",
+      "description",
+      "script_source",
+      "script_hash",
+      "created_at",
+      "updated_at",
+    ])
+  ) {
+    throw new Error(
+      "The projects table does not match the StudyNarrator v1 baseline.",
+    );
   }
 }
 
@@ -346,7 +415,8 @@ interface MigrationResult {
 
 function validateMigrations(migrations: readonly Migration[]) {
   migrations.forEach((migration, index) => {
-    if (migration.version !== index + 1) throw new Error("Migrations must be consecutive and start at version 1.");
+    if (migration.version !== index + 1)
+      throw new Error("Migrations must be consecutive and start at version 1.");
   });
 }
 
@@ -359,19 +429,38 @@ async function isExistingDatabase(path: string): Promise<boolean> {
   }
 }
 
-function backupFilename(databasePath: string, from: number, to: number, now: Date): string {
+function padVersion(version: number): string {
+  return String(version).padStart(4, "0");
+}
+
+function backupFilename(
+  databasePath: string,
+  from: number,
+  to: number,
+  now: Date,
+): string {
   const extension = extname(databasePath) || ".sqlite";
   const stem = basename(databasePath, extname(databasePath));
   const timestamp = now.toISOString().replace(/[:.]/gu, "-");
-  return `${stem}-v${String(from)}-to-v${String(to)}-${timestamp}${extension}`;
+  return `${stem}-v${padVersion(from)}-to-v${padVersion(to)}-${timestamp}${extension}`;
 }
 
 async function latestBackup(databasePath: string): Promise<string | null> {
   const backupDirectory = join(dirname(databasePath), "backups");
   try {
     const stem = `${basename(databasePath, extname(databasePath))}-v`;
-    const names = (await readdir(backupDirectory)).filter((name) => name.startsWith(stem)).sort();
-    return names.length === 0 ? null : join(backupDirectory, names.at(-1)!);
+    const names = (await readdir(backupDirectory)).filter((name) =>
+      name.startsWith(stem),
+    );
+    if (names.length === 0) return null;
+    const dated = await Promise.all(
+      names.map(async (name) => {
+        const path = join(backupDirectory, name);
+        return { path, modifiedAt: (await stat(path)).mtimeMs };
+      }),
+    );
+    dated.sort((left, right) => left.modifiedAt - right.modifiedAt || left.path.localeCompare(right.path));
+    return dated.at(-1)!.path;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw error;
@@ -387,8 +476,13 @@ export async function migrateDatabase(options: {
   const migrations = options.migrations ?? STUDYNARRATOR_MIGRATIONS;
   validateMigrations(migrations);
   const targetVersion = migrations.at(-1)?.version ?? 0;
-  if (options.migrations === undefined && targetVersion !== DATABASE_SCHEMA_VERSION) {
-    throw new Error("The migration registry does not match the shared database schema version.");
+  if (
+    options.migrations === undefined &&
+    targetVersion !== DATABASE_SCHEMA_VERSION
+  ) {
+    throw new Error(
+      "The migration registry does not match the shared database schema version.",
+    );
   }
 
   await mkdir(dirname(options.databasePath), { recursive: true, mode: 0o700 });
@@ -405,17 +499,36 @@ export async function migrateDatabase(options: {
   const appliedVersions: number[] = [];
 
   try {
-    const table = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'").get();
+    const table = database
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'",
+      )
+      .get();
     if (table) {
-      const row = database.prepare("SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations").get() as VersionRow;
+      const row = database
+        .prepare(
+          "SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations",
+        )
+        .get() as VersionRow;
       currentVersion = Number(row.version);
     }
-    if (currentVersion > targetVersion) throw new Error("The database schema is newer than this application supports.");
+    if (currentVersion > targetVersion)
+      throw new Error(
+        "The database schema is newer than this application supports.",
+      );
 
     if (existed && currentVersion < targetVersion) {
       const backupDirectory = join(dirname(options.databasePath), "backups");
       await mkdir(backupDirectory, { recursive: true, mode: 0o700 });
-      backupPath = join(backupDirectory, backupFilename(options.databasePath, currentVersion, targetVersion, (options.now ?? (() => new Date()))()));
+      backupPath = join(
+        backupDirectory,
+        backupFilename(
+          options.databasePath,
+          currentVersion,
+          targetVersion,
+          (options.now ?? (() => new Date()))(),
+        ),
+      );
       await database.backup(backupPath);
       await chmod(backupPath, 0o600);
     }
@@ -425,14 +538,24 @@ export async function migrateDatabase(options: {
       database.exec("BEGIN IMMEDIATE;");
       try {
         migration.up(database);
-        database.prepare("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)")
-          .run(migration.version, (options.now ?? (() => new Date()))().toISOString());
+        database
+          .prepare(
+            "INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+          )
+          .run(
+            migration.version,
+            (options.now ?? (() => new Date()))().toISOString(),
+          );
         database.pragma(`user_version = ${String(migration.version)}`);
         database.exec("COMMIT;");
         currentVersion = migration.version;
         appliedVersions.push(migration.version);
       } catch (error) {
-        try { database.exec("ROLLBACK;"); } catch { /* transaction did not start */ }
+        try {
+          database.exec("ROLLBACK;");
+        } catch {
+          /* transaction did not start */
+        }
         failedMigration = { version: migration.version, name: migration.name };
         throw error;
       }
@@ -440,20 +563,27 @@ export async function migrateDatabase(options: {
     if (options.migrations === undefined) validateBaselineSchema(database);
     await chmod(options.databasePath, 0o600);
     backupPath ??= await latestBackup(options.databasePath);
-    return { database, databasePath: options.databasePath, databaseSchemaVersion: currentVersion, appliedVersions, backupPath };
+    return {
+      database,
+      databasePath: options.databasePath,
+      databaseSchemaVersion: currentVersion,
+      appliedVersions,
+      backupPath,
+    };
   } catch (error) {
     database.close();
     const failedMigrationInfo = readFailedMigration();
-    const detail = failedMigrationInfo === null
-      ? ""
-      : ` The failure occurred while applying migration ${String(failedMigrationInfo.version)} (${failedMigrationInfo.name}).`;
+    const detail =
+      failedMigrationInfo === null
+        ? ""
+        : ` The failure occurred while applying migration ${String(failedMigrationInfo.version)} (${failedMigrationInfo.name}).`;
     throw new MigrationFailureError(
       `StudyNarrator could not migrate its database. The previous data remains recoverable from the protected backup.${detail}`,
       options.databasePath,
       backupPath,
       currentVersion,
       failedMigrationInfo,
-      { cause: error }
+      { cause: error },
     );
   }
 }
