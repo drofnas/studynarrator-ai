@@ -1,14 +1,16 @@
-import { readFile } from "node:fs/promises";
-import { mkdtemp, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 import {
+  listBackups,
   MigrationFailureError,
+  pruneBackups,
   STUDYNARRATOR_MIGRATIONS,
   migrateDatabase,
   openStudyNarratorRepository,
+  type BackupRecord,
   type DatabaseConstructor,
   type Migration,
 } from "./index.js";
@@ -880,5 +882,132 @@ describe("StudyNarratorRepository", () => {
       path: "/scoped/rendered.mp3",
     });
     reopened.close();
+  });
+});
+
+describe("backup retention", () => {
+  async function makeHome(prefix: string) {
+    const directory = await mkdtemp(join(tmpdir(), prefix));
+    return {
+      databasePath: join(directory, "studynarrator.sqlite"),
+      backupDirectory: join(directory, "backups"),
+    };
+  }
+
+  async function writeBackup(
+    backupDirectory: string,
+    from: number,
+    to: number,
+    at: Date,
+  ) {
+    const stamp = at.toISOString().replace(/[:.]/gu, "-");
+    const fileName = `studynarrator-v${String(from)}-to-v${String(
+      to,
+    )}-${stamp}.sqlite`;
+    const path = join(backupDirectory, fileName);
+    await writeFile(path, "retention-test-backup");
+    await utimes(path, at, at);
+    return path;
+  }
+
+  const hour = (hours: number) =>
+    new Date(Date.UTC(2026, 7, 1) + hours * 3_600_000);
+
+  it("retains the newest backup for each source schema version", async () => {
+    const home = await makeHome("studynarrator-retention-");
+    await mkdir(home.backupDirectory, { mode: 0o700 });
+    // Oldest -> newest. `a` and `c` have a newer backup from the same source
+    // version (b / d) and are outside the recent three (d, e, f).
+    const a = await writeBackup(home.backupDirectory, 1, 2, hour(1));
+    const b = await writeBackup(home.backupDirectory, 1, 2, hour(2));
+    const c = await writeBackup(home.backupDirectory, 2, 3, hour(3));
+    const d = await writeBackup(home.backupDirectory, 2, 3, hour(4));
+    const e = await writeBackup(home.backupDirectory, 3, 4, hour(5));
+    const f = await writeBackup(home.backupDirectory, 3, 4, hour(6));
+    const unrelated = "backup-notes.txt";
+    await writeFile(join(home.backupDirectory, unrelated), "not a backup");
+
+    const { removed, retained } = await pruneBackups(home.databasePath);
+    expect(removed).toEqual([c, a]);
+    expect(retained).toEqual([f, e, d, b]);
+
+    // Non-backup files are left untouched and the directory itself survives.
+    expect(await readdir(home.backupDirectory)).toContain(unrelated);
+    await stat(home.backupDirectory);
+  });
+
+  it("never removes the backup created by the current migration", async () => {
+    const home = await makeHome("studynarrator-protected-");
+    await mkdir(home.backupDirectory, { mode: 0o700 });
+    const protectedBackup = await writeBackup(
+      home.backupDirectory,
+      1,
+      3,
+      hour(1),
+    );
+    // Newer backup from the same source version plus a recent pair — without
+    // protection the older from-version-1 backup is the only prune candidate.
+    const sameSource = await writeBackup(home.backupDirectory, 1, 3, hour(2));
+    const recentSecond = await writeBackup(home.backupDirectory, 4, 5, hour(3));
+    const newest = await writeBackup(home.backupDirectory, 4, 5, hour(4));
+
+    const { removed, retained } = await pruneBackups(home.databasePath, {
+      protectPath: protectedBackup,
+    });
+    expect(removed).toEqual([]);
+    expect(retained).toEqual([newest, recentSecond, sameSource, protectedBackup]);
+
+    // Control run on an identical layout: the same backup is pruned when it
+    // is not the one created by the current migration.
+    const control = await makeHome("studynarrator-unprotected-");
+    await mkdir(control.backupDirectory, { mode: 0o700 });
+    const unprotectedBackup = await writeBackup(
+      control.backupDirectory,
+      1,
+      3,
+      hour(1),
+    );
+    await writeBackup(control.backupDirectory, 1, 3, hour(2));
+    await writeBackup(control.backupDirectory, 4, 5, hour(3));
+    await writeBackup(control.backupDirectory, 4, 5, hour(4));
+    const { removed: controlRemoved } = await pruneBackups(
+      control.databasePath,
+      { protectPath: null },
+    );
+    expect(controlRemoved).toEqual([unprotectedBackup]);
+  });
+
+  it("parses unpadded legacy backup filenames", async () => {
+    const emptyHome = await makeHome("studynarrator-empty-backups-");
+    expect(await listBackups(emptyHome.databasePath)).toEqual([]);
+
+    const home = await makeHome("studynarrator-legacy-");
+    await mkdir(home.backupDirectory, { mode: 0o700 });
+    const legacyName = "studynarrator-v1-to-v2-2026-07-15T09-30-00-000Z.sqlite";
+    const legacyPath = join(home.backupDirectory, legacyName);
+    await writeFile(legacyPath, "legacy");
+    const created = new Date("2026-07-15T09:30:00.000Z");
+    await utimes(legacyPath, created, created);
+    // A file that does not match the backup pattern must be ignored.
+    await writeFile(join(home.backupDirectory, "scratch.sqlite.bak"), "junk");
+
+    const backups = await listBackups(home.databasePath);
+    const expected: readonly BackupRecord[] = [
+      {
+        path: legacyPath,
+        fileName: legacyName,
+        fromVersion: 1,
+        toVersion: 2,
+        createdAt: created.toISOString(),
+        sizeBytes: 6,
+      },
+    ];
+    expect(backups).toEqual(expected);
+
+    // A lone legacy backup is protected by the default recent-keep rule.
+    const { removed, retained } = await pruneBackups(home.databasePath);
+    expect(removed).toEqual([]);
+    expect(retained).toEqual([legacyPath]);
+    await stat(legacyPath);
   });
 });

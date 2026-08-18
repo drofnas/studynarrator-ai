@@ -1,5 +1,5 @@
-import { chmod, mkdir, readdir, stat } from "node:fs/promises";
-import { basename, dirname, extname, join } from "node:path";
+import { chmod, mkdir, readdir, rm, stat } from "node:fs/promises";
+import { basename, dirname, extname, join, resolve } from "node:path";
 import { DATABASE_SCHEMA_VERSION } from "@studynarrator/shared-types";
 import { MigrationFailureError } from "./errors.js";
 import {
@@ -417,6 +417,101 @@ async function latestBackup(databasePath: string): Promise<string | null> {
   }
 }
 
+export interface BackupRecord {
+  path: string;
+  fileName: string;
+  fromVersion: number;
+  toVersion: number;
+  createdAt: string;
+  sizeBytes: number;
+}
+
+// Accepts both the current zero-padded filenames and unpadded legacy names.
+const BACKUP_FILE_PATTERN =
+  /^(?<stem>.+)-v(?<from>\d+)-to-v(?<to>\d+)-(?<timestamp>.+)\.(?<extension>[^.]+)$/u;
+
+export async function listBackups(
+  databasePath: string,
+): Promise<BackupRecord[]> {
+  const backupDirectory = join(dirname(databasePath), "backups");
+  let names: string[];
+  try {
+    names = await readdir(backupDirectory);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
+  }
+  const entries: Array<{ record: BackupRecord; mtimeMs: number }> = [];
+  for (const fileName of names) {
+    const match = BACKUP_FILE_PATTERN.exec(fileName);
+    if (match?.groups === undefined) continue;
+    const path = join(backupDirectory, fileName);
+    let stats;
+    try {
+      stats = await stat(path);
+    } catch {
+      continue;
+    }
+    if (!stats.isFile()) continue;
+    entries.push({
+      mtimeMs: stats.mtimeMs,
+      record: {
+        path,
+        fileName,
+        fromVersion: Number(match.groups.from),
+        toVersion: Number(match.groups.to),
+        createdAt: new Date(stats.mtimeMs).toISOString(),
+        sizeBytes: stats.size,
+      },
+    });
+  }
+  return entries
+    .sort(
+      (left, right) =>
+        right.mtimeMs - left.mtimeMs ||
+        left.record.fileName.localeCompare(right.record.fileName),
+    )
+    .map(({ record }) => record);
+}
+
+export async function pruneBackups(
+  databasePath: string,
+  options?: { keepRecent?: number; protectPath?: string | null },
+): Promise<{ removed: string[]; retained: string[] }> {
+  const backups = await listBackups(databasePath); // newest first
+  const recentKeeps = new Set(
+    backups
+      .slice(0, Math.max(0, options?.keepRecent ?? 3))
+      .map(({ path }) => resolve(path)),
+  );
+  // Newest-first walk means the first record seen for a `from` version is its
+  // newest backup — that is the one needed for downgrade to that schema.
+  const newestPerFromVersion = new Map<number, string>();
+  for (const { path, fromVersion } of backups) {
+    if (!newestPerFromVersion.has(fromVersion))
+      newestPerFromVersion.set(fromVersion, resolve(path));
+  }
+  const protectedPath = options?.protectPath
+    ? resolve(options.protectPath)
+    : null;
+  const removed: string[] = [];
+  const retained: string[] = [];
+  for (const backup of backups) {
+    const key = resolve(backup.path);
+    if (
+      recentKeeps.has(key) ||
+      newestPerFromVersion.get(backup.fromVersion) === key ||
+      protectedPath === key
+    ) {
+      retained.push(backup.path);
+      continue;
+    }
+    await rm(backup.path, { force: true });
+    removed.push(backup.path);
+  }
+  return { removed, retained };
+}
+
 export async function migrateDatabase(options: {
   Database: DatabaseConstructor;
   databasePath: string;
@@ -511,6 +606,11 @@ export async function migrateDatabase(options: {
       }
     }
     await chmod(options.databasePath, 0o600);
+    try {
+      await pruneBackups(options.databasePath, { protectPath: backupPath });
+    } catch {
+      // Pruning is best effort and must never prevent the application from opening.
+    }
     backupPath ??= await latestBackup(options.databasePath);
     return {
       database,
