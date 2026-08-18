@@ -8,18 +8,19 @@ import {
   transformScript,
   type CirNode,
   type LexiconEntry,
-  type SourceRange
+  type SourceRange,
 } from "@studynarrator/core";
 import {
   PROJECT_SNAPSHOT_SCHEMA_VERSION,
   RENDER_PLAN_SCHEMA_VERSION,
   ProjectIdSchema,
   RenderPlanIdSchema,
+  type ProjectSnapshot,
   type RenderPlan,
   type RenderPlanClient,
   type RenderPlanEntry,
   type SystemTimingConfiguration,
-  type SystemTransitionPauseSetting
+  type SystemTransitionPauseSetting,
 } from "@studynarrator/shared-types";
 import {
   SPEECH_CACHE_SCHEMA_VERSION,
@@ -29,85 +30,170 @@ import {
   type RenderPlanStore,
   type SpeechCache,
   withProjectSnapshotHash,
-  withRenderPlanHash
+  withRenderPlanHash,
 } from "@studynarrator/rendering";
 import type { ConnectionRepository } from "./connections.js";
 import type { PersistenceRepository } from "./persistence.js";
-import { SPEACHES_CACHE_ADAPTER_ID, SPEACHES_CACHE_ADAPTER_VERSION } from "./cachedSpeech.js";
+import {
+  SPEACHES_CACHE_ADAPTER_ID,
+  SPEACHES_CACHE_ADAPTER_VERSION,
+} from "./cachedSpeech.js";
 
 type RenderPlanServiceErrorCode =
   | "RENDER_PLAN_CONFIGURATION"
   | "RENDER_PLAN_INVALID_PROJECT"
-  | "RENDER_PLAN_NOT_FOUND"
   | "RENDER_PLAN_STORAGE";
 
 class RenderPlanServiceError extends Error {
-  constructor(readonly code: RenderPlanServiceErrorCode, message: string) { super(message); }
+  constructor(
+    readonly code: RenderPlanServiceErrorCode,
+    message: string,
+  ) {
+    super(message);
+  }
 }
 
-export interface RenderPlanRepository extends ConnectionRepository, Pick<PersistenceRepository,
-  "getProject" | "getSystemPacing" | "listGlobalLexicon" | "getIgnoredDiagnostics"> {
+export interface RenderPlanRepository
+  extends ConnectionRepository,
+    Pick<
+      PersistenceRepository,
+      | "getProject"
+      | "getSystemPacing"
+      | "listGlobalLexicon"
+      | "getIgnoredDiagnostics"
+    > {
   listSpeechCacheDeletionQueue?(projectId: string): string[];
   acknowledgeSpeechCacheDeletion?(projectId: string, cacheKey: string): void;
 }
 
-function sha256(value: string): string { return createHash("sha256").update(value).digest("hex"); }
+export interface ComputedRenderPlan {
+  snapshot: ProjectSnapshot;
+  plan: RenderPlan;
+  silenceAssets: ReadonlyMap<string, Uint8Array>;
+}
+
+export interface RenderPlanComputer {
+  compute(projectId: string): Promise<ComputedRenderPlan>;
+}
+
+function sha256(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
 
 function safeError(error: unknown): RenderPlanServiceError {
   if (error instanceof RenderPlanServiceError) return error;
-  const record = error && typeof error === "object" ? error as Record<string, unknown> : undefined;
-  if (record?.code === "PERSISTENCE_NOT_FOUND" || (error instanceof Error && /ENOENT/u.test(error.message))) {
-    return new RenderPlanServiceError("RENDER_PLAN_NOT_FOUND", "The requested project or render plan does not exist.");
+  if (error instanceof Error && /ENOENT/u.test(error.message)) {
+    return new RenderPlanServiceError(
+      "RENDER_PLAN_STORAGE",
+      "The requested project does not exist or is unreadable.",
+    );
   }
-  return new RenderPlanServiceError("RENDER_PLAN_STORAGE", "StudyNarrator could not create or read the render plan.");
+  return new RenderPlanServiceError(
+    "RENDER_PLAN_STORAGE",
+    "StudyNarrator could not render the study narration.",
+  );
 }
 
-function transitionDuration(timing: SystemTimingConfiguration, setting: SystemTransitionPauseSetting): { pauseId: string | null; durationMs: number } | null {
+function transitionDuration(
+  timing: SystemTimingConfiguration,
+  setting: SystemTransitionPauseSetting,
+): { pauseId: string | null; durationMs: number } | null {
   if (setting.mode === "none") return null;
-  if (setting.mode === "duration") return { pauseId: null, durationMs: setting.durationMs };
-  const preset = timing.pausePresets.find(({ pauseId }) => pauseId === setting.pauseId);
-  if (!preset) throw new RenderPlanServiceError("RENDER_PLAN_CONFIGURATION", `Pause preset ${setting.pauseId} is missing.`);
+  if (setting.mode === "duration")
+    return { pauseId: null, durationMs: setting.durationMs };
+  const preset = timing.pausePresets.find(
+    ({ pauseId }) => pauseId === setting.pauseId,
+  );
+  if (!preset)
+    throw new RenderPlanServiceError(
+      "RENDER_PLAN_CONFIGURATION",
+      `Pause preset ${setting.pauseId} is missing.`,
+    );
   return { pauseId: setting.pauseId, durationMs: preset.durationMs };
 }
 
-function explicitDuration(timing: SystemTimingConfiguration, pauseId: string): number {
-  const preset = timing.pausePresets.find((candidate) => candidate.pauseId === pauseId);
-  if (!preset) throw new RenderPlanServiceError("RENDER_PLAN_CONFIGURATION", `Pause preset ${pauseId} is missing.`);
+function explicitDuration(
+  timing: SystemTimingConfiguration,
+  pauseId: string,
+): number {
+  const preset = timing.pausePresets.find(
+    (candidate) => candidate.pauseId === pauseId,
+  );
+  if (!preset)
+    throw new RenderPlanServiceError(
+      "RENDER_PLAN_CONFIGURATION",
+      `Pause preset ${pauseId} is missing.`,
+    );
   return preset.durationMs;
 }
 
-export function createRenderPlanService(dependencies: {
+export function createRenderPlanComputer(dependencies: {
   repository: RenderPlanRepository;
   cache: SpeechCache;
-  store: RenderPlanStore;
   createId?: () => string;
   now?: () => Date;
-}): RenderPlanClient {
+}): RenderPlanComputer {
   const createId = dependencies.createId ?? randomUUID;
   const now = dependencies.now ?? (() => new Date());
 
   return {
-    async create(projectIdInput) {
+    async compute(projectIdInput) {
       try {
         const projectId = ProjectIdSchema.parse(projectIdInput);
-        for (const cacheKey of dependencies.repository.listSpeechCacheDeletionQueue?.(projectId) ?? []) {
-          const released = await dependencies.cache.releaseProjectEntry?.(projectId, cacheKey);
+        for (const cacheKey of dependencies.repository.listSpeechCacheDeletionQueue?.(
+          projectId,
+        ) ?? []) {
+          const released = await dependencies.cache.releaseProjectEntry?.(
+            projectId,
+            cacheKey,
+          );
           if (!released) break;
-          if (!released.deferred) dependencies.repository.acknowledgeSpeechCacheDeletion?.(projectId, cacheKey);
+          if (!released.deferred)
+            dependencies.repository.acknowledgeSpeechCacheDeletion?.(
+              projectId,
+              cacheKey,
+            );
         }
         const project = dependencies.repository.getProject(projectId);
         const timing = dependencies.repository.getSystemPacing();
         const connection = dependencies.repository.getSpeachesConnection();
-        if (!connection.baseUrl) throw new RenderPlanServiceError("RENDER_PLAN_CONFIGURATION", "The Speaches connection needs a server address.");
+        if (!connection.baseUrl)
+          throw new RenderPlanServiceError(
+            "RENDER_PLAN_CONFIGURATION",
+            "The Speaches connection needs a server address.",
+          );
         const modelId = connection.defaultModelId;
-        if (!modelId) throw new RenderPlanServiceError("RENDER_PLAN_CONFIGURATION", "Choose a speech model before rendering.");
-        const globalLexiconEntries = dependencies.repository.listGlobalLexicon();
-        const ignoredDiagnostics = dependencies.repository.getIgnoredDiagnostics();
-        const lexiconEntries: LexiconEntry[] = [...globalLexiconEntries, ...project.lexiconEntries];
-        const parsed = parseScript({ source: project.scriptSource, ...(ignoredDiagnostics.length > 0 ? { ignoredDiagnostics } : {}) });
-        const transformed = transformScript({ parsedScript: parsed, entries: lexiconEntries, ...(ignoredDiagnostics.length > 0 ? { ignoredDiagnostics } : {}) });
-        if (parsed.errors.length > 0 || transformed.errors.length > 0 || !transformed.synthesisReady) {
-          throw new RenderPlanServiceError("RENDER_PLAN_INVALID_PROJECT", "Resolve blocking script and pronunciation errors before rendering.");
+        if (!modelId)
+          throw new RenderPlanServiceError(
+            "RENDER_PLAN_CONFIGURATION",
+            "Choose a speech model before rendering.",
+          );
+        const globalLexiconEntries =
+          dependencies.repository.listGlobalLexicon();
+        const ignoredDiagnostics =
+          dependencies.repository.getIgnoredDiagnostics();
+        const lexiconEntries: LexiconEntry[] = [
+          ...globalLexiconEntries,
+          ...project.lexiconEntries,
+        ];
+        const parsed = parseScript({
+          source: project.scriptSource,
+          ...(ignoredDiagnostics.length > 0 ? { ignoredDiagnostics } : {}),
+        });
+        const transformed = transformScript({
+          parsedScript: parsed,
+          entries: lexiconEntries,
+          ...(ignoredDiagnostics.length > 0 ? { ignoredDiagnostics } : {}),
+        });
+        if (
+          parsed.errors.length > 0 ||
+          transformed.errors.length > 0 ||
+          !transformed.synthesisReady
+        ) {
+          throw new RenderPlanServiceError(
+            "RENDER_PLAN_INVALID_PROJECT",
+            "Resolve blocking script and pronunciation errors before rendering.",
+          );
         }
         const capturedAt = now().toISOString();
         const snapshot = withProjectSnapshotHash({
@@ -119,7 +205,7 @@ export function createRenderPlanService(dependencies: {
           ignoredDiagnostics,
           connection: {
             modelId,
-            serverIdentityHash: sha256(connection.baseUrl)
+            serverIdentityHash: sha256(connection.baseUrl),
           },
           versions: {
             scriptGrammar: SCRIPT_GRAMMAR_VERSION,
@@ -129,8 +215,8 @@ export function createRenderPlanService(dependencies: {
             speechCacheSchema: SPEECH_CACHE_SCHEMA_VERSION,
             speechNormalization: SPEECH_NORMALIZATION_VERSION,
             speechChunking: SPEECH_CHUNKING_VERSION,
-            speechAdapter: SPEACHES_CACHE_ADAPTER_VERSION
-          }
+            speechAdapter: SPEACHES_CACHE_ADAPTER_VERSION,
+          },
         });
 
         const entries: RenderPlanEntry[] = [];
@@ -148,14 +234,26 @@ export function createRenderPlanService(dependencies: {
         }) => {
           const { bytes, asset } = createPcmSilence(input.durationMs);
           if (bytes && asset) silenceAssets.set(asset.checksum, bytes);
-          entries.push({ type: "pause", ordinal: entries.length + 1, silence: asset, ...input });
+          entries.push({
+            type: "pause",
+            ordinal: entries.length + 1,
+            silence: asset,
+            ...input,
+          });
         };
 
         for (let index = 0; index < parsed.nodes.length; index += 1) {
           const node = parsed.nodes[index]!;
           if (node.type === "section") {
             activeSectionTitle = node.title;
-            entries.push({ type: "section", ordinal: entries.length + 1, nodeOrdinal: node.ordinal, title: node.title, sectionTitle: node.title, sourceRange: node.range });
+            entries.push({
+              type: "section",
+              ordinal: entries.length + 1,
+              nodeOrdinal: node.ordinal,
+              title: node.title,
+              sectionTitle: node.title,
+              sourceRange: node.range,
+            });
             boundary.section = true;
             continue;
           }
@@ -164,26 +262,57 @@ export function createRenderPlanService(dependencies: {
             continue;
           }
           if (node.type === "pause") {
-            pushPause({ pauseKind: "explicit", reason: "explicit", pauseId: node.pauseId, durationMs: explicitDuration(timing, node.pauseId), sourceRange: node.range, sectionTitle: activeSectionTitle });
+            pushPause({
+              pauseKind: "explicit",
+              reason: "explicit",
+              pauseId: node.pauseId,
+              durationMs: explicitDuration(timing, node.pauseId),
+              sourceRange: node.range,
+              sectionTitle: activeSectionTitle,
+            });
             boundary.explicit = true;
             continue;
           }
           if (previousSpeech && !boundary.explicit) {
             const automatic = boundary.section
-              ? { reason: "section" as const, setting: timing.transitionPauses.section }
-              : previousSpeech.speakerId !== node.speakerId
-                ? { reason: "speakerChange" as const, setting: timing.transitionPauses.speakerChange }
-                : boundary.paragraph
-                  ? { reason: "paragraph" as const, setting: timing.transitionPauses.paragraph }
-                  : null;
+              ? {
+                  reason: "section" as const,
+                  setting: timing.transitionPauses.section,
+                }
+              : previousSpeech.speakerId === node.speakerId
+                ? boundary.paragraph
+                  ? {
+                      reason: "paragraph" as const,
+                      setting: timing.transitionPauses.paragraph,
+                    }
+                  : null
+                : {
+                    reason: "speakerChange" as const,
+                    setting: timing.transitionPauses.speakerChange,
+                  };
             if (automatic) {
               const resolved = transitionDuration(timing, automatic.setting);
-              if (resolved) pushPause({ pauseKind: "automatic", reason: automatic.reason, ...resolved, sourceRange: null, sectionTitle: activeSectionTitle });
+              if (resolved)
+                pushPause({
+                  pauseKind: "automatic",
+                  reason: automatic.reason,
+                  ...resolved,
+                  sourceRange: null,
+                  sectionTitle: activeSectionTitle,
+                });
             }
           }
-          const transformedSegment = transformed.segments.find(({ nodeOrdinal }) => nodeOrdinal === node.ordinal);
-          const speaker = project.speakerMappings.find(({ speakerId }) => speakerId === node.speakerId);
-          if (!transformedSegment || !speaker?.voiceId) throw new RenderPlanServiceError("RENDER_PLAN_CONFIGURATION", `Speaker ${node.speakerId} needs a voice before freezing a render plan.`);
+          const transformedSegment = transformed.segments.find(
+            ({ nodeOrdinal }) => nodeOrdinal === node.ordinal,
+          );
+          const speaker = project.speakerMappings.find(
+            ({ speakerId }) => speakerId === node.speakerId,
+          );
+          if (!transformedSegment || !speaker?.voiceId)
+            throw new RenderPlanServiceError(
+              "RENDER_PLAN_CONFIGURATION",
+              `Speaker ${node.speakerId} needs a voice before rendering.`,
+            );
           const cache = await dependencies.cache.inspect({
             adapterId: SPEACHES_CACHE_ADAPTER_ID,
             adapterVersion: SPEACHES_CACHE_ADAPTER_VERSION,
@@ -192,7 +321,7 @@ export function createRenderPlanService(dependencies: {
             voiceId: speaker.voiceId,
             speed: speaker.speed,
             text: transformedSegment.ttsText,
-            responseFormat: "wav"
+            responseFormat: "wav",
           });
           entries.push({
             type: "speech",
@@ -207,17 +336,25 @@ export function createRenderPlanService(dependencies: {
             originalText: node.rawText,
             readableText: transformedSegment.readableText,
             ttsText: transformedSegment.ttsText,
-            chunks: [{ ordinal: 1, text: transformedSegment.ttsText, cacheKey: cache.key, cacheStatus: cache.status }]
+            chunks: [
+              {
+                ordinal: 1,
+                text: transformedSegment.ttsText,
+                cacheKey: cache.key,
+                cacheStatus: cache.status,
+              },
+            ],
           });
           previousSpeech = node;
           boundary = { explicit: false, paragraph: false, section: false };
         }
 
-        const existing = await dependencies.store.list(projectId);
-        const planId = RenderPlanIdSchema.parse(existing[0]?.id ?? createId());
-        const speechEntries = entries.filter((entry) => entry.type === "speech");
+        const planId = RenderPlanIdSchema.parse(createId());
+        const speechEntries = entries.filter(
+          (entry) => entry.type === "speech",
+        );
         const pauseEntries = entries.filter((entry) => entry.type === "pause");
-        const plan: RenderPlan = withRenderPlanHash({
+        const plan = withRenderPlanHash({
           schemaVersion: RENDER_PLAN_SCHEMA_VERSION,
           id: planId,
           projectId,
@@ -226,22 +363,67 @@ export function createRenderPlanService(dependencies: {
           scriptHash: project.scriptHash,
           entries,
           summary: {
-            sectionCount: entries.filter((entry) => entry.type === "section").length,
+            sectionCount: entries.filter((entry) => entry.type === "section")
+              .length,
             speechCount: speechEntries.length,
             pauseCount: pauseEntries.length,
-            cacheHits: speechEntries.filter((entry) => entry.chunks[0]?.cacheStatus === "hit").length,
-            cacheMisses: speechEntries.filter((entry) => entry.chunks[0]?.cacheStatus === "miss").length,
-            silenceDurationMs: pauseEntries.reduce((total, entry) => total + entry.durationMs, 0)
-          }
+            cacheHits: speechEntries.filter(
+              (entry) => entry.chunks[0]?.cacheStatus === "hit",
+            ).length,
+            cacheMisses: speechEntries.filter(
+              (entry) => entry.chunks[0]?.cacheStatus === "miss",
+            ).length,
+            silenceDurationMs: pauseEntries.reduce(
+              (total, entry) => total + entry.durationMs,
+              0,
+            ),
+          },
         });
-        return await dependencies.store.save(snapshot, plan, silenceAssets);
-      } catch (error) { throw safeError(error); }
+        return { snapshot, plan, silenceAssets };
+      } catch (error) {
+        throw safeError(error);
+      }
+    },
+  };
+}
+
+export function createRenderPlanService(dependencies: {
+  repository: RenderPlanRepository;
+  cache: SpeechCache;
+  store: RenderPlanStore;
+  createId?: () => string;
+  now?: () => Date;
+}): RenderPlanClient {
+  const computer = createRenderPlanComputer({
+    repository: dependencies.repository,
+    cache: dependencies.cache,
+    ...(dependencies.createId === undefined
+      ? {}
+      : { createId: dependencies.createId }),
+    ...(dependencies.now === undefined ? {} : { now: dependencies.now }),
+  });
+  return {
+    async create(projectId) {
+      const computed = await computer.compute(projectId);
+      return await dependencies.store.save(
+        computed.snapshot,
+        computed.plan,
+        computed.silenceAssets,
+      );
     },
     async list(projectId) {
-      try { return await dependencies.store.list(ProjectIdSchema.parse(projectId)); } catch (error) { throw safeError(error); }
+      try {
+        return await dependencies.store.list(ProjectIdSchema.parse(projectId));
+      } catch (error) {
+        throw safeError(error);
+      }
     },
     async get(planId) {
-      try { return await dependencies.store.get(RenderPlanIdSchema.parse(planId)); } catch (error) { throw safeError(error); }
-    }
+      try {
+        return await dependencies.store.get(RenderPlanIdSchema.parse(planId));
+      } catch (error) {
+        throw safeError(error);
+      }
+    },
   };
 }
