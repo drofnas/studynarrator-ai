@@ -59,6 +59,7 @@ describe("restoreDatabaseFromBackup", () => {
     await writeFile(`${databasePath}-shm`, "stale-shm");
 
     const result = await restoreDatabaseFromBackup({
+      Database: DatabaseAdapter,
       databasePath,
       backupPath,
     });
@@ -79,6 +80,7 @@ describe("restoreDatabaseFromBackup", () => {
 
     // Restoring again must never delete the earlier backup or earlier safety copy.
     const second = await restoreDatabaseFromBackup({
+      Database: DatabaseAdapter,
       databasePath,
       backupPath,
     });
@@ -112,7 +114,11 @@ describe("restoreDatabaseFromBackup", () => {
       "/etc/passwd",
     ]) {
       await expect(
-        restoreDatabaseFromBackup({ databasePath, backupPath: candidate }),
+        restoreDatabaseFromBackup({
+          Database: DatabaseAdapter,
+          databasePath,
+          backupPath: candidate,
+        }),
       ).rejects.toBeInstanceOf(BackupRestoreError);
     }
 
@@ -132,7 +138,11 @@ describe("restoreDatabaseFromBackup", () => {
       `studynarrator-v0001-to-v0002-${ISO_STAMP}-missing.sqlite`,
     );
     await expect(
-      restoreDatabaseFromBackup({ databasePath, backupPath: missing }),
+      restoreDatabaseFromBackup({
+        Database: DatabaseAdapter,
+        databasePath,
+        backupPath: missing,
+      }),
     ).rejects.toBeInstanceOf(BackupRestoreError);
 
     const empty = join(
@@ -141,7 +151,11 @@ describe("restoreDatabaseFromBackup", () => {
     );
     await writeFile(empty, "");
     await expect(
-      restoreDatabaseFromBackup({ databasePath, backupPath: empty }),
+      restoreDatabaseFromBackup({
+        Database: DatabaseAdapter,
+        databasePath,
+        backupPath: empty,
+      }),
     ).rejects.toBeInstanceOf(BackupRestoreError);
 
     const corrupted = join(
@@ -150,7 +164,11 @@ describe("restoreDatabaseFromBackup", () => {
     );
     await writeFile(corrupted, "not a sqlite database" + "x".repeat(1024));
     await expect(
-      restoreDatabaseFromBackup({ databasePath, backupPath: corrupted }),
+      restoreDatabaseFromBackup({
+        Database: DatabaseAdapter,
+        databasePath,
+        backupPath: corrupted,
+      }),
     ).rejects.toBeInstanceOf(BackupRestoreError);
 
     expect(await readFile(databasePath)).toEqual(original);
@@ -215,7 +233,11 @@ describe("newer-schema databases", () => {
     // A longer registry must never migrate the too-new row downward either;
     // it may advance forward from 99 if the registry is actually newer.
     await expect(
-      restoreDatabaseFromBackup({ databasePath, backupPath }),
+      restoreDatabaseFromBackup({
+        Database: DatabaseAdapter,
+        databasePath,
+        backupPath,
+      }),
     ).resolves.toMatchObject({ restoredFrom: backupPath });
     const restored = new Database(databasePath, { readonly: true });
     expect(

@@ -26,7 +26,10 @@ export interface DatabaseLike {
 }
 
 export interface DatabaseConstructor {
-  new (path: string): DatabaseLike;
+  new (
+    path: string,
+    options?: { readonly?: boolean; fileMustExist?: boolean },
+  ): DatabaseLike;
 }
 
 export interface Migration {

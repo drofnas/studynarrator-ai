@@ -156,6 +156,7 @@ export async function createDesktopServices(options: {
       list: () => listPersistenceBackups(databasePath),
       restore: (input) =>
         restoreDatabaseFromBackup({
+          Database,
           databasePath,
           backupPath: input.backupPath,
         }),

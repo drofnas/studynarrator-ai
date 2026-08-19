@@ -1,7 +1,7 @@
 import { chmod, copyFile, rm, stat } from "node:fs/promises";
-import { DatabaseSync } from "node:sqlite";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { BackupRestoreError } from "./errors.js";
+import { type DatabaseConstructor, type DatabaseLike } from "./migrations.js";
 
 interface BackupRestoreResult {
   restoredFrom: string;
@@ -26,14 +26,19 @@ function assertInsideBackupsDirectory(
   return candidate;
 }
 
-function assertBackupIntegrity(backupPath: string): void {
-  let database: DatabaseSync | undefined;
+function assertBackupIntegrity(
+  Database: DatabaseConstructor,
+  backupPath: string,
+): void {
+  let database: DatabaseLike | undefined;
   try {
-    database = new DatabaseSync(backupPath, { readOnly: true });
-    const row = database.prepare("PRAGMA integrity_check;").get() as {
-      integrity_check: string;
-    };
-    if (row.integrity_check !== "ok")
+    database = new Database(backupPath, {
+      readonly: true,
+      fileMustExist: true,
+    });
+    const row = database.prepare("PRAGMA integrity_check;").get() as
+      { integrity_check: string } | undefined;
+    if (row?.integrity_check !== "ok")
       throw new BackupRestoreError(
         "The selected backup failed its integrity check and was not restored.",
       );
@@ -54,6 +59,7 @@ function assertBackupIntegrity(backupPath: string): void {
  * file cannot be corrupted. The database must not be open while this runs.
  */
 export async function restoreDatabaseFromBackup(options: {
+  Database: DatabaseConstructor;
   databasePath: string;
   backupPath: string;
 }): Promise<BackupRestoreResult> {
@@ -75,7 +81,7 @@ export async function restoreDatabaseFromBackup(options: {
       "The selected backup is empty and was not restored.",
     );
 
-  assertBackupIntegrity(backupPath);
+  assertBackupIntegrity(options.Database, backupPath);
 
   const databasePath = resolve(options.databasePath);
   const currentStats = await stat(databasePath);

@@ -154,6 +154,7 @@ export async function createServerServices(environment = process.env) {
       list: () => listPersistenceBackups(databasePath),
       restore: (input) =>
         restoreDatabaseFromBackup({
+          Database,
           databasePath,
           backupPath: input.backupPath,
         }),
