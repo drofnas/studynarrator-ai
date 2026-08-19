@@ -2,8 +2,8 @@ import { vi } from "vitest";
 import type {
   ConnectionTestOverall,
   ScratchpadClient,
-  SpeachesConnection,
-  SpeachesConnectionClient,
+  SpeechBackendConnection,
+  SpeechBackendConnectionClient,
   SpeechCacheClient,
   VoiceCatalogClient,
 } from "@studynarrator/shared-types";
@@ -61,6 +61,7 @@ export const scratchpadClient = {
 } satisfies ScratchpadClient;
 
 export const savedConnection = {
+  backendId: "speaches" as const,
   baseUrl: "https://speech.example.test",
   suppliedUrlForm: "root" as const,
   configured: true,
@@ -79,7 +80,7 @@ export const savedConnection = {
 export function connectionWithTest(
   overall: ConnectionTestOverall,
   configured = true,
-): SpeachesConnection {
+): SpeechBackendConnection {
   const stages = [
     "url",
     "dns",
@@ -118,11 +119,11 @@ export function connectionWithTest(
 }
 
 export function connectionClient(
-  overrides: Partial<SpeachesConnectionClient> = {},
-): SpeachesConnectionClient {
+  overrides: Partial<SpeechBackendConnectionClient> = {},
+): SpeechBackendConnectionClient {
   return {
     get: vi.fn(() => Promise.resolve(savedConnection)),
-    update: vi.fn<SpeachesConnectionClient["update"]>((input) =>
+    update: vi.fn<SpeechBackendConnectionClient["update"]>((input) =>
       Promise.resolve({
         ...savedConnection,
         ...input,

@@ -7,6 +7,7 @@ import {
 } from "./connectionsClient.js";
 
 const connection = {
+  backendId: "speaches",
   baseUrl: "http://127.0.0.1:8000",
   suppliedUrlForm: "root",
   configured: true,

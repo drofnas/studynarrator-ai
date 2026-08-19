@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import {
-  type SpeachesConnection,
+  type SpeechBackendConnection,
   type SpeechCacheClient,
   type SpeechCacheStatus,
   type VoiceCatalog,
@@ -18,7 +18,7 @@ const EMPTY_CONNECTION = {
   retryCount: 2,
 };
 
-function connectionDraft(connection: SpeachesConnection | null) {
+function connectionDraft(connection: SpeechBackendConnection | null) {
   return connection
     ? {
         baseUrl: connection.baseUrl ?? "",

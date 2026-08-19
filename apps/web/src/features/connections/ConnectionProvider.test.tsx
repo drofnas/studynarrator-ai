@@ -5,8 +5,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   ConnectionTestSummary,
-  SpeachesConnection,
-  SpeachesConnectionClient,
+  SpeechBackendConnection,
+  SpeechBackendConnectionClient,
   SpeechCatalog,
   VoiceCatalogClient,
 } from "@studynarrator/shared-types";
@@ -37,7 +37,8 @@ const summary: ConnectionTestSummary = {
   availableModelIds: ["model"],
   availableVoiceIds: ["voice"],
 };
-const connection: SpeachesConnection = {
+const connection: SpeechBackendConnection = {
+  backendId: "speaches",
   baseUrl: "http://127.0.0.1:8000",
   suppliedUrlForm: "root",
   configured: true,
@@ -101,7 +102,7 @@ describe("ConnectionProvider", () => {
   it("loads the singleton and refreshes it after a connection test", async () => {
     const discoverSpeechCatalog = vi.fn(async () => catalog);
     const get = vi.fn(async () => connection);
-    const connectionClient: SpeachesConnectionClient = {
+    const connectionClient: SpeechBackendConnectionClient = {
       get,
       update: vi.fn(async () => connection),
       test: vi.fn(async () => summary),
@@ -143,10 +144,10 @@ describe("ConnectionProvider", () => {
 
   it("recovers when the initial singleton load fails during an application restart", async () => {
     const get = vi
-      .fn<SpeachesConnectionClient["get"]>()
+      .fn<SpeechBackendConnectionClient["get"]>()
       .mockRejectedValueOnce(new Error("Connection service restarted."))
       .mockResolvedValue(connection);
-    const connectionClient: SpeachesConnectionClient = {
+    const connectionClient: SpeechBackendConnectionClient = {
       get,
       update: vi.fn(async () => connection),
       test: vi.fn(async () => summary),
@@ -179,10 +180,10 @@ describe("ConnectionProvider", () => {
 
   it("keeps the last loaded singleton visible when a later refresh fails", async () => {
     const get = vi
-      .fn<SpeachesConnectionClient["get"]>()
+      .fn<SpeechBackendConnectionClient["get"]>()
       .mockResolvedValueOnce(connection)
       .mockRejectedValueOnce(new Error("Connection service restarted."));
-    const connectionClient: SpeachesConnectionClient = {
+    const connectionClient: SpeechBackendConnectionClient = {
       get,
       update: vi.fn(async () => connection),
       test: vi.fn(async () => summary),
