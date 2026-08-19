@@ -21,8 +21,8 @@ import {
   ProjectReplaceInputSchema,
   ProjectSummaryCollectionSchema,
   SystemTimingConfigurationSchema,
-  SpeachesConnectionAuthoringSchema,
-  SpeachesConnectionSchema,
+  SpeechBackendConnectionAuthoringSchema,
+  SpeechBackendConnectionSchema,
   VoiceCatalogSchema,
   RenderArtifactCollectionSchema,
   RenderArtifactSchema,
@@ -41,8 +41,8 @@ import {
   type SystemTimingConfiguration,
   type SystemTransitionPauseConfiguration,
   type SystemTransitionPauseSetting,
-  type SpeachesConnection,
-  type SpeachesConnectionAuthoring,
+  type SpeechBackendConnection,
+  type SpeechBackendConnectionAuthoring,
   type VoiceCatalog,
   type VoiceCatalogAuthoring,
   type RenderArtifact,
@@ -127,6 +127,7 @@ interface LexiconRow {
 }
 
 interface ConnectionRow {
+  backend_id: "speaches";
   base_url: string | null;
   default_model_id: string | null;
   default_voice_id: string | null;
@@ -194,12 +195,12 @@ export interface StudyNarratorRepository {
   ): IgnoredDiagnosticCollection;
   listGlobalLexicon(): LexiconEntry[];
   replaceGlobalLexicon(input: GlobalLexiconReplaceInput): LexiconEntry[];
-  getSpeachesConnection(): SpeachesConnection;
-  replaceSpeachesConnection(
-    input: SpeachesConnectionAuthoring,
+  getSpeechBackendConnection(): SpeechBackendConnection;
+  replaceSpeechBackendConnection(
+    input: SpeechBackendConnectionAuthoring,
     suppliedUrlForm: "root" | "v1" | "unconfigured",
-  ): SpeachesConnection;
-  recordConnectionTest(summary: ConnectionTestSummary): SpeachesConnection;
+  ): SpeechBackendConnection;
+  recordConnectionTest(summary: ConnectionTestSummary): SpeechBackendConnection;
   getConnectionSetup(): ConnectionSetupRecord;
   completeConnectionOnboarding(): ConnectionSetupRecord;
   getVoiceCatalogOverrides(modelId: string): VoiceCatalog;
@@ -395,8 +396,9 @@ function lexiconFromRow(row: LexiconRow): LexiconEntry {
   });
 }
 
-function connectionFromRow(row: ConnectionRow): SpeachesConnection {
-  return SpeachesConnectionSchema.parse({
+function connectionFromRow(row: ConnectionRow): SpeechBackendConnection {
+  return SpeechBackendConnectionSchema.parse({
+    backendId: row.backend_id,
     baseUrl: row.base_url,
     configured:
       row.base_url !== null &&
@@ -608,7 +610,7 @@ function createRepository(options: {
     });
   };
 
-  const getSpeachesConnection = (): SpeachesConnection => {
+  const getSpeechBackendConnection = (): SpeechBackendConnection => {
     assertOpen();
     const row = database
       .prepare("SELECT * FROM speech_backend_connection WHERE singleton_id = 1")
@@ -1063,11 +1065,11 @@ function createRepository(options: {
       );
       return GlobalLexiconEntryCollectionSchema.parse(result);
     },
-    getSpeachesConnection,
-    replaceSpeachesConnection(inputValue, suppliedUrlForm) {
+    getSpeechBackendConnection,
+    replaceSpeechBackendConnection(inputValue, suppliedUrlForm) {
       assertOpen();
-      const input = SpeachesConnectionAuthoringSchema.parse(inputValue);
-      const existing = getSpeachesConnection();
+      const input = SpeechBackendConnectionAuthoringSchema.parse(inputValue);
+      const existing = getSpeechBackendConnection();
       const unchanged =
         existing.baseUrl === input.baseUrl &&
         existing.defaultModelId === input.defaultModelId &&
@@ -1093,12 +1095,12 @@ function createRepository(options: {
           suppliedUrlForm,
           unchanged ? existing.updatedAt : options.now().toISOString(),
         );
-      return getSpeachesConnection();
+      return getSpeechBackendConnection();
     },
     recordConnectionTest(summaryValue) {
       assertOpen();
       const summary = ConnectionTestSummarySchema.parse(summaryValue);
-      const connection = getSpeachesConnection();
+      const connection = getSpeechBackendConnection();
       const result = database
         .prepare(
           `
@@ -1118,7 +1120,7 @@ function createRepository(options: {
         throw new PersistenceNotFoundError(
           "The Speaches connection was not found.",
         );
-      return getSpeachesConnection();
+      return getSpeechBackendConnection();
     },
     getConnectionSetup,
     completeConnectionOnboarding() {

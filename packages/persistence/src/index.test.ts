@@ -564,16 +564,27 @@ describe("database baseline", () => {
       databasePath,
       migrations: STUDYNARRATOR_MIGRATIONS.slice(0, 3),
     });
+    // In the v3 shape the connection row still lives in the pre-rename
+    // table; locate it by shape rather than by its old name.
+    const legacyConnectionTables = (
+      v3.database
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE '%_connection' AND name != 'connection_setup' ORDER BY name",
+        )
+        .all() as Array<{ name: string }>
+    ).map(({ name }) => name);
+    expect(legacyConnectionTables).toHaveLength(1);
+    const legacyConnectionTable = legacyConnectionTables[0];
     const now = "2026-08-19T00:00:00.000Z";
     v3.database
       .prepare(
-        "UPDATE speaches_connection SET base_url = ?, default_model_id = ?, default_voice_id = ?, created_at = ?, updated_at = ? WHERE singleton_id = 1",
+        `UPDATE ${legacyConnectionTable} SET base_url = ?, default_model_id = ?, default_voice_id = ?, created_at = ?, updated_at = ? WHERE singleton_id = 1`,
       )
       .run("https://example.test", "model-x", "voice-y", now, now);
     expect(
       v3.database
         .prepare(
-          "SELECT base_url, default_model_id, default_voice_id FROM speaches_connection WHERE singleton_id = 1",
+          `SELECT base_url, default_model_id, default_voice_id FROM ${legacyConnectionTable} WHERE singleton_id = 1`,
         )
         .get(),
     ).toEqual({
@@ -606,7 +617,7 @@ describe("database baseline", () => {
     expect(
       upgraded.database
         .prepare("SELECT name FROM sqlite_master WHERE name = ?")
-        .get("speaches_connection"),
+        .get(legacyConnectionTable),
     ).toBeUndefined();
     upgraded.database.close();
   });
@@ -1005,12 +1016,12 @@ describe("StudyNarratorRepository", () => {
       databasePath,
       now: () => new Date("2026-08-12T12:00:00.000Z"),
     });
-    expect(repository.getSpeachesConnection()).toMatchObject({
+    expect(repository.getSpeechBackendConnection()).toMatchObject({
       baseUrl: null,
       configured: false,
     });
     expect(
-      repository.replaceSpeachesConnection(
+      repository.replaceSpeechBackendConnection(
         {
           baseUrl: "http://127.0.0.1:18080",
           defaultModelId: "model",
@@ -1035,7 +1046,7 @@ describe("StudyNarratorRepository", () => {
       Database: DatabaseAdapter,
       databasePath,
     });
-    expect(reopened.getSpeachesConnection()).toMatchObject({
+    expect(reopened.getSpeechBackendConnection()).toMatchObject({
       defaultModelId: "model",
       defaultVoiceId: "voice",
     });
