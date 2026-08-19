@@ -29,6 +29,17 @@ const DataDirectoryManifestSchema = z
 
 export type DataDirectoryManifest = z.infer<typeof DataDirectoryManifestSchema>;
 
+/**
+ * A one-time data directory layout step (task 10.4 registers the first
+ * real steps). `id` is recorded in the manifest exactly once, after a
+ * successful `run`; a step that throws is never recorded, so it retries
+ * on the next launch.
+ */
+export interface LayoutStep {
+  id: string;
+  run(dataDirectory: string): Promise<void>;
+}
+
 export class LayoutTooNewError extends Error {
   readonly code = "LAYOUT_TOO_NEW";
 
@@ -46,6 +57,44 @@ export class LayoutTooNewError extends Error {
 
 const MANIFEST_FILE_NAME = "manifest.json";
 const MANIFEST_TEMPORARY_FILE_NAME = "manifest.json.tmp";
+
+/**
+ * Parse the existing manifest, or report `null` when the directory has
+ * none yet. A manifest whose layout this build does not support throws
+ * `LayoutTooNewError` and is never modified.
+ */
+async function loadManifest(
+  dataDirectory: string,
+): Promise<DataDirectoryManifest | null> {
+  let rawManifest: string;
+  try {
+    rawManifest = await readFile(
+      join(dataDirectory, MANIFEST_FILE_NAME),
+      "utf8",
+    );
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    return null;
+  }
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(rawManifest);
+  } catch (error) {
+    throw new Error(
+      "The data directory manifest is not valid JSON and could not be read.",
+      { cause: error },
+    );
+  }
+  const manifest = DataDirectoryManifestSchema.parse(decoded);
+  if (manifest.layoutVersion > DATA_DIRECTORY_LAYOUT_VERSION) {
+    throw new LayoutTooNewError(
+      dataDirectory,
+      manifest.layoutVersion,
+      DATA_DIRECTORY_LAYOUT_VERSION,
+    );
+  }
+  return manifest;
+}
 
 async function atomicWriteManifestFile(
   dataDirectory: string,
@@ -103,15 +152,8 @@ export async function readDataDirectoryManifest(
   options: { appVersion: string; now?: () => Date },
 ): Promise<DataDirectoryManifest> {
   const now = options.now ?? (() => new Date());
-  const manifestPath = join(dataDirectory, MANIFEST_FILE_NAME);
-  let rawManifest: string | null;
-  try {
-    rawManifest = await readFile(manifestPath, "utf8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    rawManifest = null;
-  }
-  if (rawManifest === null) {
+  const existing = await loadManifest(dataDirectory);
+  if (existing === null) {
     const stamp = now().toISOString();
     const manifest: DataDirectoryManifest = {
       manifestVersion: DATA_DIRECTORY_MANIFEST_VERSION,
@@ -124,28 +166,61 @@ export async function readDataDirectoryManifest(
     await writeDataDirectoryManifest(dataDirectory, manifest);
     return manifest;
   }
-  let decoded: unknown;
-  try {
-    decoded = JSON.parse(rawManifest);
-  } catch (error) {
-    throw new Error(
-      "The data directory manifest is not valid JSON and could not be read.",
-      { cause: error },
-    );
-  }
-  const manifest = DataDirectoryManifestSchema.parse(decoded);
-  if (manifest.layoutVersion > DATA_DIRECTORY_LAYOUT_VERSION) {
-    throw new LayoutTooNewError(
-      dataDirectory,
-      manifest.layoutVersion,
-      DATA_DIRECTORY_LAYOUT_VERSION,
-    );
-  }
   const updated: DataDirectoryManifest = {
-    ...manifest,
+    ...existing,
     appVersion: options.appVersion,
     updatedAt: now().toISOString(),
   };
   await writeDataDirectoryManifest(dataDirectory, updated);
   return updated;
+}
+
+/**
+ * Run one-time layout steps in array order against the data directory.
+ *
+ * - A step already in `completedSteps` is skipped.
+ * - A step that succeeds is appended to `completedSteps` and the manifest
+ *   is rewritten before the next step runs, so a crash loses at most the
+ *   step in flight (which simply retries next launch).
+ * - A step that throws is caught and collected in `failed`, and is NOT
+ *   recorded; it must never prevent the application from starting, and it
+ *   retries on the next launch.
+ *
+ * Only a manifest whose layout this build does not support is a genuine
+ * blocker (`LayoutTooNewError`); callers must surface that state.
+ */
+export async function runLayoutSteps(
+  dataDirectory: string,
+  steps: readonly LayoutStep[],
+): Promise<{
+  completed: string[];
+  failed: { id: string; error: unknown }[];
+}> {
+  const manifest = await loadManifest(dataDirectory);
+  const completedSteps = [...(manifest?.completedSteps ?? [])];
+  const completed: string[] = [];
+  const failed: { id: string; error: unknown }[] = [];
+  for (const step of steps) {
+    if (completedSteps.includes(step.id)) continue;
+    try {
+      await step.run(dataDirectory);
+    } catch (error) {
+      failed.push({ id: step.id, error });
+      continue;
+    }
+    completedSteps.push(step.id);
+    const stamp = new Date().toISOString();
+    await writeDataDirectoryManifest(dataDirectory, {
+      manifestVersion: DATA_DIRECTORY_MANIFEST_VERSION,
+      // A missing manifest here means the bootstrap read was skipped; the
+      // next readDataDirectoryManifest refreshes the version on startup.
+      appVersion: manifest?.appVersion ?? "unknown",
+      createdAt: manifest?.createdAt ?? stamp,
+      updatedAt: stamp,
+      layoutVersion: manifest?.layoutVersion ?? DATA_DIRECTORY_LAYOUT_VERSION,
+      completedSteps,
+    });
+    completed.push(step.id);
+  }
+  return { completed, failed };
 }

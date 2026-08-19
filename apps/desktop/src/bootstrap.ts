@@ -23,14 +23,19 @@ import {
   type StorageCheck,
 } from "@studynarrator/application";
 import {
+  LayoutTooNewError,
   MigrationFailureError,
   PersistenceConflictError,
   SchemaTooNewError,
   listPersistenceBackups,
   openStudyNarratorRepository,
+  readDataDirectoryManifest,
   restoreDatabaseFromBackup,
+  runLayoutSteps,
+  type LayoutStep,
 } from "@studynarrator/persistence";
 import {
+  APPLICATION_VERSION,
   DATABASE_SCHEMA_VERSION,
   PERSISTENCE_CONTRACT_VERSION,
   type PersistenceBackupsClient,
@@ -50,6 +55,13 @@ export function resolveDesktopDataDirectory(
       )
     : resolve(defaultDataDirectory);
 }
+
+/**
+ * One-time data directory layout steps, in the order that matters.
+ * Task 10.4 registers the first real step (legacy render cache cleanup)
+ * here; its id is recorded in <dataDir>/manifest.json exactly once.
+ */
+const layoutSteps: LayoutStep[] = [];
 
 export async function createDesktopServices(options: {
   defaultDataDirectory: string;
@@ -73,6 +85,10 @@ export async function createDesktopServices(options: {
   const cache = createApplicationSpeechCache(dataDirectory);
   const speechCache = createSpeechCacheService(cache);
   try {
+    await readDataDirectoryManifest(dataDirectory, {
+      appVersion: APPLICATION_VERSION,
+    });
+    await runLayoutSteps(dataDirectory, layoutSteps);
     const openedRepository = await openStudyNarratorRepository({
       Database,
       databasePath,
@@ -139,18 +155,28 @@ export async function createDesktopServices(options: {
   } catch (error) {
     if (
       !(error instanceof MigrationFailureError) &&
-      !(error instanceof SchemaTooNewError)
+      !(error instanceof SchemaTooNewError) &&
+      !(error instanceof LayoutTooNewError)
     )
       throw error;
-    const recoveryBackupPath =
-      error instanceof SchemaTooNewError
-        ? (error.backups[0]?.path ?? null)
-        : error.backupPath;
+    // A too-new layout is a data directory condition, not a database one:
+    // there is no database schema version or per-error backup to surface.
+    const layoutTooNew = error instanceof LayoutTooNewError;
+    let recoveryBackupPath: string | null = null;
+    if (!layoutTooNew) {
+      recoveryBackupPath =
+        error instanceof SchemaTooNewError
+          ? (error.backups[0]?.path ?? null)
+          : error.backupPath;
+    }
+    const unavailableDatabasePath = layoutTooNew
+      ? databasePath
+      : error.databasePath;
     storageFailure = {
       status: "fail",
       code: error.code,
       message: error.message,
-      databasePath: error.databasePath,
+      ...(layoutTooNew ? {} : { databasePath: error.databasePath }),
       recoveryBackupPath,
     };
     const backups: PersistenceBackupsClient = {
@@ -166,13 +192,18 @@ export async function createDesktopServices(options: {
       {
         contractVersion: PERSISTENCE_CONTRACT_VERSION,
         state: "unavailable",
-        databaseSchemaVersion: error.databaseSchemaVersion,
+        // The unavailable-status contract only knows the two database
+        // failure codes; a too-new layout is the same user condition
+        // ("created by a newer version") and carries its own message.
+        databaseSchemaVersion: layoutTooNew
+          ? null
+          : error.databaseSchemaVersion,
         targetDatabaseSchemaVersion: DATABASE_SCHEMA_VERSION,
-        databasePath: error.databasePath,
+        databasePath: unavailableDatabasePath,
         latestBackupPath: recoveryBackupPath,
-        code: error.code,
+        code: layoutTooNew ? "SCHEMA_TOO_NEW" : error.code,
         message: error.message,
-        availableBackups: await listPersistenceBackups(databasePath),
+        availableBackups: await listPersistenceBackups(unavailableDatabasePath),
       },
       { backups },
     );

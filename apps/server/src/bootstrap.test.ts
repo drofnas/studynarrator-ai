@@ -1,7 +1,109 @@
-import { resolve } from "node:path";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { resolveServerDataDirectory } from "./bootstrap.js";
+import Database from "better-sqlite3";
+import { APPLICATION_VERSION } from "@studynarrator/shared-types";
+import { openStudyNarratorRepository } from "@studynarrator/persistence";
+import {
+  createServerServices,
+  resolveServerDataDirectory,
+} from "./bootstrap.js";
 import { resolveServerRuntimeConfiguration } from "./runtimeConfig.js";
+
+describe("server data directory manifest", () => {
+  it("records a fresh manifest and does not grow layout steps across launches", async () => {
+    const dataDirectory = await mkdtemp(
+      join(tmpdir(), "studynarrator-server-manifest-"),
+    );
+    try {
+      for (let launch = 1; launch <= 2; launch += 1) {
+        const services = await createServerServices({
+          STUDYNARRATOR_DATA_DIR: dataDirectory,
+        });
+        try {
+          expect(
+            JSON.parse(
+              await readFile(join(dataDirectory, "manifest.json"), "utf8"),
+            ),
+          ).toMatchObject({
+            manifestVersion: 1,
+            appVersion: APPLICATION_VERSION,
+            layoutVersion: 1,
+            completedSteps: [],
+          });
+        } finally {
+          await services.dispose();
+        }
+      }
+    } finally {
+      await rm(dataDirectory, {
+        recursive: true,
+        force: true,
+        maxRetries: 5,
+        retryDelay: 100,
+      });
+    }
+  });
+
+  it("routes a too-new data directory layout to the unavailable persistence path", async () => {
+    const dataDirectory = await mkdtemp(
+      join(tmpdir(), "studynarrator-server-layout-"),
+    );
+    const databasePath = join(dataDirectory, "studynarrator.sqlite");
+    try {
+      const opened = await openStudyNarratorRepository({
+        Database,
+        databasePath,
+      });
+      opened.close();
+      await writeFile(
+        join(dataDirectory, "manifest.json"),
+        `${JSON.stringify(
+          {
+            manifestVersion: 1,
+            appVersion: "9.9.9",
+            createdAt: "2026-08-18T00:00:00.000Z",
+            updatedAt: "2026-08-18T00:00:00.000Z",
+            layoutVersion: 2,
+            completedSteps: ["a-future-layout-step"],
+          },
+          null,
+          2,
+        )}\n`,
+        { encoding: "utf8", mode: 0o600 },
+      );
+
+      const services = await createServerServices({
+        STUDYNARRATOR_DATA_DIR: dataDirectory,
+      });
+      try {
+        expect(await services.persistence.status()).toEqual(
+          expect.objectContaining({
+            state: "unavailable",
+            code: "SCHEMA_TOO_NEW",
+            databaseSchemaVersion: null,
+            databasePath,
+            latestBackupPath: null,
+            message: expect.stringContaining("newer version of StudyNarrator"),
+          }),
+        );
+        await expect(services.persistence.projects.list()).rejects.toThrow(
+          "Persistence is unavailable",
+        );
+      } finally {
+        await services.dispose();
+      }
+    } finally {
+      await rm(dataDirectory, {
+        recursive: true,
+        force: true,
+        maxRetries: 5,
+        retryDelay: 100,
+      });
+    }
+  });
+});
 
 describe("server data directory", () => {
   it("resolves a relative configured directory from the initiating workspace", () => {

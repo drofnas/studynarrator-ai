@@ -7,6 +7,7 @@ import {
   DATA_DIRECTORY_MANIFEST_VERSION,
   LayoutTooNewError,
   readDataDirectoryManifest,
+  runLayoutSteps,
   writeDataDirectoryManifest,
   type DataDirectoryManifest,
 } from "./index.js";
@@ -225,6 +226,147 @@ describe("writeDataDirectoryManifest", () => {
         baseManifest({ appVersion: "" }) as DataDirectoryManifest,
       ),
     ).rejects.toThrow();
+    expect(await lstat(manifestPath(directory)).catch(() => null)).toBeNull();
+  });
+});
+
+describe("runLayoutSteps", () => {
+  async function seededDirectory(prefix: string) {
+    const directory = manifestDirectory(prefix);
+    await readDataDirectoryManifest(directory, {
+      appVersion: "0.1.0",
+      now: () => new Date(BASE_TIME),
+    });
+    return directory;
+  }
+
+  it("runs steps in array order and records their completion", async () => {
+    const directory = await seededDirectory("steps-run");
+    const calls: string[] = [];
+
+    const result = await runLayoutSteps(directory, [
+      {
+        id: "step-a",
+        run: async () => {
+          calls.push("step-a");
+        },
+      },
+      {
+        id: "step-b",
+        run: async () => {
+          calls.push("step-b");
+        },
+      },
+    ]);
+
+    expect(calls).toEqual(["step-a", "step-b"]);
+    expect(result).toEqual({ completed: ["step-a", "step-b"], failed: [] });
+    expect(await readManifestJson(directory)).toMatchObject({
+      completedSteps: ["step-a", "step-b"],
+    });
+  });
+
+  it("skips steps already recorded in the manifest", async () => {
+    const directory = await seededDirectory("steps-skip");
+    await writeDataDirectoryManifest(
+      directory,
+      baseManifest({ completedSteps: ["step-a"] }),
+    );
+    let ran = false;
+
+    const result = await runLayoutSteps(directory, [
+      {
+        id: "step-a",
+        run: async () => {
+          ran = true;
+        },
+      },
+    ]);
+
+    expect(ran).toBe(false);
+    expect(result).toEqual({ completed: [], failed: [] });
+    expect(await readManifestJson(directory)).toMatchObject({
+      completedSteps: ["step-a"],
+    });
+  });
+
+  it("collects a failing step without recording it or stopping later steps", async () => {
+    const directory = await seededDirectory("steps-fail");
+    const failure = new Error("step-a exploded");
+
+    const result = await runLayoutSteps(directory, [
+      {
+        id: "step-a",
+        run: async () => {
+          throw failure;
+        },
+      },
+      {
+        id: "step-b",
+        run: async () => {
+          /* succeeds */
+        },
+      },
+    ]);
+
+    expect(result.completed).toEqual(["step-b"]);
+    expect(result.failed).toEqual([{ id: "step-a", error: failure }]);
+    expect(await readManifestJson(directory)).toMatchObject({
+      completedSteps: ["step-b"],
+    });
+  });
+
+  it("retries a failed step on the next launch", async () => {
+    const directory = await seededDirectory("steps-retry");
+    let attempts = 0;
+    const flaky = {
+      id: "flaky",
+      run: async () => {
+        attempts += 1;
+        if (attempts === 1) throw new Error("flaky first launch");
+      },
+    };
+
+    const first = await runLayoutSteps(directory, [flaky]);
+    expect(first.completed).toEqual([]);
+    expect(first.failed.map((entry) => entry.id)).toEqual(["flaky"]);
+
+    const second = await runLayoutSteps(directory, [flaky]);
+    expect(second).toEqual({ completed: ["flaky"], failed: [] });
+    expect(await readManifestJson(directory)).toMatchObject({
+      completedSteps: ["flaky"],
+    });
+  });
+
+  it("refuses to run steps against a layout this build does not support", async () => {
+    const directory = manifestDirectory("steps-too-new");
+    await writeFileRaw(
+      directory,
+      baseManifest({ layoutVersion: DATA_DIRECTORY_LAYOUT_VERSION + 1 }),
+    );
+    let ran = false;
+
+    await expect(
+      runLayoutSteps(directory, [
+        {
+          id: "step-a",
+          run: async () => {
+            ran = true;
+          },
+        },
+      ]),
+    ).rejects.toBeInstanceOf(LayoutTooNewError);
+
+    expect(ran).toBe(false);
+  });
+
+  it("returns empty results and writes nothing when no steps are registered", async () => {
+    const directory = manifestDirectory("steps-empty");
+    await mkdir(directory, { mode: 0o700 });
+
+    const result = await runLayoutSteps(directory, []);
+
+    expect(result).toEqual({ completed: [], failed: [] });
     expect(await lstat(manifestPath(directory)).catch(() => null)).toBeNull();
   });
 });

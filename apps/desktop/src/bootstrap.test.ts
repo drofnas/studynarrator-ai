@@ -1,9 +1,19 @@
-import { copyFile, mkdir, mkdtemp, rm } from "node:fs/promises";
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import Database from "better-sqlite3";
-import { DATABASE_SCHEMA_VERSION } from "@studynarrator/shared-types";
+import {
+  APPLICATION_VERSION,
+  DATABASE_SCHEMA_VERSION,
+} from "@studynarrator/shared-types";
 import { openStudyNarratorRepository } from "@studynarrator/persistence";
 import {
   createDesktopServices,
@@ -44,6 +54,100 @@ describe("desktop connection bootstrap", () => {
 });
 
 describe("desktop storage recovery", () => {
+  it("records a fresh manifest and does not grow layout steps on restart", async () => {
+    const dataDirectory = await mkdtemp(
+      join(tmpdir(), "studynarrator-desktop-manifest-"),
+    );
+    try {
+      for (let launch = 1; launch <= 2; launch += 1) {
+        const runtime = await createDesktopServices({
+          defaultDataDirectory: dataDirectory,
+          environment: {},
+        });
+        try {
+          expect(
+            JSON.parse(
+              await readFile(join(dataDirectory, "manifest.json"), "utf8"),
+            ),
+          ).toMatchObject({
+            manifestVersion: 1,
+            appVersion: APPLICATION_VERSION,
+            layoutVersion: 1,
+            completedSteps: [],
+          });
+        } finally {
+          await runtime.dispose();
+        }
+      }
+    } finally {
+      await rm(dataDirectory, {
+        recursive: true,
+        force: true,
+        maxRetries: 5,
+        retryDelay: 100,
+      });
+    }
+  });
+
+  it("refuses a data directory layout newer than this build", async () => {
+    const dataDirectory = await mkdtemp(
+      join(tmpdir(), "studynarrator-desktop-layout-"),
+    );
+    const databasePath = join(dataDirectory, "studynarrator.sqlite");
+    try {
+      const opened = await openStudyNarratorRepository({
+        Database,
+        databasePath,
+      });
+      opened.close();
+      await writeFile(
+        join(dataDirectory, "manifest.json"),
+        `${JSON.stringify(
+          {
+            manifestVersion: 1,
+            appVersion: "9.9.9",
+            createdAt: "2026-08-18T00:00:00.000Z",
+            updatedAt: "2026-08-18T00:00:00.000Z",
+            layoutVersion: 2,
+            completedSteps: ["a-future-layout-step"],
+          },
+          null,
+          2,
+        )}\n`,
+        { encoding: "utf8", mode: 0o600 },
+      );
+
+      const runtime = await createDesktopServices({
+        defaultDataDirectory: dataDirectory,
+        environment: {},
+      });
+      try {
+        expect(await runtime.persistence.status()).toEqual(
+          expect.objectContaining({
+            state: "unavailable",
+            code: "SCHEMA_TOO_NEW",
+            databaseSchemaVersion: null,
+            databasePath,
+            latestBackupPath: null,
+            message: expect.stringContaining("newer version of StudyNarrator"),
+          }),
+        );
+        await expect(runtime.persistence.projects.list()).rejects.toThrow(
+          "Persistence is unavailable",
+        );
+      } finally {
+        await runtime.dispose();
+      }
+    } finally {
+      await rm(dataDirectory, {
+        recursive: true,
+        force: true,
+        maxRetries: 5,
+        retryDelay: 100,
+      });
+    }
+  });
+
   it("surfaces a newer-schema database as SCHEMA_TOO_NEW and restores a backup", async () => {
     const dataDirectory = await mkdtemp(
       join(tmpdir(), "studynarrator-desktop-recovery-"),

@@ -3,8 +3,10 @@ export {
   DATA_DIRECTORY_MANIFEST_VERSION,
   LayoutTooNewError,
   readDataDirectoryManifest,
+  runLayoutSteps,
   writeDataDirectoryManifest,
   type DataDirectoryManifest,
+  type LayoutStep,
 } from "./dataDirectoryManifest.js";
 export {
   BackupRestoreError,
