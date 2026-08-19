@@ -14,10 +14,10 @@ export default defineConfig({
     baseURL: process.env.STUDYNARRATOR_DOCKER_BASE_URL,
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
-    video: "retain-on-failure"
+    video: "retain-on-failure",
   },
   projects: [
     { name: "docker-chromium", use: { ...devices["Desktop Chrome"] } },
-    { name: "docker-firefox", use: { ...devices["Desktop Firefox"] } }
-  ]
+    { name: "docker-firefox", use: { ...devices["Desktop Firefox"] } },
+  ],
 });

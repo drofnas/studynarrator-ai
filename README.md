@@ -194,12 +194,12 @@ Electron opens its own window and uses the operating system's application-data d
 
 Use the URL that the StudyNarrator backend can reach. Your browser may use a different URL:
 
-| StudyNarrator runtime | Speaches location | Base URL |
-| --- | --- | --- |
-| Docker Web | Same Docker host | `http://host.docker.internal:8000` |
-| Web or Electron from source | Same machine | `http://127.0.0.1:8000` |
-| Any runtime | Another private-network machine | `http://<private-ip-or-dns-name>:8000` |
-| Any runtime | Reverse proxy with TLS | `https://<speech-host>` |
+| StudyNarrator runtime       | Speaches location               | Base URL                               |
+| --------------------------- | ------------------------------- | -------------------------------------- |
+| Docker Web                  | Same Docker host                | `http://host.docker.internal:8000`     |
+| Web or Electron from source | Same machine                    | `http://127.0.0.1:8000`                |
+| Any runtime                 | Another private-network machine | `http://<private-ip-or-dns-name>:8000` |
+| Any runtime                 | Reverse proxy with TLS          | `https://<speech-host>`                |
 
 `localhost` inside the StudyNarrator container refers to that container, not the Docker host. The supplied Compose file maps `host.docker.internal` through Docker's Linux host-gateway support.
 
@@ -223,12 +223,12 @@ Before starting a current build, stop StudyNarrator and explicitly remove the di
 
 The checked-in [.env.example](.env.example) documents the complete Compose-facing configuration. Common settings are:
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `STUDYNARRATOR_BIND_ADDRESS` | `127.0.0.1` | Host interface that publishes the Web UI. Keep loopback unless LAN access is intentional. |
-| `STUDYNARRATOR_HOST_PORT` | `8080` | Host port for Docker Web. |
-| `STUDYNARRATOR_IMAGE_TAG` | `0.1.0` | Local image version and OCI version label. |
-| `STUDYNARRATOR_SOURCE_REVISION` | `local` | Revision reported by runtime diagnostics and the OCI image label. |
+| Variable                        | Default     | Purpose                                                                                   |
+| ------------------------------- | ----------- | ----------------------------------------------------------------------------------------- |
+| `STUDYNARRATOR_BIND_ADDRESS`    | `127.0.0.1` | Host interface that publishes the Web UI. Keep loopback unless LAN access is intentional. |
+| `STUDYNARRATOR_HOST_PORT`       | `8080`      | Host port for Docker Web.                                                                 |
+| `STUDYNARRATOR_IMAGE_TAG`       | `0.1.0`     | Local image version and OCI version label.                                                |
+| `STUDYNARRATOR_SOURCE_REVISION` | `local`     | Revision reported by runtime diagnostics and the OCI image label.                         |
 
 The Compose package fixes `STUDYNARRATOR_DATA_DIR` to `/data`, the only persistent container path. Direct Node and Electron runs can set `STUDYNARRATOR_DATA_DIR` to another writable directory. Set `STUDYNARRATOR_FFMPEG_PATH` only when FFmpeg is not discoverable on `PATH`.
 

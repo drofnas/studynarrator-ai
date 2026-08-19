@@ -3,7 +3,7 @@ import {
   validateScriptAnalysisResult,
   type ParserWorkerResponse,
   type ScriptAnalysisInput,
-  type ScriptAnalysisResult
+  type ScriptAnalysisResult,
 } from "./parserWorkerProtocol.js";
 
 export interface ScriptAnalyzer {
@@ -12,7 +12,10 @@ export interface ScriptAnalyzer {
 
 interface WorkerPort {
   postMessage(value: unknown): void;
-  addEventListener(type: "message", listener: (event: MessageEvent<unknown>) => void): void;
+  addEventListener(
+    type: "message",
+    listener: (event: MessageEvent<unknown>) => void,
+  ): void;
   addEventListener(type: "error", listener: (event: ErrorEvent) => void): void;
   terminate(): void;
 }
@@ -29,8 +32,12 @@ export class ScriptAnalysisWorkerClient implements ScriptAnalyzer {
 
   constructor(worker: WorkerPort) {
     this.#worker = worker;
-    worker.addEventListener("message", (event) => this.#handleMessage(event.data));
-    worker.addEventListener("error", (event) => this.#failAll(event.message || "The parser worker stopped unexpectedly."));
+    worker.addEventListener("message", (event) =>
+      this.#handleMessage(event.data),
+    );
+    worker.addEventListener("error", (event) =>
+      this.#failAll(event.message || "The parser worker stopped unexpectedly."),
+    );
   }
 
   analyze(input: ScriptAnalysisInput): Promise<ScriptAnalysisResult> {
@@ -49,7 +56,12 @@ export class ScriptAnalysisWorkerClient implements ScriptAnalyzer {
   }
 
   #handleMessage(value: unknown): void {
-    if (typeof value !== "object" || value === null || !("requestId" in value) || typeof value.requestId !== "number") {
+    if (
+      typeof value !== "object" ||
+      value === null ||
+      !("requestId" in value) ||
+      typeof value.requestId !== "number"
+    ) {
       this.#failAll("The parser worker returned an invalid response.");
       return;
     }
@@ -64,16 +76,23 @@ export class ScriptAnalysisWorkerClient implements ScriptAnalyzer {
     try {
       pending.resolve(validateScriptAnalysisResult(response.result));
     } catch {
-      pending.reject(new Error("The analysis worker returned data that failed validation."));
+      pending.reject(
+        new Error("The analysis worker returned data that failed validation."),
+      );
     }
   }
 
   #failAll(message: string): void {
-    for (const pending of this.#pending.values()) pending.reject(new Error(message));
+    for (const pending of this.#pending.values())
+      pending.reject(new Error(message));
     this.#pending.clear();
   }
 }
 
 export function createScriptAnalysisWorkerClient(): ScriptAnalysisWorkerClient {
-  return new ScriptAnalysisWorkerClient(new Worker(new URL("./parser.worker.ts", import.meta.url), { type: "module" }));
+  return new ScriptAnalysisWorkerClient(
+    new Worker(new URL("./parser.worker.ts", import.meta.url), {
+      type: "module",
+    }),
+  );
 }

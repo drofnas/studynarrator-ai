@@ -74,11 +74,10 @@ interface ProjectRow {
   updated_at: string;
 }
 
-interface ProjectSummaryRow
-  extends Pick<
-    ProjectRow,
-    "id" | "name" | "description" | "script_hash" | "created_at" | "updated_at"
-  > {
+interface ProjectSummaryRow extends Pick<
+  ProjectRow,
+  "id" | "name" | "description" | "script_hash" | "created_at" | "updated_at"
+> {
   script_line_count: number | null;
   audio_duration_ms: number | null;
 }
@@ -632,10 +631,12 @@ function createRepository(options: {
   const getVoiceCatalogOverrides = (modelId: string): VoiceCatalog => {
     assertOpen();
     const rows = database
-      .prepare(`
+      .prepare(
+        `
       SELECT voice_id, label, enabled, favorite, language, locale, accent, category, style, sample_text
       FROM voice_catalog_overrides WHERE model_id = ? ORDER BY ordinal ASC, voice_id ASC
-    `)
+    `,
+      )
       .all(modelId) as Array<{
       voice_id: string;
       label: string;
@@ -714,7 +715,8 @@ function createRepository(options: {
     listProjects() {
       assertOpen();
       const rows = database
-        .prepare(`
+        .prepare(
+          `
         SELECT
           projects.id,
           projects.name,
@@ -739,7 +741,8 @@ function createRepository(options: {
           projects.updated_at
         FROM projects
         ORDER BY projects.updated_at DESC, projects.id ASC
-      `)
+      `,
+        )
         .all() as ProjectSummaryRow[];
       return ProjectSummaryCollectionSchema.parse(
         rows.map((row) => ({
@@ -761,11 +764,13 @@ function createRepository(options: {
       const timestamp = options.now().toISOString();
       transaction(() => {
         database
-          .prepare(`
+          .prepare(
+            `
           INSERT INTO projects (
             id, name, description, script_source, script_hash, created_at, updated_at
           ) VALUES (?, ?, ?, '', ?, ?, ?)
-        `)
+        `,
+          )
           .run(
             id,
             input.name,
@@ -786,9 +791,11 @@ function createRepository(options: {
       const timestamp = options.now().toISOString();
       transaction(() => {
         const result = database
-          .prepare(`
+          .prepare(
+            `
           UPDATE projects SET name = ?, description = ?, script_source = ?, script_hash = ?, updated_at = ? WHERE id = ?
-        `)
+        `,
+          )
           .run(
             input.name,
             input.description,
@@ -891,11 +898,13 @@ function createRepository(options: {
       const timestamp = options.now().toISOString();
       transaction(() => {
         database
-          .prepare(`
+          .prepare(
+            `
           INSERT INTO projects (
             id, name, description, script_source, script_hash, created_at, updated_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?)
-        `)
+        `,
+          )
           .run(
             duplicateId,
             input.name,
@@ -983,13 +992,15 @@ function createRepository(options: {
       const section = transitionParameters(input.transitionPauses.section);
       transaction(() => {
         database
-          .prepare(`
+          .prepare(
+            `
           UPDATE system_timing SET
             paragraph_transition_mode = ?, paragraph_transition_pause_id = ?, paragraph_transition_duration_ms = ?,
             speaker_change_transition_mode = ?, speaker_change_transition_pause_id = ?, speaker_change_transition_duration_ms = ?,
             section_transition_mode = ?, section_transition_pause_id = ?, section_transition_duration_ms = ?, updated_at = ?
           WHERE singleton_id = 1
-        `)
+        `,
+          )
           .run(
             ...paragraph,
             ...speakerChange,
@@ -1063,11 +1074,13 @@ function createRepository(options: {
         existing.retryCount === input.retryCount &&
         existing.suppliedUrlForm === suppliedUrlForm;
       database
-        .prepare(`
+        .prepare(
+          `
         UPDATE speaches_connection SET base_url = ?, default_model_id = ?, default_voice_id = ?,
           timeout_seconds = ?, retry_count = ?, response_format = ?, supplied_url_form = ?, updated_at = ?
         WHERE singleton_id = 1
-      `)
+      `,
+        )
         .run(
           input.baseUrl,
           input.defaultModelId,
@@ -1085,10 +1098,12 @@ function createRepository(options: {
       const summary = ConnectionTestSummarySchema.parse(summaryValue);
       const connection = getSpeachesConnection();
       const result = database
-        .prepare(`
+        .prepare(
+          `
         UPDATE speaches_connection SET last_tested_at = ?, last_successful_test_at = ?,
           last_test_summary_json = ?, updated_at = ? WHERE singleton_id = 1
-      `)
+      `,
+        )
         .run(
           summary.testedAt,
           summary.overall === "connected"
@@ -1154,12 +1169,14 @@ function createRepository(options: {
       );
       transaction(() => {
         database
-          .prepare(`
+          .prepare(
+            `
           INSERT INTO render_jobs (
             id, project_id, plan_id, retry_of_render_id, state, progress_json, error_json,
             created_at, started_at, finished_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `)
+        `,
+          )
           .run(
             job.id,
             job.projectId,
@@ -1219,10 +1236,12 @@ function createRepository(options: {
     findActiveRenderJob(planId) {
       assertOpen();
       const row = database
-        .prepare(`
+        .prepare(
+          `
         SELECT * FROM render_jobs WHERE plan_id = ? AND state NOT IN ('complete','failed','canceled')
         ORDER BY created_at ASC LIMIT 1
-      `)
+      `,
+        )
         .get(planId) as RenderJobRow | undefined;
       return row ? renderJobFromRow(row) : null;
     },
@@ -1231,9 +1250,11 @@ function createRepository(options: {
       return RenderJobCollectionSchema.parse(
         (
           database
-            .prepare(`
+            .prepare(
+              `
         SELECT * FROM render_jobs WHERE state NOT IN ('complete','failed','canceled') ORDER BY created_at ASC, id ASC
-      `)
+      `,
+            )
             .all() as RenderJobRow[]
         ).map(renderJobFromRow),
       );
@@ -1242,9 +1263,11 @@ function createRepository(options: {
       assertOpen();
       const job = RenderJobSchema.parse(jobValue);
       const result = database
-        .prepare(`
+        .prepare(
+          `
         UPDATE render_jobs SET state = ?, progress_json = ?, error_json = ?, started_at = ?, finished_at = ? WHERE id = ?
-      `)
+      `,
+        )
         .run(
           job.state,
           JSON.stringify(job.progress),
@@ -1261,11 +1284,13 @@ function createRepository(options: {
       assertOpen();
       const segment = RenderSegmentSchema.parse(segmentValue);
       const result = database
-        .prepare(`
+        .prepare(
+          `
         UPDATE render_segments SET state = ?, cache_status = ?, audio_duration_ms = ?, error_json = ?,
           audio_file_name = ?, audio_path = ?, audio_size_bytes = ?, audio_checksum = ?
         WHERE render_id = ? AND ordinal = ?
-      `)
+      `,
+        )
         .run(
           segment.state,
           segment.cacheStatus,

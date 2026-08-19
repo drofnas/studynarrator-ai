@@ -61,8 +61,10 @@ export interface SpeechCacheKeyInput {
   responseFormat: "wav";
 }
 
-interface NormalizedSpeechCacheInput
-  extends Omit<SpeechCacheKeyInput, "serverIdentity" | "text"> {
+interface NormalizedSpeechCacheInput extends Omit<
+  SpeechCacheKeyInput,
+  "serverIdentity" | "text"
+> {
   serverIdentityHash: string;
   normalizedText: string;
   textHash: string;
@@ -73,8 +75,10 @@ export interface SpeechCacheUsage {
   scratchpad?: boolean;
 }
 
-interface SpeechCacheEntryMetadata
-  extends Omit<NormalizedSpeechCacheInput, "normalizedText"> {
+interface SpeechCacheEntryMetadata extends Omit<
+  NormalizedSpeechCacheInput,
+  "normalizedText"
+> {
   schemaVersion: typeof SPEECH_CACHE_SCHEMA_VERSION;
   normalizationVersion: typeof SPEECH_NORMALIZATION_VERSION;
   chunkingVersion: typeof SPEECH_CHUNKING_VERSION;
@@ -1331,9 +1335,7 @@ export interface RenderPlanStore {
   ): Promise<void>;
   /** Copies an established job snapshot into a new job directory, reusing the identical silence bytes. */
   cloneJobSnapshot(renderId: string, sourceRenderId: string): Promise<void>;
-  loadJob(
-    renderId: string,
-  ): Promise<{
+  loadJob(renderId: string): Promise<{
     snapshot: ProjectSnapshot;
     plan: RenderPlan;
     silenceAssets: ReadonlyMap<string, Uint8Array>;

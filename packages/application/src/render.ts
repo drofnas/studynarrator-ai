@@ -73,20 +73,15 @@ export type RenderRepository = Pick<
 > &
   Partial<Pick<StudyNarratorRepository, "getProject">>;
 
-export interface RenderService
-  extends Omit<
-    RenderClient,
-    "renderAudioSource" | "segmentAudioSource" | "exportAudio" | "exportDetails"
-  > {
-  exportAudio?(
-    renderId: string,
-  ): Promise<{
+export interface RenderService extends Omit<
+  RenderClient,
+  "renderAudioSource" | "segmentAudioSource" | "exportAudio" | "exportDetails"
+> {
+  exportAudio?(renderId: string): Promise<{
     disposition: "download" | "saved" | "canceled";
     fileName: string;
   }>;
-  exportDetails?(
-    renderId: string,
-  ): Promise<{
+  exportDetails?(renderId: string): Promise<{
     disposition: "download" | "saved" | "canceled";
     fileName: string;
   }>;
@@ -98,9 +93,7 @@ export interface RenderService
     renderId: string,
     ordinal: number,
   ): Promise<ResolvedRenderMedia>;
-  resolveDetailsArchive?(
-    renderId: string,
-  ): Promise<{
+  resolveDetailsArchive?(renderId: string): Promise<{
     bytes: Uint8Array;
     fileName: string;
     mimeType: "application/zip";

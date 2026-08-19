@@ -5,7 +5,5 @@
     "rootDir": "src"
   },
   "include": ["src/**/*.ts"],
-  "references": [
-    { "path": "../../packages/speaches-adapter" }
-  ]
+  "references": [{ "path": "../../packages/speaches-adapter" }]
 }

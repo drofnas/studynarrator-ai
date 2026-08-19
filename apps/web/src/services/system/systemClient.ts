@@ -2,7 +2,7 @@ import {
   BoundaryErrorSchema,
   SystemDiagnosticsSchema,
   type StudyNarratorBridge,
-  type SystemClient
+  type SystemClient,
 } from "@studynarrator/shared-types";
 
 declare global {
@@ -11,20 +11,30 @@ declare global {
   }
 }
 
-export function createRestClient(fetchInput: typeof fetch = fetch): SystemClient {
+export function createRestClient(
+  fetchInput: typeof fetch = fetch,
+): SystemClient {
   return {
     async diagnostics() {
-      const response = await fetchInput("/api/diagnostics", { headers: { accept: "application/json" } });
+      const response = await fetchInput("/api/diagnostics", {
+        headers: { accept: "application/json" },
+      });
       const body: unknown = await response.json();
       if (!response.ok) {
         const boundary = BoundaryErrorSchema.safeParse(body);
-        throw new Error(boundary.success ? boundary.data.error.message : "Diagnostics request failed.");
+        throw new Error(
+          boundary.success
+            ? boundary.data.error.message
+            : "Diagnostics request failed.",
+        );
       }
       return SystemDiagnosticsSchema.parse(body);
-    }
+    },
   };
 }
 
-export function resolveSystemClient(browserWindow: Window = window): SystemClient {
+export function resolveSystemClient(
+  browserWindow: Window = window,
+): SystemClient {
   return browserWindow.studyNarrator?.system ?? createRestClient();
 }

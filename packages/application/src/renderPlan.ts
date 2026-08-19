@@ -52,7 +52,8 @@ class RenderPlanServiceError extends Error {
 }
 
 export interface RenderPlanRepository
-  extends ConnectionRepository,
+  extends
+    ConnectionRepository,
     Pick<
       PersistenceRepository,
       | "getProject"

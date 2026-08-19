@@ -464,12 +464,14 @@ describe("database baseline", () => {
       .prepare("DELETE FROM lexicon_entries WHERE entry_type = 'namedSense'")
       .run();
     v2.database
-      .prepare(`
+      .prepare(
+        `
       INSERT INTO lexicon_entries (
         id, scope, project_id, ordinal, entry_type, display_text, sense_id, spoken_text,
         case_sensitive, whole_word, priority, enabled, notes, created_at, updated_at
       ) VALUES (?, 'global', NULL, ?, 'exactTerm', ?, NULL, ?, 0, 1, 0, 0, '', ?, ?)
-    `)
+    `,
+      )
       .run(
         "20000000-0000-4000-8000-000000000001",
         8,
@@ -479,12 +481,14 @@ describe("database baseline", () => {
         "2026-08-12T12:00:00.000Z",
       );
     v2.database
-      .prepare(`
+      .prepare(
+        `
       INSERT INTO lexicon_entries (
         id, scope, project_id, ordinal, entry_type, display_text, sense_id, spoken_text,
         case_sensitive, whole_word, priority, enabled, notes, created_at, updated_at
       ) VALUES (?, 'global', NULL, ?, 'namedSense', ?, ?, ?, 0, 1, 0, 0, '', ?, ?)
-    `)
+    `,
+      )
       .run(
         "20000000-0000-4000-8000-000000000002",
         9,
@@ -557,9 +561,11 @@ describe("database baseline", () => {
     });
     const tables = (
       migrated.database
-        .prepare(`
+        .prepare(
+          `
       SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name
-    `)
+    `,
+        )
         .all() as Array<{ name: string }>
     ).map(({ name }) => name);
     expect(tables).toContain("schema_migrations");

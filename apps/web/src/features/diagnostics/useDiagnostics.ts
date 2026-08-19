@@ -1,5 +1,8 @@
 import { useState } from "react";
-import type { SystemClient, SystemDiagnostics } from "@studynarrator/shared-types";
+import type {
+  SystemClient,
+  SystemDiagnostics,
+} from "@studynarrator/shared-types";
 
 type DiagnosticsState =
   | { phase: "idle" }
@@ -19,7 +22,10 @@ export function useDiagnostics(client: SystemClient) {
     } catch (error) {
       setState({
         phase: "error",
-        message: error instanceof Error ? error.message : "Diagnostics could not be completed."
+        message:
+          error instanceof Error
+            ? error.message
+            : "Diagnostics could not be completed.",
       });
     }
   }

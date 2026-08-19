@@ -215,19 +215,23 @@ function applyBaseline(database: DatabaseLike): void {
   database.exec(BASELINE_SCHEMA_SQL);
   const timestamp = new Date().toISOString();
   database
-    .prepare(`
+    .prepare(
+      `
     INSERT INTO speaches_connection (
       singleton_id, base_url, default_model_id, default_voice_id, timeout_seconds, retry_count,
       response_format, supplied_url_form, last_tested_at, last_successful_test_at,
       last_test_summary_json, created_at, updated_at
     ) VALUES (1, NULL, NULL, NULL, 120, 2, 'wav', 'unconfigured', NULL, NULL, NULL, ?, ?)
-  `)
+  `,
+    )
     .run(timestamp, timestamp);
   database
-    .prepare(`
+    .prepare(
+      `
     INSERT INTO connection_setup (singleton_id, onboarding_completed_at, updated_at)
     VALUES (1, NULL, ?)
-  `)
+  `,
+    )
     .run(timestamp);
 
   const transition = (setting: {
@@ -241,14 +245,16 @@ function applyBaseline(database: DatabaseLike): void {
     return [setting.mode, null, setting.durationMs ?? null];
   };
   database
-    .prepare(`
+    .prepare(
+      `
     INSERT INTO system_timing (
       singleton_id,
       paragraph_transition_mode, paragraph_transition_pause_id, paragraph_transition_duration_ms,
       speaker_change_transition_mode, speaker_change_transition_pause_id, speaker_change_transition_duration_ms,
       section_transition_mode, section_transition_pause_id, section_transition_duration_ms, updated_at
     ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `)
+  `,
+    )
     .run(
       ...transition(V1_SYSTEM_TIMING.transitionPauses.paragraph),
       ...transition(V1_SYSTEM_TIMING.transitionPauses.speakerChange),

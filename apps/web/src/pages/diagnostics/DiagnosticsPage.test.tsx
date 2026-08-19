@@ -23,7 +23,7 @@ const passingDiagnostics: SystemDiagnostics = {
     architecture: "arm64",
     dataDirectory: "/tmp/studynarrator/web",
     distribution: "development-web",
-    sourceRevision: "test-revision"
+    sourceRevision: "test-revision",
   },
   checks: {
     sharedCore: { status: "pass", marker: "study-narrator-core" },
@@ -36,24 +36,36 @@ const passingDiagnostics: SystemDiagnostics = {
       latestBackupPath: null,
       markerKey: "runtime.storage-self-test",
       markerValue: "study-narrator-storage-ok",
-      createdAt: "2026-08-11T12:00:00.000Z"
+      createdAt: "2026-08-11T12:00:00.000Z",
     },
-    ffmpeg: { status: "pass", executable: "ffmpeg", version: "ffmpeg version 8.1.2" }
-  }
+    ffmpeg: {
+      status: "pass",
+      executable: "ffmpeg",
+      version: "ffmpeg version 8.1.2",
+    },
+  },
 };
 
 describe("system diagnostics screen", () => {
   it("shows a disabled checking state while diagnostics are in flight", async () => {
     const user = userEvent.setup();
     let finish: ((value: SystemDiagnostics) => void) | undefined;
-    const pending = new Promise<SystemDiagnostics>((resolve) => { finish = resolve; });
-    render(<DiagnosticsPage client={{ diagnostics: async () => await pending }} />);
+    const pending = new Promise<SystemDiagnostics>((resolve) => {
+      finish = resolve;
+    });
+    render(
+      <DiagnosticsPage client={{ diagnostics: async () => await pending }} />,
+    );
 
     await user.click(screen.getByRole("button", { name: "Run self-test" }));
-    expect(screen.getByRole("button", { name: "Checking signal…" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Checking signal…" }),
+    ).toBeDisabled();
     expect(screen.getAllByText("CHECKING")).toHaveLength(3);
     finish?.(passingDiagnostics);
-    expect(await screen.findByRole("button", { name: "Run again" })).toBeEnabled();
+    expect(
+      await screen.findByRole("button", { name: "Run again" }),
+    ).toBeEnabled();
   });
 
   it("shows the idle state then all required Web/REST pass lines", async () => {
@@ -73,17 +85,23 @@ describe("system diagnostics screen", () => {
 
   it("renders Electron/IPC metadata from the same contract", async () => {
     const user = userEvent.setup();
-    render(<DiagnosticsPage client={{ diagnostics: async () => ({
-      ...passingDiagnostics,
-      client: "electron",
-      transport: "ipc",
-      runtime: {
-        ...passingDiagnostics.runtime,
-        runtimeName: "electron",
-        electronVersion: "43.3.0",
-        distribution: "electron"
-      }
-    }) }} />);
+    render(
+      <DiagnosticsPage
+        client={{
+          diagnostics: async () => ({
+            ...passingDiagnostics,
+            client: "electron",
+            transport: "ipc",
+            runtime: {
+              ...passingDiagnostics.runtime,
+              runtimeName: "electron",
+              electronVersion: "43.3.0",
+              distribution: "electron",
+            },
+          }),
+        }}
+      />,
+    );
     await user.click(screen.getByRole("button", { name: "Run self-test" }));
     expect(await screen.findByText("IPC")).toBeInTheDocument();
     expect(screen.getByText("Electron")).toBeInTheDocument();
@@ -91,7 +109,8 @@ describe("system diagnostics screen", () => {
 
   it("shows component failure details and supports retry", async () => {
     const user = userEvent.setup();
-    const diagnostics = vi.fn()
+    const diagnostics = vi
+      .fn()
       .mockResolvedValueOnce({
         ...passingDiagnostics,
         overall: "fail",
@@ -101,14 +120,16 @@ describe("system diagnostics screen", () => {
             status: "fail",
             executable: "ffmpeg",
             code: "FFMPEG_NOT_FOUND",
-            message: "FFmpeg was not found."
-          }
-        }
+            message: "FFmpeg was not found.",
+          },
+        },
       })
       .mockResolvedValueOnce(passingDiagnostics);
     render(<DiagnosticsPage client={{ diagnostics }} />);
     await user.click(screen.getByRole("button", { name: "Run self-test" }));
-    expect(await screen.findByText(/FFmpeg was not found\./u)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/FFmpeg was not found\./u),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Run again" }));
     expect(await screen.findAllByText("PASS")).toHaveLength(3);
     expect(diagnostics).toHaveBeenCalledTimes(2);
@@ -116,9 +137,21 @@ describe("system diagnostics screen", () => {
 
   it("turns a boundary error into actionable recovery copy", async () => {
     const user = userEvent.setup();
-    render(<DiagnosticsPage client={{ diagnostics: async () => { throw new Error("Local API is unavailable."); } }} />);
+    render(
+      <DiagnosticsPage
+        client={{
+          diagnostics: async () => {
+            throw new Error("Local API is unavailable.");
+          },
+        }}
+      />,
+    );
     await user.click(screen.getByRole("button", { name: "Run self-test" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Local API is unavailable.");
-    expect(screen.getByRole("alert")).toHaveTextContent("run the self-test again");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Local API is unavailable.",
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "run the self-test again",
+    );
   });
 });
