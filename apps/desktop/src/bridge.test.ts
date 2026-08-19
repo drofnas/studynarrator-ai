@@ -41,6 +41,9 @@ const diagnostics = {
     distribution: "electron",
     sourceRevision: "test-revision",
   },
+  backupCount: 0,
+  backupTotalBytes: 0,
+  oldestBackupAt: null,
   checks: {
     sharedCore: { status: "pass", marker: "study-narrator-core" },
     storage: {

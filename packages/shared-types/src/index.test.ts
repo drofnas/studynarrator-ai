@@ -18,6 +18,9 @@ const validDiagnostics = {
     distribution: "development-web",
     sourceRevision: "test-revision",
   },
+  backupCount: 3,
+  backupTotalBytes: 15360,
+  oldestBackupAt: "2026-08-10T09:00:00.000Z",
   checks: {
     sharedCore: { status: "pass", marker: "study-narrator-core" },
     storage: {

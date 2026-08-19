@@ -96,6 +96,9 @@ export const SystemDiagnosticsSchema = z
     client: z.enum(["web", "electron"]),
     transport: z.enum(["rest", "ipc"]),
     runtime: RuntimeSchema,
+    backupCount: z.number().int().nonnegative(),
+    backupTotalBytes: z.number().int().nonnegative(),
+    oldestBackupAt: z.iso.datetime().nullable(),
     checks: z
       .object({
         sharedCore: SharedCoreCheckSchema,

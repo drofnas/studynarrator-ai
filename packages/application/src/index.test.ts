@@ -154,4 +154,64 @@ describe("createSystemService", () => {
       code: "FFMPEG_TIMEOUT",
     });
   });
+
+  it("reports backup storage usage from the injected provider", async () => {
+    const service = createSystemService({
+      repository: { runMarker: () => storagePass, close: vi.fn() },
+      provideBackupUsage: async () => ({
+        count: 2,
+        totalBytes: 20480,
+        oldestAt: "2026-08-09T08:00:00.000Z",
+      }),
+      ffmpegProbe: {
+        run: async () => ({
+          status: "pass",
+          executable: "ffmpeg",
+          version: "ffmpeg 8",
+        }),
+      },
+    });
+
+    const result = await service.diagnostics(context);
+    expect(result.backupCount).toBe(2);
+    expect(result.backupTotalBytes).toBe(20480);
+    expect(result.oldestBackupAt).toBe("2026-08-09T08:00:00.000Z");
+  });
+
+  it("reports zero backup usage when the provider is absent or fails", async () => {
+    const absent = createSystemService({
+      repository: { runMarker: () => storagePass, close: vi.fn() },
+      ffmpegProbe: {
+        run: async () => ({
+          status: "pass",
+          executable: "ffmpeg",
+          version: "ffmpeg 8",
+        }),
+      },
+    });
+    const absentResult = await absent.diagnostics(context);
+    expect(absentResult.backupCount).toBe(0);
+    expect(absentResult.backupTotalBytes).toBe(0);
+    expect(absentResult.oldestBackupAt).toBeNull();
+
+    const failing = createSystemService({
+      repository: { runMarker: () => storagePass, close: vi.fn() },
+      provideBackupUsage: async () => {
+        throw new Error("backups unreadable");
+      },
+      ffmpegProbe: {
+        run: async () => ({
+          status: "pass",
+          executable: "ffmpeg",
+          version: "ffmpeg 8",
+        }),
+      },
+    });
+    const failingResult = await failing.diagnostics(context);
+    expect(failingResult.backupCount).toBe(0);
+    expect(failingResult.backupTotalBytes).toBe(0);
+    expect(failingResult.oldestBackupAt).toBeNull();
+    expect(failingResult.overall).toBe("pass");
+    expect(JSON.stringify(failingResult)).not.toContain("backups unreadable");
+  });
 });

@@ -47,9 +47,16 @@ const STORAGE_FAILURE: StorageCheck = {
   message: "StudyNarrator could not write and read its diagnostic database.",
 };
 
+export interface BackupUsage {
+  count: number;
+  totalBytes: number;
+  oldestAt: string | null;
+}
+
 export function createSystemService(dependencies: {
   repository: DiagnosticRepository;
   ffmpegProbe: FfmpegProbe;
+  provideBackupUsage?: () => Promise<BackupUsage>;
   storageFailure?: StorageCheck;
 }): SystemService {
   return {
@@ -82,6 +89,18 @@ export function createSystemService(dependencies: {
       }
 
       const ffmpeg = await dependencies.ffmpegProbe.run();
+      // Backup usage is disk evidence that must still render when the
+      // database will not open, so a missing or unreadable backups directory
+      // degrades to zeros rather than failing the diagnostic.
+      let backupUsage: BackupUsage = { count: 0, totalBytes: 0, oldestAt: null };
+      const provideBackupUsage = dependencies.provideBackupUsage;
+      if (provideBackupUsage !== undefined) {
+        try {
+          backupUsage = await provideBackupUsage();
+        } catch {
+          // Keep zeros; diagnostics must render in this case.
+        }
+      }
       const overall =
         storage.status === "pass" && ffmpeg.status === "pass" ? "pass" : "fail";
 
@@ -91,6 +110,9 @@ export function createSystemService(dependencies: {
         client: context.client,
         transport: context.transport,
         runtime: this.runtime(context),
+        backupCount: backupUsage.count,
+        backupTotalBytes: backupUsage.totalBytes,
+        oldestBackupAt: backupUsage.oldestAt,
         checks: {
           sharedCore: {
             status: "pass",

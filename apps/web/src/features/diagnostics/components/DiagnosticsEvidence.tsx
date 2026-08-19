@@ -1,6 +1,12 @@
 import type { SystemDiagnostics } from "@studynarrator/shared-types";
 import styles from "./DiagnosticsEvidence.module.css";
 
+function formatBytes(sizeBytes: number): string {
+  if (sizeBytes < 1024) return `${sizeBytes} B`;
+  if (sizeBytes < 1024 * 1024) return `${Math.round(sizeBytes / 1024)} KB`;
+  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 interface DiagnosticsEvidenceProps {
   diagnostics: SystemDiagnostics;
 }
@@ -61,6 +67,17 @@ export function DiagnosticsEvidence({ diagnostics }: DiagnosticsEvidenceProps) {
           {storage.status === "pass"
             ? (storage.latestBackupPath ?? "No migration backup")
             : (storage.recoveryBackupPath ?? "Unavailable")}
+        </code>
+      </article>
+      <article>
+        <p>Backup storage</p>
+        <code>
+          {diagnostics.backupCount} {" "}
+          {diagnostics.backupCount === 1 ? "backup" : "backups"} ·{" "}
+          {formatBytes(diagnostics.backupTotalBytes)} total
+          {diagnostics.oldestBackupAt !== null
+            ? ` · oldest ${diagnostics.oldestBackupAt}`
+            : ""}
         </code>
       </article>
       <article>

@@ -25,6 +25,9 @@ const passingDiagnostics: SystemDiagnostics = {
     distribution: "development-web",
     sourceRevision: "test-revision",
   },
+  backupCount: 2,
+  backupTotalBytes: 10485760,
+  oldestBackupAt: "2026-08-09T08:00:00.000Z",
   checks: {
     sharedCore: { status: "pass", marker: "study-narrator-core" },
     storage: {

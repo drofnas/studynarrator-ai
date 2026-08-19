@@ -16,6 +16,7 @@ import {
   createSystemService,
   createUnavailablePersistenceService,
   createVoiceCatalogService,
+  type BackupUsage,
   type DiagnosticsContext,
   type DiagnosticRepository,
   type RenderService,
@@ -184,6 +185,23 @@ export async function createDesktopServices(options: {
   }
   const service = createSystemService({
     repository,
+    provideBackupUsage: async (): Promise<BackupUsage> => {
+      const backups = await listPersistenceBackups(databasePath);
+      return {
+        count: backups.length,
+        totalBytes: backups.reduce(
+          (sumBytes, backup) => sumBytes + backup.sizeBytes,
+          0,
+        ),
+        oldestAt: backups.reduce<string | null>(
+          (oldest, backup) =>
+            oldest === null || backup.createdAt < oldest
+              ? backup.createdAt
+              : oldest,
+          null,
+        ),
+      };
+    },
     ...(storageFailure === undefined ? {} : { storageFailure }),
     ffmpegProbe: createFfmpegProbe(
       environment.STUDYNARRATOR_FFMPEG_PATH
