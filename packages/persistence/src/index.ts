@@ -1,4 +1,12 @@
 export {
+  DATA_DIRECTORY_LAYOUT_VERSION,
+  DATA_DIRECTORY_MANIFEST_VERSION,
+  LayoutTooNewError,
+  readDataDirectoryManifest,
+  writeDataDirectoryManifest,
+  type DataDirectoryManifest,
+} from "./dataDirectoryManifest.js";
+export {
   BackupRestoreError,
   MigrationFailureError,
   PersistenceConflictError,
