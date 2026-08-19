@@ -207,7 +207,6 @@ export interface StudyNarratorRepository {
   createRenderJob(job: RenderJob, segments: RenderSegment[]): RenderJob;
   getRenderJob(renderId: string): RenderJob;
   listRenderJobs(projectId: string): RenderJob[];
-  findActiveRenderJob(planId: string): RenderJob | null;
   listRecoverableRenderJobs(): RenderJob[];
   updateRenderJob(job: RenderJob): RenderJob;
   updateRenderSegment(
@@ -1232,18 +1231,6 @@ function createRepository(options: {
             .all(projectId) as RenderJobRow[]
         ).map(renderJobFromRow),
       );
-    },
-    findActiveRenderJob(planId) {
-      assertOpen();
-      const row = database
-        .prepare(
-          `
-        SELECT * FROM render_jobs WHERE plan_id = ? AND state NOT IN ('complete','failed','canceled')
-        ORDER BY created_at ASC LIMIT 1
-      `,
-        )
-        .get(planId) as RenderJobRow | undefined;
-      return row ? renderJobFromRow(row) : null;
     },
     listRecoverableRenderJobs() {
       assertOpen();
