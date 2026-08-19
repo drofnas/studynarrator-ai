@@ -1,4 +1,4 @@
-import { chmod, copyFile, rm, stat } from "node:fs/promises";
+import { chmod, copyFile, rename, rm, stat } from "node:fs/promises";
 import {
   basename,
   dirname,
@@ -139,13 +139,22 @@ export async function restoreDatabaseFromBackup(options: {
   await copyFile(databasePath, safetyCopyPath);
   await chmod(safetyCopyPath, 0o600);
 
-  await copyFile(backupPath, databasePath);
+  // Write beside the target and rename, so an interrupted restore can never
+  // leave a truncated database in place. Both paths are in the same directory,
+  // which keeps the rename atomic.
+  const stagingPath = `${databasePath}.restore-${process.pid.toString()}.tmp`;
+  try {
+    await copyFile(backupPath, stagingPath);
+    await chmod(stagingPath, 0o600);
+    await rename(stagingPath, databasePath);
+  } catch (error) {
+    await rm(stagingPath, { force: true });
+    throw error;
+  }
 
   // A stale write-ahead log next to a replaced database file causes corruption.
   await rm(`${databasePath}-wal`, { force: true });
   await rm(`${databasePath}-shm`, { force: true });
-
-  await chmod(databasePath, 0o600);
 
   return { restoredFrom: backupPath, safetyCopyPath };
 }

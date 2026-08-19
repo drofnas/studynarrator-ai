@@ -1,4 +1,11 @@
-import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  copyFile,
+  mkdir,
+  readFile,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
@@ -197,6 +204,55 @@ describe("restoreDatabaseFromBackup", () => {
 
     expect(await readFile(databasePath)).toEqual(original);
     expect(await readMarker(databasePath)).toBe("current");
+  });
+
+  it("leaves the original database intact when the restore copy fails", async () => {
+    const databasePath = databasePathFor("atomic");
+    const databaseDirectory = join(databasePath, "..");
+    const backupsDirectory = join(databaseDirectory, "backups");
+    await createLiveDatabase(databasePath, "current");
+    await mkdir(backupsDirectory, { recursive: true, mode: 0o700 });
+    const backupPath = join(
+      backupsDirectory,
+      `studynarrator-v0001-to-v0002-${ISO_STAMP}.sqlite`,
+    );
+    await createLiveDatabase(backupPath, "backup");
+
+    // A read-only database directory lets the safety copy (written into
+    // backups/, which keeps its own write bit) be preserved, but the
+    // staging file beside the live database cannot be created — the
+    // interrupted copy fails between the copy and the rename.
+    await chmod(databaseDirectory, 0o500);
+    try {
+      await expect(
+        restoreDatabaseFromBackup({
+          Database: DatabaseAdapter,
+          databasePath,
+          backupPath,
+        }),
+      ).rejects.toMatchObject({ code: "EACCES" });
+    } finally {
+      await chmod(databaseDirectory, 0o755);
+    }
+
+    // The live database is untouched and still openable.
+    const restored = new Database(databasePath, { readonly: true });
+    expect(restored.prepare("SELECT value FROM marker").get()).toEqual({
+      value: "current",
+    });
+    restored.close();
+    // The staging file left by the failed copy is cleaned up.
+    await expect(
+      stat(`${databasePath}.restore-${process.pid}.tmp`),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    // The safety copy was already placed before the atomic swap attempted.
+    const safetyCopies = (await listBackups(databasePath)).filter(
+      ({ kind }) => kind === "prerestore",
+    );
+    expect(safetyCopies).toHaveLength(1);
+    for (const copy of safetyCopies) {
+      expect(await readMarker(copy.path)).toBe("current");
+    }
   });
 });
 
