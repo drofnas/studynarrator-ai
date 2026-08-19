@@ -116,10 +116,10 @@ test.describe("shell, onboarding, and runtime routes", () => {
     await page.getByRole("button", { name: "Run self-test" }).click();
     await expect(page.getByText(/SQLite 3/u)).toBeVisible();
     await expect(page.getByText(/diagnostics schema 1/u)).toBeVisible();
-    await expect(page.getByText("Backup storage", { exact: true })).toBeVisible();
     await expect(
-      page.getByText(/backup(s)? · .* total/u),
+      page.getByText("Backup storage", { exact: true }),
     ).toBeVisible();
+    await expect(page.getByText(/backup(s)? · .* total/u)).toBeVisible();
     await expect(page.getByText("REST", { exact: true })).toBeVisible();
     await navigation.getByRole("link", { name: "Projects" }).click();
     await expect(

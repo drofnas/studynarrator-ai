@@ -78,9 +78,7 @@ describe("restoreDatabaseFromBackup", () => {
     expect(firstSafety.startsWith(backupsDirectory)).toBe(true);
     // The live database has no schema_migrations table, so its version falls
     // back to 0 in the name; the marker and version pair are both present.
-    expect(firstSafety).toMatch(
-      /prerestore-v\d+-to-v\d+-[^/]+\.sqlite$/u,
-    );
+    expect(firstSafety).toMatch(/prerestore-v\d+-to-v\d+-[^/]+\.sqlite$/u);
     expect(await readMarker(result.restoredFrom)).toBe("backup");
     expect(await readMarker(firstSafety)).toBe("current");
     expect((await stat(firstSafety)).mode & 0o777).toBe(0o600);
@@ -101,9 +99,7 @@ describe("restoreDatabaseFromBackup", () => {
     expect(second.safetyCopyPath).not.toBeNull();
     const secondSafety = second.safetyCopyPath as string;
     expect(await readMarker(secondSafety)).toBe("backup");
-    expect(secondSafety).toMatch(
-      /prerestore-v\d+-to-v\d+-[^/]+\.sqlite$/u,
-    );
+    expect(secondSafety).toMatch(/prerestore-v\d+-to-v\d+-[^/]+\.sqlite$/u);
     // Both safety copies are now discoverable in the backup listings and are
     // classified as pre-restore copies, not migrations. Newest first: the
     // second restore's copy is the most recent file.

@@ -92,7 +92,11 @@ export function createSystemService(dependencies: {
       // Backup usage is disk evidence that must still render when the
       // database will not open, so a missing or unreadable backups directory
       // degrades to zeros rather than failing the diagnostic.
-      let backupUsage: BackupUsage = { count: 0, totalBytes: 0, oldestAt: null };
+      let backupUsage: BackupUsage = {
+        count: 0,
+        totalBytes: 0,
+        oldestAt: null,
+      };
       const provideBackupUsage = dependencies.provideBackupUsage;
       if (provideBackupUsage !== undefined) {
         try {

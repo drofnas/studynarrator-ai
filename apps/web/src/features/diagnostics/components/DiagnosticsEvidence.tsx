@@ -72,7 +72,7 @@ export function DiagnosticsEvidence({ diagnostics }: DiagnosticsEvidenceProps) {
       <article>
         <p>Backup storage</p>
         <code>
-          {diagnostics.backupCount} {" "}
+          {diagnostics.backupCount}{" "}
           {diagnostics.backupCount === 1 ? "backup" : "backups"} ·{" "}
           {formatBytes(diagnostics.backupTotalBytes)} total
           {diagnostics.oldestBackupAt !== null

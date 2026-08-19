@@ -3,7 +3,7 @@ import type {
   SpeachesConnectionClient,
   VoiceCatalogClient,
 } from "./connections.js";
-import { type PersistenceClient } from "./persistence.js";
+import type { PersistenceClient } from "./persistence.js";
 import type { ProjectPreviewClient, SpeechCacheClient } from "./preview.js";
 import type { RenderClient } from "./render.js";
 import type { ScratchpadClient } from "./scratchpad.js";
