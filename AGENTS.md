@@ -26,6 +26,10 @@ During implementation work, create small, coherent checkpoint commits instead of
 
 When the user has authorized implementation on the current branch, these checkpoint commits are part of the normal implementation workflow and should not require a separate reminder after every slice.
 
+## Formatting
+
+Formatting is owned by Prettier: run `npm run format` before committing, and never mix formatting changes with logic changes in the same commit.
+
 ## Mandatory automated acceptance and API contracts
 
 Functional behavior must be automated before it is handed to a human reviewer.
