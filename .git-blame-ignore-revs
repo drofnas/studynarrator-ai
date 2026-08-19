@@ -1,0 +1,1 @@
+# Full SHAs of commits that intentionally reformat many files at once. echo # git blame (with --ignore-revs-file) and code review can skip them. echo f70567f4f23d9076f50f88af48822f47695c9c12
