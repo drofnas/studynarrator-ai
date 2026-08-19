@@ -358,6 +358,16 @@ export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
     name: "global-named-sense-defaults",
     up: addGlobalNamedSenseDefaults,
   },
+  {
+    version: 4,
+    name: "neutral-speech-backend-naming",
+    up(database) {
+      database.exec(`
+        ALTER TABLE speaches_connection RENAME TO speech_backend_connection;
+        ALTER TABLE speech_backend_connection ADD COLUMN backend_id TEXT NOT NULL DEFAULT 'speaches';
+      `);
+    },
+  },
 ]);
 
 interface VersionRow {

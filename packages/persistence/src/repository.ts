@@ -611,7 +611,7 @@ function createRepository(options: {
   const getSpeachesConnection = (): SpeachesConnection => {
     assertOpen();
     const row = database
-      .prepare("SELECT * FROM speaches_connection WHERE singleton_id = 1")
+      .prepare("SELECT * FROM speech_backend_connection WHERE singleton_id = 1")
       .get() as ConnectionRow | undefined;
     if (!row)
       throw new PersistenceNotFoundError(
@@ -1078,7 +1078,7 @@ function createRepository(options: {
       database
         .prepare(
           `
-        UPDATE speaches_connection SET base_url = ?, default_model_id = ?, default_voice_id = ?,
+        UPDATE speech_backend_connection SET base_url = ?, default_model_id = ?, default_voice_id = ?,
           timeout_seconds = ?, retry_count = ?, response_format = ?, supplied_url_form = ?, updated_at = ?
         WHERE singleton_id = 1
       `,
@@ -1102,7 +1102,7 @@ function createRepository(options: {
       const result = database
         .prepare(
           `
-        UPDATE speaches_connection SET last_tested_at = ?, last_successful_test_at = ?,
+        UPDATE speech_backend_connection SET last_tested_at = ?, last_successful_test_at = ?,
           last_test_summary_json = ?, updated_at = ? WHERE singleton_id = 1
       `,
         )

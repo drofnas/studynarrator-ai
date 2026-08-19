@@ -62,17 +62,18 @@ describe("database baseline", () => {
       { version: 1, name: "v1-baseline" },
       { version: 2, name: "project-speech-cache-lifecycle" },
       { version: 3, name: "global-named-sense-defaults" },
+      { version: 4, name: "neutral-speech-backend-naming" },
     ]);
-    expect(first.appliedVersions).toEqual([1, 2, 3]);
-    expect(first.databaseSchemaVersion).toBe(3);
+    expect(first.appliedVersions).toEqual([1, 2, 3, 4]);
+    expect(first.databaseSchemaVersion).toBe(4);
     expect(first.backupPath).toBeNull();
     expect(
       first.database.prepare("SELECT version FROM schema_migrations").all(),
-    ).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }]);
+    ).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }]);
     expect(
       first.database
         .prepare(
-          "SELECT singleton_id, base_url, supplied_url_form FROM speaches_connection",
+          "SELECT singleton_id, base_url, supplied_url_form FROM speech_backend_connection",
         )
         .all(),
     ).toEqual([
@@ -505,9 +506,9 @@ describe("database baseline", () => {
       Database: DatabaseAdapter,
       databasePath,
     });
-    expect(upgraded.appliedVersions).toEqual([3]);
-    expect(upgraded.databaseSchemaVersion).toBe(3);
-    expect(upgraded.backupPath).toContain("-v0002-to-v0003-");
+    expect(upgraded.appliedVersions).toEqual([3, 4]);
+    expect(upgraded.databaseSchemaVersion).toBe(4);
+    expect(upgraded.backupPath).toContain("-v0002-to-v0004-");
     expect(
       upgraded.database
         .prepare(
@@ -554,6 +555,62 @@ describe("database baseline", () => {
     reopened.database.close();
   });
 
+  it("preserves the connection row across the speech backend rename", async () => {
+    const databasePath = await temporaryDatabase(
+      "studynarrator-v3-connection-rename-",
+    );
+    const v3 = await migrateDatabase({
+      Database: DatabaseAdapter,
+      databasePath,
+      migrations: STUDYNARRATOR_MIGRATIONS.slice(0, 3),
+    });
+    const now = "2026-08-19T00:00:00.000Z";
+    v3.database
+      .prepare(
+        "UPDATE speaches_connection SET base_url = ?, default_model_id = ?, default_voice_id = ?, created_at = ?, updated_at = ? WHERE singleton_id = 1",
+      )
+      .run("https://example.test", "model-x", "voice-y", now, now);
+    expect(
+      v3.database
+        .prepare(
+          "SELECT base_url, default_model_id, default_voice_id FROM speaches_connection WHERE singleton_id = 1",
+        )
+        .get(),
+    ).toEqual({
+      base_url: "https://example.test",
+      default_model_id: "model-x",
+      default_voice_id: "voice-y",
+    });
+    v3.database.close();
+
+    const upgraded = await migrateDatabase({
+      Database: DatabaseAdapter,
+      databasePath,
+    });
+    expect(upgraded.appliedVersions).toEqual([4]);
+    expect(upgraded.databaseSchemaVersion).toBe(4);
+    expect(
+      upgraded.database
+        .prepare(
+          "SELECT base_url, default_model_id, default_voice_id, backend_id, created_at, updated_at FROM speech_backend_connection WHERE singleton_id = 1",
+        )
+        .get(),
+    ).toEqual({
+      base_url: "https://example.test",
+      default_model_id: "model-x",
+      default_voice_id: "voice-y",
+      backend_id: "speaches",
+      created_at: now,
+      updated_at: now,
+    });
+    expect(
+      upgraded.database
+        .prepare("SELECT name FROM sqlite_master WHERE name = ?")
+        .get("speaches_connection"),
+    ).toBeUndefined();
+    upgraded.database.close();
+  });
+
   it("contains only current tables and no legacy columns", async () => {
     const databasePath = await temporaryDatabase("studynarrator-v1-shape-");
     const migrated = await migrateDatabase({
@@ -591,7 +648,10 @@ describe("database baseline", () => {
     );
     expect(tables.filter((table) => table.startsWith("legacy_"))).toEqual([]);
     expect(
-      columns(migrated.database as Database.Database, "speaches_connection"),
+      columns(
+        migrated.database as Database.Database,
+        "speech_backend_connection",
+      ),
     ).not.toEqual(
       expect.arrayContaining([
         "id",
@@ -626,7 +686,7 @@ describe("database baseline", () => {
     `);
       old.close();
 
-      if (version > 3) {
+      if (version > 4) {
         await expect(
           migrateDatabase({ Database: DatabaseAdapter, databasePath }),
         ).rejects.toBeInstanceOf(SchemaTooNewError);
@@ -664,7 +724,7 @@ describe("database baseline", () => {
       .run();
     baseline.database.close();
     const failing: Migration = {
-      version: 4,
+      version: 5,
       name: "intentional-test-failure",
       up(database) {
         database.exec(
@@ -684,7 +744,7 @@ describe("database baseline", () => {
       failure = error as MigrationFailureError;
     }
     expect(failure).toBeInstanceOf(MigrationFailureError);
-    expect(failure?.backupPath).toContain("-v0003-to-v0004-");
+    expect(failure?.backupPath).toContain("-v0004-to-v0005-");
     expect((await stat(failure!.backupPath!)).mode & 0o777).toBe(0o600);
     expect((await readFile(failure!.backupPath!)).byteLength).toBeGreaterThan(
       0,
@@ -820,7 +880,7 @@ describe("StudyNarratorRepository", () => {
     });
     expect(first.status()).toMatchObject({
       contractVersion: 1,
-      databaseSchemaVersion: 3,
+      databaseSchemaVersion: 4,
     });
     const created = first.createProject({
       name: "Persistence restart proof",
@@ -1005,7 +1065,7 @@ describe("StudyNarratorRepository", () => {
     });
     expect(repository.runMarker()).toMatchObject({
       markerKey: "runtime.storage-self-test",
-      migrationVersion: 3,
+      migrationVersion: 4,
     });
     const project = repository.createProject({ name: "Rendered" });
     repository.replaceProject(project.id, {
