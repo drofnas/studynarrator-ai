@@ -233,6 +233,9 @@ export interface StudyNarratorRepository {
 interface RenderJobRow {
   id: string;
   project_id: string;
+  // Vestigial. Render plans are computed per render and no longer have a
+  // user-visible identity, so this value is generated and never looked up.
+  // Scheduled for removal; see docs/technical-debt.md.
   plan_id: string;
   retry_of_render_id: string | null;
   state: RenderJob["state"];
@@ -1167,6 +1170,10 @@ function createRepository(options: {
         RenderSegmentSchema.parse(segment),
       );
       transaction(() => {
+        // Vestigial. Render plans are computed per render and no longer have a
+        // user-visible identity, so the plan_id value inserted below is
+        // generated and never looked up. Scheduled for removal; see
+        // docs/technical-debt.md.
         database
           .prepare(
             `
