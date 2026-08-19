@@ -70,7 +70,7 @@ export const ConnectionTestSummarySchema = z
   .strict();
 export type ConnectionTestSummary = z.infer<typeof ConnectionTestSummarySchema>;
 
-export const SpeachesConnectionAuthoringSchema = z
+export const SpeechBackendConnectionAuthoringSchema = z
   .object({
     baseUrl: z.url({ protocol: /^https?$/u }).nullable(),
     defaultModelId: z.string().trim().min(1).max(500).nullable(),
@@ -90,11 +90,11 @@ export const SpeachesConnectionAuthoringSchema = z
     responseFormat: z.literal("wav").default("wav"),
   })
   .strict();
-export type SpeachesConnectionAuthoring = z.input<
-  typeof SpeachesConnectionAuthoringSchema
+export type SpeechBackendConnectionAuthoring = z.input<
+  typeof SpeechBackendConnectionAuthoringSchema
 >;
 
-export const SpeachesCatalogDiscoveryInputSchema = z
+export const SpeechCatalogDiscoveryInputSchema = z
   .object({
     baseUrl: z.url({ protocol: /^https?$/u }),
     timeoutSeconds: z
@@ -111,12 +111,13 @@ export const SpeachesCatalogDiscoveryInputSchema = z
       .default(CONNECTION_DEFAULT_RETRY_COUNT),
   })
   .strict();
-export type SpeachesCatalogDiscoveryInput = z.input<
-  typeof SpeachesCatalogDiscoveryInputSchema
+export type SpeechCatalogDiscoveryInput = z.input<
+  typeof SpeechCatalogDiscoveryInputSchema
 >;
 
-export const SpeachesConnectionSchema = z
+export const SpeechBackendConnectionSchema = z
   .object({
+    backendId: z.literal("speaches"),
     baseUrl: z.url({ protocol: /^https?$/u }).nullable(),
     suppliedUrlForm: z.enum(["root", "v1", "unconfigured"]),
     configured: z.boolean(),
@@ -132,7 +133,9 @@ export const SpeachesConnectionSchema = z
     updatedAt: TimestampSchema,
   })
   .strict();
-export type SpeachesConnection = z.infer<typeof SpeachesConnectionSchema>;
+export type SpeechBackendConnection = z.infer<
+  typeof SpeechBackendConnectionSchema
+>;
 
 export const ConnectionSetupStateSchema = z
   .object({
@@ -220,12 +223,14 @@ export type RedactedConnectionDiagnostics = z.infer<
   typeof RedactedConnectionDiagnosticsSchema
 >;
 
-export interface SpeachesConnectionClient {
-  get(): Promise<SpeachesConnection>;
-  update(input: SpeachesConnectionAuthoring): Promise<SpeachesConnection>;
+export interface SpeechBackendConnectionClient {
+  get(): Promise<SpeechBackendConnection>;
+  update(
+    input: SpeechBackendConnectionAuthoring,
+  ): Promise<SpeechBackendConnection>;
   test(): Promise<ConnectionTestSummary>;
   discoverSpeechCatalog(
-    input: SpeachesCatalogDiscoveryInput,
+    input: SpeechCatalogDiscoveryInput,
     signal?: AbortSignal,
   ): Promise<SpeechCatalog>;
   exportDiagnostics(): Promise<RedactedConnectionDiagnostics>;
