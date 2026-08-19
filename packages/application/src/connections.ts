@@ -5,16 +5,16 @@ import {
   ConnectionSetupStateSchema,
   ConnectionTestSummarySchema,
   RedactedConnectionDiagnosticsSchema,
-  SpeachesCatalogDiscoveryInputSchema,
-  SpeachesConnectionAuthoringSchema,
+  SpeechCatalogDiscoveryInputSchema,
+  SpeechBackendConnectionAuthoringSchema,
   SpeechCatalogSchema,
   VoiceCatalogSchema,
   type ConnectionSetupState,
   type ConnectionTestSummary,
   type RedactedConnectionDiagnostics,
-  type SpeachesConnection,
-  type SpeachesConnectionAuthoring,
-  type SpeachesConnectionClient,
+  type SpeechBackendConnection,
+  type SpeechBackendConnectionAuthoring,
+  type SpeechBackendConnectionClient,
   type SpeechCatalog,
   type VoiceCatalog,
   type VoiceCatalogAuthoring,
@@ -30,12 +30,12 @@ import {
 } from "@studynarrator/speaches-adapter";
 
 export interface ConnectionRepository {
-  getSpeachesConnection(): SpeachesConnection;
-  replaceSpeachesConnection(
-    input: SpeachesConnectionAuthoring,
+  getSpeechBackendConnection(): SpeechBackendConnection;
+  replaceSpeechBackendConnection(
+    input: SpeechBackendConnectionAuthoring,
     suppliedUrlForm: "root" | "v1" | "unconfigured",
-  ): SpeachesConnection;
-  recordConnectionTest(summary: ConnectionTestSummary): SpeachesConnection;
+  ): SpeechBackendConnection;
+  recordConnectionTest(summary: ConnectionTestSummary): SpeechBackendConnection;
   getConnectionSetup(): { onboardingCompletedAt: string | null };
   completeConnectionOnboarding(): { onboardingCompletedAt: string | null };
   getVoiceCatalogOverrides(modelId: string): VoiceCatalog;
@@ -114,8 +114,8 @@ function safeCatalogError(error: unknown): ConnectionCatalogError {
   );
 }
 
-function normalizeAuthoring(inputValue: SpeachesConnectionAuthoring) {
-  const input = SpeachesConnectionAuthoringSchema.parse(inputValue);
+function normalizeAuthoring(inputValue: SpeechBackendConnectionAuthoring) {
+  const input = SpeechBackendConnectionAuthoringSchema.parse(inputValue);
   const normalized =
     input.baseUrl === null ? null : normalizeSpeachesUrl(input.baseUrl);
   return {
@@ -200,25 +200,26 @@ export function createConnectionService(dependencies: {
   context: ConnectionRuntimeContext;
   diagnose?: ConnectionDiagnosticRunner;
   discoverCatalog?: ConnectionCatalogRunner;
-}): SpeachesConnectionClient {
+}): SpeechBackendConnectionClient {
   const diagnose =
     dependencies.diagnose ?? ((input) => diagnoseSpeaches(input));
   const discoverCatalog =
     dependencies.discoverCatalog ??
     ((input) => discoverSpeachesSpeechCatalog(input));
   return {
-    get: () => Promise.resolve(dependencies.repository.getSpeachesConnection()),
+    get: () =>
+      Promise.resolve(dependencies.repository.getSpeechBackendConnection()),
     update(inputValue) {
       return Promise.resolve().then(() => {
         const normalized = normalizeAuthoring(inputValue);
-        return dependencies.repository.replaceSpeachesConnection(
+        return dependencies.repository.replaceSpeechBackendConnection(
           normalized.connection,
           normalized.suppliedUrlForm,
         );
       });
     },
     async test() {
-      const connection = dependencies.repository.getSpeachesConnection();
+      const connection = dependencies.repository.getSpeechBackendConnection();
       const diagnostic = await diagnose({
         baseUrl: connection.baseUrl ?? "",
         modelId: connection.defaultModelId,
@@ -231,7 +232,7 @@ export function createConnectionService(dependencies: {
     },
     async discoverSpeechCatalog(inputValue, signal) {
       try {
-        const input = SpeachesCatalogDiscoveryInputSchema.parse(inputValue);
+        const input = SpeechCatalogDiscoveryInputSchema.parse(inputValue);
         const normalized = normalizeSpeachesUrl(input.baseUrl);
         const catalog = SpeechCatalogSchema.parse(
           await discoverCatalog({
@@ -253,7 +254,7 @@ export function createConnectionService(dependencies: {
     },
     exportDiagnostics(): Promise<RedactedConnectionDiagnostics> {
       return Promise.resolve().then(() => {
-        const connection = dependencies.repository.getSpeachesConnection();
+        const connection = dependencies.repository.getSpeechBackendConnection();
         if (!connection.lastTestSummary)
           throw new ConnectionConfigurationError(
             "Test this connection before exporting diagnostics.",

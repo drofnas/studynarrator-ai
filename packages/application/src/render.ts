@@ -58,7 +58,7 @@ class RenderMediaUnavailableError extends Error {
 
 export type RenderRepository = Pick<
   StudyNarratorRepository,
-  | "getSpeachesConnection"
+  | "getSpeechBackendConnection"
   | "createRenderJob"
   | "getRenderJob"
   | "listRenderJobs"
@@ -304,7 +304,7 @@ export async function createRenderService(options: {
       job = update(job, "validating");
       const jobBundle = await options.plans.loadJob(job.id);
       const { plan, snapshot, silenceAssets } = jobBundle;
-      const connection = options.repository.getSpeachesConnection();
+      const connection = options.repository.getSpeechBackendConnection();
       if (
         !connection.baseUrl ||
         sha256(connection.baseUrl) !== snapshot.connection.serverIdentityHash

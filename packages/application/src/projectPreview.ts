@@ -123,7 +123,7 @@ function projectConnection(
   project: ProjectDetail,
   repository: ProjectPreviewRepository,
 ) {
-  const connection = repository.getSpeachesConnection();
+  const connection = repository.getSpeechBackendConnection();
   const modelId = connection.defaultModelId;
   if (!modelId)
     throw new ProjectPreviewServiceError(

@@ -32,12 +32,12 @@ export const SPEACHES_CACHE_ADAPTER_ID = "speaches-openai-compatible";
 export const SPEACHES_CACHE_ADAPTER_VERSION = 1;
 
 export function createProjectSpeechCacheKeyPlanner(
-  repository: Pick<ConnectionRepository, "getSpeachesConnection"> & {
+  repository: Pick<ConnectionRepository, "getSpeechBackendConnection"> & {
     listGlobalLexicon(): LexiconEntry[];
   },
 ) {
   return (input: ProjectReplaceInput): readonly string[] | undefined => {
-    const connection = repository.getSpeachesConnection();
+    const connection = repository.getSpeechBackendConnection();
     if (!connection.baseUrl || !connection.defaultModelId) return undefined;
     const parsed = parseScript({ source: input.scriptSource });
     const timestamp = "2000-01-01T00:00:00.000Z";
@@ -124,7 +124,7 @@ export function createApplicationSpeechCache(
 }
 
 export function createCachedSpeechSynthesis(dependencies: {
-  repository: Pick<ConnectionRepository, "getSpeachesConnection">;
+  repository: Pick<ConnectionRepository, "getSpeechBackendConnection">;
   cache: SpeechCache;
   synthesize?: CachedSpeechSynthesisRunner;
 }): CachedSpeechSynthesis {
@@ -132,7 +132,7 @@ export function createCachedSpeechSynthesis(dependencies: {
     dependencies.synthesize ?? ((input) => synthesizeSpeech(input));
   return {
     async synthesize(input) {
-      const connection = dependencies.repository.getSpeachesConnection();
+      const connection = dependencies.repository.getSpeechBackendConnection();
       if (!connection.baseUrl)
         throw new Error("The Speaches connection needs a server address.");
       return await dependencies.cache.getOrCreate(

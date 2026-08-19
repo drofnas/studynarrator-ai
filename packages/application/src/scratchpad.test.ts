@@ -32,7 +32,7 @@ const namedSenseDefaults = DEFAULT_GLOBAL_NAMED_SENSE_LEXICON.map((entry) => ({
 
 function repository(): ScratchpadRepository {
   return {
-    getSpeachesConnection: vi.fn(() => connection),
+    getSpeechBackendConnection: vi.fn(() => connection),
     listGlobalLexicon: vi.fn(() => [
       {
         id: "sql",
@@ -50,7 +50,7 @@ function repository(): ScratchpadRepository {
       },
       ...namedSenseDefaults,
     ]),
-    replaceSpeachesConnection: vi.fn(),
+    replaceSpeechBackendConnection: vi.fn(),
     recordConnectionTest: vi.fn(),
     getConnectionSetup: vi.fn(),
     completeConnectionOnboarding: vi.fn(),

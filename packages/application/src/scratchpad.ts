@@ -120,7 +120,7 @@ export function createScratchpadService(dependencies: {
     async preview(inputValue, signal) {
       try {
         const input = ScratchpadPreviewInputSchema.parse(inputValue);
-        const connection = dependencies.repository.getSpeachesConnection();
+        const connection = dependencies.repository.getSpeechBackendConnection();
         if (!connection.baseUrl) {
           throw new ScratchpadServiceError(
             "SCRATCHPAD_CONFIGURATION",

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { unzipSync } from "fflate";
 import type {
-  SpeachesConnection,
+  SpeechBackendConnection,
   ProjectDetail,
   RenderArtifact,
   RenderJob,
@@ -38,10 +38,10 @@ class MemoryRepository implements RenderRepository {
   segments = new Map<string, RenderSegment>();
   segmentPaths = new Map<string, string | null>();
   constructor(
-    readonly connection: SpeachesConnection,
+    readonly connection: SpeechBackendConnection,
     readonly project: ProjectDetail,
   ) {}
-  getSpeachesConnection() {
+  getSpeechBackendConnection() {
     return this.connection;
   }
   getProject(id: string) {
@@ -224,6 +224,7 @@ async function fixture() {
   };
   const repository = new MemoryRepository(
     {
+      backendId: "speaches",
       baseUrl,
       suppliedUrlForm: "root",
       configured: true,
