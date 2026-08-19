@@ -3,7 +3,7 @@ import {
   LexiconEntryAuthoringCollectionSchema,
   LexiconEntrySchema,
   type LexiconEntry,
-  type LexiconEntryAuthoring
+  type LexiconEntryAuthoring,
 } from "./schemas.js";
 
 interface NormalizeLexiconEntriesOptions {
@@ -21,32 +21,43 @@ interface NormalizeLexiconEntriesResult {
 const TimestampSchema = z.iso.datetime({ offset: true });
 const IdPrefixSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/u);
 
-function behaviorMatches(existing: LexiconEntry, authored: LexiconEntryAuthoring): boolean {
-  return existing.scope === authored.scope
-    && existing.entryType === authored.entryType
-    && existing.displayText === authored.displayText
-    && existing.senseId === authored.senseId
-    && existing.spokenText === authored.spokenText
-    && existing.caseSensitive === authored.caseSensitive
-    && existing.wholeWord === authored.wholeWord
-    && existing.priority === authored.priority
-    && existing.enabled === authored.enabled
-    && existing.notes === authored.notes;
+function behaviorMatches(
+  existing: LexiconEntry,
+  authored: LexiconEntryAuthoring,
+): boolean {
+  return (
+    existing.scope === authored.scope &&
+    existing.entryType === authored.entryType &&
+    existing.displayText === authored.displayText &&
+    existing.senseId === authored.senseId &&
+    existing.spokenText === authored.spokenText &&
+    existing.caseSensitive === authored.caseSensitive &&
+    existing.wholeWord === authored.wholeWord &&
+    existing.priority === authored.priority &&
+    existing.enabled === authored.enabled &&
+    existing.notes === authored.notes
+  );
 }
 
 export function normalizeLexiconEntries(
   value: unknown,
-  options: NormalizeLexiconEntriesOptions
+  options: NormalizeLexiconEntriesOptions,
 ): NormalizeLexiconEntriesResult {
   const authoredEntries = LexiconEntryAuthoringCollectionSchema.parse(value);
   const timestamp = TimestampSchema.parse(options.timestamp);
   const idPrefix = IdPrefixSchema.parse(options.idPrefix ?? "lexicon");
   if (!Number.isSafeInteger(options.nextId) || options.nextId < 1) {
-    throw new Error("The next lexicon entry ID must be a positive safe integer.");
+    throw new Error(
+      "The next lexicon entry ID must be a positive safe integer.",
+    );
   }
 
-  const existingById = new Map((options.existingEntries ?? []).map((entry) => [entry.id, entry]));
-  const usedIds = new Set(authoredEntries.flatMap((entry) => entry.id ? [entry.id] : []));
+  const existingById = new Map(
+    (options.existingEntries ?? []).map((entry) => [entry.id, entry]),
+  );
+  const usedIds = new Set(
+    authoredEntries.flatMap((entry) => (entry.id ? [entry.id] : [])),
+  );
   let nextId = options.nextId;
 
   function generateId(scope: LexiconEntry["scope"]): string {
@@ -67,7 +78,10 @@ export function normalizeLexiconEntries(
       ...authored,
       id,
       createdAt: existing?.createdAt ?? timestamp,
-      updatedAt: existing && behaviorMatches(existing, authored) ? existing.updatedAt : timestamp
+      updatedAt:
+        existing && behaviorMatches(existing, authored)
+          ? existing.updatedAt
+          : timestamp,
     });
   });
 

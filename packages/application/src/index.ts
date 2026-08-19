@@ -6,7 +6,7 @@ import {
   SystemDiagnosticsSchema,
   type Health,
   type RuntimeInfo,
-  type SystemDiagnostics
+  type SystemDiagnostics,
 } from "@studynarrator/shared-types";
 
 export type StorageCheck = SystemDiagnostics["checks"]["storage"];
@@ -44,17 +44,27 @@ export interface SystemService {
 const STORAGE_FAILURE: StorageCheck = {
   status: "fail",
   code: "STORAGE_UNAVAILABLE",
-  message: "StudyNarrator could not write and read its diagnostic database."
+  message: "StudyNarrator could not write and read its diagnostic database.",
 };
+
+export interface BackupUsage {
+  count: number;
+  totalBytes: number;
+  oldestAt: string | null;
+}
 
 export function createSystemService(dependencies: {
   repository: DiagnosticRepository;
   ffmpegProbe: FfmpegProbe;
+  provideBackupUsage?: () => Promise<BackupUsage>;
   storageFailure?: StorageCheck;
 }): SystemService {
   return {
     health() {
-      return HealthSchema.parse({ status: "ok", applicationVersion: APPLICATION_VERSION });
+      return HealthSchema.parse({
+        status: "ok",
+        applicationVersion: APPLICATION_VERSION,
+      });
     },
     runtime(context) {
       return RuntimeSchema.parse({
@@ -67,7 +77,7 @@ export function createSystemService(dependencies: {
         architecture: context.architecture,
         dataDirectory: context.dataDirectory,
         distribution: context.distribution,
-        sourceRevision: context.sourceRevision
+        sourceRevision: context.sourceRevision,
       });
     },
     async diagnostics(context) {
@@ -79,7 +89,24 @@ export function createSystemService(dependencies: {
       }
 
       const ffmpeg = await dependencies.ffmpegProbe.run();
-      const overall = storage.status === "pass" && ffmpeg.status === "pass" ? "pass" : "fail";
+      // Backup usage is disk evidence that must still render when the
+      // database will not open, so a missing or unreadable backups directory
+      // degrades to zeros rather than failing the diagnostic.
+      let backupUsage: BackupUsage = {
+        count: 0,
+        totalBytes: 0,
+        oldestAt: null,
+      };
+      const provideBackupUsage = dependencies.provideBackupUsage;
+      if (provideBackupUsage !== undefined) {
+        try {
+          backupUsage = await provideBackupUsage();
+        } catch {
+          // Keep zeros; diagnostics must render in this case.
+        }
+      }
+      const overall =
+        storage.status === "pass" && ffmpeg.status === "pass" ? "pass" : "fail";
 
       return SystemDiagnosticsSchema.parse({
         schemaVersion: DIAGNOSTICS_SCHEMA_VERSION,
@@ -87,16 +114,22 @@ export function createSystemService(dependencies: {
         client: context.client,
         transport: context.transport,
         runtime: this.runtime(context),
+        backupCount: backupUsage.count,
+        backupTotalBytes: backupUsage.totalBytes,
+        oldestBackupAt: backupUsage.oldestAt,
         checks: {
-          sharedCore: { status: "pass", marker: "study-narrator-core" },
+          sharedCore: {
+            status: "pass",
+            marker: "study-narrator-core",
+          },
           storage,
-          ffmpeg
-        }
+          ffmpeg,
+        },
       });
     },
     close() {
       dependencies.repository.close();
-    }
+    },
   };
 }
 
@@ -104,7 +137,7 @@ export {
   PersistenceUnavailableError,
   createPersistenceService,
   createUnavailablePersistenceService,
-  type PersistenceRepository
+  type PersistenceRepository,
 } from "./persistence.js";
 export {
   ConnectionCatalogError,
@@ -112,7 +145,7 @@ export {
   createConnectionService,
   createVoiceCatalogService,
   type ConnectionCatalogRunner,
-  type ConnectionRepository
+  type ConnectionRepository,
 } from "./connections.js";
 export { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
 export {
@@ -123,35 +156,40 @@ export {
   createProjectSpeechCacheKeyPlanner,
   createSpeechCacheService,
   type CachedSpeechSynthesis,
-  type CachedSpeechSynthesisRunner
+  type CachedSpeechSynthesisRunner,
 } from "./cachedSpeech.js";
 export {
   createProjectPreviewService,
-  type ProjectPreviewRepository
+  type ProjectPreviewRepository,
 } from "./projectPreview.js";
 export {
-  createRenderPlanService,
-  type RenderPlanRepository
+  createRenderPlanComputer,
+  type ComputedRenderPlan,
+  type RenderPlanComputer,
+  type RenderPlanRepository,
 } from "./renderPlan.js";
 export {
   createRenderService,
   type RenderRepository,
-  type RenderService
+  type RenderService,
 } from "./render.js";
-export { parseRenderMediaRange, type ResolvedRenderMedia } from "./renderMedia.js";
+export {
+  parseRenderMediaRange,
+  type ResolvedRenderMedia,
+} from "./renderMedia.js";
 export {
   createScriptGenerationService,
   type ScriptGenerationRepository,
-  type ScriptGenerationService
+  type ScriptGenerationService,
 } from "./scriptGeneration.js";
 export {
   createScratchpadService,
-  type ScratchpadRepository
+  type ScratchpadRepository,
 } from "./scratchpad.js";
 export {
   BUNDLED_VOICE_CATALOGS,
   KOKORO_V1_MODEL_ID,
   KOKORO_V1_VOICE_CATALOG,
   KOKORO_VOICE_CATALOG_ATTRIBUTION,
-  KOKORO_VOICE_CATALOG_SOURCE
+  KOKORO_VOICE_CATALOG_SOURCE,
 } from "./kokoroCatalog.js";

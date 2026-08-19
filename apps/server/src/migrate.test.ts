@@ -7,15 +7,27 @@ import { parseDataDirectory, runMigrationCommand } from "./migrate.js";
 describe("db:migrate command", () => {
   it("requires one explicit data directory", () => {
     expect(() => parseDataDirectory([])).toThrow("--data-dir");
-    expect(() => parseDataDirectory(["--data-dir", "/tmp/one", "extra"])).toThrow("--data-dir");
+    expect(() =>
+      parseDataDirectory(["--data-dir", "/tmp/one", "extra"]),
+    ).toThrow("--data-dir");
   });
 
   it("reports applied and current versions without project content", async () => {
-    const dataDirectory = mkdtempSync(join(tmpdir(), "studynarrator-migrate-command-"));
+    const dataDirectory = mkdtempSync(
+      join(tmpdir(), "studynarrator-migrate-command-"),
+    );
     const first = await runMigrationCommand(["--data-dir", dataDirectory]);
-    expect(first).toMatchObject({ state: "ready", databaseSchemaVersion: 3, appliedVersions: [1, 2, 3], backupPath: null });
+    expect(first).toMatchObject({
+      state: "ready",
+      databaseSchemaVersion: 3,
+      appliedVersions: [1, 2, 3],
+      backupPath: null,
+    });
     const second = await runMigrationCommand(["--data-dir", dataDirectory]);
-    expect(second).toMatchObject({ databaseSchemaVersion: 3, appliedVersions: [] });
+    expect(second).toMatchObject({
+      databaseSchemaVersion: 3,
+      appliedVersions: [],
+    });
     expect(JSON.stringify(second)).not.toContain("scriptSource");
   });
 });

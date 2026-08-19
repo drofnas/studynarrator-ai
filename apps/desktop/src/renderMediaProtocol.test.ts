@@ -13,21 +13,45 @@ describe("Electron render media protocol", () => {
     const path = join(root, "audio.wav");
     await writeFile(path, Uint8Array.from([1, 2, 3, 4]));
     const renders = {
-      resolveRenderAudio: vi.fn(async () => ({ path, fileName: "audio.mp3", mimeType: "audio/mpeg" as const, sizeBytes: 4 })),
-      resolveSegmentAudio: vi.fn(async () => ({ path, fileName: "000001.wav", mimeType: "audio/wav" as const, sizeBytes: 4 }))
+      resolveRenderAudio: vi.fn(async () => ({
+        path,
+        fileName: "audio.mp3",
+        mimeType: "audio/mpeg" as const,
+        sizeBytes: 4,
+      })),
+      resolveSegmentAudio: vi.fn(async () => ({
+        path,
+        fileName: "000001.wav",
+        mimeType: "audio/wav" as const,
+        sizeBytes: 4,
+      })),
     } as unknown as RenderService;
     const handle = createRenderMediaProtocolHandler(renders);
 
-    const partial = await handle(new Request(`studynarrator-media://segment/${renderId}/1`, { headers: { range: "bytes=1-2" } }));
+    const partial = await handle(
+      new Request(`studynarrator-media://segment/${renderId}/1`, {
+        headers: { range: "bytes=1-2" },
+      }),
+    );
     expect(partial.status).toBe(206);
     expect(partial.headers.get("content-range")).toBe("bytes 1-2/4");
-    expect(new Uint8Array(await partial.arrayBuffer())).toEqual(Uint8Array.from([2, 3]));
+    expect(new Uint8Array(await partial.arrayBuffer())).toEqual(
+      Uint8Array.from([2, 3]),
+    );
 
-    const head = await handle(new Request(`studynarrator-media://render/${renderId}`, { method: "HEAD" }));
+    const head = await handle(
+      new Request(`studynarrator-media://render/${renderId}`, {
+        method: "HEAD",
+      }),
+    );
     expect(head.status).toBe(200);
     expect(head.headers.get("content-length")).toBe("4");
     expect((await head.arrayBuffer()).byteLength).toBe(0);
-    const invalidRange = await handle(new Request(`studynarrator-media://render/${renderId}`, { headers: { range: "bytes=9-10" } }));
+    const invalidRange = await handle(
+      new Request(`studynarrator-media://render/${renderId}`, {
+        headers: { range: "bytes=9-10" },
+      }),
+    );
     expect(invalidRange.status).toBe(416);
     expect(invalidRange.headers.get("content-range")).toBe("bytes */4");
   });
@@ -35,10 +59,17 @@ describe("Electron render media protocol", () => {
   it("rejects malformed IDs, paths, and ranges without invoking a resolver", async () => {
     const resolveRenderAudio = vi.fn();
     const resolveSegmentAudio = vi.fn();
-    const renders = { resolveRenderAudio, resolveSegmentAudio } as unknown as RenderService;
+    const renders = {
+      resolveRenderAudio,
+      resolveSegmentAudio,
+    } as unknown as RenderService;
     const handle = createRenderMediaProtocolHandler(renders);
-    await expect(handle(new Request("studynarrator-media://render/not-a-uuid"))).resolves.toMatchObject({ status: 404 });
-    await expect(handle(new Request(`studynarrator-media://segment/${renderId}/1/extra`))).resolves.toMatchObject({ status: 404 });
+    await expect(
+      handle(new Request("studynarrator-media://render/not-a-uuid")),
+    ).resolves.toMatchObject({ status: 404 });
+    await expect(
+      handle(new Request(`studynarrator-media://segment/${renderId}/1/extra`)),
+    ).resolves.toMatchObject({ status: 404 });
     expect(resolveRenderAudio).not.toHaveBeenCalled();
     expect(resolveSegmentAudio).not.toHaveBeenCalled();
   });

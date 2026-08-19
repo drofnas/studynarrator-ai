@@ -15,19 +15,19 @@ const snapshot = {
     speakerMappings: [],
     lexiconEntries: [],
     createdAt: "2026-08-15T00:00:00.000Z",
-    updatedAt: "2026-08-15T00:00:00.000Z"
+    updatedAt: "2026-08-15T00:00:00.000Z",
   },
   timing: {
     pausePresets: [
       { pauseId: "pause_short", durationMs: 350, description: "Short" },
       { pauseId: "pause_medium", durationMs: 750, description: "Medium" },
-      { pauseId: "pause_long", durationMs: 1_500, description: "Long" }
+      { pauseId: "pause_long", durationMs: 1_500, description: "Long" },
     ],
     transitionPauses: {
       paragraph: { mode: "none" },
       speakerChange: { mode: "none" },
-      section: { mode: "none" }
-    }
+      section: { mode: "none" },
+    },
   },
   globalLexiconEntries: [],
   ignoredDiagnostics: [],
@@ -40,17 +40,22 @@ const snapshot = {
     speechCacheSchema: 1,
     speechNormalization: 1,
     speechChunking: 1,
-    speechAdapter: 1
-  }
+    speechAdapter: 1,
+  },
 };
 
 describe("ProjectSnapshotSchema", () => {
   it("accepts only the current schema-1 snapshot shape", () => {
     expect(ProjectSnapshotSchema.parse(snapshot)).toEqual(snapshot);
-    expect(ProjectSnapshotSchema.safeParse({ ...snapshot, schemaVersion: 4 }).success).toBe(false);
-    expect(ProjectSnapshotSchema.safeParse({
-      ...snapshot,
-      connection: { ...snapshot.connection, profileId: "removed-profile" }
-    }).success).toBe(false);
+    expect(
+      ProjectSnapshotSchema.safeParse({ ...snapshot, schemaVersion: 4 })
+        .success,
+    ).toBe(false);
+    expect(
+      ProjectSnapshotSchema.safeParse({
+        ...snapshot,
+        connection: { ...snapshot.connection, profileId: "removed-profile" },
+      }).success,
+    ).toBe(false);
   });
 });

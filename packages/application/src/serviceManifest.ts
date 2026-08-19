@@ -16,6 +16,8 @@ export const APPLICATION_SERVICE_MANIFEST = Object.freeze([
   "persistence.preferences.replaceIgnoredDiagnostics",
   "persistence.globalLexicon.list",
   "persistence.globalLexicon.replace",
+  "persistence.backups.list",
+  "persistence.backups.restore",
   "connection.get",
   "connection.update",
   "connection.test",
@@ -31,10 +33,6 @@ export const APPLICATION_SERVICE_MANIFEST = Object.freeze([
   "speechCache.clearAll",
   "speechCache.clearProject",
   "speechCache.clearEntry",
-  "renderPlans.create",
-  "renderPlans.list",
-  "renderPlans.get",
-  "renders.start",
   "renders.startProject",
   "renders.list",
   "renders.get",
@@ -49,5 +47,5 @@ export const APPLICATION_SERVICE_MANIFEST = Object.freeze([
   "renders.exportSegment",
   "scriptGeneration.previewPrompt",
   "scriptGeneration.exportPrompt",
-  "scriptGeneration.exportSkillPackage"
+  "scriptGeneration.exportSkillPackage",
 ]);

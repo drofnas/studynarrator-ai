@@ -5,8 +5,5 @@
     "rootDir": "src"
   },
   "include": ["src/**/*.ts"],
-  "references": [
-    { "path": "../application" },
-    { "path": "../shared-types" }
-  ]
+  "references": [{ "path": "../application" }, { "path": "../shared-types" }]
 }

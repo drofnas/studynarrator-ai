@@ -14,9 +14,20 @@
   --line: #b9c8ce;
 }
 
-* { box-sizing: border-box; }
-body { margin: 0; min-width: 320px; min-height: 100vh; }
-button, input, textarea, select { font: inherit; }
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
 
 button {
   min-height: 46px;
@@ -27,14 +38,36 @@ button {
   border-radius: 2px;
   cursor: pointer;
   font-weight: 700;
-  transition: transform 140ms ease, background 140ms ease;
+  transition:
+    transform 140ms ease,
+    background 140ms ease;
 }
 
-button:hover:not(:disabled) { background: var(--signal); transform: translateY(-2px); }
-button:focus-visible { outline: 3px solid var(--copper); outline-offset: 3px; }
-button:disabled { cursor: wait; opacity: 0.6; }
-code { display: block; overflow-wrap: anywhere; color: var(--ink); font-size: 0.78rem; line-height: 1.55; }
+button:hover:not(:disabled) {
+  background: var(--signal);
+  transform: translateY(-2px);
+}
+button:focus-visible {
+  outline: 3px solid var(--copper);
+  outline-offset: 3px;
+}
+button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+code {
+  display: block;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
 }

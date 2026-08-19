@@ -6,19 +6,25 @@ import {
   registerDiagnosticsHandler,
   registerPersistenceHandlers,
   registerProjectPreviewHandlers,
-  registerRenderPlanHandlers,
   registerRenderHandlers,
   registerScratchpadHandlers,
   registerScriptGenerationHandlers,
-  registerSpeechCacheHandlers
+  registerSpeechCacheHandlers,
 } from "./ipc.js";
 import { isApprovedExternalUrl, SECURE_WEB_PREFERENCES } from "./security.js";
 import { createRenderMediaProtocolHandler } from "./renderMediaProtocol.js";
 
-protocol.registerSchemesAsPrivileged([{
-  scheme: "studynarrator-media",
-  privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true }
-}]);
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "studynarrator-media",
+    privileges: {
+      standard: true,
+      secure: true,
+      stream: true,
+      supportFetchAPI: true,
+    },
+  },
+]);
 
 let runtime: Awaited<ReturnType<typeof createDesktopServices>> | undefined;
 
@@ -31,8 +37,8 @@ async function createWindow() {
     backgroundColor: "#eaf0f2",
     webPreferences: {
       ...SECURE_WEB_PREFERENCES,
-      preload: join(__dirname, "preload.cjs")
-    }
+      preload: join(__dirname, "preload.cjs"),
+    },
   });
 
   window.webContents.setWindowOpenHandler(({ url }) => {
@@ -43,7 +49,8 @@ async function createWindow() {
     if (targetUrl !== window.webContents.getURL()) event.preventDefault();
   });
 
-  const rendererUrl = process.env.STUDYNARRATOR_RENDERER_URL ?? "http://127.0.0.1:5173";
+  const rendererUrl =
+    process.env.STUDYNARRATOR_RENDERER_URL ?? "http://127.0.0.1:5173";
   if (app.isPackaged) {
     await window.loadFile(resolve(__dirname, "../../web/dist/index.html"));
   } else {
@@ -56,16 +63,29 @@ async function createWindow() {
 }
 
 void app.whenReady().then(async () => {
-  runtime = await createDesktopServices({ defaultDataDirectory: app.getPath("userData") });
+  runtime = await createDesktopServices({
+    defaultDataDirectory: app.getPath("userData"),
+  });
   registerDiagnosticsHandler(ipcMain, runtime.service, runtime.context);
   registerPersistenceHandlers(ipcMain, runtime.persistence);
-  if (runtime.connection && runtime.voiceCatalog) registerConnectionHandlers(ipcMain, runtime.connection, runtime.voiceCatalog);
-  if (runtime.scratchpad) registerScratchpadHandlers(ipcMain, runtime.scratchpad);
-  if (runtime.projectPreview) registerProjectPreviewHandlers(ipcMain, runtime.projectPreview);
-  if (runtime.renderPlans) registerRenderPlanHandlers(ipcMain, runtime.renderPlans);
+  if (runtime.connection && runtime.voiceCatalog)
+    registerConnectionHandlers(
+      ipcMain,
+      runtime.connection,
+      runtime.voiceCatalog,
+    );
+  if (runtime.scratchpad)
+    registerScratchpadHandlers(ipcMain, runtime.scratchpad);
+  if (runtime.projectPreview)
+    registerProjectPreviewHandlers(ipcMain, runtime.projectPreview);
   if (runtime.renders) registerRenderHandlers(ipcMain, runtime.renders, dialog);
-  if (runtime.scriptGeneration) registerScriptGenerationHandlers(ipcMain, runtime.scriptGeneration, dialog);
-  if (runtime.renders) protocol.handle("studynarrator-media", createRenderMediaProtocolHandler(runtime.renders));
+  if (runtime.scriptGeneration)
+    registerScriptGenerationHandlers(ipcMain, runtime.scriptGeneration, dialog);
+  if (runtime.renders)
+    protocol.handle(
+      "studynarrator-media",
+      createRenderMediaProtocolHandler(runtime.renders),
+    );
   registerSpeechCacheHandlers(ipcMain, runtime.speechCache);
   await createWindow();
 });

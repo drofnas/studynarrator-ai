@@ -6,11 +6,19 @@ const shared = {
   format: "cjs",
   platform: "node",
   sourcemap: true,
-  target: "node24"
+  target: "node24",
 };
 
 await Promise.all([
   build({ ...shared, entryPoints: ["src/main.ts"], outfile: "dist/main.cjs" }),
-  build({ ...shared, entryPoints: ["src/preload.ts"], outfile: "dist/preload.cjs" }),
-  build({ ...shared, entryPoints: ["src/smoke.ts"], outfile: "dist/smoke.cjs" })
+  build({
+    ...shared,
+    entryPoints: ["src/preload.ts"],
+    outfile: "dist/preload.cjs",
+  }),
+  build({
+    ...shared,
+    entryPoints: ["src/smoke.ts"],
+    outfile: "dist/smoke.cjs",
+  }),
 ]);

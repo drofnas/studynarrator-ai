@@ -6,8 +6,8 @@ export default defineConfig({
       "apps/server/src/**/*.test.ts",
       "apps/desktop/src/bridge.test.ts",
       "apps/desktop/src/bootstrap.test.ts",
-      "packages/application/src/**/*.test.ts"
+      "packages/application/src/**/*.test.ts",
     ],
-    testTimeout: 15_000
-  }
+    testTimeout: 15_000,
+  },
 });

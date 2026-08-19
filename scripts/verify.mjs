@@ -17,18 +17,24 @@ function run(command, args, environment = {}) {
     cwd: repositoryRoot,
     env: { ...process.env, ...environment },
     stdio: "inherit",
-    shell: false
+    shell: false,
   });
   if (result.error) fail(`${command} could not start`);
-  if (result.status !== 0) fail(`${command} ${args.join(" ")} failed with exit ${String(result.status)}`);
+  if (result.status !== 0)
+    fail(
+      `${command} ${args.join(" ")} failed with exit ${String(result.status)}`,
+    );
 }
 
 if (process.argv.length !== 2) fail("usage: npm run verify");
 if (Number(process.versions.node.split(".")[0]) !== 26) {
-  fail(`verification requires Node 26; current runtime is ${process.versions.node}`);
+  fail(
+    `verification requires Node 26; current runtime is ${process.versions.node}`,
+  );
 }
 
 run("npm", ["run", "audit:dead-code"]);
+run("npm", ["run", "format:check"]);
 run("npm", ["run", "lint"]);
 run("npm", ["run", "typecheck"]);
 run("npm", ["test"]);
@@ -45,13 +51,24 @@ const desktopData = resolve(verificationRun, "desktop");
 mkdirSync(serverData, { recursive: true, mode: 0o700 });
 mkdirSync(desktopData, { recursive: true, mode: 0o700 });
 
-const serverNativeModule = realpathSync(resolve(repositoryRoot, "apps/server/node_modules/better-sqlite3"));
-const desktopNativeModule = realpathSync(resolve(repositoryRoot, "apps/desktop/node_modules/better-sqlite3"));
-if (serverNativeModule === desktopNativeModule) fail("server and Electron must not share a better-sqlite3 installation");
+const serverNativeModule = realpathSync(
+  resolve(repositoryRoot, "apps/server/node_modules/better-sqlite3"),
+);
+const desktopNativeModule = realpathSync(
+  resolve(repositoryRoot, "apps/desktop/node_modules/better-sqlite3"),
+);
+if (serverNativeModule === desktopNativeModule)
+  fail("server and Electron must not share a better-sqlite3 installation");
 
-run("npm", ["run", "smoke", "--workspace", "@studynarrator/server"], { STUDYNARRATOR_DATA_DIR: serverData });
-run("npm", ["run", "smoke", "--workspace", "@studynarrator/desktop"], { STUDYNARRATOR_DATA_DIR: desktopData });
-run("npm", ["run", "smoke", "--workspace", "@studynarrator/server"], { STUDYNARRATOR_DATA_DIR: serverData });
+run("npm", ["run", "smoke", "--workspace", "@studynarrator/server"], {
+  STUDYNARRATOR_DATA_DIR: serverData,
+});
+run("npm", ["run", "smoke", "--workspace", "@studynarrator/desktop"], {
+  STUDYNARRATOR_DATA_DIR: desktopData,
+});
+run("npm", ["run", "smoke", "--workspace", "@studynarrator/server"], {
+  STUDYNARRATOR_DATA_DIR: serverData,
+});
 run("npm", ["run", "verify:docker"]);
 
 process.stdout.write("\nVERIFY: ALL CHECKS PASSED\n");

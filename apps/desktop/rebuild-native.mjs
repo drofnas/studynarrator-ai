@@ -9,7 +9,9 @@ await rebuild({
   projectRootPath: import.meta.dirname,
   electronVersion,
   onlyModules: ["better-sqlite3"],
-  force: true
+  force: true,
 });
 
-process.stdout.write("Rebuilt apps/desktop/node_modules/better-sqlite3 for Electron.\n");
+process.stdout.write(
+  "Rebuilt apps/desktop/node_modules/better-sqlite3 for Electron.\n",
+);

@@ -1,23 +1,126 @@
-.page { display: grid; min-width: 0; gap: 18px; }
-.header { display: flex; justify-content: space-between; gap: 32px; align-items: end; padding: 0 8px 22px; border-bottom: 2px solid var(--ink); }
-.header > div { max-width: 850px; }
-.kicker, .previewHeading span { display: block; margin: 0 0 7px; color: var(--signal); font: 800 0.68rem ui-monospace, monospace; letter-spacing: 0.12em; text-transform: uppercase; }
-.header h2 { margin: 0; font: 700 clamp(2.8rem, 6vw, 5.4rem)/0.88 "Avenir Next Condensed", "Arial Narrow", sans-serif; letter-spacing: -0.05em; }
-.header p:not(.kicker) { max-width: 720px; margin: 14px 0 0; color: #557080; line-height: 1.55; }
-.backLink { display: inline-flex; align-items: center; min-height: 42px; padding: 0 14px; color: var(--ink); border: 2px solid var(--ink); font-weight: 800; text-decoration: none; white-space: nowrap; }
-.backLink:hover { color: white; background: var(--signal); }
-.backLink:focus-visible { outline: 3px solid var(--copper); outline-offset: 3px; }
-.workspace { display: grid; min-width: 0; }
-.previewPanel { min-width: 0; padding: 20px; background: var(--paper); border: 1px solid var(--line); border-top: 0; }
-.previewHeading h3 { margin: 0; }
-.instructions, .notice { color: #557080; font-size: 0.76rem; line-height: 1.5; }
-.instructions { max-width: 720px; margin: 12px 0 16px; padding: 11px 13px; background: #dcebec; border-left: 5px solid var(--signal); }
-.error { padding: 10px; color: var(--fault); background: #f8e5e5; font-size: 0.78rem; font-weight: 800; }
-.notice { min-height: 1.2em; }
-.editorMeta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin-top: 9px; color: #557080; font-size: 0.7rem; }
-.loadingState { padding: 30px; background: var(--paper); border-top: 5px solid var(--signal); }
-.loadingState a { color: var(--signal); font-weight: 800; }
-@media (max-width: 900px) { .header { align-items: start; flex-direction: column; } }
+.page {
+  display: grid;
+  min-width: 0;
+  gap: 18px;
+}
+.header {
+  display: flex;
+  justify-content: space-between;
+  gap: 32px;
+  align-items: end;
+  padding: 0 8px 22px;
+  border-bottom: 2px solid var(--ink);
+}
+.header > div {
+  max-width: 850px;
+}
+.kicker,
+.previewHeading span {
+  display: block;
+  margin: 0 0 7px;
+  color: var(--signal);
+  font:
+    800 0.68rem ui-monospace,
+    monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.header h2 {
+  margin: 0;
+  font:
+    700 clamp(2.8rem, 6vw, 5.4rem)/0.88 "Avenir Next Condensed",
+    "Arial Narrow",
+    sans-serif;
+  letter-spacing: -0.05em;
+}
+.header p:not(.kicker) {
+  max-width: 720px;
+  margin: 14px 0 0;
+  color: #557080;
+  line-height: 1.55;
+}
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 42px;
+  padding: 0 14px;
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.backLink:hover {
+  color: white;
+  background: var(--signal);
+}
+.backLink:focus-visible {
+  outline: 3px solid var(--copper);
+  outline-offset: 3px;
+}
+.workspace {
+  display: grid;
+  min-width: 0;
+}
+.previewPanel {
+  min-width: 0;
+  padding: 20px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-top: 0;
+}
+.previewHeading h3 {
+  margin: 0;
+}
+.instructions,
+.notice {
+  color: #557080;
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+.instructions {
+  max-width: 720px;
+  margin: 12px 0 16px;
+  padding: 11px 13px;
+  background: #dcebec;
+  border-left: 5px solid var(--signal);
+}
+.error {
+  padding: 10px;
+  color: var(--fault);
+  background: #f8e5e5;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+.notice {
+  min-height: 1.2em;
+}
+.editorMeta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 9px;
+  color: #557080;
+  font-size: 0.7rem;
+}
+.loadingState {
+  padding: 30px;
+  background: var(--paper);
+  border-top: 5px solid var(--signal);
+}
+.loadingState a {
+  color: var(--signal);
+  font-weight: 800;
+}
+@media (max-width: 900px) {
+  .header {
+    align-items: start;
+    flex-direction: column;
+  }
+}
 @media (max-width: 580px) {
-  .previewPanel { padding: 14px; }
+  .previewPanel {
+    padding: 14px;
+  }
 }

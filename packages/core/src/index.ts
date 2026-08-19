@@ -39,17 +39,15 @@ export {
   type SupportedPauseId,
   type TransformDiagnostic,
   type TransformScriptInput,
-  type TransformScriptResult
+  type TransformScriptResult,
 } from "./schemas.js";
 export { parseScript } from "./parser.js";
-export {
-  normalizeLexiconEntries
-} from "./lexicon.js";
+export { normalizeLexiconEntries } from "./lexicon.js";
 export { transformScript } from "./transformer.js";
 export { resolveParagraphPauses } from "./pacing.js";
 export {
   ScratchpadPassageError,
-  transformScratchpadPassage
+  transformScratchpadPassage,
 } from "./scratchpad.js";
 export {
   AuthoringDryRunResultSchema,
@@ -70,5 +68,5 @@ export {
   buildExternalLlmPrompt,
   buildSkillPackageFiles,
   type ScriptGenerationContext,
-  type ScriptPromptKind
+  type ScriptPromptKind,
 } from "./scriptGeneration.js";

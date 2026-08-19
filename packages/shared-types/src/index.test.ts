@@ -16,8 +16,11 @@ const validDiagnostics = {
     architecture: "arm64",
     dataDirectory: "/tmp/studynarrator",
     distribution: "development-web",
-    sourceRevision: "test-revision"
+    sourceRevision: "test-revision",
   },
+  backupCount: 3,
+  backupTotalBytes: 15360,
+  oldestBackupAt: "2026-08-10T09:00:00.000Z",
   checks: {
     sharedCore: { status: "pass", marker: "study-narrator-core" },
     storage: {
@@ -29,20 +32,33 @@ const validDiagnostics = {
       latestBackupPath: null,
       markerKey: "runtime.storage-self-test",
       markerValue: "study-narrator-storage-ok",
-      createdAt: "2026-08-11T12:00:00.000Z"
+      createdAt: "2026-08-11T12:00:00.000Z",
     },
-    ffmpeg: { status: "pass", executable: "ffmpeg", version: "ffmpeg version 8.1.2" }
-  }
+    ffmpeg: {
+      status: "pass",
+      executable: "ffmpeg",
+      version: "ffmpeg version 8.1.2",
+    },
+  },
 } as const;
 
 describe("SystemDiagnosticsSchema", () => {
   it("accepts the shared diagnostics contract", () => {
-    expect(SystemDiagnosticsSchema.parse(validDiagnostics)).toEqual(validDiagnostics);
+    expect(SystemDiagnosticsSchema.parse(validDiagnostics)).toEqual(
+      validDiagnostics,
+    );
   });
 
   it("rejects malformed or expanded boundary output", () => {
-    expect(() => SystemDiagnosticsSchema.parse({ ...validDiagnostics, secret: "leak" })).toThrow();
-    expect(() => SystemDiagnosticsSchema.parse({ ...validDiagnostics, overall: "unknown" })).toThrow();
+    expect(() =>
+      SystemDiagnosticsSchema.parse({ ...validDiagnostics, secret: "leak" }),
+    ).toThrow();
+    expect(() =>
+      SystemDiagnosticsSchema.parse({
+        ...validDiagnostics,
+        overall: "unknown",
+      }),
+    ).toThrow();
   });
 
   it("accepts the same diagnostics shape across REST and IPC", () => {
@@ -57,16 +73,19 @@ describe("SystemDiagnosticsSchema", () => {
         runtimeVersion: "24.18.1",
         electronVersion: "43.3.0",
         dataDirectory: "/tmp/studynarrator-desktop",
-        distribution: "electron"
+        distribution: "electron",
       },
       checks: {
         ...validDiagnostics.checks,
         storage: {
           ...validDiagnostics.checks.storage,
-          databasePath: "/tmp/studynarrator-desktop/studynarrator.sqlite"
+          databasePath: "/tmp/studynarrator-desktop/studynarrator.sqlite",
         },
-        ffmpeg: { ...validDiagnostics.checks.ffmpeg, executable: "/opt/homebrew/bin/ffmpeg" }
-      }
+        ffmpeg: {
+          ...validDiagnostics.checks.ffmpeg,
+          executable: "/opt/homebrew/bin/ffmpeg",
+        },
+      },
     });
 
     expect(Object.keys(ipc)).toEqual(Object.keys(rest));

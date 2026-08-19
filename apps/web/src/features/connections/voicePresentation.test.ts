@@ -1,41 +1,154 @@
 import { describe, expect, it } from "vitest";
-import type { SpeechCatalogVoice, VoiceCatalogEntry } from "@studynarrator/shared-types";
-import { filterPresentedVoices, groupPresentedVoices, presentVoices, voiceOptionLabel } from "./voicePresentation.js";
+import type {
+  SpeechCatalogVoice,
+  VoiceCatalogEntry,
+} from "@studynarrator/shared-types";
+import {
+  filterPresentedVoices,
+  groupPresentedVoices,
+  presentVoices,
+  voiceOptionLabel,
+} from "./voicePresentation.js";
 
 const serverVoices: SpeechCatalogVoice[] = [
-  { voiceId: "voice-heart", name: "VOICE-HEART", language: "American English", gender: "female" },
+  {
+    voiceId: "voice-heart",
+    name: "VOICE-HEART",
+    language: "American English",
+    gender: "female",
+  },
   { voiceId: "voice-alloy", name: "Alloy", language: "en-US", gender: null },
   { voiceId: "voice-aoede", name: "Aoede", language: "en-US", gender: null },
-  { voiceId: "voice-lessac", name: "Lessac", language: "American English", gender: "female" },
-  { voiceId: "voice-raw", name: "VOICE-RAW", language: "not-a-locale", gender: null }
+  {
+    voiceId: "voice-lessac",
+    name: "Lessac",
+    language: "American English",
+    gender: "female",
+  },
+  {
+    voiceId: "voice-raw",
+    name: "VOICE-RAW",
+    language: "not-a-locale",
+    gender: null,
+  },
 ];
 const catalogEntries: VoiceCatalogEntry[] = [
-  { voiceId: "voice-heart", label: "Heart — American English — voice-heart", enabled: true, favorite: true, language: "American English", locale: "en-US", accent: null, category: null, style: null, sampleText: null },
-  { voiceId: "voice-alloy", label: "Catalog Alloy", enabled: false, favorite: false, language: "American English", locale: "en-US", accent: null, category: null, style: null, sampleText: null },
-  { voiceId: "voice-aoede", label: "Catalog Aoede", enabled: true, favorite: false, language: "American English", locale: "en-US", accent: null, category: null, style: null, sampleText: null },
-  { voiceId: "voice-local", label: "Local Only — British English — voice-local", enabled: true, favorite: false, language: "British English", locale: "en-GB", accent: null, category: null, style: null, sampleText: null },
-  { voiceId: "voice-berlin", label: "Berlin — German — voice-berlin", enabled: true, favorite: false, language: "German", locale: "de-DE", accent: null, category: null, style: null, sampleText: null }
+  {
+    voiceId: "voice-heart",
+    label: "Heart — American English — voice-heart",
+    enabled: true,
+    favorite: true,
+    language: "American English",
+    locale: "en-US",
+    accent: null,
+    category: null,
+    style: null,
+    sampleText: null,
+  },
+  {
+    voiceId: "voice-alloy",
+    label: "Catalog Alloy",
+    enabled: false,
+    favorite: false,
+    language: "American English",
+    locale: "en-US",
+    accent: null,
+    category: null,
+    style: null,
+    sampleText: null,
+  },
+  {
+    voiceId: "voice-aoede",
+    label: "Catalog Aoede",
+    enabled: true,
+    favorite: false,
+    language: "American English",
+    locale: "en-US",
+    accent: null,
+    category: null,
+    style: null,
+    sampleText: null,
+  },
+  {
+    voiceId: "voice-local",
+    label: "Local Only — British English — voice-local",
+    enabled: true,
+    favorite: false,
+    language: "British English",
+    locale: "en-GB",
+    accent: null,
+    category: null,
+    style: null,
+    sampleText: null,
+  },
+  {
+    voiceId: "voice-berlin",
+    label: "Berlin — German — voice-berlin",
+    enabled: true,
+    favorite: false,
+    language: "German",
+    locale: "de-DE",
+    accent: null,
+    category: null,
+    style: null,
+    sampleText: null,
+  },
 ];
 
 describe("voice presentation", () => {
   it("merges server and local metadata with deterministic friendly-name and locale fallbacks", () => {
     const voices = presentVoices(serverVoices, catalogEntries);
-    expect(voices.find(({ voiceId }) => voiceId === "voice-heart")).toMatchObject({ friendlyName: "Heart", locale: "en-US", favorite: true, availableOnServer: true });
-    expect(voices.find(({ voiceId }) => voiceId === "voice-alloy")).toMatchObject({ friendlyName: "Alloy" });
-    expect(voices.find(({ voiceId }) => voiceId === "voice-local")).toMatchObject({ friendlyName: "Local Only", locale: "en-GB", availableOnServer: false });
-    expect(voices.find(({ voiceId }) => voiceId === "voice-lessac")).toMatchObject({ friendlyName: "Lessac", locale: null, localeLabel: "Locale unavailable", favorite: false });
-    expect(voices.find(({ voiceId }) => voiceId === "voice-raw")).toMatchObject({ friendlyName: "voice-raw", locale: null, localeLabel: "Locale unavailable" });
+    expect(
+      voices.find(({ voiceId }) => voiceId === "voice-heart"),
+    ).toMatchObject({
+      friendlyName: "Heart",
+      locale: "en-US",
+      favorite: true,
+      availableOnServer: true,
+    });
+    expect(
+      voices.find(({ voiceId }) => voiceId === "voice-alloy"),
+    ).toMatchObject({ friendlyName: "Alloy" });
+    expect(
+      voices.find(({ voiceId }) => voiceId === "voice-local"),
+    ).toMatchObject({
+      friendlyName: "Local Only",
+      locale: "en-GB",
+      availableOnServer: false,
+    });
+    expect(
+      voices.find(({ voiceId }) => voiceId === "voice-lessac"),
+    ).toMatchObject({
+      friendlyName: "Lessac",
+      locale: null,
+      localeLabel: "Locale unavailable",
+      favorite: false,
+    });
+    expect(voices.find(({ voiceId }) => voiceId === "voice-raw")).toMatchObject(
+      {
+        friendlyName: "voice-raw",
+        locale: null,
+        localeLabel: "Locale unavailable",
+      },
+    );
   });
 
   it("searches locale codes and groups favorites before sorted locale voices", () => {
     const voices = presentVoices(serverVoices, catalogEntries);
-    expect(filterPresentedVoices(voices, "EN-us").map(({ voiceId }) => voiceId)).toEqual(["voice-heart", "voice-alloy", "voice-aoede"]);
-    expect(groupPresentedVoices(voices).map(({ label, voices: grouped }) => ({ label, voices: grouped.map(({ friendlyName }) => friendlyName) }))).toEqual([
+    expect(
+      filterPresentedVoices(voices, "EN-us").map(({ voiceId }) => voiceId),
+    ).toEqual(["voice-heart", "voice-alloy", "voice-aoede"]);
+    expect(
+      groupPresentedVoices(voices).map(({ label, voices: grouped }) => ({
+        label,
+        voices: grouped.map(({ friendlyName }) => friendlyName),
+      })),
+    ).toEqual([
       { label: "Favorites", voices: ["Heart"] },
       { label: "en-US", voices: ["Alloy", "Aoede"] },
       { label: "de-DE", voices: ["Berlin"] },
       { label: "en-GB", voices: ["Local Only"] },
-      { label: "Locale unavailable", voices: ["Lessac", "voice-raw"] }
+      { label: "Locale unavailable", voices: ["Lessac", "voice-raw"] },
     ]);
   });
 
@@ -43,6 +156,8 @@ describe("voice presentation", () => {
     const voices = presentVoices(serverVoices, catalogEntries);
     const heart = voices.find(({ voiceId }) => voiceId === "voice-heart")!;
     expect(voiceOptionLabel(heart)).toBe("Heart (voice-heart | en-US)");
-    expect(voices.filter(({ availableOnServer }) => availableOnServer)).toHaveLength(5);
+    expect(
+      voices.filter(({ availableOnServer }) => availableOnServer),
+    ).toHaveLength(5);
   });
 });

@@ -24,10 +24,22 @@
   text-transform: uppercase;
 }
 
-.title { margin: 0; font-size: clamp(1.65rem, 3vw, 2.4rem); letter-spacing: -0.035em; }
+.title {
+  margin: 0;
+  font-size: clamp(1.65rem, 3vw, 2.4rem);
+  letter-spacing: -0.035em;
+}
 
 @media (max-width: 720px) {
-  .panel { padding: 22px; box-shadow: 6px 6px 0 #d2dfe2; }
-  .heading { align-items: stretch; flex-direction: column; }
-  .heading button { width: 100%; }
+  .panel {
+    padding: 22px;
+    box-shadow: 6px 6px 0 #d2dfe2;
+  }
+  .heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .heading button {
+    width: 100%;
+  }
 }

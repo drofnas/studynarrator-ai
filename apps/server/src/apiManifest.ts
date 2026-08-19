@@ -3,6 +3,8 @@ export const REST_API_MANIFEST = [
   { method: "GET", path: "/api/runtime" },
   { method: "GET", path: "/api/diagnostics" },
   { method: "GET", path: "/api/persistence/status" },
+  { method: "GET", path: "/api/persistence/backups" },
+  { method: "POST", path: "/api/persistence/backups/restore" },
   { method: "GET", path: "/api/projects" },
   { method: "POST", path: "/api/projects" },
   { method: "GET", path: "/api/projects/:projectId" },
@@ -16,10 +18,6 @@ export const REST_API_MANIFEST = [
   { method: "POST", path: "/api/projects/:projectId/prompt-preview" },
   { method: "POST", path: "/api/projects/:projectId/prompt-export" },
   { method: "POST", path: "/api/projects/:projectId/skill-export" },
-  { method: "POST", path: "/api/projects/:projectId/render-plans" },
-  { method: "GET", path: "/api/projects/:projectId/render-plans" },
-  { method: "GET", path: "/api/render-plans/:planId" },
-  { method: "POST", path: "/api/render-plans/:planId/renders" },
   { method: "POST", path: "/api/projects/:projectId/renders" },
   { method: "GET", path: "/api/projects/:projectId/renders" },
   { method: "GET", path: "/api/renders/:renderId" },
@@ -53,5 +51,5 @@ export const REST_API_MANIFEST = [
   { method: "POST", path: "/api/scratchpad/preview" },
   { method: "GET", path: "/api/speech-cache" },
   { method: "DELETE", path: "/api/speech-cache" },
-  { method: "DELETE", path: "/api/speech-cache/:cacheKey" }
+  { method: "DELETE", path: "/api/speech-cache/:cacheKey" },
 ] as const;

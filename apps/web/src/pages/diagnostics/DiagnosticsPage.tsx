@@ -11,18 +11,43 @@ interface DiagnosticsPageProps {
 }
 
 export function DiagnosticsPage({ client }: DiagnosticsPageProps) {
-  const { diagnostics, loading, runDiagnostics, state } = useDiagnostics(client);
+  const { diagnostics, loading, runDiagnostics, state } =
+    useDiagnostics(client);
 
   return (
     <ContentPanel
-      action={<button type="button" onClick={() => void runDiagnostics()} disabled={loading}>{loading ? "Checking signal…" : diagnostics ? "Run again" : "Run self-test"}</button>}
+      action={
+        <button
+          type="button"
+          onClick={() => void runDiagnostics()}
+          disabled={loading}
+        >
+          {loading
+            ? "Checking signal…"
+            : diagnostics
+              ? "Run again"
+              : "Run self-test"}
+        </button>
+      }
       kicker="Local runtime"
       title="Runtime self-test"
       titleId="console-title"
     >
       <DiagnosticsStatusRail diagnostics={diagnostics} loading={loading} />
-      {state.phase === "error" ? <ErrorNotice title="The diagnostic boundary did not respond.">{state.message} Check the local application process, then run the self-test again.</ErrorNotice> : null}
-      {diagnostics ? <DiagnosticsEvidence diagnostics={diagnostics} /> : <p className={styles.emptyNote}>Run the self-test to verify local persistence and inspect the complete runtime path.</p>}
+      {state.phase === "error" ? (
+        <ErrorNotice title="The diagnostic boundary did not respond.">
+          {state.message} Check the local application process, then run the
+          self-test again.
+        </ErrorNotice>
+      ) : null}
+      {diagnostics ? (
+        <DiagnosticsEvidence diagnostics={diagnostics} />
+      ) : (
+        <p className={styles.emptyNote}>
+          Run the self-test to verify local persistence and inspect the complete
+          runtime path.
+        </p>
+      )}
     </ContentPanel>
   );
 }

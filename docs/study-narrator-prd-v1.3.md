@@ -524,11 +524,11 @@ Rules:
 
 Recommended starter defaults:
 
-| Pause ID | Default duration | Intended use |
-|---|---:|---|
-| `pause_short` | 350 ms | Speaker handoff or a brief thinking beat |
-| `pause_medium` | 750 ms | Paragraph or subtopic separation |
-| `pause_long` | 1,500 ms | Major subject or section separation |
+| Pause ID       | Default duration | Intended use                             |
+| -------------- | ---------------: | ---------------------------------------- |
+| `pause_short`  |           350 ms | Speaker handoff or a brief thinking beat |
+| `pause_medium` |           750 ms | Paragraph or subtopic separation         |
+| `pause_long`   |         1,500 ms | Major subject or section separation      |
 
 These are editable defaults, not model behavior.
 
@@ -571,10 +571,10 @@ After the service restarts, processing will {{resume|continue}}.
 
 The lexicon may contain:
 
-| Display text | Sense | Spoken form |
-|---|---|---|
-| `resume` | `cv` | `rez-oo-may` |
-| `resume` | `continue` | `ree-zoom` |
+| Display text | Sense      | Spoken form  |
+| ------------ | ---------- | ------------ |
+| `resume`     | `cv`       | `rez-oo-may` |
+| `resume`     | `continue` | `ree-zoom`   |
 
 Rules:
 
@@ -1273,8 +1273,6 @@ study-narrator-script-skill/
 ```
 
 The package should describe the output contract without requiring a specific LLM vendor or API.
-
-
 
 ## 11. UI and User Experience Requirements
 

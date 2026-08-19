@@ -1,8 +1,14 @@
 import { unzipSync, strFromU8 } from "fflate";
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { DEFAULT_SYSTEM_TIMING, type ProjectDetail } from "@studynarrator/shared-types";
-import { createScriptGenerationService, type ScriptGenerationRepository } from "./scriptGeneration.js";
+import {
+  DEFAULT_SYSTEM_TIMING,
+  type ProjectDetail,
+} from "@studynarrator/shared-types";
+import {
+  createScriptGenerationService,
+  type ScriptGenerationRepository,
+} from "./scriptGeneration.js";
 import { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
 
 const timestamp = "2026-08-14T00:00:00.000Z";
@@ -14,19 +20,44 @@ const project: ProjectDetail = {
   scriptSource: "PRIVATE SOURCE MARKER",
   scriptHash: "a".repeat(64),
   speakerMappings: [],
-  lexiconEntries: [{ id: "sql", scope: "project", entryType: "exactTerm", displayText: "SQL", spokenText: "sequel", caseSensitive: true, wholeWord: true, priority: 0, enabled: true, notes: "", createdAt: timestamp, updatedAt: timestamp }],
+  lexiconEntries: [
+    {
+      id: "sql",
+      scope: "project",
+      entryType: "exactTerm",
+      displayText: "SQL",
+      spokenText: "sequel",
+      caseSensitive: true,
+      wholeWord: true,
+      priority: 0,
+      enabled: true,
+      notes: "",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    },
+  ],
   createdAt: timestamp,
-  updatedAt: timestamp
+  updatedAt: timestamp,
 };
 
 function repository(): ScriptGenerationRepository {
-  return { getProject: vi.fn(() => project), getSystemPacing: vi.fn(() => DEFAULT_SYSTEM_TIMING), listGlobalLexicon: vi.fn(() => []) };
+  return {
+    getProject: vi.fn(() => project),
+    getSystemPacing: vi.fn(() => DEFAULT_SYSTEM_TIMING),
+    listGlobalLexicon: vi.fn(() => []),
+  };
 }
 
 describe("script generation service", () => {
   it("matches the public application-service manifest", () => {
-    expect(APPLICATION_SERVICE_MANIFEST.filter((path) => path.startsWith("scriptGeneration."))).toEqual([
-      "scriptGeneration.previewPrompt", "scriptGeneration.exportPrompt", "scriptGeneration.exportSkillPackage"
+    expect(
+      APPLICATION_SERVICE_MANIFEST.filter((path) =>
+        path.startsWith("scriptGeneration."),
+      ),
+    ).toEqual([
+      "scriptGeneration.previewPrompt",
+      "scriptGeneration.exportPrompt",
+      "scriptGeneration.exportSkillPackage",
     ]);
   });
   it("returns a checksummed, sanitized prompt document", async () => {
@@ -36,21 +67,46 @@ describe("script generation service", () => {
     expect(document.fileName).toBe("resume-unsafe-project-creation-prompt.md");
     expect(document.mimeType).toBe("text/markdown; charset=utf-8");
     expect(document.checksum).toMatch(/^[a-f0-9]{64}$/u);
-    expect(document.content).toContain("# StudyNarrator Script Creation Instructions");
+    expect(document.content).toContain(
+      "# StudyNarrator Script Creation Instructions",
+    );
     expect(document.content).toContain("[WHAT SHOULD THE SCRIPT TEACH?]");
     expect(document.content).not.toContain(project.scriptSource);
     const update = await service.previewPrompt(project.id, "update");
-    expect(update).toMatchObject({ kind: "update", fileName: "resume-unsafe-project-update-prompt.md" });
-    expect(update.content).toContain("# StudyNarrator Script Update Instructions");
-    expect(update.content).toContain("[DESCRIBE WHAT SHOULD BE ADDED, REMOVED, CORRECTED, EXPANDED, OR REORGANIZED.]");
-    expect(update.content.trimEnd().endsWith("[OPTIONAL — PROVIDE FACTS, RESEARCH, SOURCE MATERIAL, CONSTRAINTS, OR ATTACH RELEVANT FILES.]")).toBe(true);
+    expect(update).toMatchObject({
+      kind: "update",
+      fileName: "resume-unsafe-project-update-prompt.md",
+    });
+    expect(update.content).toContain(
+      "# StudyNarrator Script Update Instructions",
+    );
+    expect(update.content).toContain(
+      "[DESCRIBE WHAT SHOULD BE ADDED, REMOVED, CORRECTED, EXPANDED, OR REORGANIZED.]",
+    );
+    expect(
+      update.content
+        .trimEnd()
+        .endsWith(
+          "[OPTIONAL — PROVIDE FACTS, RESEARCH, SOURCE MATERIAL, CONSTRAINTS, OR ATTACH RELEVANT FILES.]",
+        ),
+    ).toBe(true);
     expect(update.content).not.toContain("SQL → sequel");
   });
 
   it("builds a default prompt kit from global lexicon without loading a project", async () => {
     const getProject = vi.fn(() => project);
-    const globalSql = { ...project.lexiconEntries[0]!, id: "global-sql", scope: "global" as const };
-    const service = createScriptGenerationService({ repository: { getProject, getSystemPacing: vi.fn(() => DEFAULT_SYSTEM_TIMING), listGlobalLexicon: vi.fn(() => [globalSql]) } });
+    const globalSql = {
+      ...project.lexiconEntries[0]!,
+      id: "global-sql",
+      scope: "global" as const,
+    };
+    const service = createScriptGenerationService({
+      repository: {
+        getProject,
+        getSystemPacing: vi.fn(() => DEFAULT_SYSTEM_TIMING),
+        listGlobalLexicon: vi.fn(() => [globalSql]),
+      },
+    });
     const document = await service.previewPrompt(null, "creation");
     expect(document.fileName).toBe("studynarrator-creation-prompt.md");
     expect(document.content).toContain("[speaker_narrator]");
@@ -58,22 +114,32 @@ describe("script generation service", () => {
     expect(document.content).toContain("`resume/cv`");
     expect(document.content).not.toContain("SQL → sequel");
     expect(getProject).not.toHaveBeenCalled();
-    await expect(service.resolveSkillPackage(null)).resolves.toMatchObject({ fileName: "studynarrator-script-skill.zip" });
+    await expect(service.resolveSkillPackage(null)).resolves.toMatchObject({
+      fileName: "studynarrator-script-skill.zip",
+    });
   });
 
   it("exports edited prompt content with the generated filename and a matching checksum", async () => {
     const service = createScriptGenerationService({ repository: repository() });
     const content = "Edited prompt content";
-    const file = await service.resolvePromptExport(project.id, "update", content);
+    const file = await service.resolvePromptExport(
+      project.id,
+      "update",
+      content,
+    );
     expect(file.fileName).toBe("resume-unsafe-project-update-prompt.md");
     expect(strFromU8(file.bytes)).toBe(content);
-    expect(file.checksum).toBe(createHash("sha256").update(content).digest("hex"));
+    expect(file.checksum).toBe(
+      createHash("sha256").update(content).digest("hex"),
+    );
   });
 
   it("falls back to the generated prompt when no export override is supplied", async () => {
     const service = createScriptGenerationService({ repository: repository() });
     const file = await service.resolvePromptExport(project.id, "creation");
-    expect(strFromU8(file.bytes)).toContain("# StudyNarrator Script Creation Instructions");
+    expect(strFromU8(file.bytes)).toContain(
+      "# StudyNarrator Script Creation Instructions",
+    );
   });
 
   it("creates byte-identical ZIPs with both prompts, safe paths, and no saved script", async () => {
@@ -84,14 +150,44 @@ describe("script generation service", () => {
     expect(first.bytes).toEqual(second.bytes);
     expect(first.checksum).toBe(second.checksum);
     const files = unzipSync(first.bytes);
-    expect(Object.keys(files).sort()).toEqual(["CREATION_PROMPT.md", "LEXICON_ALIASES.md", "SCRIPT_FORMAT.md", "SKILL.md", "UPDATE_PROMPT.md", "examples/single-narrator.txt"].sort());
-    expect(Object.values(files).map((bytes) => strFromU8(bytes)).join("\n")).not.toContain(project.scriptSource);
-    expect(Object.keys(files).every((path) => !path.includes("..") && !path.startsWith("/"))).toBe(true);
+    expect(Object.keys(files).sort()).toEqual(
+      [
+        "CREATION_PROMPT.md",
+        "LEXICON_ALIASES.md",
+        "SCRIPT_FORMAT.md",
+        "SKILL.md",
+        "UPDATE_PROMPT.md",
+        "examples/single-narrator.txt",
+      ].sort(),
+    );
+    expect(
+      Object.values(files)
+        .map((bytes) => strFromU8(bytes))
+        .join("\n"),
+    ).not.toContain(project.scriptSource);
+    expect(
+      Object.keys(files).every(
+        (path) => !path.includes("..") && !path.startsWith("/"),
+      ),
+    ).toBe(true);
   });
 
   it("sanitizes repository failures", async () => {
-    const missing = { getProject: vi.fn(() => { throw Object.assign(new Error("secret path"), { code: "PERSISTENCE_NOT_FOUND" }); }), getSystemPacing: vi.fn(() => DEFAULT_SYSTEM_TIMING), listGlobalLexicon: vi.fn(() => []) };
+    const missing = {
+      getProject: vi.fn(() => {
+        throw Object.assign(new Error("secret path"), {
+          code: "PERSISTENCE_NOT_FOUND",
+        });
+      }),
+      getSystemPacing: vi.fn(() => DEFAULT_SYSTEM_TIMING),
+      listGlobalLexicon: vi.fn(() => []),
+    };
     const service = createScriptGenerationService({ repository: missing });
-    await expect(service.previewPrompt(project.id, "creation")).rejects.toMatchObject({ code: "SCRIPT_GENERATION_NOT_FOUND", message: "The requested project does not exist." });
+    await expect(
+      service.previewPrompt(project.id, "creation"),
+    ).rejects.toMatchObject({
+      code: "SCRIPT_GENERATION_NOT_FOUND",
+      message: "The requested project does not exist.",
+    });
   });
 });

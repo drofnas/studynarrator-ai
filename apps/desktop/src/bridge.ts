@@ -6,14 +6,13 @@ import {
   GlobalLexiconEntryCollectionSchema,
   IgnoredDiagnosticCollectionSchema,
   PERSISTENCE_CHANNELS,
+  PersistenceBackupCollectionSchema,
+  PersistenceBackupRestoreResultSchema,
   PersistenceStatusSchema,
   ProjectDetailSchema,
   PROJECT_PREVIEW_CHANNELS,
   ProjectPreviewResultSchema,
   ProjectSummaryCollectionSchema,
-  RENDER_PLAN_CHANNELS,
-  RenderPlanSchema,
-  RenderPlanSummaryCollectionSchema,
   RENDER_CHANNELS,
   RenderArtifactCollectionSchema,
   RenderArtifactExportResultSchema,
@@ -40,124 +39,306 @@ import {
   type SpeachesConnectionClient,
   type PersistenceClient,
   type ProjectPreviewClient,
-  type RenderPlanClient,
   type RenderClient,
   type ScratchpadClient,
   type ScriptGenerationClient,
   type SpeechCacheClient,
   type StudyNarratorBridge,
   type SystemDiagnostics,
-  type VoiceCatalogClient
+  type VoiceCatalogClient,
 } from "@studynarrator/shared-types";
 
-export function createPreloadBridge(invoke: (channel: string, input?: unknown) => Promise<unknown>): StudyNarratorBridge {
+export function createPreloadBridge(
+  invoke: (channel: string, input?: unknown) => Promise<unknown>,
+): StudyNarratorBridge {
   const persistence: PersistenceClient = {
-    async status() { return PersistenceStatusSchema.parse(await invoke(PERSISTENCE_CHANNELS.status)); },
+    async status() {
+      return PersistenceStatusSchema.parse(
+        await invoke(PERSISTENCE_CHANNELS.status),
+      );
+    },
+    backups: {
+      async list() {
+        return PersistenceBackupCollectionSchema.parse(
+          await invoke(PERSISTENCE_CHANNELS.backupsList),
+        );
+      },
+      async restore(input) {
+        return PersistenceBackupRestoreResultSchema.parse(
+          await invoke(PERSISTENCE_CHANNELS.backupsRestore, input),
+        );
+      },
+    },
     projects: {
-      async list() { return ProjectSummaryCollectionSchema.parse(await invoke(PERSISTENCE_CHANNELS.projectsList)); },
-      async create(input) { return ProjectDetailSchema.parse(await invoke(PERSISTENCE_CHANNELS.projectsCreate, input)); },
-      async get(projectId) { return ProjectDetailSchema.parse(await invoke(PERSISTENCE_CHANNELS.projectsGet, { projectId })); },
-      async replace(projectId, project) { return ProjectDetailSchema.parse(await invoke(PERSISTENCE_CHANNELS.projectsReplace, { projectId, project })); },
-      async duplicate(projectId, duplicate) { return ProjectDetailSchema.parse(await invoke(PERSISTENCE_CHANNELS.projectsDuplicate, { projectId, duplicate })); },
-      async delete(projectId) { EmptyResponseSchema.parse(await invoke(PERSISTENCE_CHANNELS.projectsDelete, { projectId })); }
+      async list() {
+        return ProjectSummaryCollectionSchema.parse(
+          await invoke(PERSISTENCE_CHANNELS.projectsList),
+        );
+      },
+      async create(input) {
+        return ProjectDetailSchema.parse(
+          await invoke(PERSISTENCE_CHANNELS.projectsCreate, input),
+        );
+      },
+      async get(projectId) {
+        return ProjectDetailSchema.parse(
+          await invoke(PERSISTENCE_CHANNELS.projectsGet, { projectId }),
+        );
+      },
+      async replace(projectId, project) {
+        return ProjectDetailSchema.parse(
+          await invoke(PERSISTENCE_CHANNELS.projectsReplace, {
+            projectId,
+            project,
+          }),
+        );
+      },
+      async duplicate(projectId, duplicate) {
+        return ProjectDetailSchema.parse(
+          await invoke(PERSISTENCE_CHANNELS.projectsDuplicate, {
+            projectId,
+            duplicate,
+          }),
+        );
+      },
+      async delete(projectId) {
+        EmptyResponseSchema.parse(
+          await invoke(PERSISTENCE_CHANNELS.projectsDelete, { projectId }),
+        );
+      },
     },
     settings: {
-      async getPacing() { return SystemTimingConfigurationSchema.parse(await invoke(PERSISTENCE_CHANNELS.pacingGet)); },
-      async updatePacing(input) { return SystemTimingConfigurationSchema.parse(await invoke(PERSISTENCE_CHANNELS.pacingUpdate, input)); }
+      async getPacing() {
+        return SystemTimingConfigurationSchema.parse(
+          await invoke(PERSISTENCE_CHANNELS.pacingGet),
+        );
+      },
+      async updatePacing(input) {
+        return SystemTimingConfigurationSchema.parse(
+          await invoke(PERSISTENCE_CHANNELS.pacingUpdate, input),
+        );
+      },
     },
     preferences: {
-      async getIgnoredDiagnostics() { return IgnoredDiagnosticCollectionSchema.parse(await invoke(PERSISTENCE_CHANNELS.ignoredGet)); },
-      async replaceIgnoredDiagnostics(input) { return IgnoredDiagnosticCollectionSchema.parse(await invoke(PERSISTENCE_CHANNELS.ignoredReplace, input)); }
+      async getIgnoredDiagnostics() {
+        return IgnoredDiagnosticCollectionSchema.parse(
+          await invoke(PERSISTENCE_CHANNELS.ignoredGet),
+        );
+      },
+      async replaceIgnoredDiagnostics(input) {
+        return IgnoredDiagnosticCollectionSchema.parse(
+          await invoke(PERSISTENCE_CHANNELS.ignoredReplace, input),
+        );
+      },
     },
     globalLexicon: {
-      async list() { return GlobalLexiconEntryCollectionSchema.parse(await invoke(PERSISTENCE_CHANNELS.globalLexiconList)); },
-      async replace(input) { return GlobalLexiconEntryCollectionSchema.parse(await invoke(PERSISTENCE_CHANNELS.globalLexiconReplace, input)); }
-    }
+      async list() {
+        return GlobalLexiconEntryCollectionSchema.parse(
+          await invoke(PERSISTENCE_CHANNELS.globalLexiconList),
+        );
+      },
+      async replace(input) {
+        return GlobalLexiconEntryCollectionSchema.parse(
+          await invoke(PERSISTENCE_CHANNELS.globalLexiconReplace, input),
+        );
+      },
+    },
   };
-  Object.freeze(persistence.projects);
+  Object.freeze(persistence);
   Object.freeze(persistence.settings);
   Object.freeze(persistence.preferences);
   Object.freeze(persistence.globalLexicon);
   const connection: SpeachesConnectionClient = {
-    async get() { return SpeachesConnectionSchema.parse(await invoke(CONNECTION_CHANNELS.get)); },
-    async update(input) { return SpeachesConnectionSchema.parse(await invoke(CONNECTION_CHANNELS.update, input)); },
-    async test() { return ConnectionTestSummarySchema.parse(await invoke(CONNECTION_CHANNELS.test)); },
-    async discoverSpeechCatalog(input) { return SpeechCatalogSchema.parse(await invoke(CONNECTION_CHANNELS.speechCatalogDiscover, input)); },
-    async exportDiagnostics() { return RedactedConnectionDiagnosticsSchema.parse(await invoke(CONNECTION_CHANNELS.exportDiagnostics)); },
-    async getSetupState() { return ConnectionSetupStateSchema.parse(await invoke(CONNECTION_CHANNELS.setupGet)); },
-    async completeOnboarding() { return ConnectionSetupStateSchema.parse(await invoke(CONNECTION_CHANNELS.setupComplete)); }
+    async get() {
+      return SpeachesConnectionSchema.parse(
+        await invoke(CONNECTION_CHANNELS.get),
+      );
+    },
+    async update(input) {
+      return SpeachesConnectionSchema.parse(
+        await invoke(CONNECTION_CHANNELS.update, input),
+      );
+    },
+    async test() {
+      return ConnectionTestSummarySchema.parse(
+        await invoke(CONNECTION_CHANNELS.test),
+      );
+    },
+    async discoverSpeechCatalog(input) {
+      return SpeechCatalogSchema.parse(
+        await invoke(CONNECTION_CHANNELS.speechCatalogDiscover, input),
+      );
+    },
+    async exportDiagnostics() {
+      return RedactedConnectionDiagnosticsSchema.parse(
+        await invoke(CONNECTION_CHANNELS.exportDiagnostics),
+      );
+    },
+    async getSetupState() {
+      return ConnectionSetupStateSchema.parse(
+        await invoke(CONNECTION_CHANNELS.setupGet),
+      );
+    },
+    async completeOnboarding() {
+      return ConnectionSetupStateSchema.parse(
+        await invoke(CONNECTION_CHANNELS.setupComplete),
+      );
+    },
   };
   const voiceCatalog: VoiceCatalogClient = {
-    async get(modelId) { return VoiceCatalogSchema.parse(await invoke(CONNECTION_CHANNELS.voiceCatalogGet, { modelId })); },
-    async replace(input) { return VoiceCatalogSchema.parse(await invoke(CONNECTION_CHANNELS.voiceCatalogReplace, input)); }
+    async get(modelId) {
+      return VoiceCatalogSchema.parse(
+        await invoke(CONNECTION_CHANNELS.voiceCatalogGet, { modelId }),
+      );
+    },
+    async replace(input) {
+      return VoiceCatalogSchema.parse(
+        await invoke(CONNECTION_CHANNELS.voiceCatalogReplace, input),
+      );
+    },
   };
   const scratchpad: ScratchpadClient = {
     async preview(input) {
-      return ScratchpadPreviewResultSchema.parse(await invoke(SCRATCHPAD_CHANNELS.preview, input));
-    }
+      return ScratchpadPreviewResultSchema.parse(
+        await invoke(SCRATCHPAD_CHANNELS.preview, input),
+      );
+    },
   };
   const projectPreview: ProjectPreviewClient = {
     async preview(projectId, input) {
-      return ProjectPreviewResultSchema.parse(await invoke(PROJECT_PREVIEW_CHANNELS.preview, { projectId, preview: input }));
-    }
+      return ProjectPreviewResultSchema.parse(
+        await invoke(PROJECT_PREVIEW_CHANNELS.preview, {
+          projectId,
+          preview: input,
+        }),
+      );
+    },
   };
   const speechCache: SpeechCacheClient = {
-    async status() { return SpeechCacheStatusSchema.parse(await invoke(SPEECH_CACHE_CHANNELS.status)); },
-    async clearAll() { return SpeechCacheCleanupResultSchema.parse(await invoke(SPEECH_CACHE_CHANNELS.clearAll)); },
+    async status() {
+      return SpeechCacheStatusSchema.parse(
+        await invoke(SPEECH_CACHE_CHANNELS.status),
+      );
+    },
+    async clearAll() {
+      return SpeechCacheCleanupResultSchema.parse(
+        await invoke(SPEECH_CACHE_CHANNELS.clearAll),
+      );
+    },
     async clearProject(projectId) {
-      return SpeechCacheCleanupResultSchema.parse(await invoke(SPEECH_CACHE_CHANNELS.clearProject, { projectId }));
+      return SpeechCacheCleanupResultSchema.parse(
+        await invoke(SPEECH_CACHE_CHANNELS.clearProject, { projectId }),
+      );
     },
     async clearEntry(cacheKey) {
-      return SpeechCacheCleanupResultSchema.parse(await invoke(SPEECH_CACHE_CHANNELS.clearEntry, { cacheKey }));
-    }
-  };
-  const renderPlans: RenderPlanClient = {
-    async create(projectId) {
-      return RenderPlanSchema.parse(await invoke(RENDER_PLAN_CHANNELS.create, { projectId }));
+      return SpeechCacheCleanupResultSchema.parse(
+        await invoke(SPEECH_CACHE_CHANNELS.clearEntry, { cacheKey }),
+      );
     },
-    async list(projectId) {
-      return RenderPlanSummaryCollectionSchema.parse(await invoke(RENDER_PLAN_CHANNELS.list, { projectId }));
-    },
-    async get(planId) {
-      return RenderPlanSchema.parse(await invoke(RENDER_PLAN_CHANNELS.get, { planId }));
-    }
   };
   const renders: RenderClient = {
-    async start(planId) { return RenderJobSchema.parse(await invoke(RENDER_CHANNELS.start, { planId })); },
-    async startProject(projectId) { return RenderJobSchema.parse(await invoke(RENDER_CHANNELS.startProject, { projectId })); },
-    async list(projectId) { return RenderJobCollectionSchema.parse(await invoke(RENDER_CHANNELS.list, { projectId })); },
-    async get(renderId) { return RenderJobSchema.parse(await invoke(RENDER_CHANNELS.get, { renderId })); },
-    async cancel(renderId) { return RenderJobSchema.parse(await invoke(RENDER_CHANNELS.cancel, { renderId })); },
-    async retry(renderId) { return RenderJobSchema.parse(await invoke(RENDER_CHANNELS.retry, { renderId })); },
-    async listArtifacts(renderId) { return RenderArtifactCollectionSchema.parse(await invoke(RENDER_CHANNELS.artifacts, { renderId })); },
-    async exportArtifact(artifactId) { return RenderArtifactExportResultSchema.parse(await invoke(RENDER_CHANNELS.exportArtifact, { artifactId })); },
-    async exportAudio(renderId) { return RenderArtifactExportResultSchema.parse(await invoke(RENDER_CHANNELS.exportAudio, { renderId })); },
-    async exportDetails(renderId) { return RenderArtifactExportResultSchema.parse(await invoke(RENDER_CHANNELS.exportDetails, { renderId })); },
-    async listSegments(renderId) { return RenderHistorySegmentCollectionSchema.parse(await invoke(RENDER_CHANNELS.segments, { renderId })); },
-    async getWaveform(renderId) { return RenderWaveformSchema.parse(await invoke(RENDER_CHANNELS.waveform, { renderId })); },
-    renderAudioSource(renderId) { return `studynarrator-media://render/${RenderIdSchema.parse(renderId)}`; },
+    async startProject(projectId) {
+      return RenderJobSchema.parse(
+        await invoke(RENDER_CHANNELS.startProject, { projectId }),
+      );
+    },
+    async list(projectId) {
+      return RenderJobCollectionSchema.parse(
+        await invoke(RENDER_CHANNELS.list, { projectId }),
+      );
+    },
+    async get(renderId) {
+      return RenderJobSchema.parse(
+        await invoke(RENDER_CHANNELS.get, { renderId }),
+      );
+    },
+    async cancel(renderId) {
+      return RenderJobSchema.parse(
+        await invoke(RENDER_CHANNELS.cancel, { renderId }),
+      );
+    },
+    async retry(renderId) {
+      return RenderJobSchema.parse(
+        await invoke(RENDER_CHANNELS.retry, { renderId }),
+      );
+    },
+    async listArtifacts(renderId) {
+      return RenderArtifactCollectionSchema.parse(
+        await invoke(RENDER_CHANNELS.artifacts, { renderId }),
+      );
+    },
+    async exportArtifact(artifactId) {
+      return RenderArtifactExportResultSchema.parse(
+        await invoke(RENDER_CHANNELS.exportArtifact, { artifactId }),
+      );
+    },
+    async exportAudio(renderId) {
+      return RenderArtifactExportResultSchema.parse(
+        await invoke(RENDER_CHANNELS.exportAudio, { renderId }),
+      );
+    },
+    async exportDetails(renderId) {
+      return RenderArtifactExportResultSchema.parse(
+        await invoke(RENDER_CHANNELS.exportDetails, { renderId }),
+      );
+    },
+    async listSegments(renderId) {
+      return RenderHistorySegmentCollectionSchema.parse(
+        await invoke(RENDER_CHANNELS.segments, { renderId }),
+      );
+    },
+    async getWaveform(renderId) {
+      return RenderWaveformSchema.parse(
+        await invoke(RENDER_CHANNELS.waveform, { renderId }),
+      );
+    },
+    renderAudioSource(renderId) {
+      return `studynarrator-media://render/${RenderIdSchema.parse(renderId)}`;
+    },
     segmentAudioSource(renderId, ordinal) {
-      if (!Number.isInteger(ordinal) || ordinal < 1) throw new Error("The render segment ordinal is invalid.");
+      if (!Number.isInteger(ordinal) || ordinal < 1)
+        throw new Error("The render segment ordinal is invalid.");
       return `studynarrator-media://segment/${RenderIdSchema.parse(renderId)}/${String(ordinal)}`;
     },
-    async exportSegment(renderId, ordinal) { return RenderArtifactExportResultSchema.parse(await invoke(RENDER_CHANNELS.exportSegment, { renderId, ordinal })); }
+    async exportSegment(renderId, ordinal) {
+      return RenderArtifactExportResultSchema.parse(
+        await invoke(RENDER_CHANNELS.exportSegment, { renderId, ordinal }),
+      );
+    },
   };
   const scriptGeneration: ScriptGenerationClient = {
     async previewPrompt(projectId, kind) {
-      return PromptDocumentSchema.parse(await invoke(SCRIPT_GENERATION_CHANNELS.previewPrompt, { projectId, kind }));
+      return PromptDocumentSchema.parse(
+        await invoke(SCRIPT_GENERATION_CHANNELS.previewPrompt, {
+          projectId,
+          kind,
+        }),
+      );
     },
     async exportPrompt(projectId, kind, content) {
-      return FileExportResultSchema.parse(await invoke(SCRIPT_GENERATION_CHANNELS.exportPrompt, { projectId, kind, ...(content === undefined ? {} : { content }) }));
+      return FileExportResultSchema.parse(
+        await invoke(SCRIPT_GENERATION_CHANNELS.exportPrompt, {
+          projectId,
+          kind,
+          ...(content === undefined ? {} : { content }),
+        }),
+      );
     },
     async exportSkillPackage(projectId) {
-      return FileExportResultSchema.parse(await invoke(SCRIPT_GENERATION_CHANNELS.exportSkillPackage, { projectId }));
-    }
+      return FileExportResultSchema.parse(
+        await invoke(SCRIPT_GENERATION_CHANNELS.exportSkillPackage, {
+          projectId,
+        }),
+      );
+    },
   };
   return Object.freeze({
     system: Object.freeze({
       async diagnostics(): Promise<SystemDiagnostics> {
-        return SystemDiagnosticsSchema.parse(await invoke(SYSTEM_DIAGNOSTICS_CHANNEL));
-      }
+        return SystemDiagnosticsSchema.parse(
+          await invoke(SYSTEM_DIAGNOSTICS_CHANNEL),
+        );
+      },
     }),
     persistence: Object.freeze(persistence),
     connection: Object.freeze(connection),
@@ -165,8 +346,7 @@ export function createPreloadBridge(invoke: (channel: string, input?: unknown) =
     scratchpad: Object.freeze(scratchpad),
     projectPreview: Object.freeze(projectPreview),
     speechCache: Object.freeze(speechCache),
-    renderPlans: Object.freeze(renderPlans),
     renders: Object.freeze(renders),
-    scriptGeneration: Object.freeze(scriptGeneration)
+    scriptGeneration: Object.freeze(scriptGeneration),
   });
 }
