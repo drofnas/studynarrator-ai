@@ -69,7 +69,28 @@ function walk(root) {
 }
 
 function readJson(path) {
-  return JSON.parse(readFileSync(path, "utf8"));
+  let text;
+  try {
+    text = readFileSync(path, "utf8");
+  } catch (error) {
+    throw new Error(
+      `failed to read manifest ${path}: ${errorInstanceMessage(error)}`,
+      { cause: error },
+    );
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    throw new Error(
+      `failed to parse manifest ${path}: ${errorInstanceMessage(error)}`,
+      { cause: error },
+    );
+  }
+}
+
+function errorInstanceMessage(error) {
+  return error instanceof Error ? error.message : "unknown error";
 }
 
 function packageName(specifier) {
@@ -392,7 +413,7 @@ function exportIndex(context, reachable) {
   return { modules, candidates };
 }
 
-function usedExports(context, reachable, index) {
+function usedExports(context, _reachable, index) {
   const used = new Set();
   const resolveExport = (file, name, seen = new Set()) => {
     const marker = `${file}\u0000${name}`;
