@@ -31,6 +31,7 @@ function backupsProvider(
     fromVersion: number;
     createdAt: string;
     sizeBytes: number;
+    kind: "migration" | "prerestore";
   } | null = null,
 ) {
   return {
@@ -83,6 +84,7 @@ describe("persistence application service", () => {
       fromVersion: 3,
       createdAt: "2026-08-12T12:00:00.000Z",
       sizeBytes: 4096,
+      kind: "migration",
     });
     const service = createPersistenceService(source, { backups: provider });
     const backups = requireBackups(service);
@@ -216,6 +218,7 @@ describe("persistence application service", () => {
       fromVersion: 3,
       createdAt: "2026-08-12T12:00:00.000Z",
       sizeBytes: 4096,
+      kind: "migration",
     });
     const service = createUnavailablePersistenceService(
       {
@@ -233,6 +236,7 @@ describe("persistence application service", () => {
             fromVersion: 3,
             createdAt: "2026-08-12T12:00:00.000Z",
             sizeBytes: 4096,
+            kind: "migration",
           },
         ],
       },
@@ -248,6 +252,7 @@ describe("persistence application service", () => {
         fromVersion: 3,
         createdAt: "2026-08-12T12:00:00.000Z",
         sizeBytes: 4096,
+        kind: "migration",
       },
     ]);
     await expect(

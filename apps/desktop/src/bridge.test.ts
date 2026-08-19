@@ -71,6 +71,7 @@ const persistenceBackup = {
   fromVersion: 5,
   createdAt: "2026-08-12T12:00:00.000Z",
   sizeBytes: 2048,
+  kind: "migration" as const,
 };
 
 const persistence = {

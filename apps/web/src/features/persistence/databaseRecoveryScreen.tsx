@@ -140,6 +140,7 @@ export function DatabaseRecoveryScreen({
             <thead>
               <tr>
                 <th scope="col">Backup</th>
+                <th scope="col">Type</th>
                 <th scope="col">From version</th>
                 <th scope="col">Created</th>
                 <th scope="col">Size</th>
@@ -150,9 +151,12 @@ export function DatabaseRecoveryScreen({
             </thead>
             <tbody>
               {status.availableBackups.map((backup) => (
-                <tr key={backup.path}>
+                <tr key={backup.path} data-backup-kind={backup.kind}>
                   <td>
                     <code>{backup.path}</code>
+                  </td>
+                  <td>
+                    {backup.kind === "prerestore" ? "Safety copy" : "Migration"}
                   </td>
                   <td>version {backup.fromVersion}</td>
                   <td>{backup.createdAt}</td>

@@ -444,11 +444,15 @@ export interface BackupRecord {
   toVersion: number;
   createdAt: string;
   sizeBytes: number;
+  kind: "migration" | "prerestore";
 }
 
 // Accepts both the current zero-padded filenames and unpadded legacy names.
+// Pre-restore safety copies carry a `prerestore` marker immediately before the
+// version pair; both their version fields are the schema version of the
+// database that was set aside. Legacy (unmarked) names parse as migrations.
 const BACKUP_FILE_PATTERN =
-  /^(?<stem>.+)-v(?<from>\d+)-to-v(?<to>\d+)-(?<timestamp>.+)\.(?<extension>[^.]+)$/u;
+  /^(?<stem>.+?)-(?:(?<kind>prerestore)-)?v(?<from>\d+)-to-v(?<to>\d+)-(?<timestamp>.+)\.(?<extension>[^.]+)$/u;
 
 export async function listBackups(
   databasePath: string,
@@ -483,6 +487,7 @@ export async function listBackups(
         toVersion: Number(match.groups.to),
         createdAt: new Date(stats.mtimeMs).toISOString(),
         sizeBytes: stats.size,
+        kind: match.groups.kind === "prerestore" ? "prerestore" : "migration",
       },
     });
   }
@@ -503,14 +508,14 @@ export async function listBackups(
 export async function listPersistenceBackups(
   databasePath: string,
 ): Promise<PersistenceBackup[]> {
-  return (await listBackups(databasePath)).map(
-    ({ path, fromVersion, createdAt, sizeBytes }) => ({
-      path,
-      fromVersion,
-      createdAt,
-      sizeBytes,
-    }),
-  );
+  const records = await listBackups(databasePath);
+  return records.map(({ path, fromVersion, createdAt, sizeBytes, kind }) => ({
+    path,
+    fromVersion,
+    createdAt,
+    sizeBytes,
+    kind,
+  }));
 }
 
 export async function pruneBackups(
@@ -518,30 +523,53 @@ export async function pruneBackups(
   options?: { keepRecent?: number; protectPath?: string | null },
 ): Promise<{ removed: string[]; retained: string[] }> {
   const backups = await listBackups(databasePath); // newest first
-  const recentKeeps = new Set(
-    backups
-      .slice(0, Math.max(0, options?.keepRecent ?? 3))
-      .map(({ path }) => resolve(path)),
-  );
-  // Newest-first walk means the first record seen for a `from` version is its
-  // newest backup — that is the one needed for downgrade to that schema.
-  const newestPerFromVersion = new Map<number, string>();
-  for (const { path, fromVersion } of backups) {
-    if (!newestPerFromVersion.has(fromVersion))
-      newestPerFromVersion.set(fromVersion, resolve(path));
+  const migrations = backups.filter(({ kind }) => kind === "migration");
+  const prerestores = backups.filter(({ kind }) => kind === "prerestore");
+
+  const retain = new Set<string>();
+
+  // Migration backups keep the existing rule: the most recent `keepRecent`,
+  // plus the newest backup for each source schema version (a newest-first
+  // walk means the first record seen for a `from` version is the one needed
+  // for downgrade to that schema).
+  for (const backup of migrations.slice(
+    0,
+    Math.max(0, options?.keepRecent ?? 3),
+  )) {
+    retain.add(resolve(backup.path));
   }
+  for (const backup of migrations) {
+    const isNewestForVersion =
+      migrations.findIndex(
+        ({ fromVersion }) => fromVersion === backup.fromVersion,
+      ) ===
+      migrations.findIndex(
+        ({ path }) => resolve(path) === resolve(backup.path),
+      );
+    if (isNewestForVersion) retain.add(resolve(backup.path));
+  }
+  // Pre-restore safety copies are only useful briefly right after a restore:
+  // keep the two most recent and let the rest rotate out.
+  for (const backup of prerestores.slice(0, 2)) {
+    retain.add(resolve(backup.path));
+  }
+  // An explicitly protected path is always a migration backup — pre-restore
+  // copies are never protected targets.
   const protectedPath = options?.protectPath
     ? resolve(options.protectPath)
     : null;
+  if (
+    protectedPath !== null &&
+    migrations.some(({ path }) => resolve(path) === protectedPath)
+  ) {
+    retain.add(protectedPath);
+  }
+
   const removed: string[] = [];
   const retained: string[] = [];
   for (const backup of backups) {
     const key = resolve(backup.path);
-    if (
-      recentKeeps.has(key) ||
-      newestPerFromVersion.get(backup.fromVersion) === key ||
-      protectedPath === key
-    ) {
+    if (retain.has(key)) {
       retained.push(backup.path);
       continue;
     }

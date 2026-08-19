@@ -131,7 +131,7 @@ test.describe("database recovery after a downgrade", () => {
     expect(readMaximumSchemaVersion(databasePath)).toBe(99);
     expect(
       (await readdir(backupsDirectory)).some((name) =>
-        name.startsWith("pre-restore-"),
+        name.includes("-prerestore-"),
       ),
     ).toBe(false);
   });
@@ -156,7 +156,7 @@ test.describe("database recovery after a downgrade", () => {
       page.getByRole("heading", { name: "Backup restored" }),
     ).toBeVisible();
     await expect(
-      page.locator("code", { hasText: /pre-restore-/ }),
+      page.locator("code", { hasText: /prerestore-/ }),
     ).toBeVisible();
 
     const { databasePath, backupsDirectory, goodBackupPath } = recoveryPaths(
@@ -166,7 +166,7 @@ test.describe("database recovery after a downgrade", () => {
     // pre-restore safety copy is preserved.
     expect(readMaximumSchemaVersion(databasePath)).not.toBe(99);
     const safetyCopies = (await readdir(backupsDirectory)).filter((name) =>
-      name.startsWith("pre-restore-"),
+      name.includes("-prerestore-"),
     );
     expect(safetyCopies).toHaveLength(1);
     expect(
@@ -221,7 +221,7 @@ test.describe("database recovery after a downgrade", () => {
     expect(readMaximumSchemaVersion(databasePath)).toBe(99);
     expect(
       (await readdir(backupsDirectory)).some((name) =>
-        name.startsWith("pre-restore-"),
+        name.includes("-prerestore-"),
       ),
     ).toBe(false);
     await expect(

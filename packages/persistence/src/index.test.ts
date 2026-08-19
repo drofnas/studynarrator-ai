@@ -13,6 +13,7 @@ import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 import {
   listBackups,
+  listPersistenceBackups,
   MigrationFailureError,
   pruneBackups,
   STUDYNARRATOR_MIGRATIONS,
@@ -1198,6 +1199,20 @@ describe("backup retention", () => {
     return path;
   }
 
+  async function writePrerestore(
+    backupDirectory: string,
+    version: number,
+    at: Date,
+  ) {
+    const stamp = at.toISOString().replace(/[:.]/gu, "-");
+    const padded = String(version).padStart(4, "0");
+    const fileName = `studynarrator-prerestore-v${padded}-to-v${padded}-${stamp}.sqlite`;
+    const path = join(backupDirectory, fileName);
+    await writeFile(path, "prerestore-safety-copy");
+    await utimes(path, at, at);
+    return path;
+  }
+
   const hour = (hours: number) =>
     new Date(Date.UTC(2026, 7, 1) + hours * 3_600_000);
 
@@ -1293,6 +1308,7 @@ describe("backup retention", () => {
         toVersion: 2,
         createdAt: created.toISOString(),
         sizeBytes: 6,
+        kind: "migration",
       },
     ];
     expect(backups).toEqual(expected);
@@ -1328,6 +1344,7 @@ describe("backup retention", () => {
         toVersion: 3,
         createdAt: hour(1).toISOString(),
         sizeBytes: 21,
+        kind: "migration",
       },
     ]);
 
@@ -1337,5 +1354,55 @@ describe("backup retention", () => {
     expect(retained).toEqual([backup]);
     await stat(walPath);
     await stat(shmPath);
+  });
+
+  it("lists pre-restore safety copies alongside migration backups", async () => {
+    const home = await makeHome("studynarrator-prerestore-listing-");
+    await mkdir(home.backupDirectory, { mode: 0o700 });
+    const migration = await writeBackup(home.backupDirectory, 3, 4, hour(1));
+    const safetyCopy = await writePrerestore(home.backupDirectory, 4, hour(2));
+
+    const backups = await listBackups(home.databasePath);
+    expect(backups.map(({ path, kind }) => [path, kind])).toEqual([
+      [safetyCopy, "prerestore"],
+      [migration, "migration"],
+    ]);
+
+    // The wire projection carries the same kind for the recovery UI.
+    const persistenceBackups = await listPersistenceBackups(home.databasePath);
+    expect(persistenceBackups.map(({ path, kind }) => [path, kind])).toEqual([
+      [safetyCopy, "prerestore"],
+      [migration, "migration"],
+    ]);
+  });
+
+  it("retains only the two most recent pre-restore copies when pruning", async () => {
+    const home = await makeHome("studynarrator-prerestore-prune-");
+    await mkdir(home.backupDirectory, { mode: 0o700 });
+    const oldMigration = await writeBackup(home.backupDirectory, 3, 4, hour(1));
+    // Three pre-restore copies, oldest to newest; only the newest two remain.
+    const oldestSafety = await writePrerestore(
+      home.backupDirectory,
+      4,
+      hour(2),
+    );
+    const middleSafety = await writePrerestore(
+      home.backupDirectory,
+      4,
+      hour(3),
+    );
+    const newestSafety = await writePrerestore(
+      home.backupDirectory,
+      4,
+      hour(4),
+    );
+
+    const { removed, retained } = await pruneBackups(home.databasePath);
+    expect(removed).toEqual([oldestSafety]);
+    // Newest first; the migration is a distinct kind and is unaffected.
+    expect(retained).toEqual([newestSafety, middleSafety, oldMigration]);
+    await stat(newestSafety);
+    await stat(middleSafety);
+    await stat(oldMigration);
   });
 });

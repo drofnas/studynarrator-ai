@@ -99,7 +99,7 @@ describe("desktop storage recovery", () => {
           );
         const restored = await backups.restore({ backupPath });
         expect(restored.restoredFrom).toBe(backupPath);
-        expect(restored.safetyCopyPath).toMatch(/pre-restore-/);
+        expect(restored.safetyCopyPath).toMatch(/prerestore-/);
 
         const reopened = await openStudyNarratorRepository({
           Database,

@@ -33,7 +33,16 @@ function dialogElementPolyfill() {
 const backupRestoredFrom =
   "/data/studynarrator/backups/studynarrator-v3-to-v3-2026-08-17T12-00-00-000Z.sqlite";
 const safetyCopy =
-  "/data/studynarrator/backups/pre-restore-2026-08-18T10-00-00-000Z.sqlite";
+  "/data/studynarrator/backups/studynarrator-prerestore-v0099-to-v0099-2026-08-18T10-00-00-000Z.sqlite";
+
+const migrationBackup: PersistenceUnavailableStatus["availableBackups"][number] =
+  {
+    path: backupRestoredFrom,
+    fromVersion: 3,
+    createdAt: "2026-08-17T12:00:00.000Z",
+    sizeBytes: 40 * 1024,
+    kind: "migration",
+  };
 
 const unavailableStatus: PersistenceUnavailableStatus = {
   contractVersion: 1,
@@ -44,14 +53,7 @@ const unavailableStatus: PersistenceUnavailableStatus = {
   targetDatabaseSchemaVersion: 3,
   databasePath: "/data/studynarrator/studynarrator.sqlite",
   latestBackupPath: backupRestoredFrom,
-  availableBackups: [
-    {
-      path: backupRestoredFrom,
-      fromVersion: 3,
-      createdAt: "2026-08-17T12:00:00.000Z",
-      sizeBytes: 40 * 1024,
-    },
-  ],
+  availableBackups: [migrationBackup],
 };
 
 function gateClient(
@@ -191,6 +193,35 @@ describe("DatabaseRecoveryScreen", () => {
     expect(
       within(row).getByRole("button", { name: "Restore from this backup" }),
     ).toBeInTheDocument();
+  });
+
+  it("labels pre-restore safety copies distinctly from migration backups", async () => {
+    const withSafetyCopy: PersistenceUnavailableStatus = {
+      ...unavailableStatus,
+      availableBackups: [
+        migrationBackup,
+        {
+          path: "/data/studynarrator/backups/studynarrator-prerestore-v0099-to-v0099-2026-08-18T10-00-00-000Z.sqlite",
+          fromVersion: 99,
+          createdAt: "2026-08-18T09:00:00.000Z",
+          sizeBytes: 40 * 1024,
+          kind: "prerestore",
+        },
+      ],
+    };
+    renderScreen(
+      vi.fn() as (
+        backupPath: string,
+      ) => Promise<PersistenceBackupRestoreResult>,
+      withSafetyCopy,
+    );
+    const rows = within(screen.getByRole("table")).getAllByRole("row");
+    const migration = rows[1] as HTMLElement;
+    const safety = rows[2] as HTMLElement;
+    expect(migration).toHaveAttribute("data-backup-kind", "migration");
+    expect(within(migration).getByText("Migration")).toBeInTheDocument();
+    expect(safety).toHaveAttribute("data-backup-kind", "prerestore");
+    expect(within(safety).getByText("Safety copy")).toBeInTheDocument();
   });
 
   it("restores the chosen backup only after explicit confirmation", async () => {

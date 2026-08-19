@@ -66,7 +66,11 @@ describe("restoreDatabaseFromBackup", () => {
 
     expect(result.restoredFrom).toBe(backupPath);
     expect(result.safetyCopyPath.startsWith(backupsDirectory)).toBe(true);
-    expect(result.safetyCopyPath).toMatch(/pre-restore-[^/]+\.sqlite$/u);
+    // The live database has no schema_migrations table, so its version falls
+    // back to 0 in the name; the marker and version pair are both present.
+    expect(result.safetyCopyPath).toMatch(
+      /prerestore-v\d+-to-v\d+-[^/]+\.sqlite$/u,
+    );
     expect(await readMarker(result.restoredFrom)).toBe("backup");
     expect(await readMarker(result.safetyCopyPath)).toBe("current");
     expect((await stat(result.safetyCopyPath)).mode & 0o777).toBe(0o600);
@@ -85,8 +89,28 @@ describe("restoreDatabaseFromBackup", () => {
       backupPath,
     });
     expect(await readMarker(second.safetyCopyPath)).toBe("backup");
+    expect(second.safetyCopyPath).toMatch(
+      /prerestore-v\d+-to-v\d+-[^/]+\.sqlite$/u,
+    );
+    // Both safety copies are now discoverable in the backup listings and are
+    // classified as pre-restore copies, not migrations. Newest first: the
+    // second restore's copy is the most recent file.
     const backups = await listBackups(databasePath);
-    expect(backups.map(({ path }) => path)).toEqual([backupPath]);
+    expect(backups.map(({ path }) => path)).toEqual([
+      second.safetyCopyPath,
+      result.safetyCopyPath,
+      backupPath,
+    ]);
+    const safetyCopies = backups.filter(
+      ({ path }) =>
+        path === result.safetyCopyPath || path === second.safetyCopyPath,
+    );
+    for (const copy of safetyCopies) {
+      expect(copy.kind).toBe("prerestore");
+    }
+    expect(backups.find(({ path }) => path === backupPath)?.kind).toBe(
+      "migration",
+    );
     for (const retained of [
       backupPath,
       result.safetyCopyPath,
@@ -232,13 +256,17 @@ describe("newer-schema databases", () => {
 
     // A longer registry must never migrate the too-new row downward either;
     // it may advance forward from 99 if the registry is actually newer.
-    await expect(
-      restoreDatabaseFromBackup({
-        Database: DatabaseAdapter,
-        databasePath,
-        backupPath,
-      }),
-    ).resolves.toMatchObject({ restoredFrom: backupPath });
+    const first = await restoreDatabaseFromBackup({
+      Database: DatabaseAdapter,
+      databasePath,
+      backupPath,
+    });
+    expect(first).toMatchObject({ restoredFrom: backupPath });
+    // The safety copy of the set-aside database is named after that database's
+    // own schema version (99), not the backup's target version.
+    expect(first.safetyCopyPath).toMatch(
+      /studynarrator-prerestore-v0099-to-v0099-/u,
+    );
     const restored = new Database(databasePath, { readonly: true });
     expect(
       restored

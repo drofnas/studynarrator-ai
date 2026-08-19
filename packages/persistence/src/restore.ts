@@ -1,7 +1,15 @@
 import { chmod, copyFile, rm, stat } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import {
+  basename,
+  dirname,
+  extname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+} from "node:path";
 import { BackupRestoreError } from "./errors.js";
-import { type DatabaseConstructor, type DatabaseLike } from "./migrations.js";
+import type { DatabaseConstructor, DatabaseLike } from "./migrations.js";
 
 interface BackupRestoreResult {
   restoredFrom: string;
@@ -53,6 +61,35 @@ function assertBackupIntegrity(
 }
 
 /**
+ * Read the schema version of the database about to be set aside so a safety
+ * copy can be named like the other backups in the directory. A database with
+ * no readable `schema_migrations` table (or that cannot be opened) reports 0;
+ * naming is bookkeeping and must never make a restore fail.
+ */
+function currentSchemaVersion(
+  Database: DatabaseConstructor,
+  databasePath: string,
+): number {
+  let database: DatabaseLike | undefined;
+  try {
+    database = new Database(databasePath, {
+      readonly: true,
+      fileMustExist: true,
+    });
+    const row = database
+      .prepare(
+        "SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations",
+      )
+      .get() as { version: number | null } | undefined;
+    return typeof row?.version === "number" ? row.version : 0;
+  } catch {
+    return 0;
+  } finally {
+    database?.close();
+  }
+}
+
+/**
  * Replace `databasePath` with a verified backup from its sibling `backups/`
  * directory. The current database is copied aside first so the restore itself
  * is reversible, and stale WAL/SHM sidecar files are removed so the replaced
@@ -89,11 +126,15 @@ export async function restoreDatabaseFromBackup(options: {
     throw new BackupRestoreError(
       "StudyNarrator could not preserve the current database before restoring.",
     );
+  const version = currentSchemaVersion(options.Database, databasePath);
+  const paddedVersion = String(version).padStart(4, "0");
+  const stem = basename(databasePath, extname(databasePath));
+  const extension = extname(databasePath) || ".sqlite";
   const timestamp = new Date().toISOString().replace(/[:.]/gu, "-");
   const safetyCopyPath = join(
     dirname(databasePath),
     "backups",
-    `pre-restore-${timestamp}.sqlite`,
+    `${stem}-prerestore-v${paddedVersion}-to-v${paddedVersion}-${timestamp}${extension}`,
   );
   await copyFile(databasePath, safetyCopyPath);
   await chmod(safetyCopyPath, 0o600);

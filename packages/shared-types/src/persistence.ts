@@ -572,6 +572,7 @@ const PersistenceBackupSchema = z
     fromVersion: z.number().int().nonnegative(),
     createdAt: z.iso.datetime(),
     sizeBytes: z.number().int().nonnegative(),
+    kind: z.enum(["migration", "prerestore"]),
   })
   .strict();
 export type PersistenceBackup = z.infer<typeof PersistenceBackupSchema>;
