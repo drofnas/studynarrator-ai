@@ -589,7 +589,7 @@ export type PersistenceBackupRestoreInput = z.infer<
 export const PersistenceBackupRestoreResultSchema = z
   .object({
     restoredFrom: z.string().min(1),
-    safetyCopyPath: z.string().min(1),
+    safetyCopyPath: z.string().min(1).nullable(),
   })
   .strict();
 export type PersistenceBackupRestoreResult = z.infer<

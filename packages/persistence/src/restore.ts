@@ -13,7 +13,7 @@ import type { DatabaseConstructor, DatabaseLike } from "./migrations.js";
 
 interface BackupRestoreResult {
   restoredFrom: string;
-  safetyCopyPath: string;
+  safetyCopyPath: string | null;
 }
 
 /**
@@ -121,23 +121,36 @@ export async function restoreDatabaseFromBackup(options: {
   assertBackupIntegrity(options.Database, backupPath);
 
   const databasePath = resolve(options.databasePath);
-  const currentStats = await stat(databasePath);
-  if (!currentStats.isFile())
+  let currentStats;
+  try {
+    currentStats = await stat(databasePath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    currentStats = null;
+  }
+  if (currentStats !== null && !currentStats.isFile())
     throw new BackupRestoreError(
       "StudyNarrator could not preserve the current database before restoring.",
     );
-  const version = currentSchemaVersion(options.Database, databasePath);
-  const paddedVersion = String(version).padStart(4, "0");
-  const stem = basename(databasePath, extname(databasePath));
-  const extension = extname(databasePath) || ".sqlite";
-  const timestamp = new Date().toISOString().replace(/[:.]/gu, "-");
-  const safetyCopyPath = join(
-    dirname(databasePath),
-    "backups",
-    `${stem}-prerestore-v${paddedVersion}-to-v${paddedVersion}-${timestamp}${extension}`,
-  );
-  await copyFile(databasePath, safetyCopyPath);
-  await chmod(safetyCopyPath, 0o600);
+
+  // Only a database that exists can be preserved. A missing database is a
+  // legitimate recovery scenario with nothing to keep aside, so the restore
+  // proceeds without a safety copy.
+  let safetyCopyPath: string | null = null;
+  if (currentStats !== null) {
+    const version = currentSchemaVersion(options.Database, databasePath);
+    const paddedVersion = String(version).padStart(4, "0");
+    const stem = basename(databasePath, extname(databasePath));
+    const extension = extname(databasePath) || ".sqlite";
+    const timestamp = new Date().toISOString().replace(/[:.]/gu, "-");
+    safetyCopyPath = join(
+      dirname(databasePath),
+      "backups",
+      `${stem}-prerestore-v${paddedVersion}-to-v${paddedVersion}-${timestamp}${extension}`,
+    );
+    await copyFile(databasePath, safetyCopyPath);
+    await chmod(safetyCopyPath, 0o600);
+  }
 
   // Write beside the target and rename, so an interrupted restore can never
   // leave a truncated database in place. Both paths are in the same directory,

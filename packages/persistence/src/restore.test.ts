@@ -72,15 +72,18 @@ describe("restoreDatabaseFromBackup", () => {
     });
 
     expect(result.restoredFrom).toBe(backupPath);
-    expect(result.safetyCopyPath.startsWith(backupsDirectory)).toBe(true);
+    // A live database existed, so a safety copy must have been kept.
+    expect(result.safetyCopyPath).not.toBeNull();
+    const firstSafety = result.safetyCopyPath as string;
+    expect(firstSafety.startsWith(backupsDirectory)).toBe(true);
     // The live database has no schema_migrations table, so its version falls
     // back to 0 in the name; the marker and version pair are both present.
-    expect(result.safetyCopyPath).toMatch(
+    expect(firstSafety).toMatch(
       /prerestore-v\d+-to-v\d+-[^/]+\.sqlite$/u,
     );
     expect(await readMarker(result.restoredFrom)).toBe("backup");
-    expect(await readMarker(result.safetyCopyPath)).toBe("current");
-    expect((await stat(result.safetyCopyPath)).mode & 0o777).toBe(0o600);
+    expect(await readMarker(firstSafety)).toBe("current");
+    expect((await stat(firstSafety)).mode & 0o777).toBe(0o600);
     expect((await stat(databasePath)).mode & 0o777).toBe(0o600);
     await expect(stat(`${databasePath}-wal`)).rejects.toMatchObject({
       code: "ENOENT",
@@ -95,8 +98,10 @@ describe("restoreDatabaseFromBackup", () => {
       databasePath,
       backupPath,
     });
-    expect(await readMarker(second.safetyCopyPath)).toBe("backup");
-    expect(second.safetyCopyPath).toMatch(
+    expect(second.safetyCopyPath).not.toBeNull();
+    const secondSafety = second.safetyCopyPath as string;
+    expect(await readMarker(secondSafety)).toBe("backup");
+    expect(secondSafety).toMatch(
       /prerestore-v\d+-to-v\d+-[^/]+\.sqlite$/u,
     );
     // Both safety copies are now discoverable in the backup listings and are
@@ -104,13 +109,12 @@ describe("restoreDatabaseFromBackup", () => {
     // second restore's copy is the most recent file.
     const backups = await listBackups(databasePath);
     expect(backups.map(({ path }) => path)).toEqual([
-      second.safetyCopyPath,
-      result.safetyCopyPath,
+      secondSafety,
+      firstSafety,
       backupPath,
     ]);
     const safetyCopies = backups.filter(
-      ({ path }) =>
-        path === result.safetyCopyPath || path === second.safetyCopyPath,
+      ({ path }) => path === firstSafety || path === secondSafety,
     );
     for (const copy of safetyCopies) {
       expect(copy.kind).toBe("prerestore");
@@ -118,11 +122,7 @@ describe("restoreDatabaseFromBackup", () => {
     expect(backups.find(({ path }) => path === backupPath)?.kind).toBe(
       "migration",
     );
-    for (const retained of [
-      backupPath,
-      result.safetyCopyPath,
-      second.safetyCopyPath,
-    ]) {
+    for (const retained of [backupPath, firstSafety, secondSafety]) {
       expect((await stat(retained)).size).toBeGreaterThan(0);
     }
   });
@@ -253,6 +253,40 @@ describe("restoreDatabaseFromBackup", () => {
     for (const copy of safetyCopies) {
       expect(await readMarker(copy.path)).toBe("current");
     }
+  });
+
+  it("restores onto a missing database without a safety copy", async () => {
+    const databasePath = databasePathFor("missing");
+    const databaseDirectory = join(databasePath, "..");
+    await mkdir(databaseDirectory, { recursive: true, mode: 0o700 });
+    await mkdir(join(databaseDirectory, "backups"), {
+      recursive: true,
+      mode: 0o700,
+    });
+    const backupPath = join(
+      databaseDirectory,
+      "backups",
+      `studynarrator-v0001-to-v0002-${ISO_STAMP}.sqlite`,
+    );
+    await createLiveDatabase(backupPath, "backup");
+    // No database file exists at databasePath — exactly the situation a
+    // backup exists for. The restore must succeed, not fail.
+
+    const result = await restoreDatabaseFromBackup({
+      Database: DatabaseAdapter,
+      databasePath,
+      backupPath,
+    });
+
+    expect(result.restoredFrom).toBe(backupPath);
+    expect(result.safetyCopyPath).toBeNull();
+    // The restored database is present and openable.
+    expect(await readMarker(databasePath)).toBe("backup");
+    // No safety copy was created: there was nothing to preserve.
+    const safetyCopies = (await listBackups(databasePath)).filter(
+      ({ kind }) => kind === "prerestore",
+    );
+    expect(safetyCopies).toHaveLength(0);
   });
 });
 

@@ -199,10 +199,19 @@ export function DatabaseRecoveryScreen({
           <h2>Backup restored</h2>
           <p>
             The restored database was written from{" "}
-            <code>{outcome.restored.restoredFrom}</code>. A safety copy of the
-            previous database was kept at{" "}
-            <code>{outcome.restored.safetyCopyPath}</code>.
+            <code>{outcome.restored.restoredFrom}</code>.
           </p>
+          {outcome.restored.safetyCopyPath !== null ? (
+            <p>
+              A safety copy of the previous database was kept at{" "}
+              <code>{outcome.restored.safetyCopyPath}</code>.
+            </p>
+          ) : (
+            <p>
+              No earlier database file was present, so there was nothing to keep
+              aside.
+            </p>
+          )}
           <p>
             <strong>Restart study-narrator now</strong> to open the restored
             database.
