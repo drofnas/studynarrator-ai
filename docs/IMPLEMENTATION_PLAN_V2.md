@@ -79,7 +79,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 9.4  | Propagate the rename through application           | P0       | M    | complete |
 | 9.5  | Propagate the rename through server and desktop    | P0       | S    | complete |
 | 9.6  | Propagate the rename through the web client        | P0       | M    | complete |
-| 10.1 | Write and read the data directory manifest         | P0       | M    | todo     |
+| 10.1 | Write and read the data directory manifest         | P0       | M    | complete |
 | 10.2 | Add the layout step runner                         | P0       | S    | todo     |
 | 10.3 | Convert cache metadata parsing to Zod              | P0       | S    | todo     |
 | 10.4 | Add the two initial layout steps                   | P0       | S    | todo     |
@@ -478,7 +478,7 @@ Split into four tasks. Task 8 deferred a filesystem cleanup that 10.4 now perfor
 
 ## TASK 10.1 — Write and read the data directory manifest
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P0 · **Size:** M
 
