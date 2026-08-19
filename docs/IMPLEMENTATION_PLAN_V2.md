@@ -75,7 +75,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | ---- | -------------------------------------------------- | -------- | ---- | -------- |
 | 9.1  | Add migration 4 and bump the schema version        | P0       | S    | complete |
 | 9.2  | Rename the connection types in shared-types        | P0       | S    | complete |
-| 9.3  | Propagate the rename through persistence           | P0       | S    | todo     |
+| 9.3  | Propagate the rename through persistence           | P0       | S    | complete |
 | 9.4  | Propagate the rename through application           | P0       | M    | todo     |
 | 9.5  | Propagate the rename through server and desktop    | P0       | S    | todo     |
 | 9.6  | Propagate the rename through the web client        | P0       | M    | todo     |
@@ -302,7 +302,7 @@ The `grep` must return no results. A repository-wide `typecheck` failure is expe
 
 ## TASK 9.3 — Propagate the rename through persistence
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P0 · **Size:** S
 
