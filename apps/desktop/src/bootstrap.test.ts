@@ -122,16 +122,19 @@ describe("desktop storage recovery", () => {
         environment: {},
       });
       try {
-        expect(await runtime.persistence.status()).toEqual(
+        const status = await runtime.persistence.status();
+        expect(status).toEqual(
           expect.objectContaining({
             state: "unavailable",
             code: "SCHEMA_TOO_NEW",
             databaseSchemaVersion: null,
             databasePath,
             latestBackupPath: null,
-            message: expect.stringContaining("newer version of StudyNarrator"),
           }),
         );
+        if (status.state !== "unavailable")
+          throw new Error("expected the unavailable persistence status");
+        expect(status.message).toContain("newer version of StudyNarrator");
         await expect(runtime.persistence.projects.list()).rejects.toThrow(
           "Persistence is unavailable",
         );

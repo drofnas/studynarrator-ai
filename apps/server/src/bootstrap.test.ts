@@ -78,16 +78,19 @@ describe("server data directory manifest", () => {
         STUDYNARRATOR_DATA_DIR: dataDirectory,
       });
       try {
-        expect(await services.persistence.status()).toEqual(
+        const status = await services.persistence.status();
+        expect(status).toEqual(
           expect.objectContaining({
             state: "unavailable",
             code: "SCHEMA_TOO_NEW",
             databaseSchemaVersion: null,
             databasePath,
             latestBackupPath: null,
-            message: expect.stringContaining("newer version of StudyNarrator"),
           }),
         );
+        if (status.state !== "unavailable")
+          throw new Error("expected the unavailable persistence status");
+        expect(status.message).toContain("newer version of StudyNarrator");
         await expect(services.persistence.projects.list()).rejects.toThrow(
           "Persistence is unavailable",
         );
