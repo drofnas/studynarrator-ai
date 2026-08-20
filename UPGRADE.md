@@ -37,11 +37,11 @@ Do not copy a newer database file over an older installation in the hope that it
 
 The database, backups, speech cache, and render artifacts all live under one data directory. Its location depends on how you run StudyNarrator:
 
-| Runtime                        | Data directory                                                            |
-| ------------------------------ | ------------------------------------------------------------------------- |
-| Docker Web                     | `/data` inside the container, backed by the `studynarrator-data` volume   |
-| Node server from source (Web)  | `STUDYNARRATOR_DATA_DIR` if set, otherwise `<repository>/.tmp/dev/web`    |
-| Electron from source           | The Electron `userData` directory for the operating system, unless `STUDYNARRATOR_DATA_DIR` overrides it |
+| Runtime                       | Data directory                                                                                           |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Docker Web                    | `/data` inside the container, backed by the `studynarrator-data` volume                                  |
+| Node server from source (Web) | `STUDYNARRATOR_DATA_DIR` if set, otherwise `<repository>/.tmp/dev/web`                                   |
+| Electron from source          | The Electron `userData` directory for the operating system, unless `STUDYNARRATOR_DATA_DIR` overrides it |
 
 `STUDYNARRATOR_DATA_DIR` may be an absolute path; a relative value is resolved against the server's working directory (for Electron, against the process `INIT_CWD`).
 
