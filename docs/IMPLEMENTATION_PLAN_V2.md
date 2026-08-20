@@ -81,7 +81,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 9.6  | Propagate the rename through the web client        | P0       | M    | complete    |
 | 10.1 | Write and read the data directory manifest         | P0       | M    | complete    |
 | 10.2 | Add the layout step runner                         | P0       | S    | done (10.x) |
-| 10.3 | Convert cache metadata parsing to Zod              | P0       | S    | todo        |
+| 10.3 | Convert cache metadata parsing to Zod              | P0       | S    | complete    |
 | 10.4 | Add the two initial layout steps                   | P0       | S    | todo        |
 | 11.1 | Add the CI check job                               | P0       | S    | todo        |
 | 11.2 | Add the CI e2e and docker jobs                     | P0       | S    | todo        |
