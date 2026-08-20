@@ -1,4 +1,18 @@
 export {
+  DATA_DIRECTORY_LAYOUT_VERSION,
+  DATA_DIRECTORY_MANIFEST_VERSION,
+  LayoutTooNewError,
+  readDataDirectoryManifest,
+  runLayoutSteps,
+  writeDataDirectoryManifest,
+  type DataDirectoryManifest,
+  type LayoutStep,
+} from "./dataDirectoryManifest.js";
+export {
+  createSpeechCacheSweep,
+  removeStandaloneRenderPlans,
+} from "./layoutSteps.js";
+export {
   BackupRestoreError,
   MigrationFailureError,
   PersistenceConflictError,

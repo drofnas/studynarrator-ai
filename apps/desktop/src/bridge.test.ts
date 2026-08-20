@@ -63,8 +63,8 @@ const diagnostics = {
 const persistenceStatus = {
   contractVersion: 1 as const,
   state: "ready" as const,
-  databaseSchemaVersion: 3 as const,
-  targetDatabaseSchemaVersion: 3 as const,
+  databaseSchemaVersion: 4 as const,
+  targetDatabaseSchemaVersion: 4 as const,
   databasePath: "/tmp/studynarrator.sqlite",
   latestBackupPath: null,
 };
@@ -323,6 +323,7 @@ describe("Electron boundary", () => {
         return { disposition: "saved", fileName: "prompt.md" };
       if (channel === CONNECTION_CHANNELS.get)
         return {
+          backendId: "speaches",
           baseUrl: null,
           suppliedUrlForm: "unconfigured",
           configured: false,
@@ -500,6 +501,7 @@ describe("Electron boundary", () => {
       availableVoiceIds: ["voice"],
     };
     const storedConnection = {
+      backendId: "speaches" as const,
       baseUrl: "http://127.0.0.1:8000",
       suppliedUrlForm: "root" as const,
       configured: true,

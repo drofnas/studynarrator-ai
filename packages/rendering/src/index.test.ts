@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -14,10 +14,22 @@ import {
   createSpeechCacheKey,
   extractWaveformPeaks,
   normalizeSpeechText,
+  SPEECH_CACHE_SCHEMA_VERSION,
+  SPEECH_CHUNKING_VERSION,
+  SPEECH_NORMALIZATION_VERSION,
+  readSpeechCacheMetadata,
   withProjectSnapshotHash,
   withRenderPlanHash,
+  type SpeechCacheEntryMetadata,
   type SpeechCacheKeyInput,
+  type SpeechCacheMetadataReadResult,
 } from "./index.js";
+
+function metadataOf(
+  result: SpeechCacheMetadataReadResult,
+): SpeechCacheEntryMetadata | null {
+  return result.status === "ok" ? result.metadata : null;
+}
 
 const runFile = promisify(execFile);
 
@@ -206,7 +218,7 @@ describe("content-addressed speech cache", () => {
     });
   });
 
-  it("treats pre-v1 metadata carrying profile identity as a cache miss", async () => {
+  it("accepts legacy metadata with retired extra fields and strips them", async () => {
     const { cache, rootDirectory } = await fixture();
     const first = await cache.getOrCreate(input, {}, async () =>
       Uint8Array.from([82, 73, 70, 70]),
@@ -225,11 +237,99 @@ describe("content-addressed speech cache", () => {
       `${JSON.stringify({ ...metadata, profileId: "removed-profile" })}\n`,
     );
 
+    // Unknown extra fields no longer invalidate an entry; they are
+    // stripped on the read and the rewrite heals the on-disk shape.
     const synthesize = vi.fn(async () => Uint8Array.from([82, 1, 2, 3]));
     await expect(
       cache.getOrCreate(input, {}, synthesize),
-    ).resolves.toMatchObject({ status: "miss" });
-    expect(synthesize).toHaveBeenCalledOnce();
+    ).resolves.toMatchObject({ status: "hit" });
+    expect(synthesize).not.toHaveBeenCalled();
+    expect(
+      JSON.parse(await readFile(metadataPath, "utf8")) as Record<
+        string,
+        unknown
+      >,
+    ).not.toHaveProperty("profileId");
+  });
+
+  describe("metadata read results", () => {
+    it("distinguishes an unreadable metadata file from a missing one", async () => {
+      const { rootDirectory } = await fixture();
+      const key = createSpeechCacheKey(input);
+      const shardDirectory = join(rootDirectory, key.slice(0, 2));
+      await mkdir(shardDirectory, { recursive: true, mode: 0o700 });
+      const corruptPath = join(shardDirectory, `${key}.json`);
+      await writeFile(corruptPath, "{ not valid metadata json");
+
+      expect(await readSpeechCacheMetadata(corruptPath)).toEqual({
+        status: "unreadable",
+        path: corruptPath,
+      });
+      expect(
+        await readSpeechCacheMetadata(join(shardDirectory, "absent.json")),
+      ).toEqual({ status: "missing" });
+    });
+
+    it("accepts a future optional field without invalidating the entry", async () => {
+      const { rootDirectory } = await fixture();
+      const key = createSpeechCacheKey(input);
+      const shardDirectory = join(rootDirectory, key.slice(0, 2));
+      await mkdir(shardDirectory, { recursive: true, mode: 0o700 });
+      const metadataPath = join(shardDirectory, `${key}.json`);
+      const schemaVersion = SPEECH_CACHE_SCHEMA_VERSION;
+      const normalizationVersion = SPEECH_NORMALIZATION_VERSION;
+      const chunkingVersion = SPEECH_CHUNKING_VERSION;
+      const identity = "a".repeat(64);
+      const base = {
+        schemaVersion,
+        normalizationVersion,
+        chunkingVersion,
+        adapterId: "speaches-openai",
+        adapterVersion: 1,
+        serverIdentityHash: identity,
+        modelId: "model-a",
+        voiceId: "voice-a",
+        speed: 1,
+        textHash: identity,
+        responseFormat: "wav",
+        key,
+        audioChecksum: identity,
+        byteLength: 4,
+        createdAt: "2026-08-13T12:00:00.000Z",
+        lastUsedAt: "2026-08-13T12:00:01.000Z",
+        projectIds: [],
+        scratchpadUsed: false,
+      };
+      await writeFile(
+        metadataPath,
+        `${JSON.stringify({ ...base, futureOptionalField: 42 })}\n`,
+      );
+
+      const result = await readSpeechCacheMetadata(metadataPath);
+      expect(result).toMatchObject({ status: "ok" });
+      expect(metadataOf(result)).toEqual(base);
+      if (result.status !== "ok") throw new Error("expected ok metadata");
+      expect(result.metadata).not.toHaveProperty("futureOptionalField");
+    });
+
+    it("reports structurally invalid metadata as unreadable", async () => {
+      const { rootDirectory } = await fixture();
+      const key = createSpeechCacheKey(input);
+      const shardDirectory = join(rootDirectory, key.slice(0, 2));
+      await mkdir(shardDirectory, { recursive: true, mode: 0o700 });
+      const metadataPath = join(shardDirectory, `${key}.json`);
+      const base = {
+        responseFormat: "wav",
+        key,
+        byteLength: 0,
+      };
+      await writeFile(metadataPath, `${JSON.stringify(base)}\n`);
+
+      expect(await readSpeechCacheMetadata(metadataPath)).toMatchObject({
+        status: "unreadable",
+        path: metadataPath,
+      });
+    });
   });
 
   it("clears a selected key, project-associated keys, and all remaining entries", async () => {

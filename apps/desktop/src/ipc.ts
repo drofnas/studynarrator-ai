@@ -46,9 +46,9 @@ import {
   ScratchpadPreviewInputSchema,
   ScratchpadPreviewResultSchema,
   SpeechCatalogSchema,
-  SpeachesCatalogDiscoveryInputSchema,
-  SpeachesConnectionAuthoringSchema,
-  SpeachesConnectionSchema,
+  SpeechCatalogDiscoveryInputSchema,
+  SpeechBackendConnectionAuthoringSchema,
+  SpeechBackendConnectionSchema,
   SPEECH_CACHE_CHANNELS,
   SpeechCacheCleanupResultSchema,
   SpeechCacheKeyInputSchema,
@@ -56,7 +56,7 @@ import {
   SpeechCacheStatusSchema,
   VoiceCatalogModelInputSchema,
   VoiceCatalogSchema,
-  type SpeachesConnectionClient,
+  type SpeechBackendConnectionClient,
   type PersistenceClient,
   type ProjectPreviewClient,
   type ScratchpadClient,
@@ -238,7 +238,7 @@ function requireBackupClient(persistence: PersistenceClient) {
 
 export function registerConnectionHandlers(
   ipcMain: IpcMainLike,
-  connection: SpeachesConnectionClient,
+  connection: SpeechBackendConnectionClient,
   voiceCatalog: VoiceCatalogClient,
 ) {
   const handle = (
@@ -276,11 +276,13 @@ export function registerConnectionHandlers(
     });
   };
   handle(CONNECTION_CHANNELS.get, async () =>
-    SpeachesConnectionSchema.parse(await connection.get()),
+    SpeechBackendConnectionSchema.parse(await connection.get()),
   );
   handle(CONNECTION_CHANNELS.update, async (input) =>
-    SpeachesConnectionSchema.parse(
-      await connection.update(SpeachesConnectionAuthoringSchema.parse(input)),
+    SpeechBackendConnectionSchema.parse(
+      await connection.update(
+        SpeechBackendConnectionAuthoringSchema.parse(input),
+      ),
     ),
   );
   handle(CONNECTION_CHANNELS.test, async () =>
@@ -289,7 +291,7 @@ export function registerConnectionHandlers(
   handle(CONNECTION_CHANNELS.speechCatalogDiscover, async (input) =>
     SpeechCatalogSchema.parse(
       await connection.discoverSpeechCatalog(
-        SpeachesCatalogDiscoveryInputSchema.parse(input),
+        SpeechCatalogDiscoveryInputSchema.parse(input),
       ),
     ),
   );

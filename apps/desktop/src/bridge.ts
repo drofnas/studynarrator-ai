@@ -34,9 +34,9 @@ import {
   SpeechCacheCleanupResultSchema,
   SpeechCacheStatusSchema,
   SpeechCatalogSchema,
-  SpeachesConnectionSchema,
+  SpeechBackendConnectionSchema,
   VoiceCatalogSchema,
-  type SpeachesConnectionClient,
+  type SpeechBackendConnectionClient,
   type PersistenceClient,
   type ProjectPreviewClient,
   type RenderClient,
@@ -148,14 +148,14 @@ export function createPreloadBridge(
   Object.freeze(persistence.settings);
   Object.freeze(persistence.preferences);
   Object.freeze(persistence.globalLexicon);
-  const connection: SpeachesConnectionClient = {
+  const connection: SpeechBackendConnectionClient = {
     async get() {
-      return SpeachesConnectionSchema.parse(
+      return SpeechBackendConnectionSchema.parse(
         await invoke(CONNECTION_CHANNELS.get),
       );
     },
     async update(input) {
-      return SpeachesConnectionSchema.parse(
+      return SpeechBackendConnectionSchema.parse(
         await invoke(CONNECTION_CHANNELS.update, input),
       );
     },

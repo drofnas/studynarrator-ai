@@ -31,7 +31,7 @@ import type {
   RenderClient,
   RenderJob,
   RenderPlan,
-  SpeachesConnection,
+  SpeechBackendConnection,
   SpeechCatalog,
   VoiceCatalog,
 } from "@studynarrator/shared-types";
@@ -315,7 +315,7 @@ function renderPage(
   client: PersistenceClient,
   analyze: ScriptAnalyzer["analyze"],
   options: {
-    connection?: SpeachesConnection | null;
+    connection?: SpeechBackendConnection | null;
     catalog?: VoiceCatalog;
     speechCatalog?: SpeechCatalog;
     discovery?: () => Promise<SpeechCatalog>;
@@ -325,6 +325,7 @@ function renderPage(
   } = {},
 ) {
   const connection = options.connection ?? {
+    backendId: "speaches" as const,
     baseUrl: null,
     suppliedUrlForm: "unconfigured" as const,
     configured: false,
@@ -689,7 +690,8 @@ describe("Projects workbench", () => {
       availableModelIds: ["speaches-ai/Kokoro-82M-v1.0-ONNX"],
       availableVoiceIds: ["af_heart"],
     };
-    const connection: SpeachesConnection = {
+    const connection: SpeechBackendConnection = {
+      backendId: "speaches",
       baseUrl: "http://127.0.0.1:8000",
       suppliedUrlForm: "root",
       configured: true,
@@ -700,7 +702,7 @@ describe("Projects workbench", () => {
       responseFormat: "wav",
       lastTestedAt: summary.testedAt,
       lastSuccessfulTestAt: summary.testedAt,
-      lastTestSummary: summary as SpeachesConnection["lastTestSummary"],
+      lastTestSummary: summary as SpeechBackendConnection["lastTestSummary"],
       createdAt: summary.testedAt,
       updatedAt: summary.testedAt,
     };
@@ -806,7 +808,8 @@ describe("Projects workbench", () => {
   });
 
   it("filters voices by model from one session discovery and appends unknown supported voices", async () => {
-    const connection: SpeachesConnection = {
+    const connection: SpeechBackendConnection = {
+      backendId: "speaches",
       baseUrl: "http://127.0.0.1:8000",
       suppliedUrlForm: "root",
       configured: true,
@@ -944,7 +947,8 @@ describe("Projects workbench", () => {
   });
 
   it("preserves the saved voice on discovery failure and retries without a synthesis request", async () => {
-    const connection: SpeachesConnection = {
+    const connection: SpeechBackendConnection = {
+      backendId: "speaches",
       baseUrl: "http://127.0.0.1:8000",
       suppliedUrlForm: "root",
       configured: true,
@@ -1312,7 +1316,8 @@ describe("Projects workbench", () => {
   it("flushes pending edits before inline segment playback and removes the outline and audible preview", async () => {
     const { source } = installAudioContext();
     const { client, analyze, replace } = fixture(project);
-    const connection: SpeachesConnection = {
+    const connection: SpeechBackendConnection = {
+      backendId: "speaches",
       baseUrl: "http://127.0.0.1:8000",
       suppliedUrlForm: "root",
       configured: true,

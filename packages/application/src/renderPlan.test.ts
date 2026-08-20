@@ -108,7 +108,7 @@ function repository(current: {
       },
     ]),
     getIgnoredDiagnostics: vi.fn(() => []),
-    getSpeachesConnection: vi.fn(() => connection),
+    getSpeechBackendConnection: vi.fn(() => connection),
     getVoiceCatalogOverrides: vi.fn(() => ({
       schemaVersion: 1,
       modelId: "model",

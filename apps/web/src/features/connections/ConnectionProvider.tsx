@@ -13,10 +13,10 @@ import type {
   ConnectionTestOverall,
   ConnectionTestSummary,
   RedactedConnectionDiagnostics,
-  SpeachesCatalogDiscoveryInput,
-  SpeachesConnection,
-  SpeachesConnectionAuthoring,
-  SpeachesConnectionClient,
+  SpeechCatalogDiscoveryInput,
+  SpeechBackendConnection,
+  SpeechBackendConnectionAuthoring,
+  SpeechBackendConnectionClient,
   SpeechCatalog,
   VoiceCatalog,
   VoiceCatalogClient,
@@ -36,7 +36,7 @@ const idleSpeechCatalog: SpeechCatalogLoadState = {
 const recoveryDelays = [250, 500, 1_000, 2_000, 5_000] as const;
 
 interface ConnectionWorkspace {
-  connection: SpeachesConnection | null;
+  connection: SpeechBackendConnection | null;
   setup: ConnectionSetupState | null;
   loading: boolean;
   error: string;
@@ -44,9 +44,11 @@ interface ConnectionWorkspace {
   shellState: ShellConnectionState;
   catalog: SpeechCatalogLoadState;
   refresh(): Promise<void>;
-  update(input: SpeachesConnectionAuthoring): Promise<SpeachesConnection>;
+  update(
+    input: SpeechBackendConnectionAuthoring,
+  ): Promise<SpeechBackendConnection>;
   test(): Promise<ConnectionTestSummary>;
-  discover(input: SpeachesCatalogDiscoveryInput): Promise<SpeechCatalog>;
+  discover(input: SpeechCatalogDiscoveryInput): Promise<SpeechCatalog>;
   exportDiagnostics(): Promise<RedactedConnectionDiagnostics>;
   completeOnboarding(): Promise<void>;
   getCatalog(modelId: string): Promise<VoiceCatalog>;
@@ -56,7 +58,7 @@ interface ConnectionWorkspace {
 const Context = createContext<ConnectionWorkspace | null>(null);
 
 function stateFor(
-  connection: SpeachesConnection | null,
+  connection: SpeechBackendConnection | null,
   testing: boolean,
 ): ShellConnectionState {
   if (testing) return "testing";
@@ -69,11 +71,13 @@ export function ConnectionProvider({
   voiceCatalog,
   children,
 }: {
-  connectionClient: SpeachesConnectionClient;
+  connectionClient: SpeechBackendConnectionClient;
   voiceCatalog: VoiceCatalogClient;
   children: ReactNode;
 }) {
-  const [connection, setConnection] = useState<SpeachesConnection | null>(null);
+  const [connection, setConnection] = useState<SpeechBackendConnection | null>(
+    null,
+  );
   const [setup, setSetup] = useState<ConnectionSetupState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");

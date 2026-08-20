@@ -6,8 +6,9 @@ export default tseslint.config(
   {
     ignores: [
       "**/dist/**",
-      "**/coverage/**",
       "**/node_modules/**",
+      "**/coverage/**",
+      ".tmp/",
       "graphify-out/**",
       "playwright-report/**",
       "test-results/**",

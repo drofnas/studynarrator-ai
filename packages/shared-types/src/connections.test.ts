@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   ConnectionTestSummarySchema,
-  SpeachesConnectionAuthoringSchema,
-  SpeachesConnectionSchema,
+  SpeechBackendConnectionAuthoringSchema,
+  SpeechBackendConnectionSchema,
   SpeechCatalogSchema,
   VoiceCatalogSchema,
 } from "./connections.js";
@@ -26,7 +26,8 @@ const stages = [
 
 describe("connection contracts", () => {
   it("accepts one address-managed connection and rejects credential-shaped authoring", () => {
-    const connection = SpeachesConnectionSchema.parse({
+    const connection = SpeechBackendConnectionSchema.parse({
+      backendId: "speaches",
       baseUrl: "http://speaches.lan:8000",
       suppliedUrlForm: "v1",
       configured: true,
@@ -43,7 +44,7 @@ describe("connection contracts", () => {
     });
     expect(connection.baseUrl).toBe("http://speaches.lan:8000");
     expect(() =>
-      SpeachesConnectionAuthoringSchema.parse({
+      SpeechBackendConnectionAuthoringSchema.parse({
         baseUrl: "http://speaches.lan:8000",
         defaultModelId: "model",
         defaultVoiceId: "voice",

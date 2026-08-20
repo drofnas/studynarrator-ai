@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type {
   ProjectReplaceInput,
-  SpeachesConnection,
+  SpeechBackendConnection,
 } from "@studynarrator/shared-types";
 import { createProjectSpeechCacheKeyPlanner } from "./cachedSpeech.js";
 
-const connection: SpeachesConnection = {
+const connection: SpeechBackendConnection = {
+  backendId: "speaches",
   baseUrl: "http://127.0.0.1:8000",
   suppliedUrlForm: "root",
   configured: true,
@@ -42,7 +43,7 @@ const input: ProjectReplaceInput = {
 describe("project speech cache key planning", () => {
   it("changes identity for voice, speed, and pronunciation text and restores the original key on reversion", () => {
     const plan = createProjectSpeechCacheKeyPlanner({
-      getSpeachesConnection: () => connection,
+      getSpeechBackendConnection: () => connection,
       listGlobalLexicon: () => [],
     });
     const [original] = plan(input)!;
@@ -76,7 +77,10 @@ describe("project speech cache key planning", () => {
 
   it("defers reconciliation while synthesis identity is unavailable", () => {
     const plan = createProjectSpeechCacheKeyPlanner({
-      getSpeachesConnection: () => ({ ...connection, defaultModelId: null }),
+      getSpeechBackendConnection: () => ({
+        ...connection,
+        defaultModelId: null,
+      }),
       listGlobalLexicon: () => [],
     });
     expect(plan(input)).toBeUndefined();

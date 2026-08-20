@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type {
-  SpeachesConnectionClient,
+  SpeechBackendConnectionClient,
   VoiceCatalogClient,
 } from "./connections.js";
 import type { PersistenceClient } from "./persistence.js";
@@ -133,7 +133,7 @@ export interface SystemClient {
 export interface StudyNarratorBridge {
   system: SystemClient;
   persistence: PersistenceClient;
-  connection: SpeachesConnectionClient;
+  connection: SpeechBackendConnectionClient;
   voiceCatalog: VoiceCatalogClient;
   scratchpad: ScratchpadClient;
   projectPreview: ProjectPreviewClient;

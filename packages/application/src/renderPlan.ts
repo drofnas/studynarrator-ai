@@ -155,7 +155,7 @@ export function createRenderPlanComputer(dependencies: {
         }
         const project = dependencies.repository.getProject(projectId);
         const timing = dependencies.repository.getSystemPacing();
-        const connection = dependencies.repository.getSpeachesConnection();
+        const connection = dependencies.repository.getSpeechBackendConnection();
         if (!connection.baseUrl)
           throw new RenderPlanServiceError(
             "RENDER_PLAN_CONFIGURATION",

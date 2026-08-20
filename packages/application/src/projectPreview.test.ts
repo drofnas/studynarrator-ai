@@ -67,7 +67,7 @@ function repository(): ProjectPreviewRepository {
   return {
     getProject: vi.fn(() => project),
     listGlobalLexicon: vi.fn(() => []),
-    getSpeachesConnection: vi.fn(() => connection),
+    getSpeechBackendConnection: vi.fn(() => connection),
     getVoiceCatalogOverrides: vi.fn(() => ({
       schemaVersion: 1,
       modelId: "model",

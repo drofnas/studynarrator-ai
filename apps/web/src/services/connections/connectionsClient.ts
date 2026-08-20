@@ -3,10 +3,10 @@ import {
   ConnectionSetupStateSchema,
   ConnectionTestSummarySchema,
   RedactedConnectionDiagnosticsSchema,
-  SpeachesConnectionSchema,
+  SpeechBackendConnectionSchema,
   SpeechCatalogSchema,
   VoiceCatalogSchema,
-  type SpeachesConnectionClient,
+  type SpeechBackendConnectionClient,
   type StudyNarratorBridge,
   type VoiceCatalogClient,
 } from "@studynarrator/shared-types";
@@ -66,12 +66,13 @@ function createRequest(fetchInput: typeof fetch) {
 
 export function createRestConnectionClient(
   fetchInput: typeof fetch = fetch,
-): SpeachesConnectionClient {
+): SpeechBackendConnectionClient {
   const request = createRequest(fetchInput);
   return {
-    get: async () => await request("/api/connection", SpeachesConnectionSchema),
+    get: async () =>
+      await request("/api/connection", SpeechBackendConnectionSchema),
     update: async (input) =>
-      await request("/api/connection", SpeachesConnectionSchema, {
+      await request("/api/connection", SpeechBackendConnectionSchema, {
         method: "PUT",
         body: JSON.stringify(input),
       }),
@@ -119,7 +120,7 @@ export function createRestVoiceCatalogClient(
 
 export function resolveConnectionClient(
   browserWindow: Window = window,
-): SpeachesConnectionClient {
+): SpeechBackendConnectionClient {
   return (
     browserWindow.studyNarrator?.connection ?? createRestConnectionClient()
   );

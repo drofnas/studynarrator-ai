@@ -21,6 +21,7 @@ import {
   type RenderPlan,
   type SilenceAsset,
 } from "@studynarrator/shared-types";
+import { z } from "zod";
 
 export const SPEECH_CACHE_SCHEMA_VERSION = 1;
 export const SPEECH_NORMALIZATION_VERSION = 1;
@@ -29,26 +30,6 @@ const MAX_CACHED_SPEECH_BYTES = 5 * 1024 * 1024;
 const CACHE_KEY_PATTERN = /^[a-f0-9]{64}$/u;
 const SHARD_PATTERN = /^[a-f0-9]{2}$/u;
 const MAX_CACHE_METADATA_BYTES = 64 * 1024;
-const METADATA_KEYS = new Set([
-  "schemaVersion",
-  "normalizationVersion",
-  "chunkingVersion",
-  "adapterId",
-  "adapterVersion",
-  "serverIdentityHash",
-  "modelId",
-  "voiceId",
-  "speed",
-  "textHash",
-  "responseFormat",
-  "key",
-  "audioChecksum",
-  "byteLength",
-  "createdAt",
-  "lastUsedAt",
-  "projectIds",
-  "scratchpadUsed",
-]);
 
 export interface SpeechCacheKeyInput {
   adapterId: string;
@@ -75,20 +56,65 @@ export interface SpeechCacheUsage {
   scratchpad?: boolean;
 }
 
-interface SpeechCacheEntryMetadata extends Omit<
-  NormalizedSpeechCacheInput,
-  "normalizedText"
-> {
-  schemaVersion: typeof SPEECH_CACHE_SCHEMA_VERSION;
-  normalizationVersion: typeof SPEECH_NORMALIZATION_VERSION;
-  chunkingVersion: typeof SPEECH_CHUNKING_VERSION;
-  key: string;
-  audioChecksum: string;
-  byteLength: number;
-  createdAt: string;
-  lastUsedAt: string;
-  projectIds: string[];
-  scratchpadUsed: boolean;
+const SpeechCacheEntryMetadataSchema = z.object({
+  schemaVersion: z.literal(SPEECH_CACHE_SCHEMA_VERSION),
+  normalizationVersion: z.literal(SPEECH_NORMALIZATION_VERSION),
+  chunkingVersion: z.literal(SPEECH_CHUNKING_VERSION),
+  adapterId: z.string().min(1),
+  adapterVersion: z.number().int(),
+  serverIdentityHash: z.string().regex(CACHE_KEY_PATTERN),
+  modelId: z.string().min(1),
+  voiceId: z.string().min(1),
+  speed: z.number().finite(),
+  textHash: z.string().regex(CACHE_KEY_PATTERN),
+  responseFormat: z.literal("wav"),
+  key: z.string().regex(CACHE_KEY_PATTERN),
+  audioChecksum: z.string().regex(CACHE_KEY_PATTERN),
+  byteLength: z.number().int().min(1).max(MAX_CACHED_SPEECH_BYTES),
+  createdAt: z.string().refine((value) => Number.isFinite(Date.parse(value))),
+  lastUsedAt: z.string().refine((value) => Number.isFinite(Date.parse(value))),
+  projectIds: z.array(z.string().min(1)),
+  scratchpadUsed: z.boolean(),
+});
+
+export type SpeechCacheEntryMetadata = z.infer<
+  typeof SpeechCacheEntryMetadataSchema
+>;
+
+export type SpeechCacheMetadataReadResult =
+  | { status: "ok"; metadata: SpeechCacheEntryMetadata }
+  | { status: "missing" }
+  | { status: "unreadable"; path: string };
+
+/**
+ * Read one speech cache entry's metadata file. The result distinguishes
+ * "not present" from "present but unreadable" (invalid JSON or a shape
+ * this build does not understand). Unknown extra fields never invalidate
+ * an entry: they are stripped, so future optional fields keep old entries
+ * usable. Reporting only — this never deletes or rewrites anything.
+ */
+export async function readSpeechCacheMetadata(
+  metadataPath: string,
+): Promise<SpeechCacheMetadataReadResult> {
+  let raw: string;
+  try {
+    raw = (
+      await readBoundedFile(metadataPath, MAX_CACHE_METADATA_BYTES)
+    ).toString("utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT")
+      return { status: "missing" };
+    return { status: "unreadable", path: metadataPath };
+  }
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(raw);
+  } catch {
+    return { status: "unreadable", path: metadataPath };
+  }
+  const metadata = SpeechCacheEntryMetadataSchema.safeParse(decoded);
+  if (!metadata.success) return { status: "unreadable", path: metadataPath };
+  return { status: "ok", metadata: metadata.data };
 }
 
 export interface CachedSpeechResult {
@@ -229,56 +255,6 @@ function assertCacheKey(value: string): string {
   if (!CACHE_KEY_PATTERN.test(value))
     throw new Error("Speech cache key is invalid.");
   return value;
-}
-
-function isStringArray(value: unknown): value is string[] {
-  return (
-    Array.isArray(value) &&
-    value.every((item) => typeof item === "string" && item.length > 0)
-  );
-}
-
-function parseMetadata(value: unknown): SpeechCacheEntryMetadata | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const item = value as Record<string, unknown>;
-  if (
-    Object.keys(item).length !== METADATA_KEYS.size ||
-    Object.keys(item).some((key) => !METADATA_KEYS.has(key)) ||
-    item.schemaVersion !== SPEECH_CACHE_SCHEMA_VERSION ||
-    item.normalizationVersion !== SPEECH_NORMALIZATION_VERSION ||
-    item.chunkingVersion !== SPEECH_CHUNKING_VERSION ||
-    typeof item.key !== "string" ||
-    !CACHE_KEY_PATTERN.test(item.key) ||
-    typeof item.adapterId !== "string" ||
-    !item.adapterId ||
-    typeof item.adapterVersion !== "number" ||
-    !Number.isInteger(item.adapterVersion) ||
-    typeof item.serverIdentityHash !== "string" ||
-    !CACHE_KEY_PATTERN.test(item.serverIdentityHash) ||
-    typeof item.modelId !== "string" ||
-    !item.modelId ||
-    typeof item.voiceId !== "string" ||
-    !item.voiceId ||
-    typeof item.speed !== "number" ||
-    !Number.isFinite(item.speed) ||
-    item.responseFormat !== "wav" ||
-    typeof item.textHash !== "string" ||
-    !CACHE_KEY_PATTERN.test(item.textHash) ||
-    typeof item.audioChecksum !== "string" ||
-    !CACHE_KEY_PATTERN.test(item.audioChecksum) ||
-    typeof item.byteLength !== "number" ||
-    !Number.isInteger(item.byteLength) ||
-    item.byteLength < 1 ||
-    item.byteLength > MAX_CACHED_SPEECH_BYTES ||
-    typeof item.createdAt !== "string" ||
-    !Number.isFinite(Date.parse(item.createdAt)) ||
-    typeof item.lastUsedAt !== "string" ||
-    !Number.isFinite(Date.parse(item.lastUsedAt)) ||
-    !isStringArray(item.projectIds) ||
-    typeof item.scratchpadUsed !== "boolean"
-  )
-    return null;
-  return item as unknown as SpeechCacheEntryMetadata;
 }
 
 function metadataMatchesInput(
@@ -497,15 +473,14 @@ export function createSpeechCache(options: {
     }
     try {
       if (signal?.aborted) throw aborted(signal);
-      const [metadataJson, audioBuffer] = await Promise.all([
-        readBoundedFile(entryPaths.metadata, MAX_CACHE_METADATA_BYTES),
+      const [metadataRead, audioBuffer] = await Promise.all([
+        readSpeechCacheMetadata(entryPaths.metadata),
         readBoundedFile(entryPaths.audio, MAX_CACHED_SPEECH_BYTES),
       ]);
-      const metadata = parseMetadata(
-        JSON.parse(metadataJson.toString("utf8")) as unknown,
-      );
+      const metadata =
+        metadataRead.status === "ok" ? metadataRead.metadata : null;
       if (
-        !metadata ||
+        metadata === null ||
         metadata.key !== key ||
         !metadataMatchesInput(metadata, normalized) ||
         metadata.byteLength !== audioBuffer.byteLength ||
@@ -702,17 +677,12 @@ export function createSpeechCache(options: {
         )
           continue;
         try {
-          const metadata = parseMetadata(
-            JSON.parse(
-              (
-                await readBoundedFile(
-                  entryPaths.metadata,
-                  MAX_CACHE_METADATA_BYTES,
-                )
-              ).toString("utf8"),
-            ) as unknown,
+          const metadataRead = await readSpeechCacheMetadata(
+            entryPaths.metadata,
           );
-          if (!metadata || metadata.key !== key) continue;
+          if (metadataRead.status !== "ok") continue;
+          const metadata = metadataRead.metadata;
+          if (metadata.key !== key) continue;
           totalBytes += metadata.byteLength;
           entryCount += 1;
           if (lastUsedAt === null || metadata.lastUsedAt > lastUsedAt)
@@ -751,17 +721,11 @@ export function createSpeechCache(options: {
         const entryPaths = paths(key);
         if (!(await regularFile(entryPaths.metadata))) continue;
         try {
-          const metadata = parseMetadata(
-            JSON.parse(
-              (
-                await readBoundedFile(
-                  entryPaths.metadata,
-                  MAX_CACHE_METADATA_BYTES,
-                )
-              ).toString("utf8"),
-            ) as unknown,
+          const metadataRead = await readSpeechCacheMetadata(
+            entryPaths.metadata,
           );
-          if (!metadata?.projectIds.includes(projectId)) continue;
+          if (metadataRead.status !== "ok") continue;
+          if (!metadataRead.metadata.projectIds.includes(projectId)) continue;
           const removed = await removeEntry(key);
           entriesRemoved += removed.entriesRemoved;
           bytesFreed += removed.bytesFreed;
@@ -789,18 +753,13 @@ export function createSpeechCache(options: {
         const entryPaths = paths(key);
         if (!(await regularFile(entryPaths.metadata)))
           return { entriesRemoved: 0, bytesFreed: 0, deferred: false };
-        const metadata = parseMetadata(
-          JSON.parse(
-            (
-              await readBoundedFile(
-                entryPaths.metadata,
-                MAX_CACHE_METADATA_BYTES,
-              )
-            ).toString("utf8"),
-          ) as unknown,
-        );
-        if (!metadata || !metadata.projectIds.includes(projectId))
+        const metadataRead = await readSpeechCacheMetadata(entryPaths.metadata);
+        if (
+          metadataRead.status !== "ok" ||
+          !metadataRead.metadata.projectIds.includes(projectId)
+        )
           return { entriesRemoved: 0, bytesFreed: 0, deferred: false };
+        const metadata = metadataRead.metadata;
         const projectIds = metadata.projectIds.filter(
           (candidate) => candidate !== projectId,
         );
@@ -825,17 +784,15 @@ export function createSpeechCache(options: {
         const entryPaths = paths(key);
         if (!(await regularFile(entryPaths.metadata))) continue;
         try {
-          const metadata = parseMetadata(
-            JSON.parse(
-              (
-                await readBoundedFile(
-                  entryPaths.metadata,
-                  MAX_CACHE_METADATA_BYTES,
-                )
-              ).toString("utf8"),
-            ) as unknown,
+          const metadataRead = await readSpeechCacheMetadata(
+            entryPaths.metadata,
           );
-          if (!metadata?.scratchpadUsed) continue;
+          if (
+            metadataRead.status !== "ok" ||
+            !metadataRead.metadata.scratchpadUsed
+          )
+            continue;
+          const metadata = metadataRead.metadata;
           if (metadata.projectIds.length > 0) {
             await writeMetadata({ ...metadata, scratchpadUsed: false });
             continue;
@@ -1381,11 +1338,16 @@ async function boundedRead(
 }
 
 async function boundedJson(path: string): Promise<unknown> {
-  return JSON.parse(
-    new TextDecoder().decode(
-      await boundedRead(path, MAX_RENDER_PLAN_JSON_BYTES),
-    ),
-  ) as unknown;
+  const text = new TextDecoder().decode(
+    await boundedRead(path, MAX_RENDER_PLAN_JSON_BYTES),
+  );
+  try {
+    return JSON.parse(text) as unknown;
+  } catch (error) {
+    throw new Error("The render plan store document is not valid JSON.", {
+      cause: error,
+    });
+  }
 }
 
 export function createRenderPlanStore(

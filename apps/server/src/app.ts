@@ -44,14 +44,14 @@ import {
   SpeechCacheKeyInputSchema,
   SpeechCacheStatusSchema,
   SpeechCatalogSchema,
-  SpeachesCatalogDiscoveryInputSchema,
-  SpeachesConnectionAuthoringSchema,
-  SpeachesConnectionSchema,
+  SpeechCatalogDiscoveryInputSchema,
+  SpeechBackendConnectionAuthoringSchema,
+  SpeechBackendConnectionSchema,
   SystemDiagnosticsSchema,
   SystemTimingConfigurationSchema,
   VoiceCatalogModelInputSchema,
   VoiceCatalogSchema,
-  type SpeachesConnectionClient,
+  type SpeechBackendConnectionClient,
   type PersistenceClient,
   type ProjectPreviewClient,
   type ScratchpadClient,
@@ -138,7 +138,7 @@ export function createExpressApp(options: {
   service: SystemService;
   context: DiagnosticsContext;
   persistence?: PersistenceClient;
-  connection?: SpeachesConnectionClient;
+  connection?: SpeechBackendConnectionClient;
   voiceCatalog?: VoiceCatalogClient;
   scratchpad?: ScratchpadClient;
   projectPreview?: ProjectPreviewClient;
@@ -398,7 +398,9 @@ export function createExpressApp(options: {
     const connection = options.connection;
     app.get("/api/connection", async (_request, response, next) => {
       try {
-        response.json(SpeachesConnectionSchema.parse(await connection.get()));
+        response.json(
+          SpeechBackendConnectionSchema.parse(await connection.get()),
+        );
       } catch (error) {
         next(error);
       }
@@ -406,9 +408,9 @@ export function createExpressApp(options: {
     app.put("/api/connection", async (request, response, next) => {
       try {
         response.json(
-          SpeachesConnectionSchema.parse(
+          SpeechBackendConnectionSchema.parse(
             await connection.update(
-              SpeachesConnectionAuthoringSchema.parse(request.body),
+              SpeechBackendConnectionAuthoringSchema.parse(request.body),
             ),
           ),
         );
@@ -439,7 +441,7 @@ export function createExpressApp(options: {
           response.json(
             SpeechCatalogSchema.parse(
               await connection.discoverSpeechCatalog(
-                SpeachesCatalogDiscoveryInputSchema.parse(request.body),
+                SpeechCatalogDiscoveryInputSchema.parse(request.body),
                 controller.signal,
               ),
             ),

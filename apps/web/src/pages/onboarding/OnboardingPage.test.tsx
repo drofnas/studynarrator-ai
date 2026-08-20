@@ -8,12 +8,13 @@ import {
   DEFAULT_SYSTEM_TIMING,
   type ConnectionTestSummary,
   type PersistenceClient,
-  type SpeachesConnectionClient,
+  type SpeechBackendConnectionClient,
 } from "@studynarrator/shared-types";
 import { App } from "@/app/App.js";
 
 const timestamp = "2026-08-12T12:00:00.000Z";
 const emptyConnection = {
+  backendId: "speaches" as const,
   baseUrl: null,
   suppliedUrlForm: "unconfigured" as const,
   configured: false,
@@ -142,7 +143,7 @@ function client() {
   let onboardingCompletedAt: string | null = null;
   return {
     get: vi.fn(async () => emptyConnection),
-    update: vi.fn<SpeachesConnectionClient["update"]>(async (input) => ({
+    update: vi.fn<SpeechBackendConnectionClient["update"]>(async (input) => ({
       ...emptyConnection,
       ...input,
       timeoutSeconds: input.timeoutSeconds ?? emptyConnection.timeoutSeconds,
@@ -201,10 +202,13 @@ function client() {
       onboardingCompletedAt = timestamp;
       return { onboardingCompletedAt, client: "web" as const };
     }),
-  } satisfies SpeachesConnectionClient;
+  } satisfies SpeechBackendConnectionClient;
 }
 
-function renderApp(connection: SpeachesConnectionClient, route = "/projects") {
+function renderApp(
+  connection: SpeechBackendConnectionClient,
+  route = "/projects",
+) {
   const speechCache = {
     status: vi.fn(async () => ({
       contractVersion: 1 as const,

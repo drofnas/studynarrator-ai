@@ -23,21 +23,32 @@ import {
   type StorageCheck,
 } from "@studynarrator/application";
 import {
+  APPLICATION_VERSION,
   DATABASE_SCHEMA_VERSION,
   PERSISTENCE_CONTRACT_VERSION,
   type PersistenceBackupsClient,
   type PersistenceClient,
 } from "@studynarrator/shared-types";
 import {
+  createSpeechCacheSweep,
+  LayoutTooNewError,
   MigrationFailureError,
   PersistenceConflictError,
   SchemaTooNewError,
+  removeStandaloneRenderPlans,
   listPersistenceBackups,
   openStudyNarratorRepository,
+  readDataDirectoryManifest,
   restoreDatabaseFromBackup,
+  runLayoutSteps,
+  type LayoutStep,
 } from "@studynarrator/persistence";
 import { createFfmpegProbe } from "@studynarrator/runtime";
-import { createRenderPlanStore } from "@studynarrator/rendering";
+import {
+  createRenderPlanStore,
+  readSpeechCacheMetadata,
+  SPEECH_CACHE_SCHEMA_VERSION,
+} from "@studynarrator/rendering";
 import { resolveServerRuntimeConfiguration } from "./runtimeConfig.js";
 
 const repositoryRoot = resolve(import.meta.dirname, "../../..");
@@ -50,6 +61,28 @@ export function resolveServerDataDirectory(environment = process.env): string {
       )
     : resolve(repositoryRoot, ".tmp/dev/web");
 }
+
+/**
+ * One-time data directory layout steps, in the order that matters. Each
+ * step's id is recorded in <dataDir>/manifest.json exactly once, after a
+ * successful run (task 10.2); both steps are idempotent on re-run and
+ * remove nothing this build or the user still needs.
+ */
+const layoutSteps: LayoutStep[] = [
+  removeStandaloneRenderPlans,
+  createSpeechCacheSweep({
+    // Kept in lockstep with createApplicationSpeechCache, which roots the
+    // speech cache at <dataDirectory>/cache/speech.
+    relativeCacheRoot: "cache/speech",
+    shouldDeleteEntry: async (metadataPath: string): Promise<boolean> => {
+      const result = await readSpeechCacheMetadata(metadataPath);
+      if (result.status === "unreadable") return true;
+      if (result.status === "ok")
+        return result.metadata.schemaVersion < SPEECH_CACHE_SCHEMA_VERSION;
+      return false;
+    },
+  }),
+];
 
 export async function createServerServices(environment = process.env) {
   const runtimeConfiguration = resolveServerRuntimeConfiguration(
@@ -70,6 +103,10 @@ export async function createServerServices(environment = process.env) {
   let renders: RenderService | undefined;
   let scriptGeneration;
   try {
+    await readDataDirectoryManifest(dataDirectory, {
+      appVersion: APPLICATION_VERSION,
+    });
+    await runLayoutSteps(dataDirectory, layoutSteps);
     const openedRepository = await openStudyNarratorRepository({
       Database,
       databasePath,
@@ -136,19 +173,31 @@ export async function createServerServices(environment = process.env) {
   } catch (error) {
     if (
       !(error instanceof MigrationFailureError) &&
-      !(error instanceof SchemaTooNewError)
+      !(error instanceof SchemaTooNewError) &&
+      !(error instanceof LayoutTooNewError)
     )
       throw error;
-    const recoveryBackupPath =
-      error instanceof SchemaTooNewError
-        ? (error.backups[0]?.path ?? null)
-        : error.backupPath;
-    const availableBackups = await listPersistenceBackups(error.databasePath);
+    // A too-new layout is a data directory condition, not a database one:
+    // there is no database schema version or per-error backup to surface.
+    const layoutTooNew = error instanceof LayoutTooNewError;
+    let recoveryBackupPath: string | null = null;
+    if (!layoutTooNew) {
+      recoveryBackupPath =
+        error instanceof SchemaTooNewError
+          ? (error.backups[0]?.path ?? null)
+          : error.backupPath;
+    }
+    const unavailableDatabasePath = layoutTooNew
+      ? databasePath
+      : error.databasePath;
+    const availableBackups = await listPersistenceBackups(
+      unavailableDatabasePath,
+    );
     storageFailure = {
       status: "fail",
       code: error.code,
       message: error.message,
-      databasePath: error.databasePath,
+      ...(layoutTooNew ? {} : { databasePath: error.databasePath }),
       recoveryBackupPath,
     };
     const backups: PersistenceBackupsClient = {
@@ -164,11 +213,16 @@ export async function createServerServices(environment = process.env) {
       {
         contractVersion: PERSISTENCE_CONTRACT_VERSION,
         state: "unavailable",
-        databaseSchemaVersion: error.databaseSchemaVersion,
+        // The unavailable-status contract only knows the two database
+        // failure codes; a too-new layout is the same user condition
+        // ("created by a newer version") and carries its own message.
+        databaseSchemaVersion: layoutTooNew
+          ? null
+          : error.databaseSchemaVersion,
         targetDatabaseSchemaVersion: DATABASE_SCHEMA_VERSION,
-        databasePath: error.databasePath,
+        databasePath: unavailableDatabasePath,
         latestBackupPath: recoveryBackupPath,
-        code: error.code,
+        code: layoutTooNew ? "SCHEMA_TOO_NEW" : error.code,
         message: error.message,
         availableBackups,
       },

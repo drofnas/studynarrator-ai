@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  SpeachesConnectionSchema,
+  SpeechBackendConnectionSchema,
   type ConnectionTestSummary,
-  type SpeachesConnectionAuthoring,
+  type SpeechBackendConnectionAuthoring,
   type SpeechCatalog,
   type VoiceCatalog,
   type VoiceCatalogAuthoring,
@@ -45,7 +45,8 @@ const connected: ConnectionTestSummary = {
 
 class MemoryRepository implements ConnectionRepository {
   setup = { onboardingCompletedAt: null as string | null };
-  connection = SpeachesConnectionSchema.parse({
+  connection = SpeechBackendConnectionSchema.parse({
+    backendId: "speaches",
     baseUrl: null,
     suppliedUrlForm: "unconfigured",
     configured: false,
@@ -62,11 +63,11 @@ class MemoryRepository implements ConnectionRepository {
   });
   overrides = new Map<string, VoiceCatalog>();
 
-  getSpeachesConnection() {
+  getSpeechBackendConnection() {
     return this.connection;
   }
-  replaceSpeachesConnection(
-    input: SpeachesConnectionAuthoring,
+  replaceSpeechBackendConnection(
+    input: SpeechBackendConnectionAuthoring,
     suppliedUrlForm: "root" | "v1" | "unconfigured",
   ) {
     this.connection = {

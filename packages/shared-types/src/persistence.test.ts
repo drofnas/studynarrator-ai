@@ -12,7 +12,7 @@ import {
   SystemTimingConfigurationSchema,
   PersistenceStatusSchema,
 } from "./persistence.js";
-import { SpeachesConnectionAuthoringSchema } from "./connections.js";
+import { SpeechBackendConnectionAuthoringSchema } from "./connections.js";
 
 const validProject = {
   name: "Persistence contract",
@@ -264,7 +264,7 @@ describe("persistence contracts", () => {
       }),
     ).toThrow();
     expect(() =>
-      SpeachesConnectionAuthoringSchema.parse({
+      SpeechBackendConnectionAuthoringSchema.parse({
         baseUrl: "http://127.0.0.1:8000",
         defaultModelId: null,
         defaultVoiceId: null,
@@ -272,7 +272,7 @@ describe("persistence contracts", () => {
       }),
     ).toThrow();
     expect(() =>
-      SpeachesConnectionAuthoringSchema.parse({
+      SpeechBackendConnectionAuthoringSchema.parse({
         baseUrl: "file:///tmp/socket",
         defaultModelId: null,
         defaultVoiceId: null,
@@ -327,7 +327,7 @@ describe("persistence contracts", () => {
       ]),
     ).toHaveLength(1);
     expect(
-      SpeachesConnectionAuthoringSchema.parse({
+      SpeechBackendConnectionAuthoringSchema.parse({
         baseUrl: "http://127.0.0.1:8000",
         defaultModelId: "speaches-ai/Kokoro-82M-v1.0-ONNX",
         defaultVoiceId: "af_heart",

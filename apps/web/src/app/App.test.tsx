@@ -8,7 +8,7 @@ import { DEFAULT_SYSTEM_TIMING } from "@studynarrator/shared-types";
 import type {
   ConnectionTestOverall,
   PersistenceClient,
-  SpeachesConnectionClient,
+  SpeechBackendConnectionClient,
   SystemClient,
 } from "@studynarrator/shared-types";
 import { App } from "./App.js";
@@ -40,6 +40,7 @@ const unusedPersistence: PersistenceClient = {
 };
 const unusedConnections = {
   get: vi.fn(async () => ({
+    backendId: "speaches" as const,
     baseUrl: null,
     suppliedUrlForm: "unconfigured" as const,
     configured: false,
@@ -124,7 +125,7 @@ afterEach(cleanup);
 function renderApp(
   route: string,
   client: SystemClient = { diagnostics: vi.fn() },
-  connection: SpeachesConnectionClient = unusedConnections,
+  connection: SpeechBackendConnectionClient = unusedConnections,
 ) {
   return render(
     <MemoryRouter initialEntries={[route]}>
@@ -297,6 +298,7 @@ describe("application routing", () => {
   ] as const)("shows the %s shell connection state", async (overall, label) => {
     const testedAt = "2026-08-12T12:00:00.000Z";
     const connection = {
+      backendId: "speaches" as const,
       baseUrl: "http://127.0.0.1:8000",
       suppliedUrlForm: "root" as const,
       configured: true,

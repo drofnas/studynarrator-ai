@@ -1,5 +1,5 @@
 import type {
-  SpeachesConnectionClient,
+  SpeechBackendConnectionClient,
   PersistenceClient,
   ProjectPreviewClient,
   RenderClient,
@@ -18,7 +18,7 @@ import "./styles/global.css";
 interface AppProps {
   client: SystemClient;
   persistence: PersistenceClient;
-  connection: SpeachesConnectionClient;
+  connection: SpeechBackendConnectionClient;
   voiceCatalog: VoiceCatalogClient;
   scratchpad: ScratchpadClient;
   projectPreview: ProjectPreviewClient;
