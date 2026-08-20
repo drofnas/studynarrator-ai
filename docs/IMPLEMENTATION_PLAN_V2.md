@@ -87,7 +87,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 11.2 | Add the CI e2e and docker jobs                     | P0       | S    | complete    |
 | 12.1 | Correct the README                                 | P0       | S    | complete    |
 | 12.2 | Write UPGRADE.md                                   | P0       | S    | complete    |
-| 12.3 | Split setup into SETUP.md                          | P0       | S    | todo        |
+| 12.3 | Split setup into SETUP.md                          | P0       | S    | complete    |
 | 13   | Lower the Node requirement to 24                   | P1       | S    | todo        |
 | 14   | Make the Vitest configs disjoint                   | P1       | XS   | todo        |
 | 15   | Add coverage thresholds                            | P1       | S    | todo        |
@@ -880,7 +880,7 @@ Confirm each relative link resolves.
 
 ## TASK 12.3 — Split setup into SETUP.md
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P0 · **Size:** S
 
