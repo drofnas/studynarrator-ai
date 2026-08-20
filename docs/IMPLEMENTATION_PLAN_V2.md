@@ -82,7 +82,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 10.1 | Write and read the data directory manifest         | P0       | M    | complete    |
 | 10.2 | Add the layout step runner                         | P0       | S    | done (10.x) |
 | 10.3 | Convert cache metadata parsing to Zod              | P0       | S    | complete    |
-| 10.4 | Add the two initial layout steps                   | P0       | S    | todo        |
+| 10.4 | Add the two initial layout steps                   | P0       | S    | complete    |
 | 11.1 | Add the CI check job                               | P0       | S    | todo        |
 | 11.2 | Add the CI e2e and docker jobs                     | P0       | S    | todo        |
 | 12.1 | Correct the README                                 | P0       | S    | todo        |
@@ -540,7 +540,7 @@ npm run format:check && npm run lint && npm run typecheck && npx vitest run pack
 
 ## TASK 10.2 — Add the layout step runner
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P0 · **Size:** S
 
@@ -597,7 +597,7 @@ Start the server twice against the same fresh data directory and confirm the man
 
 ## TASK 10.3 — Convert cache metadata parsing to Zod
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P0 · **Size:** S
 
@@ -651,7 +651,7 @@ Add a test asserting a corrupt metadata file yields `unreadable`, not `missing`.
 
 ## TASK 10.4 — Add the two initial layout steps
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P0 · **Size:** S
 

@@ -30,7 +30,10 @@ describe("server data directory manifest", () => {
             manifestVersion: 1,
             appVersion: APPLICATION_VERSION,
             layoutVersion: 1,
-            completedSteps: [],
+            completedSteps: [
+              "remove-standalone-render-plans",
+              "sweep-unreadable-cache-entries",
+            ],
           });
         } finally {
           await services.dispose();

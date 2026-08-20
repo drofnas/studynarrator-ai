@@ -73,7 +73,10 @@ describe("desktop storage recovery", () => {
             manifestVersion: 1,
             appVersion: APPLICATION_VERSION,
             layoutVersion: 1,
-            completedSteps: [],
+            completedSteps: [
+              "remove-standalone-render-plans",
+              "sweep-unreadable-cache-entries",
+            ],
           });
         } finally {
           await runtime.dispose();

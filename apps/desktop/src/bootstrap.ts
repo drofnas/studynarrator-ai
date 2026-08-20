@@ -23,10 +23,12 @@ import {
   type StorageCheck,
 } from "@studynarrator/application";
 import {
+  createSpeechCacheSweep,
   LayoutTooNewError,
   MigrationFailureError,
   PersistenceConflictError,
   SchemaTooNewError,
+  removeStandaloneRenderPlans,
   listPersistenceBackups,
   openStudyNarratorRepository,
   readDataDirectoryManifest,
@@ -42,7 +44,11 @@ import {
   type PersistenceClient,
 } from "@studynarrator/shared-types";
 import { createFfmpegProbe } from "@studynarrator/runtime";
-import { createRenderPlanStore } from "@studynarrator/rendering";
+import {
+  createRenderPlanStore,
+  readSpeechCacheMetadata,
+  SPEECH_CACHE_SCHEMA_VERSION,
+} from "@studynarrator/rendering";
 
 export function resolveDesktopDataDirectory(
   defaultDataDirectory: string,
@@ -57,11 +63,26 @@ export function resolveDesktopDataDirectory(
 }
 
 /**
- * One-time data directory layout steps, in the order that matters.
- * Task 10.4 registers the first real step (legacy render cache cleanup)
- * here; its id is recorded in <dataDir>/manifest.json exactly once.
+ * One-time data directory layout steps, in the order that matters. Each
+ * step's id is recorded in <dataDir>/manifest.json exactly once, after a
+ * successful run (task 10.2); both steps are idempotent on re-run and
+ * remove nothing this build or the user still needs.
  */
-const layoutSteps: LayoutStep[] = [];
+const layoutSteps: LayoutStep[] = [
+  removeStandaloneRenderPlans,
+  createSpeechCacheSweep({
+    // Kept in lockstep with createApplicationSpeechCache, which roots the
+    // speech cache at <dataDirectory>/cache/speech.
+    relativeCacheRoot: "cache/speech",
+    shouldDeleteEntry: async (metadataPath: string): Promise<boolean> => {
+      const result = await readSpeechCacheMetadata(metadataPath);
+      if (result.status === "unreadable") return true;
+      if (result.status === "ok")
+        return result.metadata.schemaVersion < SPEECH_CACHE_SCHEMA_VERSION;
+      return false;
+    },
+  }),
+];
 
 export async function createDesktopServices(options: {
   defaultDataDirectory: string;
