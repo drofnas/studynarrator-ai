@@ -213,11 +213,13 @@ The primary navigation is **Prompt Kit**, **Projects**, **Quick Scratchpad**, an
 
 New installations include editable Global Lexicon defaults for common acronyms and ambiguous pronunciations. Named-sense aliases use `word/sense` in Settings and resolve explicit script annotations such as `{{resume|cv}}`; users may edit, disable, or delete any default without the application restoring it on restart.
 
-## Pre-release data reset
+## Data upgrades and backups
 
-All persisted contracts are at schema version 1: SQLite, project snapshots, diagnostics, parser grammar, script generation, preview, Scratchpad, and render plans. The repository intentionally supports only the current v1 shapes. Development databases, frozen plans, and cache metadata produced by earlier builds are rejected or treated as cache misses; the application never deletes or converts them automatically.
+StudyNarrator migrates the database forward automatically when it starts. Before any schema upgrade it takes a full backup of the current database in the `backups/` directory next to the database file, for example `<dataDir>/backups/`.
 
-Before starting a current build, stop StudyNarrator and explicitly remove the disposable data directory if it contains pre-v1 data. For source Web development, remove `.tmp/dev/web`. For a custom Node data location, remove the directory named by `STUDYNARRATOR_DATA_DIR`. For Electron, remove the StudyNarrator application-data directory reported by System diagnostics. For Docker Web, `docker compose down --volumes` deletes the `studynarrator-data` volume and is irreversible; use it only when a complete reset is intended. Back up anything you need first.
+Old backups are pruned automatically: the newest backup for each source schema version, plus the three most recent backup files, plus the two most recent pre-restore safety copies always survive.
+
+If the data directory was created by a newer version of this application, a recovery screen appears at startup offering a restore from one of those backups. Nothing is ever deleted or converted automatically.
 
 ## Docker environment reference
 
