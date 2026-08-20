@@ -83,7 +83,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 10.2 | Add the layout step runner                         | P0       | S    | done (10.x) |
 | 10.3 | Convert cache metadata parsing to Zod              | P0       | S    | complete    |
 | 10.4 | Add the two initial layout steps                   | P0       | S    | complete    |
-| 11.1 | Add the CI check job                               | P0       | S    | todo        |
+| 11.1 | Add the CI check job                               | P0       | S    | complete    |
 | 11.2 | Add the CI e2e and docker jobs                     | P0       | S    | todo        |
 | 12.1 | Correct the README                                 | P0       | S    | todo        |
 | 12.2 | Write UPGRADE.md                                   | P0       | S    | todo        |
@@ -708,7 +708,7 @@ ls /tmp/sn-t104/render-plans/.jobs    # fake-render still present
 
 ## TASK 11.1 — Add the CI check job
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P0 · **Size:** S
 
