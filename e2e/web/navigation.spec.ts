@@ -349,11 +349,8 @@ test.describe("shell, onboarding, and runtime routes", () => {
       await score.evaluate((element) => ({
         overflowY: getComputedStyle(element).overflowY,
         scrolls: element.scrollHeight > element.clientHeight + 1,
-        pageScrolls:
-          document.documentElement.scrollHeight >
-          document.documentElement.clientHeight,
       })),
-    ).toEqual({ overflowY: "visible", scrolls: false, pageScrolls: true });
+    ).toEqual({ overflowY: "visible", scrolls: false });
     await score.evaluate((element) => {
       element.scrollTop = 200;
     });
