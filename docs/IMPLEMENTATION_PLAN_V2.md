@@ -84,7 +84,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 10.3 | Convert cache metadata parsing to Zod              | P0       | S    | complete    |
 | 10.4 | Add the two initial layout steps                   | P0       | S    | complete    |
 | 11.1 | Add the CI check job                               | P0       | S    | complete    |
-| 11.2 | Add the CI e2e and docker jobs                     | P0       | S    | todo        |
+| 11.2 | Add the CI e2e and docker jobs                     | P0       | S    | complete    |
 | 12.1 | Correct the README                                 | P0       | S    | todo        |
 | 12.2 | Write UPGRADE.md                                   | P0       | S    | todo        |
 | 12.3 | Split setup into SETUP.md                          | P0       | S    | todo        |
@@ -753,7 +753,7 @@ node -e "['format:check','lint','typecheck','test','test:api'].forEach(s=>{if(!r
 
 ## TASK 11.2 — Add the CI e2e and docker jobs
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P0 · **Size:** S
 
