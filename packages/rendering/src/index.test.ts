@@ -20,8 +20,16 @@ import {
   readSpeechCacheMetadata,
   withProjectSnapshotHash,
   withRenderPlanHash,
+  type SpeechCacheEntryMetadata,
   type SpeechCacheKeyInput,
+  type SpeechCacheMetadataReadResult,
 } from "./index.js";
+
+function metadataOf(
+  result: SpeechCacheMetadataReadResult,
+): SpeechCacheEntryMetadata | null {
+  return result.status === "ok" ? result.metadata : null;
+}
 
 const runFile = promisify(execFile);
 
@@ -299,8 +307,8 @@ describe("content-addressed speech cache", () => {
 
       const result = await readSpeechCacheMetadata(metadataPath);
       expect(result).toMatchObject({ status: "ok" });
+      expect(metadataOf(result)).toEqual(base);
       if (result.status !== "ok") throw new Error("expected ok metadata");
-      expect(result.metadata).toEqual(base);
       expect(result.metadata).not.toHaveProperty("futureOptionalField");
     });
 
