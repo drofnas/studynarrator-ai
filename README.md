@@ -287,6 +287,7 @@ npm run verify
 
 ## Documentation
 
+- [Upgrading, downgrading, and your data](UPGRADE.md)
 - [Docker Web operations](deploy/docker/README.md)
 - [Script grammar](docs/script-grammar-v1.md)
 - [Product requirements and architecture](docs/study-narrator-prd-v1.3.md)
