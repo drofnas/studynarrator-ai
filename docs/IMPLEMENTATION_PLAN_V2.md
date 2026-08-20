@@ -86,7 +86,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 11.1 | Add the CI check job                               | P0       | S    | complete    |
 | 11.2 | Add the CI e2e and docker jobs                     | P0       | S    | complete    |
 | 12.1 | Correct the README                                 | P0       | S    | complete    |
-| 12.2 | Write UPGRADE.md                                   | P0       | S    | todo        |
+| 12.2 | Write UPGRADE.md                                   | P0       | S    | complete    |
 | 12.3 | Split setup into SETUP.md                          | P0       | S    | todo        |
 | 13   | Lower the Node requirement to 24                   | P1       | S    | todo        |
 | 14   | Make the Vitest configs disjoint                   | P1       | XS   | todo        |
@@ -835,7 +835,7 @@ Must return nothing.
 
 ## TASK 12.2 — Write UPGRADE.md
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P0 · **Size:** S
 
