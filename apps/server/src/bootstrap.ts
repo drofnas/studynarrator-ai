@@ -92,7 +92,7 @@ export async function createServerServices(environment = process.env) {
   );
   const dataDirectory = resolveServerDataDirectory(environment);
   const databasePath = resolve(dataDirectory, "studynarrator.sqlite");
-  const descriptor: StudyNarratorRuntimeDescriptor = {
+  const descriptor = {
     client: "web",
     transport: "rest",
     runtimeName: "node",
@@ -102,7 +102,7 @@ export async function createServerServices(environment = process.env) {
     sourceRevision: runtimeConfiguration.sourceRevision,
     dataDirectory,
     appVersion: APPLICATION_VERSION,
-  };
+  } satisfies StudyNarratorRuntimeDescriptor;
   const cache = createApplicationSpeechCache(descriptor.dataDirectory);
   const speechCache = createSpeechCacheService(cache);
   let storageFailure: StorageCheck | undefined;
@@ -275,7 +275,7 @@ export async function createServerServices(environment = process.env) {
   });
   const context: DiagnosticsContext = {
     client: descriptor.client,
-    distribution: runtimeConfiguration.distribution,
+    distribution: descriptor.distribution,
     transport: descriptor.transport,
     runtimeName: descriptor.runtimeName,
     runtimeVersion: descriptor.runtimeVersion,

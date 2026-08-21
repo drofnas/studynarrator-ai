@@ -95,9 +95,9 @@ export async function createDesktopServices(options: {
     environment,
   );
   const databasePath = resolve(dataDirectory, "studynarrator.sqlite");
-  const descriptor: StudyNarratorRuntimeDescriptor = {
+  const descriptor = {
     client: "electron",
-    distribution: "electron",
+    distribution: "electron" as const,
     transport: "ipc",
     runtimeName: "electron",
     runtimeVersion: process.versions.node,
@@ -106,7 +106,7 @@ export async function createDesktopServices(options: {
       environment.STUDYNARRATOR_SOURCE_REVISION?.trim() || "development",
     dataDirectory,
     appVersion: APPLICATION_VERSION,
-  };
+  } satisfies StudyNarratorRuntimeDescriptor;
   let storageFailure: StorageCheck | undefined;
   let persistence: PersistenceClient;
   let repository: DiagnosticRepository;
@@ -276,7 +276,7 @@ export async function createDesktopServices(options: {
   });
   const context: DiagnosticsContext = {
     client: descriptor.client,
-    distribution: "electron",
+    distribution: descriptor.distribution,
     transport: descriptor.transport,
     runtimeName: descriptor.runtimeName,
     runtimeVersion: descriptor.runtimeVersion,
