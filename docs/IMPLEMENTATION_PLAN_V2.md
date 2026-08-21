@@ -94,7 +94,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 16.1 | Extract the runtime descriptor type                | P1       | S    | complete    |
 | 16.2 | Extract the shared service factory                 | P1       | M    | complete    |
 | 16.3 | Reduce both bootstraps to the factory              | P1       | S    | complete    |
-| 17.1 | Add the async handler and error middleware         | P1       | S    | todo        |
+| 17.1 | Add the async handler and error middleware         | P1       | S    | complete    |
 | 17.2 | Extract the system and persistence routers         | P1       | S    | todo        |
 | 17.3 | Extract the connection and catalog routers         | P1       | S    | todo        |
 | 17.4 | Extract the render and cache routers               | P1       | M    | todo        |
@@ -1194,7 +1194,7 @@ wc -l apps/server/src/bootstrap.ts apps/desktop/src/bootstrap.ts
 
 ## TASK 17.1 — Add the async handler and error middleware
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 
