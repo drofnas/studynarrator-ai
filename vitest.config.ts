@@ -23,5 +23,22 @@ export default defineConfig({
       "packages/application/src/**/*.test.ts",
     ],
     testTimeout: 10_000,
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "html", "lcov"],
+      exclude: [
+        "**/*.test.*",
+        "**/dist/**",
+        "e2e/**",
+        "scripts/**",
+        "apps/fake-speaches/**",
+      ],
+      thresholds: {
+        statements: 70,
+        branches: 60,
+        functions: 70,
+        lines: 70,
+      },
+    },
   },
 });

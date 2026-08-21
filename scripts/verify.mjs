@@ -39,6 +39,7 @@ run("npm", ["run", "lint"]);
 run("npm", ["run", "typecheck"]);
 run("npm", ["test"]);
 run("npm", ["run", "test:api"]);
+run("npm", ["run", "test:coverage"]);
 run("npm", ["run", "build"]);
 run("npm", ["run", "rebuild:native", "--workspace", "@studynarrator/desktop"]);
 run("playwright", ["test"]);

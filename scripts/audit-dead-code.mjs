@@ -486,6 +486,7 @@ function usedPackages(files) {
       if (dependency) used.add(dependency);
     }
     if (text.includes("@vitest-environment jsdom")) used.add("jsdom");
+    if (text.includes(`provider: "v8"`)) used.add("@vitest/coverage-v8");
   }
   return used;
 }
