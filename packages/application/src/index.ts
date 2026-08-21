@@ -148,6 +148,7 @@ export {
   type ConnectionRepository,
 } from "./connections.js";
 export { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
+export type { StudyNarratorRuntimeDescriptor } from "./composition.js";
 export {
   SPEACHES_CACHE_ADAPTER_ID,
   SPEACHES_CACHE_ADAPTER_VERSION,

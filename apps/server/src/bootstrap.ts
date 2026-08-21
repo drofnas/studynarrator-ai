@@ -21,6 +21,7 @@ import {
   type DiagnosticRepository,
   type RenderService,
   type StorageCheck,
+  type StudyNarratorRuntimeDescriptor,
 } from "@studynarrator/application";
 import {
   APPLICATION_VERSION,
@@ -91,7 +92,18 @@ export async function createServerServices(environment = process.env) {
   );
   const dataDirectory = resolveServerDataDirectory(environment);
   const databasePath = resolve(dataDirectory, "studynarrator.sqlite");
-  const cache = createApplicationSpeechCache(dataDirectory);
+  const descriptor: StudyNarratorRuntimeDescriptor = {
+    client: "web",
+    transport: "rest",
+    runtimeName: "node",
+    runtimeVersion: process.versions.node,
+    electronVersion: null,
+    distribution: runtimeConfiguration.distribution,
+    sourceRevision: runtimeConfiguration.sourceRevision,
+    dataDirectory,
+    appVersion: APPLICATION_VERSION,
+  };
+  const cache = createApplicationSpeechCache(descriptor.dataDirectory);
   const speechCache = createSpeechCacheService(cache);
   let storageFailure: StorageCheck | undefined;
   let persistence: PersistenceClient;
@@ -103,10 +115,10 @@ export async function createServerServices(environment = process.env) {
   let renders: RenderService | undefined;
   let scriptGeneration;
   try {
-    await readDataDirectoryManifest(dataDirectory, {
-      appVersion: APPLICATION_VERSION,
+    await readDataDirectoryManifest(descriptor.dataDirectory, {
+      appVersion: descriptor.appVersion,
     });
-    await runLayoutSteps(dataDirectory, layoutSteps);
+    await runLayoutSteps(descriptor.dataDirectory, layoutSteps);
     const openedRepository = await openStudyNarratorRepository({
       Database,
       databasePath,
@@ -126,9 +138,9 @@ export async function createServerServices(environment = process.env) {
       backups,
     });
     const context = {
-      client: "web" as const,
-      nodeVersion: process.versions.node,
-      electronVersion: null,
+      client: descriptor.client,
+      nodeVersion: descriptor.runtimeVersion,
+      electronVersion: descriptor.electronVersion,
     };
     connection = createConnectionService({
       repository: openedRepository,
@@ -151,7 +163,7 @@ export async function createServerServices(environment = process.env) {
       speech,
     });
     const planStore = createRenderPlanStore(
-      resolve(dataDirectory, "render-plans"),
+      resolve(descriptor.dataDirectory, "render-plans"),
     );
     const planComputer = createRenderPlanComputer({
       repository: openedRepository,
@@ -165,7 +177,7 @@ export async function createServerServices(environment = process.env) {
       plans: planStore,
       planComputer,
       speech,
-      dataDirectory,
+      dataDirectory: descriptor.dataDirectory,
       ...(environment.STUDYNARRATOR_FFMPEG_PATH
         ? { ffmpegPath: environment.STUDYNARRATOR_FFMPEG_PATH }
         : {}),
@@ -262,16 +274,16 @@ export async function createServerServices(environment = process.env) {
     ),
   });
   const context: DiagnosticsContext = {
-    client: "web",
+    client: descriptor.client,
     distribution: runtimeConfiguration.distribution,
-    transport: "rest",
-    runtimeName: "node",
-    runtimeVersion: process.versions.node,
-    electronVersion: null,
+    transport: descriptor.transport,
+    runtimeName: descriptor.runtimeName,
+    runtimeVersion: descriptor.runtimeVersion,
+    electronVersion: descriptor.electronVersion,
     platform: process.platform,
     architecture: process.arch,
-    dataDirectory,
-    sourceRevision: runtimeConfiguration.sourceRevision,
+    dataDirectory: descriptor.dataDirectory,
+    sourceRevision: descriptor.sourceRevision,
   };
   return {
     service,
