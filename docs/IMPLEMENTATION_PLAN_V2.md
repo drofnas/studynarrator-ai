@@ -89,7 +89,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 12.2 | Write UPGRADE.md                                   | P0       | S    | complete    |
 | 12.3 | Split setup into SETUP.md                          | P0       | S    | complete    |
 | 13   | Lower the Node requirement to 24                   | P1       | S    | complete    |
-| 14   | Make the Vitest configs disjoint                   | P1       | XS   | todo        |
+| 14   | Make the Vitest configs disjoint                   | P1       | XS   | complete    |
 | 15   | Add coverage thresholds                            | P1       | S    | todo        |
 | 16.1 | Extract the runtime descriptor type                | P1       | S    | todo        |
 | 16.2 | Extract the shared service factory                 | P1       | M    | todo        |
@@ -967,7 +967,7 @@ node -e "const e=require('./package.json').engines.node; const n=require('fs').r
 
 # 14 — MAKE THE VITEST CONFIGS DISJOINT
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** XS
 
