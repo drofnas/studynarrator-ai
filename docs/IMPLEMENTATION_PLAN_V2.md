@@ -91,7 +91,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 13   | Lower the Node requirement to 24                   | P1       | S    | complete    |
 | 14   | Make the Vitest configs disjoint                   | P1       | XS   | complete    |
 | 15   | Add coverage thresholds                            | P1       | S    | complete    |
-| 16.1 | Extract the runtime descriptor type                | P1       | S    | todo        |
+| 16.1 | Extract the runtime descriptor type                | P1       | S    | complete    |
 | 16.2 | Extract the shared service factory                 | P1       | M    | todo        |
 | 16.3 | Reduce both bootstraps to the factory              | P1       | S    | todo        |
 | 17.1 | Add the async handler and error middleware         | P1       | S    | todo        |
@@ -1058,7 +1058,7 @@ Must pass on the first run.
 
 ## TASK 16.1 — Extract the runtime descriptor type
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 
