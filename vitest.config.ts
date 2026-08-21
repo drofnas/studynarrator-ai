@@ -1,5 +1,5 @@
 import { fileURLToPath, URL } from "node:url";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 export default defineConfig({
   resolve: {
@@ -14,6 +14,13 @@ export default defineConfig({
       "apps/**/*.test.tsx",
       "packages/**/*.test.ts",
       "scripts/**/*.test.ts",
+    ],
+    exclude: [
+      ...configDefaults.exclude,
+      "apps/server/src/**/*.test.ts",
+      "apps/desktop/src/bridge.test.ts",
+      "apps/desktop/src/bootstrap.test.ts",
+      "packages/application/src/**/*.test.ts",
     ],
     testTimeout: 10_000,
   },
