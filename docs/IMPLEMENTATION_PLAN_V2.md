@@ -90,7 +90,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 12.3 | Split setup into SETUP.md                          | P0       | S    | complete    |
 | 13   | Lower the Node requirement to 24                   | P1       | S    | complete    |
 | 14   | Make the Vitest configs disjoint                   | P1       | XS   | complete    |
-| 15   | Add coverage thresholds                            | P1       | S    | todo        |
+| 15   | Add coverage thresholds                            | P1       | S    | complete    |
 | 16.1 | Extract the runtime descriptor type                | P1       | S    | todo        |
 | 16.2 | Extract the shared service factory                 | P1       | M    | todo        |
 | 16.3 | Reduce both bootstraps to the factory              | P1       | S    | todo        |
@@ -1009,7 +1009,7 @@ The `comm` output must be empty, and the final count must equal the count from b
 
 # 15 — ADD COVERAGE THRESHOLDS
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 
