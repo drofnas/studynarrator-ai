@@ -111,7 +111,7 @@ test.describe("external-LLM script generation", () => {
       page.getByRole("button", { name: /both prompts/u }),
     ).toHaveCount(0);
 
-    await creationEditor.press("Meta+ArrowDown");
+    await creationEditor.evaluate((el) => el.scrollIntoView({ block: "end" }));
     await expect(creationEditor).toContainText(
       "[PASTE SOURCE MATERIAL HERE AND/OR ATTACH RELEVANT FILES TO THE CONVERSATION.]",
     );
@@ -152,7 +152,7 @@ test.describe("external-LLM script generation", () => {
         /USER INPUT section at the end asks for the requested changes/u,
       ),
     ).toBeVisible();
-    await updateEditor.press("Meta+ArrowDown");
+    await updateEditor.evaluate((el) => el.scrollIntoView({ block: "end" }));
     await expect(updateEditor).toContainText(
       "[OPTIONAL — PROVIDE FACTS, RESEARCH, SOURCE MATERIAL, CONSTRAINTS, OR ATTACH RELEVANT FILES.]",
     );

@@ -19,126 +19,16 @@ StudyNarrator does not bundle a speech engine. It sends synthesis requests to an
 
 ## Quick start: Docker Web
 
-Docker Web is the recommended local setup. Run Speaches and StudyNarrator as separate applications. The supplied StudyNarrator Compose file contains one application service and no model-management commands.
-
-### 1. Set up Speaches
-
-Install Docker Engine with the Compose plugin, or Docker Desktop. Speaches recommends Docker Compose and publishes separate CPU and NVIDIA CUDA configurations in its [official installation guide](https://speaches.ai/installation/).
-
-Create a directory outside the StudyNarrator repository for Speaches:
-
-```sh
-mkdir speaches
-cd speaches
-```
-
-For CPU operation, including Docker Desktop on Apple Silicon, download and start the CPU configuration:
-
-```sh
-curl --fail --remote-name https://raw.githubusercontent.com/speaches-ai/speaches/master/compose.yaml
-curl --fail --remote-name https://raw.githubusercontent.com/speaches-ai/speaches/master/compose.cpu.yaml
-docker compose --file compose.cpu.yaml up --detach
-```
-
-For an NVIDIA GPU with a working CUDA container runtime, use the upstream CUDA configuration instead:
-
-```sh
-curl --fail --remote-name https://raw.githubusercontent.com/speaches-ai/speaches/master/compose.yaml
-curl --fail --remote-name https://raw.githubusercontent.com/speaches-ai/speaches/master/compose.cuda.yaml
-docker compose --file compose.cuda.yaml up --detach
-```
-
-Confirm the server is running:
-
-```sh
-curl --fail http://127.0.0.1:8000/health
-```
-
-The response should report a healthy service. If it does not, inspect the container:
-
-```sh
-docker compose --file compose.cpu.yaml ps
-docker compose --file compose.cpu.yaml logs speaches
-```
-
-Use `compose.cuda.yaml` in those commands if you selected CUDA.
-
-### 2. Install the Kokoro speech model
-
-Speaches requires a model download before text-to-speech use. Install the [`uv` command-line tool](https://docs.astral.sh/uv/getting-started/installation/) if you do not have `uvx`, then run:
-
-```sh
-SPEACHES_BASE_URL=http://127.0.0.1:8000 \
-  uvx speaches-cli model download speaches-ai/Kokoro-82M-v1.0-ONNX
-```
-
-Confirm that the model appears in the installed text-to-speech model list:
-
-```sh
-SPEACHES_BASE_URL=http://127.0.0.1:8000 \
-  uvx speaches-cli model ls --task text-to-speech
-```
-
-The output should contain `speaches-ai/Kokoro-82M-v1.0-ONNX`.
-
-Generate a small WAV file before connecting StudyNarrator:
-
-```sh
-curl --fail --silent --show-error \
-  http://127.0.0.1:8000/v1/audio/speech \
-  --header 'Content-Type: application/json' \
-  --output speaches-test.wav \
-  --data '{
-    "input": "Speaches is ready for StudyNarrator.",
-    "model": "speaches-ai/Kokoro-82M-v1.0-ONNX",
-    "voice": "af_heart",
-    "response_format": "wav"
-  }'
-
-test -s speaches-test.wav && echo "Speaches text-to-speech is ready."
-```
-
-See the upstream [Speaches text-to-speech guide](https://speaches.ai/usage/text-to-speech/) for other models, voices, speeds, and API examples.
-
-### 3. Start StudyNarrator
-
-Clone this repository in a different directory, then create its local environment file:
+See [SETUP.md](SETUP.md) for the full setup: Speaches installation, the speech model download, starting StudyNarrator, and connecting them. In short, with Docker Engine and the Compose plugin available:
 
 ```sh
 git clone https://github.com/drofnas/studynarrator-ai.git
 cd studynarrator-ai
 cp .env.example .env
-```
-
-The checked-in environment template configures only the StudyNarrator Web binding and image metadata. Speaches is configured inside the application.
-
-Build and start StudyNarrator:
-
-```sh
-docker compose up --build --detach
-docker compose ps
-```
-
-Open <http://127.0.0.1:8080>. During onboarding, enter `http://host.docker.internal:8000` for Speaches running on the Docker host, load the catalog, review the selected model and default voice, then choose **Save and Test**. A connected result confirms DNS, TCP, HTTP, model, voice, and sample-audio checks.
-
-StudyNarrator remains healthy if Speaches is stopped. You can continue editing and reconnect from Settings after Speaches returns without recreating the StudyNarrator container.
-
-### Stop or update Docker Web
-
-Stop the application while retaining projects and renders:
-
-```sh
-docker compose down
-```
-
-Rebuild after pulling an update:
-
-```sh
-git pull --ff-only
 docker compose up --build --detach
 ```
 
-The `studynarrator-data` named volume persists the SQLite database, speech cache, frozen plans, and render artifacts. Do not run `docker compose down --volumes` unless you intend to delete that data. See the [Docker operations guide](deploy/docker/README.md) for backup, restore, LAN access, and bind-mount permissions.
+Open <http://127.0.0.1:8080> and complete the onboarding connection to Speaches.
 
 ## Other ways to run locally
 
@@ -190,34 +80,19 @@ npm run dev:desktop
 
 Electron opens its own window and uses the operating system's application-data directory. Configure the single loopback, LAN, or HTTPS Speaches connection during onboarding or in Settings.
 
-## Connecting to Speaches from each runtime
-
-Use the URL that the StudyNarrator backend can reach. Your browser may use a different URL:
-
-| StudyNarrator runtime       | Speaches location               | Base URL                               |
-| --------------------------- | ------------------------------- | -------------------------------------- |
-| Docker Web                  | Same Docker host                | `http://host.docker.internal:8000`     |
-| Web or Electron from source | Same machine                    | `http://127.0.0.1:8000`                |
-| Any runtime                 | Another private-network machine | `http://<private-ip-or-dns-name>:8000` |
-| Any runtime                 | Reverse proxy with TLS          | `https://<speech-host>`                |
-
-`localhost` inside the StudyNarrator container refers to that container, not the Docker host. The supplied Compose file maps `host.docker.internal` through Docker's Linux host-gateway support.
-
-StudyNarrator accepts a Speaches root URL or a URL ending in `/v1`; it normalizes the address before making API calls. Cross-origin browser access to Speaches is not required because the Node or Electron backend makes the requests.
-
-The connection is a singleton owned by the application installation. Projects do not contain a connection ID, and neither runtime reads connection profiles or credentials from environment variables. StudyNarrator does not have an API-key field, credential vault, or operating-system credential-store integration; authenticated Speaches servers are rejected by the connection test.
-
 ## Application surfaces
 
 The primary navigation is **Prompt Kit**, **Projects**, **Quick Scratchpad**, and **Settings**, with **General**, **Voices**, **Lexicon**, **Timings**, and **System diagnostics** beneath Settings. Web requests use the manifest-backed `/api` surface for runtime diagnostics, projects, prompt export, previews, render plans and renders, pacing, preferences, the global lexicon, the singleton connection, setup, voice catalogs, Scratchpad, and speech-cache controls. Electron exposes the same operations through its validated public IPC manifest; operation names are contract-tested in both transports.
 
 New installations include editable Global Lexicon defaults for common acronyms and ambiguous pronunciations. Named-sense aliases use `word/sense` in Settings and resolve explicit script annotations such as `{{resume|cv}}`; users may edit, disable, or delete any default without the application restoring it on restart.
 
-## Pre-release data reset
+## Data upgrades and backups
 
-All persisted contracts are at schema version 1: SQLite, project snapshots, diagnostics, parser grammar, script generation, preview, Scratchpad, and render plans. The repository intentionally supports only the current v1 shapes. Development databases, frozen plans, and cache metadata produced by earlier builds are rejected or treated as cache misses; the application never deletes or converts them automatically.
+StudyNarrator migrates the database forward automatically when it starts. Before any schema upgrade it takes a full backup of the current database in the `backups/` directory next to the database file, for example `<dataDir>/backups/`.
 
-Before starting a current build, stop StudyNarrator and explicitly remove the disposable data directory if it contains pre-v1 data. For source Web development, remove `.tmp/dev/web`. For a custom Node data location, remove the directory named by `STUDYNARRATOR_DATA_DIR`. For Electron, remove the StudyNarrator application-data directory reported by System diagnostics. For Docker Web, `docker compose down --volumes` deletes the `studynarrator-data` volume and is irreversible; use it only when a complete reset is intended. Back up anything you need first.
+Old backups are pruned automatically: the newest backup for each source schema version, plus the three most recent backup files, plus the two most recent pre-restore safety copies always survive.
+
+If the data directory was created by a newer version of this application, a recovery screen appears at startup offering a restore from one of those backups. Nothing is ever deleted or converted automatically.
 
 ## Docker environment reference
 
@@ -285,6 +160,8 @@ npm run verify
 
 ## Documentation
 
+- [Setup (Speaches, model, first-run connection)](SETUP.md)
+- [Upgrading, downgrading, and your data](UPGRADE.md)
 - [Docker Web operations](deploy/docker/README.md)
 - [Script grammar](docs/script-grammar-v1.md)
 - [Product requirements and architecture](docs/study-narrator-prd-v1.3.md)

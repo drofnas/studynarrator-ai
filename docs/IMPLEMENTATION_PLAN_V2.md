@@ -83,11 +83,11 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 10.2 | Add the layout step runner                         | P0       | S    | done (10.x) |
 | 10.3 | Convert cache metadata parsing to Zod              | P0       | S    | complete    |
 | 10.4 | Add the two initial layout steps                   | P0       | S    | complete    |
-| 11.1 | Add the CI check job                               | P0       | S    | todo        |
-| 11.2 | Add the CI e2e and docker jobs                     | P0       | S    | todo        |
-| 12.1 | Correct the README                                 | P0       | S    | todo        |
-| 12.2 | Write UPGRADE.md                                   | P0       | S    | todo        |
-| 12.3 | Split setup into SETUP.md                          | P0       | S    | todo        |
+| 11.1 | Add the CI check job                               | P0       | S    | complete    |
+| 11.2 | Add the CI e2e and docker jobs                     | P0       | S    | complete    |
+| 12.1 | Correct the README                                 | P0       | S    | complete    |
+| 12.2 | Write UPGRADE.md                                   | P0       | S    | complete    |
+| 12.3 | Split setup into SETUP.md                          | P0       | S    | complete    |
 | 13   | Lower the Node requirement to 24                   | P1       | S    | todo        |
 | 14   | Make the Vitest configs disjoint                   | P1       | XS   | todo        |
 | 15   | Add coverage thresholds                            | P1       | S    | todo        |
@@ -708,7 +708,7 @@ ls /tmp/sn-t104/render-plans/.jobs    # fake-render still present
 
 ## TASK 11.1 — Add the CI check job
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P0 · **Size:** S
 
@@ -753,7 +753,7 @@ node -e "['format:check','lint','typecheck','test','test:api'].forEach(s=>{if(!r
 
 ## TASK 11.2 — Add the CI e2e and docker jobs
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P0 · **Size:** S
 
@@ -790,7 +790,7 @@ Push the branch and confirm all three jobs appear and the first two pass.
 
 ## TASK 12.1 — Correct the README
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P0 · **Size:** S
 
@@ -835,7 +835,7 @@ Must return nothing.
 
 ## TASK 12.2 — Write UPGRADE.md
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P0 · **Size:** S
 
@@ -880,7 +880,7 @@ Confirm each relative link resolves.
 
 ## TASK 12.3 — Split setup into SETUP.md
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P0 · **Size:** S
 
