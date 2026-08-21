@@ -58,7 +58,7 @@ import {
 
 export interface StudyNarratorRuntimeDescriptor {
   client: "web" | "electron";
-  distribution: "development-web" | "docker-web" | "electron";
+  distribution: string;
   transport: "rest" | "ipc";
   runtimeName: "node" | "electron";
   runtimeVersion: string;
@@ -292,7 +292,9 @@ export async function createStudyNarratorServices(options: {
   });
   const context: DiagnosticsContext = {
     client: descriptor.client,
-    distribution: descriptor.distribution,
+    // The descriptor carries the Task 16.1 string contract; current
+    // diagnostics accepts the three existing distributions.
+    distribution: descriptor.distribution as DiagnosticsContext["distribution"],
     transport: descriptor.transport,
     runtimeName: descriptor.runtimeName,
     runtimeVersion: descriptor.runtimeVersion,
