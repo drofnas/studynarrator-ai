@@ -7,24 +7,11 @@ import express, {
 import { createReadStream } from "node:fs";
 import { resolve } from "node:path";
 import {
-  BoundaryErrorSchema,
   ConnectionSetupStateSchema,
   ConnectionTestSummarySchema,
-  GlobalLexiconEntryCollectionSchema,
-  GlobalLexiconReplaceInputSchema,
-  IgnoredDiagnosticCollectionSchema,
-  PersistenceBackupCollectionSchema,
-  PersistenceBackupRestoreInputSchema,
-  PersistenceBackupRestoreResultSchema,
-  PersistenceStatusSchema,
-  ProjectCreateInputSchema,
-  ProjectDetailSchema,
-  ProjectDuplicateInputSchema,
   ProjectIdSchema,
   ProjectPreviewInputSchema,
   ProjectPreviewResultSchema,
-  ProjectReplaceInputSchema,
-  ProjectSummaryCollectionSchema,
   RenderArtifactIdSchema,
   RenderArtifactCollectionSchema,
   RenderIdSchema,
@@ -46,8 +33,6 @@ import {
   SpeechCatalogDiscoveryInputSchema,
   SpeechBackendConnectionAuthoringSchema,
   SpeechBackendConnectionSchema,
-  SystemDiagnosticsSchema,
-  SystemTimingConfigurationSchema,
   VoiceCatalogModelInputSchema,
   VoiceCatalogSchema,
   type SpeechBackendConnectionClient,
@@ -55,7 +40,6 @@ import {
   type ProjectPreviewClient,
   type ScratchpadClient,
   type SpeechCacheClient,
-  type SystemDiagnostics,
   type VoiceCatalogClient,
 } from "@studynarrator/shared-types";
 import {
@@ -68,6 +52,8 @@ import {
 } from "@studynarrator/application";
 import { asyncHandler } from "./asyncHandler.js";
 import { boundaryError } from "./errorMiddleware.js";
+import { createPersistenceRouter } from "./routes/persistence.js";
+import { createSystemRouter } from "./routes/system.js";
 
 function streamRenderMedia(
   request: Request,
@@ -162,212 +148,13 @@ export function createExpressApp(options: {
     );
   };
 
-  app.get("/api/health", (_request, response) => {
-    response.json(options.service.health());
-  });
-
-  app.get("/api/runtime", (_request, response) => {
-    response.json(options.service.runtime(options.context));
-  });
-
-  app.get(
-    "/api/diagnostics",
-    asyncHandler(async (_request, response) => {
-      try {
-        const diagnostics: SystemDiagnostics =
-          await options.service.diagnostics(options.context);
-        response.json(SystemDiagnosticsSchema.parse(diagnostics));
-      } catch {
-        response.status(500).json(
-          BoundaryErrorSchema.parse({
-            error: {
-              code: "DIAGNOSTICS_BOUNDARY_ERROR",
-              message:
-                "StudyNarrator could not validate the diagnostics response.",
-            },
-          }),
-        );
-      }
-    }),
+  createSystemRouter(
+    { service: options.service, context: options.context },
+    app,
   );
 
   if (options.persistence) {
-    const persistence = options.persistence;
-    app.get(
-      "/api/persistence/status",
-      asyncHandler(async (_request, response) => {
-        response.json(
-          PersistenceStatusSchema.parse(await persistence.status()),
-        );
-      }),
-    );
-    app.get(
-      "/api/persistence/backups",
-      asyncHandler(async (_request, response) => {
-        const backups = persistence.backups;
-        if (!backups)
-          throw new Error("Backup listing is not available in this context.");
-        response.json(
-          PersistenceBackupCollectionSchema.parse(await backups.list()),
-        );
-      }),
-    );
-    app.post(
-      "/api/persistence/backups/restore",
-      asyncHandler(async (request, response) => {
-        const backups = persistence.backups;
-        if (!backups)
-          throw new Error("Backup restore is not available in this context.");
-        response
-          .status(201)
-          .json(
-            PersistenceBackupRestoreResultSchema.parse(
-              await backups.restore(
-                PersistenceBackupRestoreInputSchema.parse(request.body),
-              ),
-            ),
-          );
-      }),
-    );
-    app.get(
-      "/api/projects",
-      asyncHandler(async (_request, response) => {
-        response.json(
-          ProjectSummaryCollectionSchema.parse(
-            await persistence.projects.list(),
-          ),
-        );
-      }),
-    );
-    app.post(
-      "/api/projects",
-      asyncHandler(async (request, response) => {
-        response
-          .status(201)
-          .json(
-            ProjectDetailSchema.parse(
-              await persistence.projects.create(
-                ProjectCreateInputSchema.parse(request.body),
-              ),
-            ),
-          );
-      }),
-    );
-    app.get(
-      "/api/projects/:projectId",
-      asyncHandler(async (request, response) => {
-        response.json(
-          ProjectDetailSchema.parse(
-            await persistence.projects.get(
-              ProjectIdSchema.parse(request.params.projectId),
-            ),
-          ),
-        );
-      }),
-    );
-    app.put(
-      "/api/projects/:projectId",
-      asyncHandler(async (request, response) => {
-        response.json(
-          ProjectDetailSchema.parse(
-            await persistence.projects.replace(
-              ProjectIdSchema.parse(request.params.projectId),
-              ProjectReplaceInputSchema.parse(request.body),
-            ),
-          ),
-        );
-      }),
-    );
-    app.post(
-      "/api/projects/:projectId/duplicate",
-      asyncHandler(async (request, response) => {
-        response
-          .status(201)
-          .json(
-            ProjectDetailSchema.parse(
-              await persistence.projects.duplicate(
-                ProjectIdSchema.parse(request.params.projectId),
-                ProjectDuplicateInputSchema.parse(request.body),
-              ),
-            ),
-          );
-      }),
-    );
-    app.delete(
-      "/api/projects/:projectId",
-      asyncHandler(async (request, response) => {
-        await persistence.projects.delete(
-          ProjectIdSchema.parse(request.params.projectId),
-        );
-        response.status(204).end();
-      }),
-    );
-    app.get(
-      "/api/settings/pacing",
-      asyncHandler(async (_request, response) => {
-        response.json(
-          SystemTimingConfigurationSchema.parse(
-            await persistence.settings.getPacing(),
-          ),
-        );
-      }),
-    );
-    app.put(
-      "/api/settings/pacing",
-      asyncHandler(async (request, response) => {
-        response.json(
-          SystemTimingConfigurationSchema.parse(
-            await persistence.settings.updatePacing(
-              SystemTimingConfigurationSchema.parse(request.body),
-            ),
-          ),
-        );
-      }),
-    );
-    app.get(
-      "/api/preferences/ignored-diagnostics",
-      asyncHandler(async (_request, response) => {
-        response.json(
-          IgnoredDiagnosticCollectionSchema.parse(
-            await persistence.preferences.getIgnoredDiagnostics(),
-          ),
-        );
-      }),
-    );
-    app.put(
-      "/api/preferences/ignored-diagnostics",
-      asyncHandler(async (request, response) => {
-        response.json(
-          IgnoredDiagnosticCollectionSchema.parse(
-            await persistence.preferences.replaceIgnoredDiagnostics(
-              IgnoredDiagnosticCollectionSchema.parse(request.body),
-            ),
-          ),
-        );
-      }),
-    );
-    app.get(
-      "/api/lexicon/global",
-      asyncHandler(async (_request, response) => {
-        response.json(
-          GlobalLexiconEntryCollectionSchema.parse(
-            await persistence.globalLexicon.list(),
-          ),
-        );
-      }),
-    );
-    app.put(
-      "/api/lexicon/global",
-      asyncHandler(async (request, response) => {
-        response.json(
-          GlobalLexiconEntryCollectionSchema.parse(
-            await persistence.globalLexicon.replace(
-              GlobalLexiconReplaceInputSchema.parse(request.body),
-            ),
-          ),
-        );
-      }),
-    );
+    createPersistenceRouter(options.persistence, app);
   }
 
   if (options.connection) {
