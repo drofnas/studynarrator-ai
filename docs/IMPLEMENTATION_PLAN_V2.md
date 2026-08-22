@@ -118,7 +118,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 23.2 | Verify the native rebuild per target               | P1       | S    | deferred    |
 | 23.3 | Add the release workflow, unsigned                 | P1       | S    | complete    |
 | 23.4 | Add signing and notarization                       | P1       | M    | complete    |
-| 23.5 | Decide and document the Docker support level       | P1       | S    | todo        |
+| 23.5 | Decide and document the Docker support level       | P1       | S    | complete    |
 | 24.1 | Build the golden corpus fixtures                   | P1       | M    | todo        |
 | 24.2 | Add the golden corpus test and regeneration script | P1       | S    | todo        |
 | 25.1 | Split the rendering package                        | P2       | M    | todo        |
@@ -1938,7 +1938,7 @@ If certificates are not yet available: ship unsigned, and add prominent install 
 
 ## TASK 23.5 — Decide and document the Docker support level
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 
