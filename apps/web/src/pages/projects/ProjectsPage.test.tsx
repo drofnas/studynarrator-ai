@@ -1720,22 +1720,26 @@ describe("Projects workbench", () => {
     ).toBeEnabled();
   });
 
-  it("performs one reconciliation GET after repeated stream drop signals and unsubscribes on unmount", async () => {
+  it("ignores stale reconciliation after recovered stream progress and unsubscribes on unmount", async () => {
     const { client, analyze } = fixture();
     const activeJob = renderJobFixture(
       "00000000-0000-4000-8000-000000000092",
       "synthesizing",
     );
     const reconciledJob = renderJobFixture(activeJob.id, "synthesizing", 2);
-    const getRender = vi.fn(async () => reconciledJob);
+    const recoveredJob = renderJobFixture(activeJob.id, "synthesizing", 3);
+    const getRequest = deferred<RenderJob>();
+    const getRender = vi.fn(() => getRequest.promise);
+    let publish: ((job: RenderJob) => void) | undefined;
     let reportDropped: (() => void) | undefined;
     const unsubscribe = vi.fn();
     const subscribe = vi.fn(
       (
         _renderId: string,
-        _onJob: (job: RenderJob) => void,
+        onJob: (job: RenderJob) => void,
         onDropped: () => void,
       ) => {
+        publish = onJob;
         reportDropped = onDropped;
         return unsubscribe;
       },
@@ -1752,15 +1756,57 @@ describe("Projects workbench", () => {
     });
     await waitFor(() => expect(getRender).toHaveBeenCalledWith(activeJob.id));
     expect(getRender).toHaveBeenCalledOnce();
-    expect(subscribe).toHaveBeenCalledOnce();
+    act(() => publish!(recoveredJob));
     expect(
-      await screen.findByText("2 of 4 chunks complete"),
+      await screen.findByText("3 of 4 chunks complete"),
     ).toBeInTheDocument();
+
+    await act(async () => {
+      getRequest.resolve(reconciledJob);
+      await getRequest.promise;
+    });
+    expect(screen.getByText("3 of 4 chunks complete")).toBeInTheDocument();
+    expect(
+      screen.queryByText("2 of 4 chunks complete"),
+    ).not.toBeInTheDocument();
+    expect(subscribe).toHaveBeenCalledOnce();
 
     page.unmount();
     expect(unsubscribe).toHaveBeenCalledOnce();
     act(() => reportDropped!());
     expect(getRender).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a locally started render when the initial render list resolves late", async () => {
+    const { client, analyze } = fixture();
+    const activeJob = renderJobFixture(
+      "00000000-0000-4000-8000-000000000094",
+      "synthesizing",
+    );
+    const listRequest = deferred<RenderJob[]>();
+    const unsubscribe = vi.fn();
+    const subscribe = vi.fn(() => unsubscribe);
+    const renderClient: RenderProgressClient = {
+      ...renderClientFixture([], vi.fn(), subscribe),
+      startProject: vi.fn(async () => activeJob),
+      list: vi.fn(() => listRequest.promise),
+    };
+    renderPage(client, analyze, { renderClient });
+    await openProjectTab("Render");
+    const renderButton = await screen.findByRole("button", { name: "Render" });
+    await waitFor(() => expect(renderButton).toBeEnabled());
+    fireEvent.click(renderButton);
+    await waitFor(() => expect(subscribe).toHaveBeenCalledOnce());
+    expect(screen.getByText("1 of 4 chunks complete")).toBeInTheDocument();
+
+    await act(async () => {
+      listRequest.resolve([]);
+      await listRequest.promise;
+    });
+    expect(screen.getByText("1 of 4 chunks complete")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Rendering…" })).toBeDisabled();
+    expect(subscribe).toHaveBeenCalledOnce();
+    expect(unsubscribe).not.toHaveBeenCalled();
   });
 
   it("retains polling for an Electron render client without subscriptions and stops on terminal state", async () => {

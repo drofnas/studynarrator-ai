@@ -226,6 +226,7 @@ export function ProjectsPage({
   const revisionRef = useRef(0);
   const savedRevisionRef = useRef(0);
   const analysisRevisionRef = useRef(0);
+  const renderStartRevisionRef = useRef(0);
   const saveQueueRef = useRef<Promise<boolean>>(Promise.resolve(true));
   const autosaveTimerRef = useRef<number | undefined>(undefined);
   const saveNowRef = useRef<() => Promise<boolean>>(() =>
@@ -420,11 +421,13 @@ export function ProjectsPage({
   useEffect(() => {
     if (!projectId || !renderClient) return;
     let active = true;
+    const renderStartRevision = renderStartRevisionRef.current;
     setRenderError("");
     void renderClient
       .list(projectId)
       .then((jobs) => {
-        if (!active) return;
+        if (!active || renderStartRevisionRef.current !== renderStartRevision)
+          return;
         setSelectedRenderJob(jobs[0]);
         setCompletedRenderJob(jobs.find(({ state }) => state === "complete"));
       })
@@ -454,17 +457,27 @@ export function ProjectsPage({
 
     if (renderClient.subscribe) {
       let reconciled = false;
+      let streamedUpdateRevision = 0;
+      const applyStreamedJob = (job: RenderJob) => {
+        streamedUpdateRevision += 1;
+        applyJob(job);
+      };
       const unsubscribe = renderClient.subscribe(
         activeRenderId,
-        applyJob,
+        applyStreamedJob,
         () => {
           if (!active || reconciled) return;
           reconciled = true;
+          const reconciliationRevision = streamedUpdateRevision;
           void renderClient
             .get(activeRenderId)
-            .then(applyJob)
+            .then((job) => {
+              if (streamedUpdateRevision === reconciliationRevision)
+                applyJob(job);
+            })
             .catch((error: unknown) => {
-              if (active) setRenderError(message(error));
+              if (active && streamedUpdateRevision === reconciliationRevision)
+                setRenderError(message(error));
             });
         },
       );
@@ -954,6 +967,7 @@ export function ProjectsPage({
       if (isDirty && !(await saveNow()))
         throw new Error("Save valid project changes before rendering.");
       const job = await renderClient.startProject(project.id);
+      renderStartRevisionRef.current += 1;
       setSelectedRenderJob(job);
       if (job.state === "complete") setCompletedRenderJob(job);
       setNotice("Rendering started.");
