@@ -212,6 +212,28 @@ describe("retention maintenance", () => {
     ).resolves.toEqual(Buffer.from("artifact"));
   });
 
+  it("reports corrupt cache metadata in usage and reclaim previews", async () => {
+    const { cacheKey, dataDirectory, maintenance } = await fixture();
+    await writeFile(
+      join(
+        dataDirectory,
+        "cache",
+        "speech",
+        cacheKey.slice(0, 2),
+        `${cacheKey}.json`,
+      ),
+      "not JSON",
+    );
+
+    await expect(maintenance.usage()).resolves.toMatchObject({
+      speechCache: { entries: 1, bytes: 7 },
+    });
+    await expect(maintenance.previewReclaim()).resolves.toMatchObject({
+      reclaimable: { speechCache: { entries: 1, bytes: 7 } },
+      skipped: false,
+    });
+  });
+
   it("keeps a pinned render and its cache dependencies out of reclaim", async () => {
     const { cache, cleared, dataDirectory, maintenance } = await fixture({
       pinned: true,

@@ -129,6 +129,26 @@ describe("Retention settings", () => {
     expect(retention.usage).toHaveBeenCalledTimes(2);
   });
 
+  it("shows Refresh usage failures in the accessible error state", async () => {
+    const { client, retention } = clientFixture({
+      usage: vi
+        .fn()
+        .mockResolvedValueOnce(usage)
+        .mockRejectedValueOnce(new Error("Usage unavailable")),
+    });
+    render(<RetentionSettingsPage client={client} />);
+    await screen.findByText("Retention settings are loaded.");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Refresh usage" }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Usage unavailable",
+    );
+    expect(retention.usage).toHaveBeenCalledTimes(2);
+  });
+
   it("shows retention service failures", async () => {
     const { client } = clientFixture({
       previewReclaim: vi.fn(async () => {

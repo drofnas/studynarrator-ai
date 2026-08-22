@@ -47,7 +47,16 @@ export function RetentionSettingsPage({
   const [saving, setSaving] = useState(false);
   const [reclaiming, setReclaiming] = useState(false);
 
-  const refreshUsage = async () => setUsage(await client.retention.usage());
+  const refreshUsage = async () => {
+    setError("");
+    try {
+      setUsage(await client.retention.usage());
+    } catch (reason) {
+      setError(
+        message(reason, "Managed storage usage could not be refreshed."),
+      );
+    }
+  };
 
   useEffect(() => {
     let active = true;

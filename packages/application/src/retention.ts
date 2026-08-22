@@ -25,6 +25,7 @@ const TTL_MILLISECONDS = {
 
 type RetentionTtl = "8h" | "24h" | "7d" | "never";
 interface SpeechCacheSweeper {
+  inventory(): Promise<{ entries: number; bytes: number }>;
   sweep(input: {
     ttl: RetentionTtl;
     sizeCapBytes: number;
@@ -165,14 +166,14 @@ export function createRetentionMaintenance(options: {
   };
 
   const usage = async (): Promise<RetentionUsage> => {
-    const [cacheStatus, directories] = await Promise.all([
-      options.cache.status(),
+    const [cacheInventory, directories] = await Promise.all([
+      options.speechCacheSweeper.inventory(),
       directoryUsage(),
     ]);
     return RetentionUsageSchema.parse({
       speechCache: {
-        entries: cacheStatus.entryCount,
-        bytes: cacheStatus.totalBytes,
+        entries: cacheInventory.entries,
+        bytes: cacheInventory.bytes,
       },
       jobSnapshots: {
         entries: directories.snapshots.length,

@@ -68,6 +68,7 @@ vi.mock("@studynarrator/rendering", async (importOriginal) => {
   const createSpeechCacheSweeper = actual.createSpeechCacheSweeper as (
     options: unknown,
   ) => {
+    inventory(): Promise<{ entries: number; bytes: number }>;
     sweep(input: {
       pinnedProjectIds?: readonly string[];
       sizeCapBytes: number;
@@ -79,6 +80,7 @@ vi.mock("@studynarrator/rendering", async (importOriginal) => {
     createSpeechCacheSweeper: (options: unknown) => {
       const sweeper = createSpeechCacheSweeper(options);
       return {
+        inventory: () => sweeper.inventory(),
         sweep: async (input: {
           pinnedProjectIds?: readonly string[];
           sizeCapBytes: number;

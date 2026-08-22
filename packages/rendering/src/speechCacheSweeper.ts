@@ -107,6 +107,8 @@ async function removeEntry(rootDirectory: string, key: string): Promise<void> {
 async function listEntries(rootDirectory: string): Promise<SpeechCacheEntry[]> {
   let shards;
   try {
+    const root = await lstat(rootDirectory);
+    if (!root.isDirectory() || root.isSymbolicLink()) return [];
     shards = await readdir(rootDirectory, { withFileTypes: true });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
@@ -121,6 +123,8 @@ async function listEntries(rootDirectory: string): Promise<SpeechCacheEntry[]> {
     )
       continue;
     const directory = join(rootDirectory, shard.name);
+    const details = await lstat(directory);
+    if (!details.isDirectory() || details.isSymbolicLink()) continue;
     for (const file of await readdir(directory, { withFileTypes: true })) {
       const match = METADATA_FILE_PATTERN.exec(file.name);
       const key = match?.[1];
@@ -175,6 +179,13 @@ export function createSpeechCacheSweeper(options: {
 }) {
   const rootDirectory = resolve(options.rootDirectory);
   return {
+    async inventory() {
+      const entries = await listEntries(rootDirectory);
+      return {
+        entries: entries.length,
+        bytes: entries.reduce((total, entry) => total + entry.byteLength, 0),
+      };
+    },
     async sweep(optionsInput: {
       ttl: SpeechCacheTtl;
       sizeCapBytes: number;
