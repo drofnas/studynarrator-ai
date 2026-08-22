@@ -1333,6 +1333,10 @@ export async function createRenderService(options: {
     retryOfRenderId: string | null,
     activity: SpeechCacheActivityLease | undefined,
   ): RenderJob => {
+    if (closing) {
+      activity?.release();
+      throw new Error("Render service is closing.");
+    }
     const job = RenderJobSchema.parse({
       contractVersion: RENDER_CONTRACT_VERSION,
       id,

@@ -155,6 +155,10 @@ async function fixture(
     normalizedText?: string;
     statfs?: (path: string) => Promise<{ bavail: bigint; bsize: bigint }>;
     activityGate?: SpeechCacheActivityGate;
+    computeGate?: Promise<void>;
+    cloneGate?: Promise<void>;
+    onCompute?: () => void;
+    onClone?: () => void;
   } = {},
 ) {
   const dataDirectory = await mkdtemp(join(tmpdir(), "studynarrator-render-"));
@@ -270,6 +274,8 @@ async function fixture(
     async cloneJobSnapshot(renderId) {
       if (!/^[0-9a-f-]{36}$/u.test(renderId))
         throw new Error("Invalid render id in test fixture.");
+      options.onClone?.();
+      if (options.cloneGate) await options.cloneGate;
     },
     async loadJob() {
       return { snapshot, plan, silenceAssets: new Map() };
@@ -302,7 +308,11 @@ async function fixture(
     plan,
     silenceAssets: new Map(),
   };
-  const computePlan = vi.fn(async () => computed);
+  const computePlan = vi.fn(async () => {
+    options.onCompute?.();
+    if (options.computeGate) await options.computeGate;
+    return computed;
+  });
   const synthesize = vi.fn<CachedSpeechSynthesis["synthesize"]>(async () => {
     if (options.synthesisGate) await options.synthesisGate;
     if (options.synthesisFailure) throw options.synthesisFailure;
@@ -394,6 +404,76 @@ describe("render coordinator", () => {
     expect(computePlan).toHaveBeenCalledWith(projectId);
     await service.cancel(job.id);
     await service.close();
+  });
+
+  it("releases pending start activity without publishing a job after close", async () => {
+    const activityGate = createSpeechCacheActivityGate();
+    let releaseCompute: () => void = () => undefined;
+    let enteredCompute: () => void = () => undefined;
+    const computeGate = new Promise<void>((resolve) => {
+      releaseCompute = resolve;
+    });
+    const computeEntered = new Promise<void>((resolve) => {
+      enteredCompute = resolve;
+    });
+    const { service, projectId, repository } = await fixture({
+      activityGate,
+      computeGate,
+      onCompute: enteredCompute,
+    });
+
+    const pending = service.startProject(projectId, {
+      diskSpaceCheckEnabled: false,
+    });
+    await computeEntered;
+    await service.close();
+    releaseCompute();
+
+    await expect(pending).rejects.toThrow("Render service is closing.");
+    expect(repository.jobs.size).toBe(0);
+    const maintenance = activityGate.beginMaintenance();
+    expect(maintenance).not.toBeNull();
+    maintenance?.release();
+  });
+
+  it("releases pending retry activity without publishing a job after close", async () => {
+    const activityGate = createSpeechCacheActivityGate();
+    const failedFixture = await fixture({
+      activityGate,
+      synthesisFailure: new Error("synthesis failed"),
+    });
+    const failed = await terminal(
+      failedFixture.service,
+      (await failedFixture.service.startProject(failedFixture.projectId)).id,
+    );
+    expect(failed.state).toBe("failed");
+    await failedFixture.service.close();
+
+    let releaseClone: () => void = () => undefined;
+    let enteredClone: () => void = () => undefined;
+    const cloneGate = new Promise<void>((resolve) => {
+      releaseClone = resolve;
+    });
+    const cloneEntered = new Promise<void>((resolve) => {
+      enteredClone = resolve;
+    });
+    const { service, repository } = await fixture({
+      activityGate,
+      cloneGate,
+      onClone: enteredClone,
+    });
+    repository.jobs.set(failed.id, failed);
+
+    const pending = service.retry(failed.id);
+    await cloneEntered;
+    await service.close();
+    releaseClone();
+
+    await expect(pending).rejects.toThrow("Render service is closing.");
+    expect(repository.jobs.size).toBe(1);
+    const maintenance = activityGate.beginMaintenance();
+    expect(maintenance).not.toBeNull();
+    maintenance?.release();
   });
 
   it("reads free bytes from the exact data volume and returns only requested calibrations", async () => {

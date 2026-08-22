@@ -108,9 +108,9 @@ export interface CachedSpeechSynthesis {
   synthesize(input: CachedSpeechSynthesisInput): Promise<CachedSpeechResult>;
 }
 
-export interface CachedSpeechSynthesisRunner {
-  (input: SpeachesSynthesisInput): Promise<SpeachesSynthesisResult>;
-}
+export type CachedSpeechSynthesisRunner = (
+  input: SpeachesSynthesisInput,
+) => Promise<SpeachesSynthesisResult>;
 
 export function createApplicationSpeechCache(
   dataDirectory: string,
