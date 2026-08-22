@@ -42,7 +42,7 @@ StudyNarrator starts and remains healthy while Speaches is offline. Project edit
 
 ## Data and upgrades
 
-The named `studynarrator-data` volume is mounted at `/data` and contains the SQLite database, cache, frozen plans, render artifacts, and generated exports. Recreating or upgrading the application container leaves this volume intact.
+The named `studynarrator-data` volume is mounted at `/data` and contains the SQLite database, cache, render artifacts, and generated exports. Recreating or upgrading the application container leaves this volume intact.
 
 Before an upgrade, stop StudyNarrator and back up the volume:
 
