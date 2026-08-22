@@ -15,6 +15,7 @@ import {
   RenderJobSchema,
   RenderSegmentInputSchema,
   RenderWaveformSchema,
+  type RenderJob,
 } from "@studynarrator/shared-types";
 import type {
   RenderService,
@@ -68,6 +69,73 @@ export function createRendersRouter(
             await renders.get(RenderIdSchema.parse(request.params.renderId)),
           ),
         );
+      }),
+    );
+    router.get(
+      "/api/renders/:renderId/events",
+      asyncHandler(async (request, response) => {
+        const renderId = RenderIdSchema.parse(request.params.renderId);
+        const initial = RenderJobSchema.parse(await renders.get(renderId));
+        let closed = false;
+        let heartbeat: NodeJS.Timeout | undefined;
+        let unsubscribe: (() => void) | undefined;
+        let lastSnapshot = "";
+
+        const cleanup = () => {
+          if (closed) return;
+          closed = true;
+          request.off("aborted", cleanup);
+          response.off("close", cleanup);
+          if (heartbeat) {
+            clearInterval(heartbeat);
+            heartbeat = undefined;
+          }
+          const stop = unsubscribe;
+          unsubscribe = undefined;
+          stop?.();
+          if (!response.writableEnded && !response.destroyed) response.end();
+        };
+        const isTerminal = (job: RenderJob) =>
+          job.state === "complete" ||
+          job.state === "failed" ||
+          job.state === "canceled";
+        const emit = (job: RenderJob) => {
+          if (closed || response.writableEnded || response.destroyed) return;
+          const snapshot = JSON.stringify(RenderJobSchema.parse(job));
+          response.write(
+            `event: ${isTerminal(job) ? "terminal" : "progress"}\ndata: ${snapshot}\n\n`,
+          );
+          lastSnapshot = snapshot;
+          if (isTerminal(job)) cleanup();
+        };
+
+        request.once("aborted", cleanup);
+        response.once("close", cleanup);
+        response.status(200);
+        response.setHeader("content-type", "text/event-stream");
+        response.setHeader("cache-control", "no-cache");
+        response.setHeader("connection", "keep-alive");
+        response.setHeader("x-accel-buffering", "no");
+        response.flushHeaders();
+        emit(initial);
+        if (closed) return;
+
+        heartbeat = setInterval(() => {
+          if (!closed && !response.writableEnded && !response.destroyed)
+            response.write(": heartbeat\n\n");
+        }, 15_000);
+        heartbeat.unref();
+
+        const stop = renders.subscribe(renderId, emit);
+        if (closed) {
+          stop();
+          return;
+        }
+        unsubscribe = stop;
+
+        const reconciled = RenderJobSchema.parse(await renders.get(renderId));
+        if (!closed && JSON.stringify(reconciled) !== lastSnapshot)
+          emit(reconciled);
       }),
     );
     router.post(

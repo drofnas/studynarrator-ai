@@ -13,6 +13,7 @@ import {
   createUnavailablePersistenceService,
   createVoiceCatalogService,
   type DiagnosticsContext,
+  type RenderService,
 } from "@studynarrator/application";
 import {
   BackupRestoreError,
@@ -29,11 +30,13 @@ import {
   ProjectDetailSchema,
   ProjectPreviewResultSchema,
   ProjectSummaryCollectionSchema,
+  RenderJobSchema,
   RuntimeSchema,
   SpeechCacheCleanupResultSchema,
   SpeechCacheStatusSchema,
   SpeechCatalogSchema,
   SystemDiagnosticsSchema,
+  type RenderJob,
 } from "@studynarrator/shared-types";
 import { attachStaticWebApplication, createExpressApp } from "./app.js";
 import { REST_API_MANIFEST } from "./apiManifest.js";
@@ -68,6 +71,120 @@ async function listen(
   });
   openServers.add(server);
   return server;
+}
+
+function serverUrl(server: Server, path: string): string {
+  const address = server.address();
+  if (!address || typeof address === "string")
+    throw new Error("Expected the test server to listen on TCP.");
+  return `http://127.0.0.1:${String(address.port)}${path}`;
+}
+
+async function openEventStream(
+  server: Server,
+  path: string,
+  signal?: AbortSignal,
+) {
+  const response = await fetch(serverUrl(server, path), {
+    ...(signal ? { signal } : {}),
+    headers: { accept: "text/event-stream" },
+  });
+  if (!response.body) throw new Error("Expected an SSE response body.");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let text = "";
+  const readNext = async (): Promise<boolean> => {
+    const result = await reader.read();
+    if (result.done) {
+      text += decoder.decode();
+      return false;
+    }
+    text += decoder.decode(result.value, { stream: true });
+    return true;
+  };
+  return {
+    response,
+    async readUntil(fragment: string): Promise<string> {
+      while (!text.includes(fragment)) {
+        if (!(await readNext()))
+          throw new Error(`SSE stream ended before ${fragment}.`);
+      }
+      return text;
+    },
+    async readToEnd(): Promise<string> {
+      while (await readNext()) {
+        // Read until the server closes the terminal stream.
+      }
+      return text;
+    },
+  };
+}
+
+function renderJobInState(
+  job: RenderJob,
+  state: RenderJob["state"],
+): RenderJob {
+  const terminal =
+    state === "complete" || state === "failed" || state === "canceled";
+  return RenderJobSchema.parse({
+    ...job,
+    state,
+    progress: { ...job.progress, phase: state },
+    error:
+      state === "failed"
+        ? {
+            code: "RENDER_SYNTHESIS_FAILED",
+            message: "Speech generation failed for the current segment.",
+            retryable: true,
+            phase: "synthesizing",
+            entryOrdinal: null,
+            chunkOrdinal: null,
+            sourceRange: null,
+            speakerId: null,
+            voiceId: null,
+          }
+        : null,
+    startedAt: state === "queued" ? null : job.startedAt,
+    finishedAt: terminal ? job.finishedAt : null,
+  });
+}
+
+function observedRenderService(
+  base: RenderService,
+  initial: RenderJob,
+  reconcileAfterSubscribe?: RenderJob,
+) {
+  let current = initial;
+  let observer: ((job: RenderJob) => void) | undefined;
+  let resolveUnsubscribed: (() => void) | undefined;
+  const unsubscribed = new Promise<void>((resolve) => {
+    resolveUnsubscribed = resolve;
+  });
+  const unsubscribe = vi.fn(() => {
+    observer = undefined;
+    resolveUnsubscribed?.();
+  });
+  const get = vi.fn(async () => current);
+  const subscribe = vi.fn(
+    (_renderId: string, callback: (job: RenderJob) => void) => {
+      observer = callback;
+      if (reconcileAfterSubscribe) current = reconcileAfterSubscribe;
+      return unsubscribe;
+    },
+  );
+  const service: RenderService = { ...base, get, subscribe };
+  return {
+    service,
+    get,
+    subscribe,
+    unsubscribe,
+    unsubscribed,
+    publish(job: RenderJob) {
+      current = job;
+      if (!observer) throw new Error("Expected an active render observer.");
+      observer(job);
+    },
+  };
 }
 
 afterEach(async () => {
@@ -888,6 +1005,171 @@ describe("Express render review media", () => {
   });
 });
 
+describe("Express render progress events", () => {
+  const renderId = "00000000-0000-4000-8000-000000000003";
+
+  it("streams progress, heartbeats, and one terminal event before ending", async () => {
+    const base = await fixture();
+    const completed = RenderJobSchema.parse(await base.renders.get());
+    const queued = renderJobInState(completed, "queued");
+    const synthesizing = renderJobInState(completed, "synthesizing");
+    const observed = observedRenderService(base.renders, queued);
+    const intervalSpy = vi.spyOn(globalThis, "setInterval");
+    const clearIntervalSpy = vi.spyOn(globalThis, "clearInterval");
+    try {
+      const server = await listen(
+        createExpressApp({
+          service: base.service,
+          renders: observed.service,
+          context,
+        }),
+      );
+      const stream = await openEventStream(
+        server,
+        `/api/renders/${renderId}/events`,
+      );
+
+      expect(stream.response.status).toBe(200);
+      expect(stream.response.headers.get("content-type")).toBe(
+        "text/event-stream",
+      );
+      expect(stream.response.headers.get("cache-control")).toBe("no-cache");
+      expect(stream.response.headers.get("connection")).toBe("keep-alive");
+      expect(stream.response.headers.get("x-accel-buffering")).toBe("no");
+      await stream.readUntil('"state":"queued"');
+
+      const intervalCallIndex = intervalSpy.mock.calls.findIndex(
+        ([, delay]) => delay === 15_000,
+      );
+      expect(intervalCallIndex).toBeGreaterThanOrEqual(0);
+      const intervalCall = intervalSpy.mock.calls[intervalCallIndex]!;
+      const heartbeatTimer = intervalSpy.mock.results[intervalCallIndex]!
+        .value as ReturnType<typeof setInterval>;
+      expect(heartbeatTimer.hasRef()).toBe(false);
+      intervalCall[0]();
+      await stream.readUntil(": heartbeat\n\n");
+
+      observed.publish(synthesizing);
+      await stream.readUntil('"state":"synthesizing"');
+      observed.publish(completed);
+      const body = await stream.readToEnd();
+
+      expect(body.match(/^event: progress$/gmu)).toHaveLength(2);
+      expect(body.match(/^event: terminal$/gmu)).toHaveLength(1);
+      expect(body).toContain('"state":"complete"');
+      for (const frame of body.split("\n\n")) {
+        const data = frame
+          .split("\n")
+          .find((line) => line.startsWith("data: "));
+        if (data)
+          RenderJobSchema.parse(
+            JSON.parse(data.slice("data: ".length)) as unknown,
+          );
+      }
+      expect(observed.get).toHaveBeenCalledTimes(2);
+      expect(observed.subscribe).toHaveBeenCalledOnce();
+      expect(observed.unsubscribe).toHaveBeenCalledOnce();
+      expect(
+        clearIntervalSpy.mock.calls.filter(
+          ([timer]) => timer === heartbeatTimer,
+        ),
+      ).toHaveLength(1);
+    } finally {
+      clearIntervalSpy.mockRestore();
+      intervalSpy.mockRestore();
+    }
+  });
+
+  it("reconciles a terminal update that occurs before observer registration", async () => {
+    const base = await fixture();
+    const completed = RenderJobSchema.parse(await base.renders.get());
+    const queued = renderJobInState(completed, "queued");
+    const observed = observedRenderService(base.renders, queued, completed);
+    const server = await listen(
+      createExpressApp({
+        service: base.service,
+        renders: observed.service,
+        context,
+      }),
+    );
+
+    const stream = await openEventStream(
+      server,
+      `/api/renders/${renderId}/events`,
+    );
+    const body = await stream.readToEnd();
+
+    expect(body.match(/^event: progress$/gmu)).toHaveLength(1);
+    expect(body.match(/^event: terminal$/gmu)).toHaveLength(1);
+    expect(body).toContain('"state":"queued"');
+    expect(body).toContain('"state":"complete"');
+    expect(observed.get).toHaveBeenCalledTimes(2);
+    expect(observed.unsubscribe).toHaveBeenCalledOnce();
+  });
+
+  it("unsubscribes and clears the heartbeat when the client disconnects", async () => {
+    const base = await fixture();
+    const completed = RenderJobSchema.parse(await base.renders.get());
+    const queued = renderJobInState(completed, "queued");
+    const observed = observedRenderService(base.renders, queued);
+    const clearIntervalSpy = vi.spyOn(globalThis, "clearInterval");
+    const controller = new AbortController();
+    try {
+      const server = await listen(
+        createExpressApp({
+          service: base.service,
+          renders: observed.service,
+          context,
+        }),
+      );
+      const stream = await openEventStream(
+        server,
+        `/api/renders/${renderId}/events`,
+        controller.signal,
+      );
+      await stream.readUntil('"state":"queued"');
+
+      controller.abort();
+      await observed.unsubscribed;
+
+      expect(observed.unsubscribe).toHaveBeenCalledOnce();
+      expect(clearIntervalSpy).toHaveBeenCalledOnce();
+    } finally {
+      controller.abort();
+      clearIntervalSpy.mockRestore();
+    }
+  });
+
+  it.each(["failed", "canceled"] as const)(
+    "classifies an initial %s render as terminal without subscribing",
+    async (state) => {
+      const base = await fixture();
+      const completed = RenderJobSchema.parse(await base.renders.get());
+      const terminal = renderJobInState(completed, state);
+      const observed = observedRenderService(base.renders, terminal);
+      const server = await listen(
+        createExpressApp({
+          service: base.service,
+          renders: observed.service,
+          context,
+        }),
+      );
+
+      const stream = await openEventStream(
+        server,
+        `/api/renders/${renderId}/events`,
+      );
+      const body = await stream.readToEnd();
+
+      expect(body.match(/^event: progress$/gmu)).toBeNull();
+      expect(body.match(/^event: terminal$/gmu)).toHaveLength(1);
+      expect(body).toContain(`"state":"${state}"`);
+      expect(observed.get).toHaveBeenCalledOnce();
+      expect(observed.subscribe).not.toHaveBeenCalled();
+    },
+  );
+});
+
 interface ExpressRouteLayer {
   route?: {
     path: string;
@@ -934,10 +1216,10 @@ describe("REST API operation manifest", () => {
       ({ method, path }) => `${method} ${path}`,
     );
     expect(registered.sort()).toEqual([...declared].sort());
-    expect(new Set(declared).size).toBe(53);
+    expect(new Set(declared).size).toBe(54);
   });
 
-  it("exercises a successful schema-valid response for all 53 operations", async () => {
+  it("exercises a successful schema-valid response for all 54 operations", async () => {
     const { app } = await fixture();
     const covered = new Set<string>();
     const call = async (
@@ -1108,6 +1390,22 @@ describe("REST API operation manifest", () => {
     ).body as { id: string };
     await call("GET", `/api/projects/${created.id}/renders`, 200);
     await call("GET", `/api/renders/${render.id}`, 200);
+    const renderEvents = await call(
+      "GET",
+      `/api/renders/${render.id}/events`,
+      200,
+    );
+    expect(renderEvents.headers["content-type"]).toMatch(
+      /^text\/event-stream/u,
+    );
+    expect(renderEvents.text).toContain("event: terminal\n");
+    const terminalData = renderEvents.text
+      .split("\n")
+      .find((line) => line.startsWith("data: "));
+    expect(terminalData).toBeDefined();
+    RenderJobSchema.parse(
+      JSON.parse(terminalData!.slice("data: ".length)) as unknown,
+    );
     await call("POST", `/api/renders/${render.id}/cancel`, 200);
     await call("POST", `/api/renders/${render.id}/retry`, 202);
     const artifacts = (
@@ -1219,6 +1517,7 @@ describe("REST API operation manifest", () => {
         .expect(400),
       request(app).get("/api/projects/not-a-uuid/renders").expect(400),
       request(app).get("/api/renders/not-a-uuid").expect(400),
+      request(app).get("/api/renders/not-a-uuid/events").expect(400),
       request(app).post("/api/renders/not-a-uuid/cancel").expect(400),
       request(app).post("/api/renders/not-a-uuid/retry").expect(400),
       request(app).get("/api/renders/not-a-uuid/artifacts").expect(400),

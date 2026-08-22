@@ -21,6 +21,7 @@ export const REST_API_MANIFEST = [
   { method: "POST", path: "/api/projects/:projectId/renders" },
   { method: "GET", path: "/api/projects/:projectId/renders" },
   { method: "GET", path: "/api/renders/:renderId" },
+  { method: "GET", path: "/api/renders/:renderId/events" },
   { method: "POST", path: "/api/renders/:renderId/cancel" },
   { method: "POST", path: "/api/renders/:renderId/retry" },
   { method: "GET", path: "/api/renders/:renderId/artifacts" },
