@@ -24,6 +24,8 @@ import {
   type SystemService,
 } from "@studynarrator/application";
 import { boundaryError, type BoundaryLogger } from "./errorMiddleware.js";
+import { createHostAllowlistMiddleware } from "./hostAllowlist.js";
+import { resolveServerHostAllowlist } from "./runtimeConfig.js";
 import { createConnectionRouter } from "./routes/connection.js";
 import { createPersistenceRouter } from "./routes/persistence.js";
 import { createPreviewRouter } from "./routes/preview.js";
@@ -116,9 +118,15 @@ export function createExpressApp(options: {
   speechCache?: SpeechCacheClient;
   scriptGeneration?: ScriptGenerationService;
   logger?: BoundaryLogger;
+  allowedHosts?: readonly string[];
 }): Express {
   const app = express();
   app.disable("x-powered-by");
+  app.use(
+    createHostAllowlistMiddleware(
+      options.allowedHosts ?? resolveServerHostAllowlist(),
+    ),
+  );
   app.use((_request, response, next) => {
     const requestId = randomUUID();
     response.locals.requestId = requestId;

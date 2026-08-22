@@ -13,6 +13,17 @@ Requirements: Docker Engine or Docker Desktop with Docker Compose.
 
 The supplied Compose package binds to loopback by default. Change `STUDYNARRATOR_BIND_ADDRESS` only when browser access from another device is intentional and the surrounding network is trusted.
 
+StudyNarrator also validates every HTTP `Host` header. By default it accepts only `localhost`, `127.0.0.1`, and `[::1]` (with or without a port), plus its configured listen host. For intentional LAN or reverse-proxy exposure, use a custom Compose override to pass the additional comma-separated hosts into the container:
+
+```yaml
+services:
+  study-narrator:
+    environment:
+      STUDYNARRATOR_ALLOWED_HOSTS: study.example.test,192.168.1.50
+```
+
+Do not treat the Compose `.env` file as container environment configuration: the supplied Compose file uses it only for host binding, ports, and image metadata. Keep the allowlist narrow; this setting does not add authentication.
+
 ## Connect to Speaches
 
 - Docker host: `http://host.docker.internal:8000`
