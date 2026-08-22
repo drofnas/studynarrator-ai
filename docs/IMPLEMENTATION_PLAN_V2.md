@@ -113,7 +113,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 21.2 | Add the cache sweeper                              | P1       | M    | complete    |
 | 21.3 | Add render pinning                                 | P1       | S    | complete    |
 | 21.4 | Add the retention settings screen                  | P1       | M    | complete    |
-| 22   | Host header allowlist                              | P1       | S    | todo        |
+| 22   | Host header allowlist                              | P1       | S    | complete    |
 | 23.1 | Add electron-builder configuration                 | P1       | M    | todo        |
 | 23.2 | Verify the native rebuild per target               | P1       | S    | todo        |
 | 23.3 | Add the release workflow, unsigned                 | P1       | S    | todo        |
