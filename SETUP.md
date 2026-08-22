@@ -2,6 +2,15 @@
 
 This guide covers the Speaches installation, the speech model download, the first StudyNarrator start, and connecting the two. StudyNarrator itself does not bundle a speech engine.
 
+## Unsigned desktop installers: verify before opening
+
+Current desktop installers are unsigned because code signing and notarization are not yet available. Obtain installers only from the [official StudyNarrator GitHub Release](https://github.com/drofnas/studynarrator-ai/releases), then verify the installer against the published SHA-256 checksum in `SHA256SUMS.txt` before bypassing any warning. Do not continue if the checksum does not match.
+
+After the checksum matches, use only the warning-specific path below; do not disable Gatekeeper or SmartScreen globally.
+
+- **macOS Gatekeeper:** Move the app from the verified DMG to Applications. In Finder, Control-click the app, choose **Open**, then confirm **Open**. If macOS instead reports that the app was blocked, open **System Settings** > **Privacy & Security**, select **Open Anyway** for that app, then confirm **Open**.
+- **Windows SmartScreen:** Start the verified installer. In the **Windows protected your PC** dialog, select **More info**, then **Run anyway**. If an organization policy prevents this option, do not change that policy; contact the organization administrator.
+
 ## 1. Set up Speaches
 
 Install Docker Engine with the Compose plugin, or Docker Desktop. Speaches recommends Docker Compose and publishes separate CPU and NVIDIA CUDA configurations in its [official installation guide](https://speaches.ai/installation/).
