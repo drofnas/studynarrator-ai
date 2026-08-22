@@ -431,6 +431,7 @@ describe("Express boundary logging", () => {
     const { app } = await fixture(logger);
     const missingProjectId = "00000000-0000-4000-8000-000000000099";
     const secret = "private-request-value-must-not-leak";
+    const sensitiveProjectPath = "PrivateProjectName";
 
     const known = await request(app)
       .get(`/api/projects/${missingProjectId}?secret=${secret}`)
@@ -441,6 +442,12 @@ describe("Express boundary logging", () => {
         message: "The requested persistence record does not exist.",
       },
     });
+    const pathValidation = await request(app)
+      .get(`/api/projects/${sensitiveProjectPath}`)
+      .expect(400);
+    expect(BoundaryErrorSchema.parse(pathValidation.body).error.code).toBe(
+      "VALIDATION_ERROR",
+    );
     const validation = await request(app)
       .post("/api/projects")
       .send({ name: "", password: secret })
@@ -460,7 +467,7 @@ describe("Express boundary logging", () => {
       },
     });
 
-    const responses = [known, validation, unknown];
+    const responses = [known, pathValidation, validation, unknown];
     const requestIds = responses.map(
       ({ headers }) => headers["x-request-id"] as string,
     );
@@ -470,8 +477,9 @@ describe("Express boundary logging", () => {
       ),
       expect.any(String),
       expect.any(String),
+      expect.any(String),
     ]);
-    expect(new Set(requestIds).size).toBe(3);
+    expect(new Set(requestIds).size).toBe(4);
     const boundaryLogs = logger.error.mock.calls.map(
       ([bindings]) => bindings as Record<string, unknown>,
     );
@@ -480,7 +488,7 @@ describe("Express boundary logging", () => {
         event: "boundary-error",
         requestId: requestIds[0],
         method: "GET",
-        path: `/api/projects/${missingProjectId}`,
+        path: "/api/projects/:projectId",
         status: 404,
         code: "NOT_FOUND",
         cause: { name: "Error", code: "PERSISTENCE_NOT_FOUND" },
@@ -488,8 +496,8 @@ describe("Express boundary logging", () => {
       expect.objectContaining({
         event: "boundary-error",
         requestId: requestIds[1],
-        method: "POST",
-        path: "/api/projects",
+        method: "GET",
+        path: "/api/projects/:projectId",
         status: 400,
         code: "VALIDATION_ERROR",
         cause: { name: "ZodError" },
@@ -499,12 +507,22 @@ describe("Express boundary logging", () => {
         requestId: requestIds[2],
         method: "POST",
         path: "/api/projects",
+        status: 400,
+        code: "VALIDATION_ERROR",
+        cause: { name: "ZodError" },
+      }),
+      expect.objectContaining({
+        event: "boundary-error",
+        requestId: requestIds[3],
+        method: "POST",
+        path: "[unmatched]",
         status: 500,
         code: "PERSISTENCE_BOUNDARY_ERROR",
         cause: { name: "SyntaxError" },
       }),
     ]);
     expect(JSON.stringify(boundaryLogs)).not.toContain(secret);
+    expect(JSON.stringify(boundaryLogs)).not.toContain(sensitiveProjectPath);
     expect(JSON.stringify(boundaryLogs)).not.toContain("query");
     expect(JSON.stringify(boundaryLogs)).not.toContain("body");
   });

@@ -17,6 +17,11 @@ function safeCauseField(value: unknown): string | undefined {
     : undefined;
 }
 
+function matchedRoutePath(request: Request): string {
+  const route = request.route as { path?: unknown } | undefined;
+  return typeof route?.path === "string" ? route.path : "[unmatched]";
+}
+
 function handleBoundaryError(
   logger: BoundaryLogger,
   error: unknown,
@@ -175,7 +180,7 @@ function handleBoundaryError(
       event: "boundary-error",
       requestId: response.locals.requestId,
       method: request.method,
-      path: request.path,
+      path: matchedRoutePath(request),
       status,
       code,
       cause: {
