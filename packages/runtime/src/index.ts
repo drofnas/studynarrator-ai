@@ -2,6 +2,9 @@ import { spawn } from "node:child_process";
 import type { SpawnOptions } from "node:child_process";
 import type { FfmpegCheck } from "@studynarrator/application";
 
+export { createLogger, serverIdentityHash } from "./logger.js";
+export type { CreateLoggerOptions, Logger, LoggerLevel } from "./logger.js";
+
 interface ChildProcessLike {
   stdout: NodeJS.ReadableStream;
   stderr: NodeJS.ReadableStream;
