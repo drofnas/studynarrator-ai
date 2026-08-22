@@ -833,8 +833,8 @@ describe("Express persistence API", () => {
     const persistence = createUnavailablePersistenceService({
       contractVersion: 1,
       state: "unavailable",
-      databaseSchemaVersion: 4,
-      targetDatabaseSchemaVersion: 4,
+      databaseSchemaVersion: 5,
+      targetDatabaseSchemaVersion: 5,
       databasePath: "/tmp/studynarrator.sqlite",
       latestBackupPath: "/tmp/backups/recovery.sqlite",
       code: "MIGRATION_FAILED",

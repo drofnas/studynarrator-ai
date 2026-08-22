@@ -380,6 +380,22 @@ export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
       `);
     },
   },
+  {
+    version: 5,
+    name: "voice-timing-calibration",
+    up(database) {
+      database.exec(`
+        CREATE TABLE voice_timing_calibration (
+          model_id TEXT NOT NULL,
+          voice_id TEXT NOT NULL,
+          milliseconds_per_normalized_character REAL NOT NULL CHECK (milliseconds_per_normalized_character > 0),
+          sample_count INTEGER NOT NULL CHECK (sample_count > 0),
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (model_id, voice_id)
+        );
+      `);
+    },
+  },
 ]);
 
 interface VersionRow {

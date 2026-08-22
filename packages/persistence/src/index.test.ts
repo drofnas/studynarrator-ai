@@ -63,13 +63,20 @@ describe("database baseline", () => {
       { version: 2, name: "project-speech-cache-lifecycle" },
       { version: 3, name: "global-named-sense-defaults" },
       { version: 4, name: "neutral-speech-backend-naming" },
+      { version: 5, name: "voice-timing-calibration" },
     ]);
-    expect(first.appliedVersions).toEqual([1, 2, 3, 4]);
-    expect(first.databaseSchemaVersion).toBe(4);
+    expect(first.appliedVersions).toEqual([1, 2, 3, 4, 5]);
+    expect(first.databaseSchemaVersion).toBe(5);
     expect(first.backupPath).toBeNull();
     expect(
       first.database.prepare("SELECT version FROM schema_migrations").all(),
-    ).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }]);
+    ).toEqual([
+      { version: 1 },
+      { version: 2 },
+      { version: 3 },
+      { version: 4 },
+      { version: 5 },
+    ]);
     expect(
       first.database
         .prepare(
@@ -126,6 +133,54 @@ describe("database baseline", () => {
         .get(),
     ).toEqual({ count: 0 });
     second.database.close();
+  });
+
+  it("creates the constrained voice timing calibration table", async () => {
+    const databasePath = await temporaryDatabase(
+      "studynarrator-voice-timing-schema-",
+    );
+    const migrated = await migrateDatabase({
+      Database: DatabaseAdapter,
+      databasePath,
+    });
+    const database = migrated.database as Database.Database;
+
+    expect(columns(database, "voice_timing_calibration")).toEqual([
+      "model_id",
+      "voice_id",
+      "milliseconds_per_normalized_character",
+      "sample_count",
+      "updated_at",
+    ]);
+    expect(
+      (
+        database
+          .prepare("PRAGMA table_info(voice_timing_calibration)")
+          .all() as Array<{
+          name: string;
+          notnull: number;
+          pk: number;
+        }>
+      )
+        .filter(({ pk }) => pk > 0)
+        .map(({ name, notnull, pk }) => ({ name, notnull, pk })),
+    ).toEqual([
+      { name: "model_id", notnull: 1, pk: 1 },
+      { name: "voice_id", notnull: 1, pk: 2 },
+    ]);
+
+    const insert = database.prepare(`
+      INSERT INTO voice_timing_calibration (
+        model_id, voice_id, milliseconds_per_normalized_character, sample_count, updated_at
+      ) VALUES (?, ?, ?, ?, ?)
+    `);
+    expect(() =>
+      insert.run("model", "zero-average", 0, 1, "2026-08-21T00:00:00.000Z"),
+    ).toThrow(/CHECK constraint failed/u);
+    expect(() =>
+      insert.run("model", "zero-count", 1, 0, "2026-08-21T00:00:00.000Z"),
+    ).toThrow(/CHECK constraint failed/u);
+    migrated.database.close();
   });
 
   it("seeds the same global lexicon rows a pre-change database contains", async () => {
@@ -508,9 +563,9 @@ describe("database baseline", () => {
       databasePath,
       logger,
     });
-    expect(upgraded.appliedVersions).toEqual([3, 4]);
-    expect(upgraded.databaseSchemaVersion).toBe(4);
-    expect(upgraded.backupPath).toContain("-v0002-to-v0004-");
+    expect(upgraded.appliedVersions).toEqual([3, 4, 5]);
+    expect(upgraded.databaseSchemaVersion).toBe(5);
+    expect(upgraded.backupPath).toContain("-v0002-to-v0005-");
     if (upgraded.backupPath === null)
       throw new Error("Expected the migration backup path.");
     expect(logger.info).toHaveBeenNthCalledWith(
@@ -519,7 +574,7 @@ describe("database baseline", () => {
         event: "database-migration-backup-created",
         backupPath: upgraded.backupPath,
         fromDatabaseSchemaVersion: 2,
-        toDatabaseSchemaVersion: 4,
+        toDatabaseSchemaVersion: 5,
       },
       "Database migration backup created",
     );
@@ -543,6 +598,15 @@ describe("database baseline", () => {
     );
     expect(logger.info).toHaveBeenNthCalledWith(
       4,
+      {
+        event: "database-migration-applied",
+        migrationVersion: 5,
+        migrationName: "voice-timing-calibration",
+      },
+      "Database migration applied",
+    );
+    expect(logger.info).toHaveBeenNthCalledWith(
+      5,
       {
         event: "database-backups-pruned",
         removedCount: 0,
@@ -642,8 +706,8 @@ describe("database baseline", () => {
       Database: DatabaseAdapter,
       databasePath,
     });
-    expect(upgraded.appliedVersions).toEqual([4]);
-    expect(upgraded.databaseSchemaVersion).toBe(4);
+    expect(upgraded.appliedVersions).toEqual([4, 5]);
+    expect(upgraded.databaseSchemaVersion).toBe(5);
     expect(
       upgraded.database
         .prepare(
@@ -736,12 +800,18 @@ describe("database baseline", () => {
       old.exec(`
       CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
       CREATE TABLE preserved_development_data (value TEXT NOT NULL);
-      INSERT INTO schema_migrations (version, applied_at) VALUES (${String(version)}, '2026-08-11T00:00:00.000Z');
-      INSERT INTO preserved_development_data (value) VALUES ('keep-me');
     `);
+      old
+        .prepare(
+          "INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+        )
+        .run(version, "2026-08-11T00:00:00.000Z");
+      old
+        .prepare("INSERT INTO preserved_development_data (value) VALUES (?)")
+        .run("keep-me");
       old.close();
 
-      if (version > 4) {
+      if (version > 5) {
         await expect(
           migrateDatabase({ Database: DatabaseAdapter, databasePath }),
         ).rejects.toBeInstanceOf(SchemaTooNewError);
@@ -779,7 +849,7 @@ describe("database baseline", () => {
       .run();
     baseline.database.close();
     const failing: Migration = {
-      version: 5,
+      version: 6,
       name: "intentional-test-failure",
       up(database) {
         database.exec(
@@ -799,7 +869,7 @@ describe("database baseline", () => {
       failure = error as MigrationFailureError;
     }
     expect(failure).toBeInstanceOf(MigrationFailureError);
-    expect(failure?.backupPath).toContain("-v0004-to-v0005-");
+    expect(failure?.backupPath).toContain("-v0005-to-v0006-");
     expect((await stat(failure!.backupPath!)).mode & 0o777).toBe(0o600);
     expect((await readFile(failure!.backupPath!)).byteLength).toBeGreaterThan(
       0,
@@ -935,7 +1005,7 @@ describe("StudyNarratorRepository", () => {
     });
     expect(first.status()).toMatchObject({
       contractVersion: 1,
-      databaseSchemaVersion: 4,
+      databaseSchemaVersion: 5,
     });
     const created = first.createProject({
       name: "Persistence restart proof",
@@ -1111,6 +1181,76 @@ describe("StudyNarratorRepository", () => {
     reopened.close();
   });
 
+  it("upserts validated voice timing calibration and persists it across reopen", async () => {
+    const databasePath = await temporaryDatabase(
+      "studynarrator-voice-timing-calibration-",
+    );
+    const repository = await openStudyNarratorRepository({
+      Database: DatabaseAdapter,
+      databasePath,
+    });
+    const initial = {
+      modelId: "model-a",
+      voiceId: "voice-a",
+      millisecondsPerNormalizedCharacter: 61.25,
+      sampleCount: 2,
+      updatedAt: "2026-08-21T10:00:00.000Z",
+    };
+
+    expect(
+      repository.getVoiceTimingCalibration(initial.modelId, initial.voiceId),
+    ).toBeNull();
+    expect(repository.upsertVoiceTimingCalibration(initial)).toEqual(initial);
+    expect(
+      repository.getVoiceTimingCalibration(initial.modelId, initial.voiceId),
+    ).toEqual(initial);
+    expect(() =>
+      repository.upsertVoiceTimingCalibration({
+        ...initial,
+        millisecondsPerNormalizedCharacter: 0,
+      }),
+    ).toThrow();
+    expect(() =>
+      repository.upsertVoiceTimingCalibration({ ...initial, sampleCount: 0 }),
+    ).toThrow();
+    expect(() =>
+      repository.upsertVoiceTimingCalibration({
+        ...initial,
+        updatedAt: "not-a-timestamp",
+      }),
+    ).toThrow();
+
+    const replacement = {
+      ...initial,
+      millisecondsPerNormalizedCharacter: 54.5,
+      sampleCount: 7,
+      updatedAt: "2026-08-21T11:00:00.000Z",
+    };
+    expect(repository.upsertVoiceTimingCalibration(replacement)).toEqual(
+      replacement,
+    );
+    repository.close();
+
+    const inspected = new Database(databasePath, { readonly: true });
+    expect(
+      inspected
+        .prepare(
+          "SELECT count(*) AS count FROM voice_timing_calibration WHERE model_id = ? AND voice_id = ?",
+        )
+        .get(initial.modelId, initial.voiceId),
+    ).toEqual({ count: 1 });
+    inspected.close();
+
+    const reopened = await openStudyNarratorRepository({
+      Database: DatabaseAdapter,
+      databasePath,
+    });
+    expect(
+      reopened.getVoiceTimingCalibration(initial.modelId, initial.voiceId),
+    ).toEqual(replacement);
+    reopened.close();
+  });
+
   it("persists marker evidence and durable render state", async () => {
     const databasePath = await temporaryDatabase("studynarrator-render-state-");
     const repository = await openStudyNarratorRepository({
@@ -1120,7 +1260,7 @@ describe("StudyNarratorRepository", () => {
     });
     expect(repository.runMarker()).toMatchObject({
       markerKey: "runtime.storage-self-test",
-      migrationVersion: 4,
+      migrationVersion: 5,
     });
     const project = repository.createProject({ name: "Rendered" });
     repository.replaceProject(project.id, {

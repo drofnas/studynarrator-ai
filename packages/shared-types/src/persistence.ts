@@ -8,7 +8,7 @@ import {
 } from "@studynarrator/core";
 import { z } from "zod";
 
-export const DATABASE_SCHEMA_VERSION = 4;
+export const DATABASE_SCHEMA_VERSION = 5;
 export const PERSISTENCE_CONTRACT_VERSION = 1;
 export const PERSISTENCE_CHANNELS = Object.freeze({
   status: "persistence.status",
@@ -30,6 +30,19 @@ export const PERSISTENCE_CHANNELS = Object.freeze({
 
 export const ProjectIdSchema = z.uuid();
 const TimestampSchema = z.iso.datetime({ offset: true });
+
+export const VoiceTimingCalibrationSchema = z
+  .object({
+    modelId: z.string().min(1),
+    voiceId: z.string().min(1),
+    millisecondsPerNormalizedCharacter: z.number().positive().finite(),
+    sampleCount: z.number().int().positive(),
+    updatedAt: TimestampSchema,
+  })
+  .strict();
+export type VoiceTimingCalibration = z.infer<
+  typeof VoiceTimingCalibrationSchema
+>;
 
 const SpeakerMappingSchema = z
   .object({

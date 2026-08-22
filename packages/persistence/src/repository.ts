@@ -24,6 +24,7 @@ import {
   SpeechBackendConnectionAuthoringSchema,
   SpeechBackendConnectionSchema,
   VoiceCatalogSchema,
+  VoiceTimingCalibrationSchema,
   RenderArtifactCollectionSchema,
   RenderArtifactSchema,
   RenderJobCollectionSchema,
@@ -45,6 +46,7 @@ import {
   type SpeechBackendConnectionAuthoring,
   type VoiceCatalog,
   type VoiceCatalogAuthoring,
+  type VoiceTimingCalibration,
   type RenderArtifact,
   type RenderJob,
   type RenderSegment,
@@ -64,6 +66,10 @@ import {
 const STORAGE_SELF_TEST_KEY = "runtime.storage-self-test";
 const STORAGE_SELF_TEST_VALUE = "study-narrator-storage-ok";
 const CURRENT_MIGRATION_VERSION = DATABASE_SCHEMA_VERSION;
+const VoiceTimingCalibrationKeySchema = VoiceTimingCalibrationSchema.pick({
+  modelId: true,
+  voiceId: true,
+});
 
 interface ProjectRow {
   id: string;
@@ -143,6 +149,14 @@ interface ConnectionRow {
   updated_at: string;
 }
 
+interface VoiceTimingCalibrationRow {
+  model_id: string;
+  voice_id: string;
+  milliseconds_per_normalized_character: number;
+  sample_count: number;
+  updated_at: string;
+}
+
 interface MarkerRow {
   key: string;
   value: string;
@@ -206,6 +220,13 @@ export interface StudyNarratorRepository {
   completeConnectionOnboarding(): ConnectionSetupRecord;
   getVoiceCatalogOverrides(modelId: string): VoiceCatalog;
   replaceVoiceCatalogOverrides(input: VoiceCatalogAuthoring): VoiceCatalog;
+  getVoiceTimingCalibration(
+    modelId: string,
+    voiceId: string,
+  ): VoiceTimingCalibration | null;
+  upsertVoiceTimingCalibration(
+    calibration: VoiceTimingCalibration,
+  ): VoiceTimingCalibration;
   createRenderJob(job: RenderJob, segments: RenderSegment[]): RenderJob;
   getRenderJob(renderId: string): RenderJob;
   listRenderJobs(projectId: string): RenderJob[];
@@ -418,6 +439,19 @@ function connectionFromRow(row: ConnectionRow): SpeechBackendConnection {
         ? null
         : (JSON.parse(row.last_test_summary_json) as unknown),
     createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  });
+}
+
+function voiceTimingCalibrationFromRow(
+  row: VoiceTimingCalibrationRow,
+): VoiceTimingCalibration {
+  return VoiceTimingCalibrationSchema.parse({
+    modelId: row.model_id,
+    voiceId: row.voice_id,
+    millisecondsPerNormalizedCharacter:
+      row.milliseconds_per_normalized_character,
+    sampleCount: row.sample_count,
     updatedAt: row.updated_at,
   });
 }
@@ -670,6 +704,23 @@ function createRepository(options: {
         sampleText: row.sample_text,
       })),
     });
+  };
+
+  const getVoiceTimingCalibration = (
+    modelIdInput: string,
+    voiceIdInput: string,
+  ): VoiceTimingCalibration | null => {
+    assertOpen();
+    const { modelId, voiceId } = VoiceTimingCalibrationKeySchema.parse({
+      modelId: modelIdInput,
+      voiceId: voiceIdInput,
+    });
+    const row = database
+      .prepare(
+        "SELECT * FROM voice_timing_calibration WHERE model_id = ? AND voice_id = ?",
+      )
+      .get(modelId, voiceId) as VoiceTimingCalibrationRow | undefined;
+    return row === undefined ? null : voiceTimingCalibrationFromRow(row);
   };
 
   return {
@@ -1165,6 +1216,41 @@ function createRepository(options: {
         );
       });
       return getVoiceCatalogOverrides(input.modelId);
+    },
+    getVoiceTimingCalibration,
+    upsertVoiceTimingCalibration(calibrationValue) {
+      assertOpen();
+      const calibration = VoiceTimingCalibrationSchema.parse(calibrationValue);
+      return transaction(() => {
+        database
+          .prepare(
+            `
+          INSERT INTO voice_timing_calibration (
+            model_id, voice_id, milliseconds_per_normalized_character, sample_count, updated_at
+          ) VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT(model_id, voice_id) DO UPDATE SET
+            milliseconds_per_normalized_character = excluded.milliseconds_per_normalized_character,
+            sample_count = excluded.sample_count,
+            updated_at = excluded.updated_at
+        `,
+          )
+          .run(
+            calibration.modelId,
+            calibration.voiceId,
+            calibration.millisecondsPerNormalizedCharacter,
+            calibration.sampleCount,
+            calibration.updatedAt,
+          );
+        const persisted = getVoiceTimingCalibration(
+          calibration.modelId,
+          calibration.voiceId,
+        );
+        if (persisted === null)
+          throw new Error(
+            "Stored voice timing calibration was not found after upsert.",
+          );
+        return persisted;
+      });
     },
     createRenderJob(jobValue, segmentValues) {
       assertOpen();
