@@ -6,6 +6,7 @@ import {
   readFile,
   rename,
   rm,
+  statfs,
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, join, resolve, sep } from "node:path";
@@ -13,6 +14,8 @@ import { zipSync } from "fflate";
 import {
   RENDER_CONTRACT_VERSION,
   RenderArtifactIdSchema,
+  RenderEstimateContextInputSchema,
+  RenderEstimateContextResultSchema,
   RenderHistorySegmentCollectionSchema,
   RenderIdSchema,
   RenderJobSchema,
@@ -20,6 +23,7 @@ import {
   type RenderArtifact,
   type RenderClient,
   type RenderError,
+  type RenderEstimateContextResult,
   type RenderHistorySegment,
   type RenderJob,
   type RenderPlan,
@@ -60,6 +64,13 @@ interface RenderLifecycleLogger {
   info(bindings: Record<string, unknown>, message: string): void;
   error(bindings: Record<string, unknown>, message: string): void;
 }
+
+interface RenderFileSystemStats {
+  bavail: bigint;
+  bsize: bigint;
+}
+
+type RenderStatfs = (path: string) => Promise<RenderFileSystemStats>;
 
 export type RenderRepository = Pick<
   StudyNarratorRepository,
@@ -234,9 +245,15 @@ export async function createRenderService(options: {
   createId?: () => string;
   planComputer: RenderPlanComputer;
   logger: RenderLifecycleLogger;
+  statfs?: RenderStatfs;
 }): Promise<RenderService> {
   const now = options.now ?? (() => new Date());
   const createId = options.createId ?? randomUUID;
+  const readFileSystemStats: RenderStatfs =
+    options.statfs ??
+    (async (path) => {
+      return await statfs(path, { bigint: true });
+    });
   const root = resolve(options.dataDirectory, "renders");
   const stagingRoot = join(root, ".staging");
   if (
@@ -1223,6 +1240,34 @@ export async function createRenderService(options: {
   return {
     startProject: (projectId) =>
       startFromProject(ProjectIdSchema.parse(projectId)),
+    async getEstimateContext(input) {
+      const parsed = RenderEstimateContextInputSchema.parse(input);
+      const stats = await readFileSystemStats(options.dataDirectory);
+      if (stats.bavail < 0n || stats.bsize < 0n)
+        throw new Error("Data-volume free space could not be measured.");
+      const availableBytes = stats.bavail * stats.bsize;
+      const maximumSafeBytes = BigInt(Number.MAX_SAFE_INTEGER);
+      const calibrations: RenderEstimateContextResult["calibrations"] = [];
+      if (parsed.modelId !== null) {
+        for (const voiceId of parsed.voiceIds) {
+          const calibration = options.repository.getVoiceTimingCalibration(
+            parsed.modelId,
+            voiceId,
+          );
+          if (
+            calibration?.modelId === parsed.modelId &&
+            calibration.voiceId === voiceId
+          )
+            calibrations.push(calibration);
+        }
+      }
+      return RenderEstimateContextResultSchema.parse({
+        freeSpaceBytes: Number(
+          availableBytes > maximumSafeBytes ? maximumSafeBytes : availableBytes,
+        ),
+        calibrations,
+      });
+    },
     async list(projectId) {
       return await Promise.resolve(
         options.repository.listRenderJobs(projectId),

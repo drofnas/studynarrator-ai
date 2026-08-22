@@ -150,6 +150,7 @@ async function fixture(
     speed?: number;
     readableText?: string;
     normalizedText?: string;
+    statfs?: (path: string) => Promise<{ bavail: bigint; bsize: bigint }>;
   } = {},
 ) {
   const dataDirectory = await mkdtemp(join(tmpdir(), "studynarrator-render-"));
@@ -336,6 +337,7 @@ async function fixture(
       `00000000-0000-4000-8000-${String(nextId++).padStart(12, "0")}`,
     now: () => new Date(timestamp),
     logger,
+    ...(options.statfs ? { statfs: options.statfs } : {}),
   });
   return { service, repository, plan, projectId, dataDirectory, logger };
 }
@@ -353,8 +355,64 @@ async function terminal(
 }
 
 describe("render coordinator", () => {
-  it("declares the progress observer in the application-service manifest", () => {
+  it("declares the progress observer and estimate context in the application-service manifest", () => {
     expect(APPLICATION_SERVICE_MANIFEST).toContain("renders.subscribe");
+    expect(APPLICATION_SERVICE_MANIFEST).toContain(
+      "renders.getEstimateContext",
+    );
+  });
+
+  it("reads free bytes from the exact data volume and returns only requested calibrations", async () => {
+    const readStats = vi.fn(async () => ({ bavail: 1_234n, bsize: 4_096n }));
+    const { service, repository, dataDirectory } = await fixture({
+      statfs: readStats,
+    });
+    const calibration: VoiceTimingCalibration = {
+      modelId: "model",
+      voiceId: "voice",
+      millisecondsPerNormalizedCharacter: 72,
+      sampleCount: 3,
+      updatedAt: "2026-08-13T12:00:00.000Z",
+    };
+    repository.calibrations.set("model:voice", calibration);
+    repository.calibrations.set("model:other", {
+      ...calibration,
+      voiceId: "other",
+    });
+
+    await expect(
+      service.getEstimateContext({
+        modelId: "model",
+        voiceIds: ["voice", "missing"],
+      }),
+    ).resolves.toEqual({
+      freeSpaceBytes: 1_234 * 4_096,
+      calibrations: [calibration],
+    });
+    expect(readStats).toHaveBeenCalledWith(dataDirectory);
+    expect(repository.calibrationReads).toEqual([
+      { modelId: "model", voiceId: "voice" },
+      { modelId: "model", voiceId: "missing" },
+    ]);
+    expect(repository.calibrationUpserts).toEqual([]);
+    expect(repository.jobs.size).toBe(0);
+  });
+
+  it("skips calibration reads without a model and safely bounds huge volumes", async () => {
+    const { service, repository } = await fixture({
+      statfs: async () => ({
+        bavail: BigInt(Number.MAX_SAFE_INTEGER),
+        bsize: 4_096n,
+      }),
+    });
+
+    await expect(
+      service.getEstimateContext({ modelId: null, voiceIds: ["voice"] }),
+    ).resolves.toEqual({
+      freeSpaceBytes: Number.MAX_SAFE_INTEGER,
+      calibrations: [],
+    });
+    expect(repository.calibrationReads).toEqual([]);
   });
 
   it("notifies observers for progress updates and the terminal state exactly once", async () => {

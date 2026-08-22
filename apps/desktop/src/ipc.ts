@@ -25,6 +25,8 @@ import {
   RenderArtifactCollectionSchema,
   RenderArtifactExportResultSchema,
   RenderArtifactInputSchema,
+  RenderEstimateContextInputSchema,
+  RenderEstimateContextResultSchema,
   RenderHistorySegmentCollectionSchema,
   RenderIdInputSchema,
   RenderJobCollectionSchema,
@@ -467,6 +469,12 @@ export function registerRenderHandlers(
   handle(RENDER_CHANNELS.startProject, async (input) => {
     const { projectId } = RenderProjectInputSchema.parse(input);
     return RenderJobSchema.parse(await renders.startProject(projectId));
+  });
+  handle(RENDER_CHANNELS.getEstimateContext, async (input) => {
+    const parsed = RenderEstimateContextInputSchema.parse(input);
+    return RenderEstimateContextResultSchema.parse(
+      await renders.getEstimateContext(parsed),
+    );
   });
   handle(RENDER_CHANNELS.list, async (input) => {
     const { projectId } = RenderProjectInputSchema.parse(input);

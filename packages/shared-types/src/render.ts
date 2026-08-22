@@ -1,10 +1,14 @@
 import { z } from "zod";
-import { ProjectIdSchema } from "./persistence.js";
+import {
+  ProjectIdSchema,
+  VoiceTimingCalibrationSchema,
+} from "./persistence.js";
 import { RenderPlanIdSchema } from "./renderPlan.js";
 
 export const RENDER_CONTRACT_VERSION = 1;
 export const RENDER_CHANNELS = Object.freeze({
   startProject: "renders.startProject",
+  getEstimateContext: "renders.getEstimateContext",
   list: "renders.list",
   get: "renders.get",
   cancel: "renders.cancel",
@@ -259,6 +263,55 @@ export const RenderArtifactSchema = z
 export type RenderArtifact = z.infer<typeof RenderArtifactSchema>;
 export const RenderArtifactCollectionSchema = z.array(RenderArtifactSchema);
 
+const RenderEstimateVoiceIdCollectionSchema = z
+  .array(z.string().min(1).max(500))
+  .max(100)
+  .superRefine((voiceIds, context) => {
+    const seen = new Set<string>();
+    voiceIds.forEach((voiceId, index) => {
+      if (seen.has(voiceId))
+        context.addIssue({
+          code: "custom",
+          message: "Estimate voice IDs must be unique.",
+          path: [index],
+        });
+      seen.add(voiceId);
+    });
+  });
+
+export const RenderEstimateContextInputSchema = z
+  .object({
+    modelId: z.string().min(1).max(500).nullable(),
+    voiceIds: RenderEstimateVoiceIdCollectionSchema,
+  })
+  .strict();
+export type RenderEstimateContextInput = z.infer<
+  typeof RenderEstimateContextInputSchema
+>;
+
+export const RenderEstimateContextResultSchema = z
+  .object({
+    freeSpaceBytes: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    calibrations: z.array(VoiceTimingCalibrationSchema).max(100),
+  })
+  .strict()
+  .superRefine((result, context) => {
+    const seen = new Set<string>();
+    result.calibrations.forEach((calibration, index) => {
+      const key = `${calibration.modelId}\u0000${calibration.voiceId}`;
+      if (seen.has(key))
+        context.addIssue({
+          code: "custom",
+          message: "Estimate calibrations must be unique by model and voice.",
+          path: ["calibrations", index],
+        });
+      seen.add(key);
+    });
+  });
+export type RenderEstimateContextResult = z.infer<
+  typeof RenderEstimateContextResultSchema
+>;
+
 export const RenderProjectInputSchema = z
   .object({ projectId: ProjectIdSchema })
   .strict();
@@ -286,6 +339,9 @@ type RenderArtifactExportResult = z.infer<
 
 export interface RenderClient {
   startProject(projectId: string): Promise<RenderJob>;
+  getEstimateContext(
+    input: RenderEstimateContextInput,
+  ): Promise<RenderEstimateContextResult>;
   list(projectId: string): Promise<RenderJob[]>;
   get(renderId: string): Promise<RenderJob>;
   cancel(renderId: string): Promise<RenderJob>;

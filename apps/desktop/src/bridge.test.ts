@@ -226,9 +226,22 @@ const renderArtifact = {
   durationMs: 1,
   createdAt: "2026-08-12T12:00:00.000Z",
 };
+const renderEstimateContext = {
+  freeSpaceBytes: 5_000_000,
+  calibrations: [
+    {
+      modelId: "model",
+      voiceId: "voice",
+      millisecondsPerNormalizedCharacter: 72,
+      sampleCount: 3,
+      updatedAt: "2026-08-12T12:00:00.000Z",
+    },
+  ],
+};
 const renders = {
   start: vi.fn(async () => renderJob),
   startProject: vi.fn(async () => renderJob),
+  getEstimateContext: vi.fn(async () => renderEstimateContext),
   list: vi.fn(async () => [renderJob]),
   get: vi.fn(async () => renderJob),
   cancel: vi.fn(async () => renderJob),
@@ -315,6 +328,8 @@ describe("Electron boundary", () => {
     };
     const invoke = vi.fn(async (channel: string) => {
       if (channel === RENDER_CHANNELS.startProject) return renderJob;
+      if (channel === RENDER_CHANNELS.getEstimateContext)
+        return renderEstimateContext;
       if (channel === SYSTEM_DIAGNOSTICS_CHANNEL) return diagnostics;
       if (channel === PERSISTENCE_CHANNELS.projectsList) return [];
       if (channel === PERSISTENCE_CHANNELS.globalLexiconReplace)
@@ -391,6 +406,16 @@ describe("Electron boundary", () => {
       `studynarrator-media://segment/${renderJob.id}/3`,
     );
     expect(() => bridge.renders.renderAudioSource("../outside")).toThrow();
+    await expect(
+      bridge.renders.getEstimateContext({
+        modelId: "model",
+        voiceIds: ["voice"],
+      }),
+    ).resolves.toEqual(renderEstimateContext);
+    expect(invoke).toHaveBeenCalledWith(RENDER_CHANNELS.getEstimateContext, {
+      modelId: "model",
+      voiceIds: ["voice"],
+    });
     await expect(
       bridge.scriptGeneration.exportPrompt(null, "update", "Edited prompt"),
     ).resolves.toEqual({ disposition: "saved", fileName: "prompt.md" });
@@ -675,6 +700,10 @@ describe("Electron boundary", () => {
       [SPEECH_CACHE_CHANNELS.clearProject]: { projectId: project.id },
       [SPEECH_CACHE_CHANNELS.clearEntry]: { cacheKey: "a".repeat(64) },
       [RENDER_CHANNELS.startProject]: { projectId: project.id },
+      [RENDER_CHANNELS.getEstimateContext]: {
+        modelId: "model",
+        voiceIds: ["voice"],
+      },
       [RENDER_CHANNELS.list]: { projectId: project.id },
       [RENDER_CHANNELS.get]: { renderId: renderJob.id },
       [RENDER_CHANNELS.cancel]: { renderId: renderJob.id },

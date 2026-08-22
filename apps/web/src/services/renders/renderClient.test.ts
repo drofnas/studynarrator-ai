@@ -69,6 +69,48 @@ class FakeEventSource {
 }
 
 describe("render REST client", () => {
+  it("posts strict estimate context and validates the response", async () => {
+    const context = {
+      freeSpaceBytes: 5_000_000,
+      calibrations: [
+        {
+          modelId: "model",
+          voiceId: "voice",
+          millisecondsPerNormalizedCharacter: 72,
+          sampleCount: 3,
+          updatedAt: "2026-08-12T12:00:00.000Z",
+        },
+      ],
+    };
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify(context), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    const client = createRestRenderClient(fetchMock as typeof fetch);
+
+    await expect(
+      client.getEstimateContext({
+        modelId: "model",
+        voiceIds: ["voice"],
+      }),
+    ).resolves.toEqual(context);
+    expect(fetchMock).toHaveBeenCalledWith("/api/renders/estimate-context", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ modelId: "model", voiceIds: ["voice"] }),
+    });
+    await expect(
+      client.getEstimateContext({
+        modelId: "model",
+        voiceIds: ["voice", "voice"],
+      }),
+    ).rejects.toThrow("Estimate voice IDs must be unique");
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
   it("validates review metadata and constructs scoped playback sources", async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url =

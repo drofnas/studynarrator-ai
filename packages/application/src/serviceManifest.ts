@@ -34,6 +34,7 @@ export const APPLICATION_SERVICE_MANIFEST = Object.freeze([
   "speechCache.clearProject",
   "speechCache.clearEntry",
   "renders.startProject",
+  "renders.getEstimateContext",
   "renders.list",
   "renders.get",
   "renders.subscribe",

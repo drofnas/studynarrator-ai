@@ -30,6 +30,7 @@ import {
   ProjectDetailSchema,
   ProjectPreviewResultSchema,
   ProjectSummaryCollectionSchema,
+  RenderEstimateContextResultSchema,
   RenderJobSchema,
   RuntimeSchema,
   SpeechCacheCleanupResultSchema,
@@ -425,6 +426,10 @@ async function fixture(logger?: {
   };
   const renders = {
     startProject: async () => renderJob(),
+    getEstimateContext: async () => ({
+      freeSpaceBytes: 5_000_000,
+      calibrations: [],
+    }),
     list: async () => [renderJob()],
     get: async () => renderJob(),
     subscribe: () => () => undefined,
@@ -1216,10 +1221,10 @@ describe("REST API operation manifest", () => {
       ({ method, path }) => `${method} ${path}`,
     );
     expect(registered.sort()).toEqual([...declared].sort());
-    expect(new Set(declared).size).toBe(54);
+    expect(new Set(declared).size).toBe(55);
   });
 
-  it("exercises a successful schema-valid response for all 54 operations", async () => {
+  it("exercises a successful schema-valid response for all 55 operations", async () => {
     const { app } = await fixture();
     const covered = new Set<string>();
     const call = async (
@@ -1385,6 +1390,14 @@ describe("REST API operation manifest", () => {
       ).text,
     ).toBe("Edited project prompt");
     await call("POST", `/api/projects/${created.id}/skill-export`, 200, {});
+    RenderEstimateContextResultSchema.parse(
+      (
+        await call("POST", "/api/renders/estimate-context", 200, {
+          modelId: "model",
+          voiceIds: ["voice"],
+        })
+      ).body as unknown,
+    );
     const render = (
       await call("POST", `/api/projects/${created.id}/renders`, 202)
     ).body as { id: string };
@@ -1514,6 +1527,14 @@ describe("REST API operation manifest", () => {
       request(app)
         .post("/api/projects/00000000-0000-4000-8000-000000000001/skill-export")
         .send({ sourceMaterial: secret })
+        .expect(400),
+      request(app)
+        .post("/api/renders/estimate-context")
+        .send({
+          modelId: "model",
+          voiceIds: ["voice", "voice"],
+          apiKey: secret,
+        })
         .expect(400),
       request(app).get("/api/projects/not-a-uuid/renders").expect(400),
       request(app).get("/api/renders/not-a-uuid").expect(400),

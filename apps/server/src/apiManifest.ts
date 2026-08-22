@@ -20,6 +20,7 @@ export const REST_API_MANIFEST = [
   { method: "POST", path: "/api/projects/:projectId/skill-export" },
   { method: "POST", path: "/api/projects/:projectId/renders" },
   { method: "GET", path: "/api/projects/:projectId/renders" },
+  { method: "POST", path: "/api/renders/estimate-context" },
   { method: "GET", path: "/api/renders/:renderId" },
   { method: "GET", path: "/api/renders/:renderId/events" },
   { method: "POST", path: "/api/renders/:renderId/cancel" },

@@ -9,6 +9,8 @@ import {
   ProjectIdSchema,
   RenderArtifactIdSchema,
   RenderArtifactCollectionSchema,
+  RenderEstimateContextInputSchema,
+  RenderEstimateContextResultSchema,
   RenderHistorySegmentCollectionSchema,
   RenderIdSchema,
   RenderJobCollectionSchema,
@@ -37,6 +39,18 @@ export function createRendersRouter(
   router: Router = Router(),
 ): Router {
   if (renders) {
+    router.post(
+      "/api/renders/estimate-context",
+      asyncHandler(async (request, response) => {
+        response.json(
+          RenderEstimateContextResultSchema.parse(
+            await renders.getEstimateContext(
+              RenderEstimateContextInputSchema.parse(request.body),
+            ),
+          ),
+        );
+      }),
+    );
     router.post(
       "/api/projects/:projectId/renders",
       asyncHandler(async (request, response) => {

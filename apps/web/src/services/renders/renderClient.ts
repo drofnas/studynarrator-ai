@@ -1,6 +1,8 @@
 import {
   BoundaryErrorSchema,
   RenderArtifactCollectionSchema,
+  RenderEstimateContextInputSchema,
+  RenderEstimateContextResultSchema,
   RenderHistorySegmentCollectionSchema,
   RenderIdSchema,
   RenderJobCollectionSchema,
@@ -48,6 +50,17 @@ export function createRestRenderClient(
   createEventSource: RenderEventSourceFactory = (url) => new EventSource(url),
 ): RenderProgressClient {
   return {
+    async getEstimateContext(input) {
+      const parsed = RenderEstimateContextInputSchema.parse(input);
+      return await read(
+        await fetchInput("/api/renders/estimate-context", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(parsed),
+        }),
+        (body) => RenderEstimateContextResultSchema.parse(body),
+      );
+    },
     async startProject(projectId) {
       return await read(
         await fetchInput(

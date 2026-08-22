@@ -441,6 +441,24 @@ test.describe("Projects connected authoring", () => {
       "[pause_short] Continue.",
     ].join("\n");
     await page.getByLabel("Script source").fill(longScript);
+    const estimates = page.getByRole("group", { name: "Script estimates" });
+    const estimateValue = (label: string) =>
+      estimates.getByText(label, { exact: true }).locator("xpath=../dd");
+    const wordCount = longScript.trim().split(/\s+/u).length;
+    await expect(estimateValue("Words")).toHaveText(wordCount.toLocaleString());
+    await expect(
+      estimates.getByRole("status", { name: "Estimate calibration status" }),
+    ).toContainText("default voice timing");
+    for (const label of [
+      "Estimated duration",
+      "Estimated MP3 size",
+      "Estimated cache footprint",
+      "Estimated peak disk",
+    ])
+      await expect(estimateValue(label)).not.toHaveText("—");
+    await expect(estimateValue("Free space")).toHaveText(
+      /(?:KiB|MiB|GiB|TiB)/u,
+    );
     await page.getByRole("tab", { name: "Settings" }).click();
     const speakers = page.getByRole("region", { name: "Project speakers" });
     const voices = page.getByLabel("Voice for speaker teacher");

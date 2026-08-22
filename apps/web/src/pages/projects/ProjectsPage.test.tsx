@@ -29,6 +29,8 @@ import type {
   ProjectPreviewClient,
   ProjectSummary,
   RenderClient,
+  RenderEstimateContextInput,
+  RenderEstimateContextResult,
   RenderJob,
   RenderPlan,
   SpeechBackendConnection,
@@ -107,6 +109,53 @@ const globalCatalog: VoiceCatalog = {
       category: null,
       style: null,
       sampleText: null,
+    },
+  ],
+};
+
+const estimateConnection: SpeechBackendConnection = {
+  backendId: "speaches",
+  baseUrl: "http://127.0.0.1:8000",
+  suppliedUrlForm: "root",
+  configured: true,
+  defaultModelId: "model",
+  defaultVoiceId: "voice_teacher",
+  timeoutSeconds: 120,
+  retryCount: 0,
+  responseFormat: "wav",
+  lastTestedAt: null,
+  lastSuccessfulTestAt: null,
+  lastTestSummary: null,
+  createdAt: project.createdAt,
+  updatedAt: project.updatedAt,
+};
+const estimateCatalog: VoiceCatalog = {
+  schemaVersion: 1,
+  modelId: "model",
+  entries: ["voice_teacher", "voice_other"].map((voiceId) => ({
+    voiceId,
+    label: voiceId === "voice_teacher" ? "Teacher Voice" : "Other Voice",
+    enabled: true,
+    favorite: false,
+    language: null,
+    locale: null,
+    accent: null,
+    category: null,
+    style: null,
+    sampleText: null,
+  })),
+};
+const estimateSpeechCatalog: SpeechCatalog = {
+  schemaVersion: 1,
+  models: [
+    {
+      modelId: "model",
+      voices: estimateCatalog.entries.map(({ voiceId, label }) => ({
+        voiceId,
+        name: label,
+        language: null,
+        gender: null,
+      })),
     },
   ],
 };
@@ -274,6 +323,10 @@ function renderClientFixture(
     renderJobFixture("00000000-0000-4000-8000-000000000091", "complete");
   return {
     startProject: vi.fn(async () => fallbackJob),
+    getEstimateContext: vi.fn(async () => ({
+      freeSpaceBytes: 1_073_741_824,
+      calibrations: [],
+    })),
     list: vi.fn(async () => jobs),
     get,
     cancel: vi.fn(async () => fallbackJob),
@@ -554,6 +607,14 @@ function replaceScriptSource(value: string): void {
   });
 }
 
+function estimateValue(strip: HTMLElement, label: string): HTMLElement {
+  const term = within(strip).getByText(label, { exact: true });
+  const value = term.nextElementSibling;
+  if (!(value instanceof HTMLElement))
+    throw new Error(`Expected an estimate value for ${label}.`);
+  return value;
+}
+
 beforeEach(() => {
   vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(
     () => undefined,
@@ -711,6 +772,225 @@ describe("Projects workbench", () => {
         ),
       ).toBeInTheDocument();
     }
+  });
+
+  it("uses worker-derived speech and exact pauses with persisted voice calibration", async () => {
+    const { client, analyze } = fixture();
+    const calibration = {
+      modelId: "model",
+      voiceId: "voice_teacher",
+      millisecondsPerNormalizedCharacter: 200,
+      sampleCount: 3,
+      updatedAt: "2026-08-12T12:00:00.000Z",
+    };
+    const getEstimateContext = vi.fn(
+      async (
+        input: RenderEstimateContextInput,
+      ): Promise<RenderEstimateContextResult> => ({
+        freeSpaceBytes: 1_073_741_824,
+        calibrations: input.voiceIds.includes("voice_teacher")
+          ? [calibration]
+          : [],
+      }),
+    );
+    const renderClient = {
+      ...renderClientFixture([], vi.fn()),
+      getEstimateContext,
+    };
+    renderPage(client, analyze, {
+      connection: estimateConnection,
+      catalog: estimateCatalog,
+      speechCatalog: estimateSpeechCatalog,
+      renderClient,
+    });
+
+    const strip = await screen.findByRole("group", {
+      name: "Script estimates",
+    });
+    await waitFor(() =>
+      expect(
+        within(strip).getByRole("status", {
+          name: "Estimate calibration status",
+        }),
+      ).toHaveTextContent("Voice timing calibration applied"),
+    );
+    expect(estimateValue(strip, "Words")).toHaveTextContent("4");
+    expect(estimateValue(strip, "Duration")).toHaveTextContent("4s");
+    expect(estimateValue(strip, "MP3 size")).toHaveTextContent("83.2 KiB");
+    expect(estimateValue(strip, "Cache footprint")).toHaveTextContent(
+      "150.0 KiB",
+    );
+    expect(estimateValue(strip, "Peak disk")).toHaveTextContent("399.6 KiB");
+    expect(estimateValue(strip, "Free space")).toHaveTextContent("1.0 GiB");
+    expect(getEstimateContext).toHaveBeenCalledWith({
+      modelId: "model",
+      voiceIds: ["voice_teacher"],
+    });
+
+    await openProjectTab("Settings");
+    fireEvent.change(screen.getByLabelText("Speed for speaker teacher"), {
+      target: { value: "2" },
+    });
+    await openProjectTab("Script Editor");
+    const updatedStrip = await screen.findByRole("group", {
+      name: "Script estimates",
+    });
+    expect(estimateValue(updatedStrip, "Duration")).toHaveTextContent("2s");
+    expect(estimateValue(updatedStrip, "MP3 size")).toHaveTextContent(
+      "45.7 KiB",
+    );
+    expect(estimateValue(updatedStrip, "Cache footprint")).toHaveTextContent(
+      "75.0 KiB",
+    );
+    expect(estimateValue(updatedStrip, "Peak disk")).toHaveTextContent(
+      "212.1 KiB",
+    );
+  });
+
+  it("keeps default estimates available while free space loads and fails", async () => {
+    const { client, analyze } = fixture();
+    const pending = deferred<RenderEstimateContextResult>();
+    const getEstimateContext = vi.fn(
+      (
+        input: RenderEstimateContextInput,
+      ): Promise<RenderEstimateContextResult> =>
+        input.voiceIds.length === 0
+          ? Promise.resolve({
+              freeSpaceBytes: 1_073_741_824,
+              calibrations: [],
+            })
+          : pending.promise,
+    );
+    const renderClient = {
+      ...renderClientFixture([], vi.fn()),
+      getEstimateContext,
+    };
+    renderPage(client, analyze, {
+      connection: estimateConnection,
+      catalog: estimateCatalog,
+      speechCatalog: estimateSpeechCatalog,
+      renderClient,
+    });
+
+    const strip = await screen.findByRole("group", {
+      name: "Script estimates",
+    });
+    await waitFor(() =>
+      expect(getEstimateContext).toHaveBeenCalledWith({
+        modelId: "model",
+        voiceIds: ["voice_teacher"],
+      }),
+    );
+    expect(estimateValue(strip, "Estimated duration")).toHaveTextContent("2s");
+    expect(estimateValue(strip, "Estimated MP3 size")).toHaveTextContent(
+      "38.2 KiB",
+    );
+    expect(estimateValue(strip, "Estimated cache footprint")).toHaveTextContent(
+      "60.0 KiB",
+    );
+    expect(estimateValue(strip, "Estimated peak disk")).toHaveTextContent(
+      "174.6 KiB",
+    );
+    expect(estimateValue(strip, "Free space")).toHaveTextContent("Loading…");
+
+    pending.reject(new Error("statfs unavailable"));
+    await waitFor(() =>
+      expect(estimateValue(strip, "Free space")).toHaveTextContent(
+        "Unavailable",
+      ),
+    );
+    expect(within(strip).getByRole("status")).toHaveTextContent(
+      "default voice timing",
+    );
+  });
+
+  it("shows placeholders until worker analysis completes", async () => {
+    const loaded = fixture();
+    const analysis = deferred<Awaited<ReturnType<ScriptAnalyzer["analyze"]>>>();
+    const renderClient = renderClientFixture([], vi.fn());
+    renderPage(loaded.client, () => analysis.promise, { renderClient });
+
+    const strip = await screen.findByRole("group", {
+      name: "Script estimates",
+    });
+    await waitFor(() =>
+      expect(estimateValue(strip, "Free space")).toHaveTextContent("1.0 GiB"),
+    );
+    expect(estimateValue(strip, "Words")).toHaveTextContent("4");
+    expect(estimateValue(strip, "Estimated duration")).toHaveTextContent("—");
+    expect(estimateValue(strip, "Estimated MP3 size")).toHaveTextContent("—");
+    expect(estimateValue(strip, "Estimated cache footprint")).toHaveTextContent(
+      "—",
+    );
+    expect(estimateValue(strip, "Estimated peak disk")).toHaveTextContent("—");
+    expect(within(strip).getByRole("status")).toHaveTextContent(
+      "Waiting for script analysis",
+    );
+  });
+
+  it("ignores stale estimate context after the configured voice changes", async () => {
+    const { client, analyze } = fixture();
+    const stale = deferred<RenderEstimateContextResult>();
+    const getEstimateContext = vi.fn(
+      (
+        input: RenderEstimateContextInput,
+      ): Promise<RenderEstimateContextResult> => {
+        if (input.voiceIds.includes("voice_teacher")) return stale.promise;
+        return Promise.resolve({
+          freeSpaceBytes: input.voiceIds.includes("voice_other")
+            ? 2_147_483_648
+            : 1_073_741_824,
+          calibrations: [],
+        });
+      },
+    );
+    const renderClient = {
+      ...renderClientFixture([], vi.fn()),
+      getEstimateContext,
+    };
+    renderPage(client, analyze, {
+      connection: estimateConnection,
+      catalog: estimateCatalog,
+      speechCatalog: estimateSpeechCatalog,
+      renderClient,
+    });
+    await screen.findByRole("group", { name: "Script estimates" });
+    await waitFor(() =>
+      expect(getEstimateContext).toHaveBeenCalledWith({
+        modelId: "model",
+        voiceIds: ["voice_teacher"],
+      }),
+    );
+
+    await openProjectTab("Settings");
+    await userEvent.selectOptions(
+      await screen.findByLabelText("Voice for speaker teacher"),
+      "voice_other",
+    );
+    await waitFor(() =>
+      expect(getEstimateContext).toHaveBeenCalledWith({
+        modelId: "model",
+        voiceIds: ["voice_other"],
+      }),
+    );
+    await openProjectTab("Script Editor");
+    const currentStrip = await screen.findByRole("group", {
+      name: "Script estimates",
+    });
+    await waitFor(() =>
+      expect(estimateValue(currentStrip, "Free space")).toHaveTextContent(
+        "2.0 GiB",
+      ),
+    );
+
+    act(() => {
+      stale.resolve({ freeSpaceBytes: 536_870_912, calibrations: [] });
+    });
+    await waitFor(() =>
+      expect(estimateValue(currentStrip, "Free space")).toHaveTextContent(
+        "2.0 GiB",
+      ),
+    );
   });
 
   it("keeps project lexicon changes isolated from global entries", async () => {
@@ -1627,6 +1907,10 @@ describe("Projects workbench", () => {
     const renderClient = {
       start: vi.fn(() => startRequest.promise),
       startProject: vi.fn(() => startRequest.promise),
+      getEstimateContext: vi.fn(async () => ({
+        freeSpaceBytes: 1_073_741_824,
+        calibrations: [],
+      })),
       list: vi.fn(async () => [priorJob]),
       get: getRender,
       subscribe,
@@ -2092,6 +2376,10 @@ describe("Projects workbench", () => {
     }));
     const renderClient: RenderClient = {
       startProject: start,
+      getEstimateContext: vi.fn(async () => ({
+        freeSpaceBytes: 1_073_741_824,
+        calibrations: [],
+      })),
       list: vi.fn(async () => []),
       get: vi.fn(async () => job),
       cancel: vi.fn(async () => job),

@@ -9,8 +9,13 @@ import {
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import {
   buildAuthoringDryRun,
+  estimateCacheBytes,
+  estimateMp3Bytes,
+  estimatePeakDiskBytes,
+  estimatePlanDurationMs,
   reconcileDiscoveredConfiguration,
   type AuthoringDryRunResult,
+  type EstimablePlan,
   type AuthoringPauseRow,
   type AuthoringSpeakerRow,
   type IgnoredDiagnostic,
@@ -23,6 +28,7 @@ import {
   type PersistenceClient,
   type ProjectDetail,
   type ProjectPreviewClient,
+  type RenderEstimateContextResult,
   type RenderJob,
   type RenderWaveform,
   type ProjectSummary,
@@ -59,6 +65,7 @@ import {
   ScriptSourceEditor,
   type ScriptSourceEditorHandle,
 } from "@/features/projects/ScriptSourceEditor.js";
+import { EstimateStrip } from "@/features/projects/estimateStrip.js";
 import type { RenderProgressClient } from "@/services/renders/renderClient.js";
 
 type SaveState = "saved" | "unsaved" | "saving" | "invalid" | "failed";
@@ -66,6 +73,10 @@ type AnalysisState = "idle" | "parsing" | "ready" | "failed";
 type VoiceCatalogState = "idle" | "loading" | "ready" | "failed";
 type VoiceSelectionState =
   VoiceCatalogState | "modelUnavailable" | "noSupportedVoices";
+type EstimateContextState =
+  | { status: "loading" }
+  | { status: "ready"; value: RenderEstimateContextResult }
+  | { status: "unavailable" };
 type ProjectTab = "script" | "settings" | "details" | "render";
 
 const projectTabs: Array<{ id: ProjectTab; label: string }> = [
@@ -215,6 +226,10 @@ export function ProjectsPage({
   const [renderStarting, setRenderStarting] = useState(false);
   const [renderWaveform, setRenderWaveform] = useState<RenderWaveform>();
   const [renderError, setRenderError] = useState("");
+  const [estimateContextState, setEstimateContextState] =
+    useState<EstimateContextState>(
+      renderClient ? { status: "loading" } : { status: "unavailable" },
+    );
   const editorRef = useRef<ScriptSourceEditorHandle>(null);
   const pendingFocusLineRef = useRef<number | undefined>(undefined);
   const tabRefs = useRef<Record<ProjectTab, HTMLButtonElement | null>>({
@@ -786,6 +801,112 @@ export function ProjectsPage({
         : undefined,
     [analysis, configuration],
   );
+  const estimablePlan = useMemo<EstimablePlan | undefined>(() => {
+    if (!dryRun) return undefined;
+    const speedBySpeaker = new Map(
+      configuration.speakers.map(({ speakerId, speed }) => [speakerId, speed]),
+    );
+    const entries: EstimablePlan["entries"][number][] = [];
+    for (const row of dryRun.rows) {
+      if (row.type === "section") {
+        entries.push({ type: "section" });
+        continue;
+      }
+      if (row.type === "pause") {
+        if (row.durationMs === null) return undefined;
+        entries.push({ type: "pause", durationMs: row.durationMs });
+        continue;
+      }
+      const speed = speedBySpeaker.get(row.speakerId);
+      if (row.voiceId === null || speed === undefined) return undefined;
+      entries.push({
+        type: "speech",
+        voiceId: row.voiceId,
+        speed,
+        chunks: [{ text: row.ttsText }],
+      });
+    }
+    return { entries };
+  }, [configuration.speakers, dryRun]);
+  const estimateVoiceIds = useMemo(
+    () =>
+      estimablePlan
+        ? [
+            ...new Set(
+              estimablePlan.entries
+                .filter((entry) => entry.type === "speech")
+                .map(({ voiceId }) => voiceId),
+            ),
+          ].sort()
+        : [],
+    [estimablePlan],
+  );
+  const estimateVoiceIdsKey = JSON.stringify(estimateVoiceIds);
+
+  useEffect(() => {
+    let active = true;
+    if (!renderClient || !projectId) {
+      setEstimateContextState({ status: "unavailable" });
+      return;
+    }
+    setEstimateContextState({ status: "loading" });
+    void renderClient
+      .getEstimateContext({
+        modelId: effectiveModelId,
+        voiceIds: estimateVoiceIds,
+      })
+      .then((value) => {
+        if (active) setEstimateContextState({ status: "ready", value });
+      })
+      .catch(() => {
+        if (active) setEstimateContextState({ status: "unavailable" });
+      });
+    return () => {
+      active = false;
+    };
+  }, [effectiveModelId, estimateVoiceIdsKey, projectId, renderClient]);
+
+  const renderEstimates = useMemo(() => {
+    if (!estimablePlan) return undefined;
+    const calibratedByVoice = Object.create(null) as Record<string, number>;
+    if (estimateContextState.status === "ready")
+      for (const calibration of estimateContextState.value.calibrations)
+        if (
+          calibration.modelId === effectiveModelId &&
+          estimateVoiceIds.includes(calibration.voiceId)
+        )
+          calibratedByVoice[calibration.voiceId] =
+            calibration.millisecondsPerNormalizedCharacter;
+    const calibration = {
+      millisecondsPerNormalizedCharacterByVoice: calibratedByVoice,
+    };
+    const speechPlan: EstimablePlan = {
+      entries: estimablePlan.entries.filter((entry) => entry.type === "speech"),
+    };
+    const speechDurationMs = estimatePlanDurationMs(speechPlan, calibration);
+    const durationMs = estimatePlanDurationMs(estimablePlan, calibration);
+    const mp3Bytes = estimateMp3Bytes(durationMs, 192);
+    const cacheBytes = estimateCacheBytes(speechDurationMs, 24_000, 2, 1);
+    return {
+      durationMs,
+      mp3Bytes,
+      cacheBytes,
+      peakDiskBytes: estimatePeakDiskBytes({
+        speechCacheBytes: cacheBytes,
+        totalDurationMs: durationMs,
+        bitrateKbps: 192,
+        sampleRate: 24_000,
+        bytesPerSample: 2,
+        channels: 1,
+      }),
+      allVoicesCalibrated:
+        effectiveModelId !== null &&
+        estimateVoiceIds.length > 0 &&
+        estimateVoiceIds.every((voiceId) =>
+          Object.hasOwn(calibratedByVoice, voiceId),
+        ),
+    };
+  }, [effectiveModelId, estimablePlan, estimateContextState, estimateVoiceIds]);
 
   const cleanedFencedSource = useMemo(
     () =>
@@ -1279,6 +1400,28 @@ export function ProjectsPage({
                           label="Script statistics above editor"
                         />
                       </div>
+                      <EstimateStrip
+                        wordCount={countWords(draft.scriptSource)}
+                        allVoicesCalibrated={
+                          renderEstimates?.allVoicesCalibrated ?? false
+                        }
+                        {...(renderEstimates
+                          ? {
+                              durationMs: renderEstimates.durationMs,
+                              mp3Bytes: renderEstimates.mp3Bytes,
+                              cacheBytes: renderEstimates.cacheBytes,
+                              peakDiskBytes: renderEstimates.peakDiskBytes,
+                            }
+                          : {})}
+                        {...(estimateContextState.status === "ready"
+                          ? {
+                              freeSpaceBytes:
+                                estimateContextState.value.freeSpaceBytes,
+                            }
+                          : estimateContextState.status === "unavailable"
+                            ? { freeSpaceBytes: null }
+                            : {})}
+                      />
                       <div
                         className={styles.panelScrollBody}
                         role="region"

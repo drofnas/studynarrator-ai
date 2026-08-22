@@ -16,6 +16,8 @@ import {
   RENDER_CHANNELS,
   RenderArtifactCollectionSchema,
   RenderArtifactExportResultSchema,
+  RenderEstimateContextInputSchema,
+  RenderEstimateContextResultSchema,
   RenderHistorySegmentCollectionSchema,
   RenderIdSchema,
   RenderJobCollectionSchema,
@@ -240,6 +242,12 @@ export function createPreloadBridge(
     async startProject(projectId) {
       return RenderJobSchema.parse(
         await invoke(RENDER_CHANNELS.startProject, { projectId }),
+      );
+    },
+    async getEstimateContext(input) {
+      const parsed = RenderEstimateContextInputSchema.parse(input);
+      return RenderEstimateContextResultSchema.parse(
+        await invoke(RENDER_CHANNELS.getEstimateContext, parsed),
       );
     },
     async list(projectId) {
