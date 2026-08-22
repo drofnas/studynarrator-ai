@@ -114,7 +114,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 21.3 | Add render pinning                                 | P1       | S    | complete    |
 | 21.4 | Add the retention settings screen                  | P1       | M    | complete    |
 | 22   | Host header allowlist                              | P1       | S    | complete    |
-| 23.1 | Add electron-builder configuration                 | P1       | M    | todo        |
+| 23.1 | Add electron-builder configuration                 | P1       | M    | complete    |
 | 23.2 | Verify the native rebuild per target               | P1       | S    | todo        |
 | 23.3 | Add the release workflow, unsigned                 | P1       | S    | todo        |
 | 23.4 | Add signing and notarization                       | P1       | M    | todo        |
@@ -1838,7 +1838,7 @@ Standard, plus tests asserting `Host: evil.example.com` gets 403 and `Host: 127.
 
 ## TASK 23.1 — Add electron-builder configuration
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** M
 
@@ -1850,6 +1850,7 @@ apps/desktop/electron-builder.yml   (new)
 apps/desktop/build/   (new, icons and entitlements)
 .gitignore
 package-lock.json
+scripts/audit-dead-code.mjs
 ```
 
 Add `electron-builder` as a dev dependency in `apps/desktop`. Targets: macOS `dmg` arm64 and x64, Windows `nsis` x64, Linux `AppImage` and `deb` x64. Configure `asarUnpack` for the `better-sqlite3` native binding. Ignore build output.
@@ -1863,8 +1864,9 @@ Add `electron-builder` as a dev dependency in `apps/desktop`. Targets: macOS `dm
 ### VERIFY
 
 ```sh
+npm run build --workspace @studynarrator/web
 npm run build --workspace @studynarrator/desktop
-npx electron-builder --dir --config apps/desktop/electron-builder.yml
+npm exec --workspace @studynarrator/desktop electron-builder -- --dir --config electron-builder.yml
 ```
 
 Launch the unpacked application and confirm it opens.
