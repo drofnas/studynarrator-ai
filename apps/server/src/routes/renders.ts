@@ -15,6 +15,7 @@ import {
   RenderIdSchema,
   RenderJobCollectionSchema,
   RenderJobSchema,
+  RenderPinInputSchema,
   RenderSegmentInputSchema,
   RenderStartOptionsSchema,
   RenderWaveformSchema,
@@ -176,6 +177,25 @@ export function createRendersRouter(
               ),
             ),
           );
+      }),
+    );
+    router.put(
+      "/api/renders/:renderId/pin",
+      asyncHandler(async (request, response) => {
+        const body = request.body as unknown;
+        const pinRequest =
+          body !== null && typeof body === "object" && !Array.isArray(body)
+            ? (body as Record<string, unknown>)
+            : {};
+        const input = RenderPinInputSchema.parse({
+          ...pinRequest,
+          renderId: request.params.renderId,
+        });
+        response.json(
+          RenderJobSchema.parse(
+            await renders.setPinned(input.renderId, input.pinned),
+          ),
+        );
       }),
     );
     router.get(

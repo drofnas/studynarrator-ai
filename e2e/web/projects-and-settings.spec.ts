@@ -40,6 +40,29 @@ test.describe("Settings and connection diagnostics", () => {
     await openConnectionSettings(page, studyNarrator);
   });
 
+  test("navigates to retention, persists controls, and confirms reclaim only after preview", async ({
+    page,
+  }) => {
+    await page.getByRole("link", { name: "Retention" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Retention" }),
+    ).toBeVisible();
+    await page.getByLabel("Speech cache retention").selectOption("24h");
+    await page.getByRole("button", { name: "Save retention settings" }).click();
+    await expect(page.getByText("Retention settings saved.")).toBeVisible();
+    await page.getByRole("button", { name: "Preview reclaim" }).click();
+    const confirmation = page.getByRole("dialog", { name: "Confirm reclaim" });
+    await expect(confirmation).toBeVisible();
+    await page.getByRole("button", { name: "Cancel reclaim" }).click();
+    await expect(confirmation).toHaveCount(0);
+    await page.getByRole("button", { name: "Preview reclaim" }).click();
+    await expect(confirmation).toBeVisible();
+    await page.getByRole("button", { name: "Confirm reclaim" }).click();
+    await expect(page.getByText(/^Reclaimed /u)).toBeVisible();
+    await page.reload();
+    await expect(page.getByLabel("Speech cache retention")).toHaveValue("24h");
+  });
+
   test("persists the singleton, normalizes /v1, stages every fake failure, and exports redacted JSON", async ({
     page,
     studyNarrator,

@@ -29,6 +29,7 @@ import {
   VoiceTimingCalibrationSchema,
   RenderArtifactCollectionSchema,
   RenderArtifactSchema,
+  RenderIdSchema,
   RenderJobCollectionSchema,
   RenderJobSchema,
   RenderSegmentSchema,
@@ -247,7 +248,9 @@ export interface StudyNarratorRepository {
   getRenderJob(renderId: string): RenderJob;
   listRenderJobs(projectId: string): RenderJob[];
   listRecoverableRenderJobs(): RenderJob[];
+  listRetentionRenderJobs(): RenderJob[];
   listPinnedRenderProjectIds(): string[];
+  clearRenderMedia(renderId: string): void;
   updateRenderJob(job: RenderJob): RenderJob;
   updateRenderSegment(
     segment: RenderSegment,
@@ -1412,6 +1415,18 @@ function createRepository(options: {
         ).map(renderJobFromRow),
       );
     },
+    listRetentionRenderJobs() {
+      assertOpen();
+      return RenderJobCollectionSchema.parse(
+        (
+          database
+            .prepare(
+              "SELECT * FROM render_jobs ORDER BY created_at ASC, id ASC",
+            )
+            .all() as RenderJobRow[]
+        ).map(renderJobFromRow),
+      );
+    },
     listPinnedRenderProjectIds() {
       assertOpen();
       return (
@@ -1421,6 +1436,17 @@ function createRepository(options: {
           )
           .all() as Array<{ project_id: string }>
       ).map(({ project_id: projectId }) => ProjectIdSchema.parse(projectId));
+    },
+    clearRenderMedia(renderId) {
+      assertOpen();
+      database
+        .prepare("DELETE FROM render_artifacts WHERE render_id = ?")
+        .run(RenderIdSchema.parse(renderId));
+      database
+        .prepare(
+          "UPDATE render_segments SET audio_path = NULL, audio_file_name = NULL, audio_size_bytes = NULL, audio_checksum = NULL WHERE render_id = ?",
+        )
+        .run(renderId);
     },
     updateRenderJob(jobValue) {
       assertOpen();

@@ -44,6 +44,7 @@ import {
   createProjectSpeechCacheKeyPlanner,
   createRenderPlanComputer,
   createRenderService,
+  createRetentionMaintenance,
   createScratchpadService,
   createScriptGenerationService,
   createSpeechCacheService,
@@ -172,24 +173,25 @@ export async function createStudyNarratorServices(options: {
       rootDirectory: resolve(descriptor.dataDirectory, "cache/speech"),
       activityGate: cacheActivityGate,
     });
-    const runSpeechCacheSweep = async () => {
+    const retentionMaintenance = createRetentionMaintenance({
+      repository: openedRepository,
+      cache,
+      speechCacheSweeper,
+      activityGate: cacheActivityGate,
+      dataDirectory: descriptor.dataDirectory,
+    });
+    const runRetentionSweep = async () => {
       try {
-        if (openedRepository.listRecoverableRenderJobs().length > 0) return;
-        const retention = openedRepository.getRetentionSettings();
-        await speechCacheSweeper.sweep({
-          ttl: retention.speechCacheTtl,
-          sizeCapBytes: retention.speechCacheSizeCapBytes,
-          pinnedProjectIds: openedRepository.listPinnedRenderProjectIds(),
-        });
+        await retentionMaintenance.reclaim({ confirm: true });
       } catch (error) {
         options.logger.warn(
-          { event: "speech-cache-sweep-failed", error },
-          "Speech cache sweep failed",
+          { event: "retention-sweep-failed", error },
+          "Retention sweep failed",
         );
       }
     };
     speechCacheSweepInterval = setInterval(
-      () => void runSpeechCacheSweep(),
+      () => void runRetentionSweep(),
       SPEECH_CACHE_SWEEP_INTERVAL_MILLISECONDS,
     );
     speechCacheSweepInterval.unref();
@@ -205,6 +207,7 @@ export async function createStudyNarratorServices(options: {
       projectSpeechCacheKeys:
         createProjectSpeechCacheKeyPlanner(openedRepository),
       backups,
+      retention: retentionMaintenance,
     });
     const context = {
       client: descriptor.client,
@@ -253,7 +256,7 @@ export async function createStudyNarratorServices(options: {
         ? {}
         : { ffmpegPath: options.ffmpegPath }),
     });
-    void runSpeechCacheSweep();
+    void runRetentionSweep();
   } catch (error) {
     if (
       !(error instanceof MigrationFailureError) &&

@@ -6,6 +6,12 @@ import {
   PersistenceBackupRestoreInputSchema,
   PersistenceBackupRestoreResultSchema,
   PersistenceStatusSchema,
+  RetentionReclaimInputSchema,
+  RetentionReclaimPreviewSchema,
+  RetentionReclaimResultSchema,
+  RetentionSettingsAuthoringSchema,
+  RetentionSettingsSchema,
+  RetentionUsageSchema,
   ProjectCreateInputSchema,
   ProjectDetailSchema,
   ProjectDuplicateInputSchema,
@@ -20,6 +26,8 @@ import {
   type PersistenceBackupRestoreResult,
   type PersistenceClient,
   type PersistenceStatus,
+  type RetentionSettings,
+  type RetentionSettingsAuthoring,
   type ProjectCreateInput,
   type ProjectDetail,
   type ProjectDuplicateInput,
@@ -54,6 +62,14 @@ export interface PersistenceRepository {
   ): IgnoredDiagnosticCollection;
   listGlobalLexicon(): LexiconEntry[];
   replaceGlobalLexicon(input: GlobalLexiconReplaceInput): LexiconEntry[];
+  getRetentionSettings(): RetentionSettings;
+  updateRetentionSettings(input: RetentionSettingsAuthoring): RetentionSettings;
+}
+
+interface RetentionMaintenanceProvider {
+  usage(): Promise<unknown>;
+  previewReclaim(): Promise<unknown>;
+  reclaim(input: unknown): Promise<unknown>;
 }
 
 export class PersistenceUnavailableError extends Error {
@@ -74,10 +90,17 @@ export function createPersistenceService(
       input: ProjectReplaceInput,
     ) => readonly string[] | undefined;
     backups?: PersistenceBackupsProvider;
+    retention?: RetentionMaintenanceProvider;
   } = {},
 ): PersistenceClient {
   const execute = <T>(operation: () => T | Promise<T>): Promise<Awaited<T>> =>
     Promise.resolve().then(operation) as Promise<Awaited<T>>;
+  const retentionMaintenance = (): RetentionMaintenanceProvider => {
+    if (options.retention) return options.retention;
+    throw new PersistenceUnavailableError(
+      "Retention maintenance is not available in this context.",
+    );
+  };
   return {
     status() {
       return execute(() => PersistenceStatusSchema.parse(repository.status()));
@@ -169,6 +192,43 @@ export function createPersistenceService(
         );
       },
     },
+    retention: {
+      get() {
+        return execute(() =>
+          RetentionSettingsSchema.parse(repository.getRetentionSettings()),
+        );
+      },
+      update(input) {
+        return execute(() =>
+          RetentionSettingsSchema.parse(
+            repository.updateRetentionSettings(
+              RetentionSettingsAuthoringSchema.parse(input),
+            ),
+          ),
+        );
+      },
+      usage() {
+        return execute(async () =>
+          RetentionUsageSchema.parse(await retentionMaintenance().usage()),
+        );
+      },
+      previewReclaim() {
+        return execute(async () =>
+          RetentionReclaimPreviewSchema.parse(
+            await retentionMaintenance().previewReclaim(),
+          ),
+        );
+      },
+      reclaim(input) {
+        return execute(async () =>
+          RetentionReclaimResultSchema.parse(
+            await retentionMaintenance().reclaim(
+              RetentionReclaimInputSchema.parse(input),
+            ),
+          ),
+        );
+      },
+    },
     preferences: {
       getIgnoredDiagnostics() {
         return execute(() =>
@@ -246,6 +306,13 @@ export function createUnavailablePersistenceService(
       delete: unavailable,
     },
     settings: { getPacing: unavailable, updatePacing: unavailable },
+    retention: {
+      get: unavailable,
+      update: unavailable,
+      usage: unavailable,
+      previewReclaim: unavailable,
+      reclaim: unavailable,
+    },
     preferences: {
       getIgnoredDiagnostics: unavailable,
       replaceIgnoredDiagnostics: unavailable,

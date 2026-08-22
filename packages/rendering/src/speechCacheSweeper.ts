@@ -181,6 +181,8 @@ export function createSpeechCacheSweeper(options: {
       preview?: boolean;
       now?: () => Date;
       pinnedProjectIds?: readonly string[];
+      /** An outer retention run may hold this gate for all managed classes. */
+      maintenanceLease?: SpeechCacheActivityLease;
     }): Promise<SpeechCacheSweepResult> {
       if (
         !Number.isSafeInteger(optionsInput.sizeCapBytes) ||
@@ -188,7 +190,10 @@ export function createSpeechCacheSweeper(options: {
       )
         throw new Error("Speech cache size cap is invalid.");
       const preview = optionsInput.preview === true;
-      const maintenance = options.activityGate?.beginMaintenance();
+      const ownsMaintenance = optionsInput.maintenanceLease === undefined;
+      const maintenance =
+        optionsInput.maintenanceLease ??
+        options.activityGate?.beginMaintenance();
       if (options.activityGate && !maintenance)
         return { entriesRemoved: 0, bytesFreed: 0, skipped: true, preview };
       if (!options.activityGate && (await options.cache.status()).inFlight > 0)
@@ -258,7 +263,7 @@ export function createSpeechCacheSweeper(options: {
           preview,
         };
       } finally {
-        maintenance?.release();
+        if (ownsMaintenance) maintenance?.release();
       }
     },
   };

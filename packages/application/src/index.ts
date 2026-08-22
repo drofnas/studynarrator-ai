@@ -183,6 +183,7 @@ export {
   parseRenderMediaRange,
   type ResolvedRenderMedia,
 } from "./renderMedia.js";
+export { createRetentionMaintenance } from "./retention.js";
 export {
   createScriptGenerationService,
   type ScriptGenerationRepository,

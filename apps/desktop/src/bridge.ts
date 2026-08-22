@@ -9,6 +9,10 @@ import {
   PersistenceBackupCollectionSchema,
   PersistenceBackupRestoreResultSchema,
   PersistenceStatusSchema,
+  RetentionReclaimPreviewSchema,
+  RetentionReclaimResultSchema,
+  RetentionSettingsSchema,
+  RetentionUsageSchema,
   ProjectDetailSchema,
   PROJECT_PREVIEW_CHANNELS,
   ProjectPreviewResultSchema,
@@ -22,6 +26,7 @@ import {
   RenderIdSchema,
   RenderJobCollectionSchema,
   RenderJobSchema,
+  RenderPinInputSchema,
   RenderStartOptionsSchema,
   RenderWaveformSchema,
   SYSTEM_DIAGNOSTICS_CHANNEL,
@@ -122,6 +127,33 @@ export function createPreloadBridge(
         );
       },
     },
+    retention: {
+      async get() {
+        return RetentionSettingsSchema.parse(
+          await invoke(PERSISTENCE_CHANNELS.retentionGet),
+        );
+      },
+      async update(input) {
+        return RetentionSettingsSchema.parse(
+          await invoke(PERSISTENCE_CHANNELS.retentionUpdate, input),
+        );
+      },
+      async usage() {
+        return RetentionUsageSchema.parse(
+          await invoke(PERSISTENCE_CHANNELS.retentionUsage),
+        );
+      },
+      async previewReclaim() {
+        return RetentionReclaimPreviewSchema.parse(
+          await invoke(PERSISTENCE_CHANNELS.retentionPreviewReclaim),
+        );
+      },
+      async reclaim(input) {
+        return RetentionReclaimResultSchema.parse(
+          await invoke(PERSISTENCE_CHANNELS.retentionReclaim, input),
+        );
+      },
+    },
     preferences: {
       async getIgnoredDiagnostics() {
         return IgnoredDiagnosticCollectionSchema.parse(
@@ -149,6 +181,7 @@ export function createPreloadBridge(
   };
   Object.freeze(persistence);
   Object.freeze(persistence.settings);
+  Object.freeze(persistence.retention);
   Object.freeze(persistence.preferences);
   Object.freeze(persistence.globalLexicon);
   const connection: SpeechBackendConnectionClient = {
@@ -272,6 +305,14 @@ export function createPreloadBridge(
     async retry(renderId) {
       return RenderJobSchema.parse(
         await invoke(RENDER_CHANNELS.retry, { renderId }),
+      );
+    },
+    async setPinned(renderId, pinned) {
+      return RenderJobSchema.parse(
+        await invoke(
+          RENDER_CHANNELS.setPinned,
+          RenderPinInputSchema.parse({ renderId, pinned }),
+        ),
       );
     },
     async listArtifacts(renderId) {

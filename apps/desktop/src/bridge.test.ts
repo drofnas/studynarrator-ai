@@ -99,6 +99,37 @@ const persistence = {
     getPacing: vi.fn(async () => DEFAULT_SYSTEM_TIMING),
     updatePacing: vi.fn(),
   },
+  retention: {
+    get: vi.fn(async () => ({
+      speechCacheTtl: "7d" as const,
+      jobSnapshotTtl: "never" as const,
+      renderArtifactTtl: "never" as const,
+      speechCacheSizeCapBytes: 1_024,
+      updatedAt: "2026-08-12T12:00:00.000Z",
+    })),
+    update: vi.fn(),
+    usage: vi.fn(async () => ({
+      speechCache: { entries: 0, bytes: 0 },
+      jobSnapshots: { entries: 0, bytes: 0 },
+      renderArtifacts: { entries: 0, bytes: 0 },
+    })),
+    previewReclaim: vi.fn(async () => ({
+      reclaimable: {
+        speechCache: { entries: 0, bytes: 0 },
+        jobSnapshots: { entries: 0, bytes: 0 },
+        renderArtifacts: { entries: 0, bytes: 0 },
+      },
+      skipped: false,
+    })),
+    reclaim: vi.fn(async () => ({
+      reclaimed: {
+        speechCache: { entries: 0, bytes: 0 },
+        jobSnapshots: { entries: 0, bytes: 0 },
+        renderArtifacts: { entries: 0, bytes: 0 },
+      },
+      skipped: false,
+    })),
+  },
   preferences: {
     getIgnoredDiagnostics: vi.fn(async () => []),
     replaceIgnoredDiagnostics: vi.fn(),
@@ -247,6 +278,7 @@ const renders = {
   get: vi.fn(async () => renderJob),
   cancel: vi.fn(async () => renderJob),
   retry: vi.fn(async () => renderJob),
+  setPinned: vi.fn(async () => renderJob),
   listArtifacts: vi.fn(async () => []),
   exportArtifact: vi.fn(async () => ({
     disposition: "download" as const,
@@ -632,6 +664,13 @@ describe("Electron boundary", () => {
     persistence.projects.duplicate.mockResolvedValue(project);
     persistence.projects.delete.mockResolvedValue(undefined);
     persistence.settings.updatePacing.mockResolvedValue(DEFAULT_SYSTEM_TIMING);
+    persistence.retention.update.mockResolvedValue({
+      speechCacheTtl: "7d",
+      jobSnapshotTtl: "never",
+      renderArtifactTtl: "never",
+      speechCacheSizeCapBytes: 1_024,
+      updatedAt: timestamp,
+    });
     persistence.preferences.replaceIgnoredDiagnostics.mockResolvedValue([]);
     persistence.globalLexicon.replace.mockResolvedValue(namedSenseOutput);
     connection.get.mockResolvedValue(storedConnection as never);
@@ -711,6 +750,13 @@ describe("Electron boundary", () => {
         backupPath: persistenceBackup.path,
       },
       [PERSISTENCE_CHANNELS.pacingUpdate]: DEFAULT_SYSTEM_TIMING,
+      [PERSISTENCE_CHANNELS.retentionUpdate]: {
+        speechCacheTtl: "7d",
+        jobSnapshotTtl: "never",
+        renderArtifactTtl: "never",
+        speechCacheSizeCapBytes: 1_024,
+      },
+      [PERSISTENCE_CHANNELS.retentionReclaim]: { confirm: true },
       [PERSISTENCE_CHANNELS.ignoredReplace]: [],
       [PERSISTENCE_CHANNELS.globalLexiconReplace]: namedSenseInput,
       [CONNECTION_CHANNELS.update]: connectionInput,
@@ -744,6 +790,7 @@ describe("Electron boundary", () => {
       [RENDER_CHANNELS.get]: { renderId: renderJob.id },
       [RENDER_CHANNELS.cancel]: { renderId: renderJob.id },
       [RENDER_CHANNELS.retry]: { renderId: renderJob.id },
+      [RENDER_CHANNELS.setPinned]: { renderId: renderJob.id, pinned: true },
       [RENDER_CHANNELS.artifacts]: { renderId: renderJob.id },
       [RENDER_CHANNELS.exportArtifact]: { artifactId: renderArtifact.id },
       [RENDER_CHANNELS.exportAudio]: { renderId: renderJob.id },

@@ -1477,6 +1477,16 @@ export async function createRenderService(options: {
         throw error;
       }
     },
+    async setPinned(renderIdInput, pinned) {
+      const job = options.repository.getRenderJob(
+        RenderIdSchema.parse(renderIdInput),
+      );
+      return await Promise.resolve(
+        options.repository.updateRenderJob(
+          RenderJobSchema.parse({ ...job, pinned: Boolean(pinned) }),
+        ),
+      );
+    },
     async listArtifacts(renderId) {
       return await Promise.resolve(
         options.repository.listRenderArtifacts(RenderIdSchema.parse(renderId)),

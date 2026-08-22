@@ -259,6 +259,7 @@ export function ProjectsPage({
   );
   const [renderWaveform, setRenderWaveform] = useState<RenderWaveform>();
   const [renderError, setRenderError] = useState("");
+  const [pinBusy, setPinBusy] = useState(false);
   const [estimateContextState, setEstimateContextState] =
     useState<EstimateContextState>(
       renderClient ? { status: "loading" } : { status: "unavailable" },
@@ -501,6 +502,26 @@ export function ProjectsPage({
     !terminalRenderStates.has(selectedRenderJob.state)
       ? selectedRenderJob.id
       : undefined;
+
+  const toggleCompletedRenderPin = async () => {
+    if (!renderClient || !completedRenderJob) return;
+    setPinBusy(true);
+    setRenderError("");
+    try {
+      const updated = await renderClient.setPinned(
+        completedRenderJob.id,
+        !completedRenderJob.pinned,
+      );
+      setCompletedRenderJob(updated);
+      setSelectedRenderJob((current) =>
+        current?.id === updated.id ? updated : current,
+      );
+    } catch (error) {
+      setRenderError(message(error));
+    } finally {
+      setPinBusy(false);
+    }
+  };
 
   useEffect(() => {
     if (!renderClient || !activeRenderId) return;
@@ -1863,6 +1884,17 @@ export function ProjectsPage({
                       {...(renderWaveform ? { waveform: renderWaveform } : {})}
                     />
                     <div className={styles.renderDownloads}>
+                      <button
+                        type="button"
+                        className={styles.textLinkButton}
+                        aria-pressed={completedRenderJob.pinned}
+                        disabled={renderActive || pinBusy}
+                        onClick={() => void toggleCompletedRenderPin()}
+                      >
+                        {completedRenderJob.pinned
+                          ? "Unpin completed output"
+                          : "Pin completed output"}
+                      </button>
                       <button
                         type="button"
                         className={styles.textLinkButton}

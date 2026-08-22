@@ -317,6 +317,10 @@ export function AppShell() {
                 {settingsNavigationLink(APP_PATHS.settingsVoices, "Voices")}
                 {settingsNavigationLink(APP_PATHS.settingsLexicon, "Lexicon")}
                 {settingsNavigationLink(APP_PATHS.settingsTimings, "Timings")}
+                {settingsNavigationLink(
+                  APP_PATHS.settingsRetention,
+                  "Retention",
+                )}
               </div>
             </div>
             {navigationLink(

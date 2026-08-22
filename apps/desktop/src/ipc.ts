@@ -12,6 +12,12 @@ import {
   PersistenceBackupRestoreInputSchema,
   PersistenceBackupRestoreResultSchema,
   PersistenceStatusSchema,
+  RetentionReclaimInputSchema,
+  RetentionReclaimPreviewSchema,
+  RetentionReclaimResultSchema,
+  RetentionSettingsAuthoringSchema,
+  RetentionSettingsSchema,
+  RetentionUsageSchema,
   ProjectCreateInputSchema,
   ProjectDetailSchema,
   ProjectDuplicateRequestSchema,
@@ -31,6 +37,7 @@ import {
   RenderIdInputSchema,
   RenderJobCollectionSchema,
   RenderJobSchema,
+  RenderPinInputSchema,
   RenderProjectInputSchema,
   RenderProjectStartInputSchema,
   RenderSegmentInputSchema,
@@ -171,6 +178,31 @@ export function registerPersistenceHandlers(
     SystemTimingConfigurationSchema.parse(
       await persistence.settings.updatePacing(
         SystemTimingConfigurationSchema.parse(input),
+      ),
+    ),
+  );
+  handle(PERSISTENCE_CHANNELS.retentionGet, async () =>
+    RetentionSettingsSchema.parse(await persistence.retention.get()),
+  );
+  handle(PERSISTENCE_CHANNELS.retentionUpdate, async (input) =>
+    RetentionSettingsSchema.parse(
+      await persistence.retention.update(
+        RetentionSettingsAuthoringSchema.parse(input),
+      ),
+    ),
+  );
+  handle(PERSISTENCE_CHANNELS.retentionUsage, async () =>
+    RetentionUsageSchema.parse(await persistence.retention.usage()),
+  );
+  handle(PERSISTENCE_CHANNELS.retentionPreviewReclaim, async () =>
+    RetentionReclaimPreviewSchema.parse(
+      await persistence.retention.previewReclaim(),
+    ),
+  );
+  handle(PERSISTENCE_CHANNELS.retentionReclaim, async (input) =>
+    RetentionReclaimResultSchema.parse(
+      await persistence.retention.reclaim(
+        RetentionReclaimInputSchema.parse(input),
       ),
     ),
   );
@@ -499,6 +531,10 @@ export function registerRenderHandlers(
   handle(RENDER_CHANNELS.retry, async (input) => {
     const { renderId } = RenderIdInputSchema.parse(input);
     return RenderJobSchema.parse(await renders.retry(renderId));
+  });
+  handle(RENDER_CHANNELS.setPinned, async (input) => {
+    const { renderId, pinned } = RenderPinInputSchema.parse(input);
+    return RenderJobSchema.parse(await renders.setPinned(renderId, pinned));
   });
   handle(RENDER_CHANNELS.artifacts, async (input) => {
     const { renderId } = RenderIdInputSchema.parse(input);

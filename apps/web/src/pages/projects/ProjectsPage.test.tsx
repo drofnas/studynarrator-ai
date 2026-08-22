@@ -332,6 +332,7 @@ function renderClientFixture(
     get,
     cancel: vi.fn(async () => fallbackJob),
     retry: vi.fn(async () => fallbackJob),
+    setPinned: vi.fn(async () => fallbackJob),
     listArtifacts: vi.fn(async () => []),
     exportArtifact: vi.fn(),
     exportAudio: vi.fn(),
@@ -415,6 +416,7 @@ function fixture(
       getPacing: vi.fn(async () => DEFAULT_SYSTEM_TIMING),
       updatePacing: vi.fn(),
     },
+    retention: {} as PersistenceClient["retention"],
     preferences: {
       getIgnoredDiagnostics: vi.fn(async () =>
         structuredClone(ignoredDiagnostics),
@@ -2562,6 +2564,7 @@ describe("Projects workbench", () => {
       get: vi.fn(async () => job),
       cancel: vi.fn(async () => job),
       retry: vi.fn(async () => job),
+      setPinned: vi.fn(async () => job),
       listArtifacts: vi.fn(async () => [artifact]),
       exportArtifact,
       exportAudio: exportArtifact,
@@ -2607,6 +2610,38 @@ describe("Projects workbench", () => {
       screen.getByRole("button", { name: "Download Details" }),
     );
     expect(exportDetails).toHaveBeenCalledWith(job.id);
+  });
+
+  it("pins and unpins the completed render from the render result", async () => {
+    const { client, analyze } = fixture();
+    const completed = renderJobFixture(
+      "00000000-0000-4000-8000-000000000094",
+      "complete",
+    );
+    const renderClient = renderClientFixture(
+      [completed],
+      async () => completed,
+    );
+    const setPinned = vi.fn(async (_renderId: string, pinned: boolean) => ({
+      ...completed,
+      pinned,
+    }));
+    renderClient.setPinned = setPinned;
+    renderPage(client, analyze, { renderClient });
+    await openProjectTab("Render");
+
+    const pin = await screen.findByRole("button", {
+      name: "Pin completed output",
+    });
+    await userEvent.click(pin);
+    expect(setPinned).toHaveBeenCalledWith(completed.id, true);
+    expect(
+      await screen.findByRole("button", { name: "Unpin completed output" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Unpin completed output" }),
+    );
+    expect(setPinned).toHaveBeenLastCalledWith(completed.id, false);
   });
 
   it("shows failed saves and guards unload and route navigation", async () => {

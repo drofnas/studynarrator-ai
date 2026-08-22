@@ -112,7 +112,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 21.1 | Add the retention settings table and service       | P1       | S    | complete    |
 | 21.2 | Add the cache sweeper                              | P1       | M    | complete    |
 | 21.3 | Add render pinning                                 | P1       | S    | complete    |
-| 21.4 | Add the retention settings screen                  | P1       | M    | todo        |
+| 21.4 | Add the retention settings screen                  | P1       | M    | complete    |
 | 22   | Host header allowlist                              | P1       | S    | todo        |
 | 23.1 | Add electron-builder configuration                 | P1       | M    | todo        |
 | 23.2 | Verify the native rebuild per target               | P1       | S    | todo        |
@@ -1752,25 +1752,42 @@ Standard, plus a test that a pinned render survives a sweep whose TTL has elapse
 
 ## TASK 21.4 — Add the retention settings screen
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** M
 
-### FILES YOU MAY TOUCH
+### Corrected decomposition
 
-```
-apps/web/src/pages/settings/RetentionSettingsPage.tsx   (new)
-apps/web/src/pages/settings/RetentionSettingsPage.module.css   (new)
-apps/web/src/pages/settings/RetentionSettingsPage.test.tsx   (new)
-apps/web/src/app/routes.tsx
-apps/web/src/services/persistence/persistenceClient.ts
-```
+The original UI-only file allowance was incomplete: the retention table was
+private to persistence and the cache sweeper was private to composition, so a
+truthful screen first needed a typed maintenance surface. The approved
+correction includes the narrow supporting transport work below; it does not
+restore the removed standalone RenderHistory feature.
 
-Per-class TTL selection, the size cap, current usage by class, a pin toggle surfaced on render history, and a manual "reclaim N MB" action showing a preview of what would be removed before confirmation.
+1. Expose typed retention settings, usage, preview reclaim, and explicit
+   confirmed reclaim operations through the persistence service, REST, and
+   Electron IPC. Keep their schemas, API/IPC/application manifests, and
+   manifest-driven contract tests in lockstep.
+2. Apply each saved non-`never` TTL to its managed class: speech cache
+   segments, `render-plans/.jobs` snapshots, and render artifact directories.
+   Scan only these managed roots, skip symlinks and missing roots, preserve
+   cache activity and pinned-project guarantees, and keep pinned render
+   snapshots, artifacts, and cache dependencies.
+3. Add the minimal `renders.setPinned` mutation to both transports and place
+   an accessible pin/unpin control in the completed-render area of
+   `ProjectsPage`.
+4. Add the Retention Settings route and navigation entry. The page loads and
+   saves all retention controls, reports all three usage classes, previews
+   before explicit confirmation, surfaces errors and success, and persists on
+   reload.
 
-### VERIFY
+### Verification
 
-Standard, plus `npm run test:e2e:web`.
+Focused service, transport, client, component, pin-control, and Playwright
+coverage covers configured TTLs for every class, preview non-destructiveness,
+pin protection, missing managed roots, payload validation, loading/saving,
+preview cancel/confirm, errors, and reload persistence. `npm run verify` and
+`npm run test:e2e:web` passed before this task was marked complete.
 
 ### COMMIT
 

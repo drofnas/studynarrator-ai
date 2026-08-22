@@ -65,6 +65,7 @@ function fixture() {
       delete: vi.fn(),
     },
     settings: { getPacing: vi.fn(), updatePacing: vi.fn() },
+    retention: {} as PersistenceClient["retention"],
     preferences: {
       getIgnoredDiagnostics: vi.fn(),
       replaceIgnoredDiagnostics: vi.fn(),

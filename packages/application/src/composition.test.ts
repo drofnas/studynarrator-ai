@@ -378,11 +378,13 @@ describe("createStudyNarratorServices", () => {
 
       const services = await servicesIn(dataDirectory);
       await vi.waitFor(() =>
-        expect(recorded.sweepInputs).toContainEqual({
-          pinnedProjectIds: [pinnedProjectId],
-          sizeCapBytes: 1024,
-          ttl: "7d",
-        }),
+        expect(recorded.sweepInputs).toContainEqual(
+          expect.objectContaining({
+            pinnedProjectIds: [pinnedProjectId],
+            sizeCapBytes: 1024,
+            ttl: "7d",
+          }),
+        ),
       );
       await services.dispose();
     });

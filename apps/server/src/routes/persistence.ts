@@ -7,6 +7,12 @@ import {
   PersistenceBackupRestoreInputSchema,
   PersistenceBackupRestoreResultSchema,
   PersistenceStatusSchema,
+  RetentionReclaimInputSchema,
+  RetentionReclaimPreviewSchema,
+  RetentionReclaimResultSchema,
+  RetentionSettingsAuthoringSchema,
+  RetentionSettingsSchema,
+  RetentionUsageSchema,
   ProjectCreateInputSchema,
   ProjectDetailSchema,
   ProjectDuplicateInputSchema,
@@ -144,6 +150,56 @@ export function createPersistenceRouter(
         SystemTimingConfigurationSchema.parse(
           await persistence.settings.updatePacing(
             SystemTimingConfigurationSchema.parse(request.body),
+          ),
+        ),
+      );
+    }),
+  );
+  router.get(
+    "/api/settings/retention",
+    asyncHandler(async (_request, response) => {
+      response.json(
+        RetentionSettingsSchema.parse(await persistence.retention.get()),
+      );
+    }),
+  );
+  router.put(
+    "/api/settings/retention",
+    asyncHandler(async (request, response) => {
+      response.json(
+        RetentionSettingsSchema.parse(
+          await persistence.retention.update(
+            RetentionSettingsAuthoringSchema.parse(request.body),
+          ),
+        ),
+      );
+    }),
+  );
+  router.get(
+    "/api/settings/retention/usage",
+    asyncHandler(async (_request, response) => {
+      response.json(
+        RetentionUsageSchema.parse(await persistence.retention.usage()),
+      );
+    }),
+  );
+  router.post(
+    "/api/settings/retention/reclaim-preview",
+    asyncHandler(async (_request, response) => {
+      response.json(
+        RetentionReclaimPreviewSchema.parse(
+          await persistence.retention.previewReclaim(),
+        ),
+      );
+    }),
+  );
+  router.post(
+    "/api/settings/retention/reclaim",
+    asyncHandler(async (request, response) => {
+      response.json(
+        RetentionReclaimResultSchema.parse(
+          await persistence.retention.reclaim(
+            RetentionReclaimInputSchema.parse(request.body),
           ),
         ),
       );

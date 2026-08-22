@@ -386,6 +386,7 @@ describe("render coordinator", () => {
     expect(APPLICATION_SERVICE_MANIFEST).toContain(
       "renders.getEstimateContext",
     );
+    expect(APPLICATION_SERVICE_MANIFEST).toContain("renders.setPinned");
   });
 
   it("waits for exclusive cache maintenance before starting a render", async () => {

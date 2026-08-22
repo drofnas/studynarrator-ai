@@ -7,6 +7,7 @@ import {
   RenderIdSchema,
   RenderJobCollectionSchema,
   RenderJobSchema,
+  RenderPinInputSchema,
   RenderStartOptionsSchema,
   RenderWaveformSchema,
   type RenderClient,
@@ -152,6 +153,20 @@ export function createRestRenderClient(
         await fetchInput(`/api/renders/${encodeURIComponent(renderId)}/retry`, {
           method: "POST",
         }),
+        (body) => RenderJobSchema.parse(body),
+      );
+    },
+    async setPinned(renderId, pinned) {
+      const input = RenderPinInputSchema.parse({ renderId, pinned });
+      return await read(
+        await fetchInput(
+          `/api/renders/${encodeURIComponent(input.renderId)}/pin`,
+          {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ pinned: input.pinned }),
+          },
+        ),
         (body) => RenderJobSchema.parse(body),
       );
     },

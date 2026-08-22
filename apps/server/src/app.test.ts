@@ -28,6 +28,10 @@ import {
   HealthSchema,
   PersistenceBackupCollectionSchema,
   PersistenceBackupRestoreResultSchema,
+  RetentionReclaimPreviewSchema,
+  RetentionReclaimResultSchema,
+  RetentionSettingsSchema,
+  RetentionUsageSchema,
   ProjectDetailSchema,
   ProjectPreviewResultSchema,
   ProjectSummaryCollectionSchema,
@@ -236,6 +240,29 @@ async function fixture(logger?: {
           "/tmp/backups/pre-restore-2026-08-12T12-00-00-000Z.sqlite",
       }),
     },
+    retention: {
+      usage: async () => ({
+        speechCache: { entries: 0, bytes: 0 },
+        jobSnapshots: { entries: 0, bytes: 0 },
+        renderArtifacts: { entries: 0, bytes: 0 },
+      }),
+      previewReclaim: async () => ({
+        reclaimable: {
+          speechCache: { entries: 0, bytes: 0 },
+          jobSnapshots: { entries: 0, bytes: 0 },
+          renderArtifacts: { entries: 0, bytes: 0 },
+        },
+        skipped: false,
+      }),
+      reclaim: async () => ({
+        reclaimed: {
+          speechCache: { entries: 0, bytes: 0 },
+          jobSnapshots: { entries: 0, bytes: 0 },
+          renderArtifacts: { entries: 0, bytes: 0 },
+        },
+        skipped: false,
+      }),
+    },
   });
   const connection = createConnectionService({
     repository,
@@ -437,6 +464,10 @@ async function fixture(logger?: {
     subscribe: () => () => undefined,
     cancel: async () => renderJob(),
     retry: async () => renderJob(),
+    setPinned: async (_renderId: string, pinned: boolean) => ({
+      ...renderJob(),
+      pinned,
+    }),
     listArtifacts: async () => [artifact],
     exportArtifact: async () => ({
       disposition: "download" as const,
@@ -1266,10 +1297,10 @@ describe("REST API operation manifest", () => {
       ({ method, path }) => `${method} ${path}`,
     );
     expect(registered.sort()).toEqual([...declared].sort());
-    expect(new Set(declared).size).toBe(55);
+    expect(new Set(declared).size).toBe(61);
   });
 
-  it("exercises a successful schema-valid response for all 55 operations", async () => {
+  it("exercises a successful schema-valid response for all 61 operations", async () => {
     const { app } = await fixture();
     const covered = new Set<string>();
     const call = async (
@@ -1344,6 +1375,33 @@ describe("REST API operation manifest", () => {
     );
     await call("GET", "/api/settings/pacing", 200);
     await call("PUT", "/api/settings/pacing", 200, DEFAULT_SYSTEM_TIMING);
+    const retention = RetentionSettingsSchema.parse(
+      (await call("GET", "/api/settings/retention", 200)).body as unknown,
+    );
+    RetentionSettingsSchema.parse(
+      (
+        await call("PUT", "/api/settings/retention", 200, {
+          speechCacheTtl: retention.speechCacheTtl,
+          jobSnapshotTtl: retention.jobSnapshotTtl,
+          renderArtifactTtl: retention.renderArtifactTtl,
+          speechCacheSizeCapBytes: retention.speechCacheSizeCapBytes,
+        })
+      ).body as unknown,
+    );
+    RetentionUsageSchema.parse(
+      (await call("GET", "/api/settings/retention/usage", 200)).body as unknown,
+    );
+    RetentionReclaimPreviewSchema.parse(
+      (await call("POST", "/api/settings/retention/reclaim-preview", 200))
+        .body as unknown,
+    );
+    RetentionReclaimResultSchema.parse(
+      (
+        await call("POST", "/api/settings/retention/reclaim", 200, {
+          confirm: true,
+        })
+      ).body as unknown,
+    );
     await call("GET", "/api/preferences/ignored-diagnostics", 200);
     await call("PUT", "/api/preferences/ignored-diagnostics", 200, []);
     GlobalLexiconEntryCollectionSchema.parse(
@@ -1466,6 +1524,13 @@ describe("REST API operation manifest", () => {
     );
     await call("POST", `/api/renders/${render.id}/cancel`, 200);
     await call("POST", `/api/renders/${render.id}/retry`, 202);
+    RenderJobSchema.parse(
+      (
+        await call("PUT", `/api/renders/${render.id}/pin`, 200, {
+          pinned: true,
+        })
+      ).body as unknown,
+    );
     const artifacts = (
       await call("GET", `/api/renders/${render.id}/artifacts`, 200)
     ).body as Array<{ id: string }>;
@@ -1516,6 +1581,11 @@ describe("REST API operation manifest", () => {
       request(app)
         .put("/api/settings/pacing")
         .send({ durationMs: -1 })
+        .expect(400),
+      request(app).put("/api/settings/retention").send({}).expect(400),
+      request(app)
+        .post("/api/settings/retention/reclaim")
+        .send({ confirm: false })
         .expect(400),
       request(app)
         .put("/api/preferences/ignored-diagnostics")
@@ -1586,6 +1656,10 @@ describe("REST API operation manifest", () => {
       request(app).get("/api/renders/not-a-uuid/events").expect(400),
       request(app).post("/api/renders/not-a-uuid/cancel").expect(400),
       request(app).post("/api/renders/not-a-uuid/retry").expect(400),
+      request(app)
+        .put("/api/renders/not-a-uuid/pin")
+        .send({ pinned: true })
+        .expect(400),
       request(app).get("/api/renders/not-a-uuid/artifacts").expect(400),
       request(app).get("/api/renders/not-a-uuid/audio").expect(400),
       request(app).get("/api/renders/not-a-uuid/waveform").expect(400),

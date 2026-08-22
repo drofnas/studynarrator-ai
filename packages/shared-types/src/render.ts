@@ -13,6 +13,7 @@ export const RENDER_CHANNELS = Object.freeze({
   get: "renders.get",
   cancel: "renders.cancel",
   retry: "renders.retry",
+  setPinned: "renders.setPinned",
   artifacts: "renders.artifacts",
   exportArtifact: "renders.exportArtifact",
   exportAudio: "renders.exportAudio",
@@ -375,6 +376,9 @@ export const RenderProjectStartInputSchema = z
 export const RenderIdInputSchema = z
   .object({ renderId: RenderIdSchema })
   .strict();
+export const RenderPinInputSchema = z
+  .object({ renderId: RenderIdSchema, pinned: z.boolean() })
+  .strict();
 export const RenderSegmentInputSchema = z
   .object({
     renderId: RenderIdSchema,
@@ -406,6 +410,7 @@ export interface RenderClient {
   get(renderId: string): Promise<RenderJob>;
   cancel(renderId: string): Promise<RenderJob>;
   retry(renderId: string): Promise<RenderJob>;
+  setPinned(renderId: string, pinned: boolean): Promise<RenderJob>;
   listArtifacts(renderId: string): Promise<RenderArtifact[]>;
   exportArtifact(artifactId: string): Promise<RenderArtifactExportResult>;
   exportAudio(renderId: string): Promise<RenderArtifactExportResult>;
