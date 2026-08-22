@@ -10,6 +10,7 @@ import type {
   RenderArtifact,
   RenderJob,
   RenderSegment,
+  VoiceTimingCalibration,
 } from "@studynarrator/shared-types";
 import {
   createPcmSilence,
@@ -38,6 +39,12 @@ class MemoryRepository implements RenderRepository {
   artifacts = new Map<string, RenderArtifact & { path: string }>();
   segments = new Map<string, RenderSegment>();
   segmentPaths = new Map<string, string | null>();
+  calibrations = new Map<string, VoiceTimingCalibration>();
+  calibrationReads: Array<{ modelId: string; voiceId: string }> = [];
+  calibrationUpserts: VoiceTimingCalibration[] = [];
+  calibrationReadFailure: Error | null = null;
+  calibrationUpsertFailure: Error | null = null;
+  persistedSpeechAudioDurationMs: number | null | undefined;
   constructor(
     readonly connection: SpeechBackendConnection,
     readonly project: ProjectDetail,
@@ -75,9 +82,18 @@ class MemoryRepository implements RenderRepository {
   }
   updateRenderSegment(item: RenderSegment, path: string | null = null) {
     const key = `${item.renderId}:${String(item.ordinal)}`;
-    this.segments.set(key, item);
+    const persisted =
+      item.type === "speech" &&
+      item.state === "complete" &&
+      this.persistedSpeechAudioDurationMs !== undefined
+        ? {
+            ...item,
+            audioDurationMs: this.persistedSpeechAudioDurationMs,
+          }
+        : item;
+    this.segments.set(key, persisted);
     this.segmentPaths.set(key, path);
-    return item;
+    return persisted;
   }
   listRenderSegments(renderId: string) {
     return [...this.segments.values()]
@@ -110,9 +126,32 @@ class MemoryRepository implements RenderRepository {
     const { path, ...artifact } = item;
     return { artifact, path };
   }
+  getVoiceTimingCalibration(modelId: string, voiceId: string) {
+    this.calibrationReads.push({ modelId, voiceId });
+    if (this.calibrationReadFailure) throw this.calibrationReadFailure;
+    return this.calibrations.get(`${modelId}:${voiceId}`) ?? null;
+  }
+  upsertVoiceTimingCalibration(calibration: VoiceTimingCalibration) {
+    this.calibrationUpserts.push(calibration);
+    if (this.calibrationUpsertFailure) throw this.calibrationUpsertFailure;
+    this.calibrations.set(
+      `${calibration.modelId}:${calibration.voiceId}`,
+      calibration,
+    );
+    return calibration;
+  }
 }
 
-async function fixture(options: { synthesisFailure?: Error } = {}) {
+async function fixture(
+  options: {
+    synthesisFailure?: Error;
+    synthesisGate?: Promise<void>;
+    speechEntryCount?: number;
+    speed?: number;
+    readableText?: string;
+    normalizedText?: string;
+  } = {},
+) {
   const dataDirectory = await mkdtemp(join(tmpdir(), "studynarrator-render-"));
   roots.push(dataDirectory);
   const projectId = "00000000-0000-4000-8000-000000000001";
@@ -131,7 +170,7 @@ async function fixture(options: { synthesisFailure?: Error } = {}) {
         speakerId: "narrator",
         displayName: "Narrator",
         voiceId: "voice",
-        speed: 1,
+        speed: options.speed ?? 1,
         gainDb: 0,
         roleDescription: "",
         sampleText: "",
@@ -172,6 +211,10 @@ async function fixture(options: { synthesisFailure?: Error } = {}) {
     },
   });
   const cacheKey = "a".repeat(64);
+  const speechEntryCount = options.speechEntryCount ?? 1;
+  const speed = options.speed ?? 1;
+  const readableText = options.readableText ?? "Render me.";
+  const normalizedText = options.normalizedText ?? "Render me.";
   const plan = withRenderPlanHash({
     schemaVersion: 1,
     id: planId,
@@ -179,34 +222,37 @@ async function fixture(options: { synthesisFailure?: Error } = {}) {
     createdAt: timestamp,
     snapshotHash: snapshot.snapshotHash,
     scriptHash: project.scriptHash,
-    entries: [
-      {
-        type: "speech",
-        ordinal: 1,
-        nodeOrdinal: 1,
-        sectionTitle: null,
-        sourceRange: {
-          start: { line: 1, column: 1 },
-          end: { line: 1, column: 21 },
-        },
-        speakerId: "narrator",
-        voiceId: "voice",
-        speed: 1,
-        gainDb: 0,
-        originalText: "Render me.",
-        readableText: "Render me.",
-        ttsText: "Render me.",
-        chunks: [
-          { ordinal: 1, text: "Render me.", cacheKey, cacheStatus: "miss" },
-        ],
+    entries: Array.from({ length: speechEntryCount }, (_, index) => ({
+      type: "speech" as const,
+      ordinal: index + 1,
+      nodeOrdinal: index + 1,
+      sectionTitle: null,
+      sourceRange: {
+        start: { line: 1, column: 1 },
+        end: { line: 1, column: 21 },
       },
-    ],
+      speakerId: "narrator",
+      voiceId: "voice",
+      speed,
+      gainDb: 0,
+      originalText: readableText,
+      readableText,
+      ttsText: normalizedText,
+      chunks: [
+        {
+          ordinal: 1,
+          text: normalizedText,
+          cacheKey,
+          cacheStatus: "miss" as const,
+        },
+      ],
+    })),
     summary: {
       sectionCount: 0,
-      speechCount: 1,
+      speechCount: speechEntryCount,
       pauseCount: 0,
       cacheHits: 0,
-      cacheMisses: 1,
+      cacheMisses: speechEntryCount,
       silenceDurationMs: 0,
     },
   });
@@ -257,6 +303,7 @@ async function fixture(options: { synthesisFailure?: Error } = {}) {
     planComputer: { compute: async () => computed },
     speech: {
       async synthesize() {
+        if (options.synthesisGate) await options.synthesisGate;
         if (options.synthesisFailure) throw options.synthesisFailure;
         return {
           key: cacheKey,
@@ -271,8 +318,8 @@ async function fixture(options: { synthesisFailure?: Error } = {}) {
             serverIdentityHash: sha(baseUrl),
             modelId: "model",
             voiceId: "voice",
-            speed: 1,
-            textHash: sha("Render me."),
+            speed,
+            textHash: sha(normalizedText),
             responseFormat: "wav",
             key: cacheKey,
             audioChecksum: sha(wav),
@@ -287,6 +334,7 @@ async function fixture(options: { synthesisFailure?: Error } = {}) {
     },
     createId: () =>
       `00000000-0000-4000-8000-${String(nextId++).padStart(12, "0")}`,
+    now: () => new Date(timestamp),
     logger,
   });
   return { service, repository, plan, projectId, dataDirectory, logger };
@@ -368,6 +416,150 @@ describe("render coordinator", () => {
       1,
     );
     await service.close();
+  });
+
+  it("records persisted, speed-normalized segment timing and rolls it into one calibration per voice", async () => {
+    const { service, repository, plan, projectId } = await fixture({
+      speechEntryCount: 2,
+      speed: 1.5,
+      readableText: "Readable text that is deliberately not normalized.",
+      normalizedText: "Normalize.",
+    });
+    const firstEntry = plan.entries[0];
+    if (firstEntry?.type !== "speech")
+      throw new Error("Expected a speech fixture entry.");
+    const [frozenChunk] = firstEntry.chunks;
+    if (!frozenChunk) throw new Error("Expected a frozen speech chunk.");
+    const normalizedCharacters = frozenChunk.text.length;
+    expect(normalizedCharacters).toBe(10);
+    expect(firstEntry.readableText.length).not.toBe(normalizedCharacters);
+    expect(repository.project.scriptSource.length).not.toBe(
+      normalizedCharacters,
+    );
+    repository.persistedSpeechAudioDurationMs = 1_200;
+
+    const first = await terminal(
+      service,
+      (await service.startProject(projectId)).id,
+    );
+
+    expect(first.state).toBe("complete");
+    expect(repository.listRenderSegments(first.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ audioDurationMs: 1_200 }),
+      ]),
+    );
+    expect(repository.calibrationUpserts).toEqual([
+      {
+        modelId: "model",
+        voiceId: "voice",
+        millisecondsPerNormalizedCharacter: 180,
+        sampleCount: 2,
+        updatedAt: "2026-08-13T12:00:00.000Z",
+      },
+    ]);
+
+    repository.persistedSpeechAudioDurationMs = 800;
+    const second = await terminal(
+      service,
+      (await service.startProject(projectId)).id,
+    );
+
+    expect(second.state).toBe("complete");
+    expect(repository.calibrationReads).toEqual([
+      { modelId: "model", voiceId: "voice" },
+      { modelId: "model", voiceId: "voice" },
+    ]);
+    expect(repository.calibrationUpserts).toHaveLength(2);
+    expect(repository.calibrationUpserts.at(-1)).toEqual({
+      modelId: "model",
+      voiceId: "voice",
+      millisecondsPerNormalizedCharacter: 150,
+      sampleCount: 4,
+      updatedAt: "2026-08-13T12:00:00.000Z",
+    });
+    await service.close();
+  });
+
+  it.each(["read", "upsert"] as const)(
+    "keeps the render complete and logs only safe metadata when calibration %s fails",
+    async (operation) => {
+      const privateFailure = Object.assign(
+        new Error(
+          "Private project Render fixture: narrator: Render me. at http://127.0.0.1:8765/private",
+        ),
+        {
+          name: "PrivateCalibrationError",
+          code: "PRIVATE_RENDER_FIXTURE",
+        },
+      );
+      const { service, repository, projectId, logger } = await fixture();
+      if (operation === "read")
+        repository.calibrationReadFailure = privateFailure;
+      else repository.calibrationUpsertFailure = privateFailure;
+
+      const completed = await terminal(
+        service,
+        (await service.startProject(projectId)).id,
+      );
+
+      expect(completed.state).toBe("complete");
+      expect(await service.listArtifacts(completed.id)).not.toEqual([]);
+      expect(logger.error).toHaveBeenCalledWith(
+        {
+          event: "render-calibration-failed",
+          renderId: completed.id,
+          projectId,
+          cause: {
+            name: "Error",
+            code: "RENDER_CALIBRATION_FAILED",
+          },
+        },
+        "Render calibration failed",
+      );
+      const serializedLogs = JSON.stringify([
+        ...logger.info.mock.calls,
+        ...logger.error.mock.calls,
+      ]);
+      expect(serializedLogs).not.toContain(privateFailure.message);
+      expect(serializedLogs).not.toContain(privateFailure.name);
+      expect(serializedLogs).not.toContain(privateFailure.code);
+      expect(serializedLogs).not.toContain("Render fixture");
+      expect(serializedLogs).not.toContain("Render me.");
+      expect(serializedLogs).not.toContain("http://127.0.0.1:8765");
+      await service.close();
+    },
+  );
+
+  it("never calibrates failed or canceled renders", async () => {
+    const failedFixture = await fixture({
+      synthesisFailure: new Error("synthesis failed"),
+    });
+    const failed = await terminal(
+      failedFixture.service,
+      (await failedFixture.service.startProject(failedFixture.projectId)).id,
+    );
+    expect(failed.state).toBe("failed");
+    expect(failedFixture.repository.calibrationReads).toEqual([]);
+    expect(failedFixture.repository.calibrationUpserts).toEqual([]);
+    await failedFixture.service.close();
+
+    let releaseSynthesis: () => void = () => undefined;
+    const synthesisGate = new Promise<void>((resolve) => {
+      releaseSynthesis = resolve;
+    });
+    const canceledFixture = await fixture({ synthesisGate });
+    const started = await canceledFixture.service.startProject(
+      canceledFixture.projectId,
+    );
+    await canceledFixture.service.cancel(started.id);
+    releaseSynthesis();
+    const canceled = await terminal(canceledFixture.service, started.id);
+
+    expect(canceled.state).toBe("canceled");
+    expect(canceledFixture.repository.calibrationReads).toEqual([]);
+    expect(canceledFixture.repository.calibrationUpserts).toEqual([]);
+    await canceledFixture.service.close();
   });
 
   it("synthesizes, normalizes, encodes, validates, and atomically publishes the v1 bundle", async () => {

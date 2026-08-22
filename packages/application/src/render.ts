@@ -75,6 +75,8 @@ export type RenderRepository = Pick<
   | "getRenderArtifactPath"
   | "listRenderSegments"
   | "getRenderSegmentPath"
+  | "getVoiceTimingCalibration"
+  | "upsertVoiceTimingCalibration"
 > &
   Partial<Pick<StudyNarratorRepository, "getProject">>;
 
@@ -316,6 +318,86 @@ export async function createRenderService(options: {
       }
     }
     return persisted;
+  };
+
+  const recordVoiceTimingCalibration = (
+    completed: RenderJob,
+    plan: RenderPlan,
+    modelId: string,
+  ): void => {
+    try {
+      const speechEntries = new Map(
+        plan.entries
+          .filter((entry) => entry.type === "speech")
+          .map((entry) => [entry.ordinal, entry]),
+      );
+      const samplesByVoice = new Map<string, { sum: number; count: number }>();
+      for (const stored of options.repository.listRenderSegments(
+        completed.id,
+      )) {
+        if (
+          stored.type !== "speech" ||
+          stored.state !== "complete" ||
+          stored.audioDurationMs === null ||
+          !Number.isFinite(stored.audioDurationMs) ||
+          stored.audioDurationMs <= 0
+        )
+          continue;
+        const entry = speechEntries.get(stored.ordinal);
+        if (!entry) continue;
+        const normalizedCharacters = entry.chunks[0]?.text.length ?? 0;
+        if (normalizedCharacters === 0) continue;
+        const sample =
+          (stored.audioDurationMs * entry.speed) / normalizedCharacters;
+        if (!Number.isFinite(sample) || sample <= 0) continue;
+        const grouped = samplesByVoice.get(entry.voiceId) ?? {
+          sum: 0,
+          count: 0,
+        };
+        grouped.sum += sample;
+        grouped.count += 1;
+        samplesByVoice.set(entry.voiceId, grouped);
+      }
+      if (samplesByVoice.size === 0) return;
+      const updatedAt = now().toISOString();
+      for (const [voiceId, samples] of samplesByVoice) {
+        const existing = options.repository.getVoiceTimingCalibration(
+          modelId,
+          voiceId,
+        );
+        const existingCount = existing?.sampleCount ?? 0;
+        const sampleCount = existingCount + samples.count;
+        if (sampleCount <= 0) continue;
+        options.repository.upsertVoiceTimingCalibration({
+          modelId,
+          voiceId,
+          millisecondsPerNormalizedCharacter:
+            ((existing?.millisecondsPerNormalizedCharacter ?? 0) *
+              existingCount +
+              samples.sum) /
+            sampleCount,
+          sampleCount,
+          updatedAt,
+        });
+      }
+    } catch (error) {
+      try {
+        options.logger.error(
+          {
+            event: "render-calibration-failed",
+            renderId: completed.id,
+            projectId: completed.projectId,
+            cause: {
+              name: error instanceof Error ? "Error" : "UnknownError",
+              code: "RENDER_CALIBRATION_FAILED",
+            },
+          },
+          "Render calibration failed",
+        );
+      } catch {
+        // Calibration and its diagnostics must never change render completion.
+      }
+    }
   };
 
   async function execute(renderId: string): Promise<void> {
@@ -665,6 +747,12 @@ export async function createRenderService(options: {
         },
         "Render completed",
       );
+      if (!closing)
+        recordVoiceTimingCalibration(
+          completed,
+          plan,
+          snapshot.connection.modelId,
+        );
     } catch (error) {
       await rm(stage, { recursive: true, force: true }).catch(() => undefined);
       const phase = job.state;
