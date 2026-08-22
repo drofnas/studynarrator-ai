@@ -4,6 +4,7 @@ import express, {
   type Request,
   type Response,
 } from "express";
+import { randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { resolve } from "node:path";
 import type {
@@ -22,7 +23,7 @@ import {
   type ScriptGenerationService,
   type SystemService,
 } from "@studynarrator/application";
-import { boundaryError } from "./errorMiddleware.js";
+import { boundaryError, type BoundaryLogger } from "./errorMiddleware.js";
 import { createConnectionRouter } from "./routes/connection.js";
 import { createPersistenceRouter } from "./routes/persistence.js";
 import { createPreviewRouter } from "./routes/preview.js";
@@ -32,6 +33,10 @@ import { createScriptGenerationRouter } from "./routes/scriptGeneration.js";
 import { createSpeechCacheRouter } from "./routes/speechCache.js";
 import { createSystemRouter } from "./routes/system.js";
 import { createVoiceCatalogRouter } from "./routes/voiceCatalog.js";
+
+const silentBoundaryLogger: BoundaryLogger = {
+  error: () => undefined,
+};
 
 function streamRenderMedia(
   request: Request,
@@ -110,9 +115,16 @@ export function createExpressApp(options: {
   renders?: RenderService;
   speechCache?: SpeechCacheClient;
   scriptGeneration?: ScriptGenerationService;
+  logger?: BoundaryLogger;
 }): Express {
   const app = express();
   app.disable("x-powered-by");
+  app.use((_request, response, next) => {
+    const requestId = randomUUID();
+    response.locals.requestId = requestId;
+    response.setHeader("X-Request-Id", requestId);
+    next();
+  });
   app.use(express.json({ limit: "6mb", strict: true }));
   const persistenceUnavailable = (
     _request: Request,
@@ -149,7 +161,7 @@ export function createExpressApp(options: {
 
   createSpeechCacheRouter(options.speechCache, app);
 
-  app.use(boundaryError);
+  app.use(boundaryError(options.logger ?? silentBoundaryLogger));
 
   return app;
 }

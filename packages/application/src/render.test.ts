@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { unzipSync } from "fflate";
 import type {
   SpeechBackendConnection,
@@ -111,7 +111,7 @@ class MemoryRepository implements RenderRepository {
   }
 }
 
-async function fixture() {
+async function fixture(options: { synthesisFailure?: Error } = {}) {
   const dataDirectory = await mkdtemp(join(tmpdir(), "studynarrator-render-"));
   roots.push(dataDirectory);
   const projectId = "00000000-0000-4000-8000-000000000001";
@@ -242,6 +242,7 @@ async function fixture() {
     project,
   );
   const wav = createPcmSilence(1_000).bytes!;
+  const logger = { info: vi.fn(), error: vi.fn() };
   let nextId = 10;
   const computed: ComputedRenderPlan = {
     snapshot,
@@ -255,6 +256,7 @@ async function fixture() {
     planComputer: { compute: async () => computed },
     speech: {
       async synthesize() {
+        if (options.synthesisFailure) throw options.synthesisFailure;
         return {
           key: cacheKey,
           status: "miss",
@@ -284,8 +286,9 @@ async function fixture() {
     },
     createId: () =>
       `00000000-0000-4000-8000-${String(nextId++).padStart(12, "0")}`,
+    logger,
   });
-  return { service, repository, plan, projectId, dataDirectory };
+  return { service, repository, plan, projectId, dataDirectory, logger };
 }
 
 async function terminal(
@@ -302,7 +305,8 @@ async function terminal(
 
 describe("render coordinator", () => {
   it("synthesizes, normalizes, encodes, validates, and atomically publishes the v1 bundle", async () => {
-    const { service, repository, dataDirectory, projectId } = await fixture();
+    const { service, repository, dataDirectory, projectId, logger } =
+      await fixture();
     const started = await service.startProject(projectId);
     await expect(service.startProject(projectId)).resolves.toHaveProperty(
       "id",
@@ -315,6 +319,40 @@ describe("render coordinator", () => {
       cacheMisses: 1,
       ttsRequests: 1,
     });
+    const infoEvents = logger.info.mock.calls.map(
+      ([bindings]) => bindings as Record<string, unknown>,
+    );
+    expect(infoEvents.map(({ event }) => event)).toEqual([
+      "render-phase-transition",
+      "render-start",
+      "render-phase-transition",
+      "render-phase-transition",
+      "render-phase-transition",
+      "render-phase-transition",
+      "render-phase-transition",
+      "render-completed",
+    ]);
+    expect(
+      infoEvents
+        .filter(({ event }) => event === "render-phase-transition")
+        .map(({ fromPhase, toPhase }) => [fromPhase, toPhase]),
+    ).toEqual([
+      ["queued", "validating"],
+      ["validating", "synthesizing"],
+      ["synthesizing", "assembling"],
+      ["assembling", "encoding"],
+      ["encoding", "writing_artifacts"],
+      ["writing_artifacts", "complete"],
+    ]);
+    expect(infoEvents.at(-1)).toEqual({
+      event: "render-completed",
+      renderId: completed.id,
+      projectId,
+      durationMs: completed.progress.elapsedMs,
+      cacheHits: 0,
+      cacheMisses: 1,
+    });
+    expect(logger.error).not.toHaveBeenCalled();
     const artifacts = await service.listArtifacts(started.id);
     expect(artifacts.map(({ type }) => type).sort()).toEqual(
       [
@@ -409,6 +447,48 @@ describe("render coordinator", () => {
     await expect(service.resolveDetailsArchive!(started.id)).rejects.toThrow(
       /integrity/iu,
     );
+    await service.close();
+  });
+
+  it("logs a sanitized failure cause without private render inputs", async () => {
+    const privateFailure =
+      "Private project Render fixture: narrator: Render me. at http://127.0.0.1:8765/private";
+    const { service, projectId, logger } = await fixture({
+      synthesisFailure: new Error(privateFailure),
+    });
+    const failed = await terminal(
+      service,
+      (await service.startProject(projectId)).id,
+    );
+
+    expect(failed).toMatchObject({
+      state: "failed",
+      error: {
+        code: "RENDER_SYNTHESIS_FAILED",
+        message: "Speech generation failed for the current segment.",
+      },
+    });
+    expect(logger.error).toHaveBeenCalledWith(
+      {
+        event: "render-failed",
+        renderId: failed.id,
+        projectId,
+        phase: "synthesizing",
+        cause: {
+          code: "RENDER_SYNTHESIS_FAILED",
+          message: "Speech generation failed for the current segment.",
+        },
+      },
+      "Render failed",
+    );
+    const serializedLogs = JSON.stringify([
+      ...logger.info.mock.calls,
+      ...logger.error.mock.calls,
+    ]);
+    expect(serializedLogs).not.toContain(privateFailure);
+    expect(serializedLogs).not.toContain("Render fixture");
+    expect(serializedLogs).not.toContain("Render me.");
+    expect(serializedLogs).not.toContain("http://127.0.0.1:8765");
     await service.close();
   });
 

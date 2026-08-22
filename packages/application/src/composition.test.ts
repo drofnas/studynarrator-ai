@@ -32,6 +32,7 @@ const logger = {
 
 const recorded = vi.hoisted(() => ({
   calls: [] as string[],
+  renderLoggers: [] as unknown[],
   restoreInputs: [] as {
     Database: unknown;
     databasePath: string;
@@ -56,6 +57,20 @@ vi.mock("@studynarrator/runtime", () => ({
     run: async () => ({ status: "pass", executable: "ffmpeg", version: "7.1" }),
   })),
 }));
+
+vi.mock("./render.js", async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  const createRenderService = actual.createRenderService as (
+    options: Record<string, unknown>,
+  ) => Promise<unknown>;
+  return {
+    ...actual,
+    createRenderService: (options: Record<string, unknown>) => {
+      recorded.renderLoggers.push(options.logger);
+      return createRenderService(options);
+    },
+  };
+});
 
 vi.mock("./cachedSpeech.js", async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
@@ -168,6 +183,7 @@ describe("createStudyNarratorServices", () => {
 
   beforeEach(() => {
     recorded.calls.length = 0;
+    recorded.renderLoggers.length = 0;
     recorded.restoreInputs.length = 0;
     closeLog = [];
     vi.resetAllMocks();
@@ -259,6 +275,7 @@ describe("createStudyNarratorServices", () => {
         logger,
       });
       expect(services.logger).toBe(logger);
+      expect(recorded.renderLoggers).toEqual([logger]);
       for (const key of [
         "connection",
         "voiceCatalog",

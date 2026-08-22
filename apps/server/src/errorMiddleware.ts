@@ -1,12 +1,29 @@
-import type { ErrorRequestHandler } from "express";
+import type {
+  ErrorRequestHandler,
+  NextFunction,
+  Request,
+  Response,
+} from "express";
 import { BoundaryErrorSchema } from "@studynarrator/shared-types";
 
-export const boundaryError: ErrorRequestHandler = (
-  error,
-  _request,
-  response,
-  _next,
-) => {
+export interface BoundaryLogger {
+  error(bindings: Record<string, unknown>, message: string): void;
+}
+
+function safeCauseField(value: unknown): string | undefined {
+  return typeof value === "string" &&
+    /^[A-Za-z][A-Za-z0-9_.-]{0,127}$/u.test(value)
+    ? value
+    : undefined;
+}
+
+function handleBoundaryError(
+  logger: BoundaryLogger,
+  error: unknown,
+  request: Request,
+  response: Response,
+  _next: NextFunction,
+): void {
   let status = 500;
   let code = "PERSISTENCE_BOUNDARY_ERROR";
   let message = "StudyNarrator could not complete the persistence operation.";
@@ -151,6 +168,23 @@ export const boundaryError: ErrorRequestHandler = (
         ? errorRecord.message
         : "StudyNarrator could not generate the requested export.";
   }
+  const causeName = safeCauseField(errorRecord?.name);
+  const causeCode = safeCauseField(errorRecord?.code);
+  logger.error(
+    {
+      event: "boundary-error",
+      requestId: response.locals.requestId,
+      method: request.method,
+      path: request.path,
+      status,
+      code,
+      cause: {
+        ...(causeName === undefined ? {} : { name: causeName }),
+        ...(causeCode === undefined ? {} : { code: causeCode }),
+      },
+    },
+    "Request failed at the server boundary",
+  );
   response.status(status).json(
     BoundaryErrorSchema.parse({
       error: {
@@ -160,4 +194,9 @@ export const boundaryError: ErrorRequestHandler = (
       },
     }),
   );
-};
+}
+
+export function boundaryError(logger: BoundaryLogger): ErrorRequestHandler {
+  return (error, request, response, next) =>
+    handleBoundaryError(logger, error, request, response, next);
+}

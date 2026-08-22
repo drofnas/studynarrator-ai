@@ -56,6 +56,11 @@ class RenderMediaUnavailableError extends Error {
   readonly code = "RENDER_MEDIA_UNAVAILABLE";
 }
 
+interface RenderLifecycleLogger {
+  info(bindings: Record<string, unknown>, message: string): void;
+  error(bindings: Record<string, unknown>, message: string): void;
+}
+
 export type RenderRepository = Pick<
   StudyNarratorRepository,
   | "getSpeechBackendConnection"
@@ -225,6 +230,7 @@ export async function createRenderService(options: {
   now?: () => Date;
   createId?: () => string;
   planComputer: RenderPlanComputer;
+  logger: RenderLifecycleLogger;
 }): Promise<RenderService> {
   const now = options.now ?? (() => new Date());
   const createId = options.createId ?? randomUUID;
@@ -288,7 +294,19 @@ export async function createRenderService(options: {
       finishedAt,
       progress: { ...job.progress, ...patch, phase: state, elapsedMs },
     });
-    return options.repository.updateRenderJob(next);
+    const persisted = options.repository.updateRenderJob(next);
+    if (job.state !== persisted.state)
+      options.logger.info(
+        {
+          event: "render-phase-transition",
+          renderId: persisted.id,
+          projectId: persisted.projectId,
+          fromPhase: job.state,
+          toPhase: persisted.state,
+        },
+        "Render phase transitioned",
+      );
+    return persisted;
   };
 
   async function execute(renderId: string): Promise<void> {
@@ -302,6 +320,14 @@ export async function createRenderService(options: {
       await mkdir(join(stage, "segments"), { mode: 0o700 });
       await mkdir(join(stage, "work"), { mode: 0o700 });
       job = update(job, "validating");
+      options.logger.info(
+        {
+          event: "render-start",
+          renderId: job.id,
+          projectId: job.projectId,
+        },
+        "Render starting",
+      );
       const jobBundle = await options.plans.loadJob(job.id);
       const { plan, snapshot, silenceAssets } = jobBundle;
       const connection = options.repository.getSpeechBackendConnection();
@@ -618,7 +644,18 @@ export async function createRenderService(options: {
         });
       }
       options.repository.replaceRenderArtifacts(renderId, artifacts);
-      update(job, "complete");
+      const completed = update(job, "complete");
+      options.logger.info(
+        {
+          event: "render-completed",
+          renderId: completed.id,
+          projectId: completed.projectId,
+          durationMs: completed.progress.elapsedMs,
+          cacheHits: completed.progress.cacheHits,
+          cacheMisses: completed.progress.cacheMisses,
+        },
+        "Render completed",
+      );
     } catch (error) {
       await rm(stage, { recursive: true, force: true }).catch(() => undefined);
       const phase = job.state;
@@ -632,7 +669,20 @@ export async function createRenderService(options: {
             state: "failed",
             error: sanitized,
           });
-        update(job, "failed", {}, sanitized);
+        const failed = update(job, "failed", {}, sanitized);
+        options.logger.error(
+          {
+            event: "render-failed",
+            renderId: failed.id,
+            projectId: failed.projectId,
+            phase: sanitized.phase,
+            cause: {
+              code: sanitized.code,
+              message: sanitized.message,
+            },
+          },
+          "Render failed",
+        );
       }
     } finally {
       controllers.delete(renderId);

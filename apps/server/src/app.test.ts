@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
 import request from "supertest";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createConnectionService,
   createPersistenceService,
@@ -87,7 +87,9 @@ afterEach(async () => {
   openServices.clear();
 });
 
-async function fixture() {
+async function fixture(logger?: {
+  error(bindings: Record<string, unknown>, message: string): void;
+}) {
   const databasePath = join(
     mkdtempSync(join(tmpdir(), "studynarrator-server-")),
     "app.sqlite",
@@ -371,6 +373,7 @@ async function fixture() {
         renders,
         scriptGeneration,
         context,
+        ...(logger === undefined ? {} : { logger }),
       }),
     ),
   };
@@ -419,6 +422,91 @@ describe("Express diagnostics API", () => {
       },
     });
     expect(JSON.stringify(response.body)).not.toContain("must-not-leak");
+  });
+});
+
+describe("Express boundary logging", () => {
+  it("correlates known, validation, and unknown errors without logging request data", async () => {
+    const logger = { error: vi.fn() };
+    const { app } = await fixture(logger);
+    const missingProjectId = "00000000-0000-4000-8000-000000000099";
+    const secret = "private-request-value-must-not-leak";
+
+    const known = await request(app)
+      .get(`/api/projects/${missingProjectId}?secret=${secret}`)
+      .expect(404);
+    expect(known.body).toEqual({
+      error: {
+        code: "NOT_FOUND",
+        message: "The requested persistence record does not exist.",
+      },
+    });
+    const validation = await request(app)
+      .post("/api/projects")
+      .send({ name: "", password: secret })
+      .expect(400);
+    expect(BoundaryErrorSchema.parse(validation.body).error.code).toBe(
+      "VALIDATION_ERROR",
+    );
+    const unknown = await request(app)
+      .post("/api/projects")
+      .set("content-type", "application/json")
+      .send(`{"name":"${secret}`)
+      .expect(500);
+    expect(unknown.body).toEqual({
+      error: {
+        code: "PERSISTENCE_BOUNDARY_ERROR",
+        message: "StudyNarrator could not complete the persistence operation.",
+      },
+    });
+
+    const responses = [known, validation, unknown];
+    const requestIds = responses.map(
+      ({ headers }) => headers["x-request-id"] as string,
+    );
+    expect(requestIds).toEqual([
+      expect.stringMatching(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u,
+      ),
+      expect.any(String),
+      expect.any(String),
+    ]);
+    expect(new Set(requestIds).size).toBe(3);
+    const boundaryLogs = logger.error.mock.calls.map(
+      ([bindings]) => bindings as Record<string, unknown>,
+    );
+    expect(boundaryLogs).toEqual([
+      expect.objectContaining({
+        event: "boundary-error",
+        requestId: requestIds[0],
+        method: "GET",
+        path: `/api/projects/${missingProjectId}`,
+        status: 404,
+        code: "NOT_FOUND",
+        cause: { name: "Error", code: "PERSISTENCE_NOT_FOUND" },
+      }),
+      expect.objectContaining({
+        event: "boundary-error",
+        requestId: requestIds[1],
+        method: "POST",
+        path: "/api/projects",
+        status: 400,
+        code: "VALIDATION_ERROR",
+        cause: { name: "ZodError" },
+      }),
+      expect.objectContaining({
+        event: "boundary-error",
+        requestId: requestIds[2],
+        method: "POST",
+        path: "/api/projects",
+        status: 500,
+        code: "PERSISTENCE_BOUNDARY_ERROR",
+        cause: { name: "SyntaxError" },
+      }),
+    ]);
+    expect(JSON.stringify(boundaryLogs)).not.toContain(secret);
+    expect(JSON.stringify(boundaryLogs)).not.toContain("query");
+    expect(JSON.stringify(boundaryLogs)).not.toContain("body");
   });
 });
 

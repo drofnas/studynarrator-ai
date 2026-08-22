@@ -17,6 +17,7 @@ const {
   scriptGeneration,
   speechCache,
   context,
+  logger,
 } = runtime;
 const application = createExpressApp({
   service,
@@ -29,6 +30,7 @@ const application = createExpressApp({
   ...(renders === undefined ? {} : { renders }),
   ...(scriptGeneration === undefined ? {} : { scriptGeneration }),
   speechCache,
+  logger,
 });
 const webEntryPoint = resolve(
   configuration.webDistributionDirectory,

@@ -212,6 +212,7 @@ export async function createStudyNarratorServices(options: {
       planComputer,
       speech,
       dataDirectory: descriptor.dataDirectory,
+      logger: options.logger,
       ...(options.ffmpegPath === undefined
         ? {}
         : { ffmpegPath: options.ffmpegPath }),
