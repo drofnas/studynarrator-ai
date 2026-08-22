@@ -103,7 +103,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 18.3 | Log render lifecycle and boundary errors           | P1       | S    | complete    |
 | 19.1 | Add a render progress observer                     | P1       | S    | complete    |
 | 19.2 | Add the SSE endpoint                               | P1       | S    | complete    |
-| 19.3 | Consume SSE in the web client                      | P1       | M    | todo        |
+| 19.3 | Consume SSE in the web client                      | P1       | M    | complete    |
 | 20.1 | Add the voice timing calibration table             | P1       | S    | todo        |
 | 20.2 | Record calibration after each render               | P1       | S    | todo        |
 | 20.3 | Add the estimation functions                       | P1       | S    | todo        |
@@ -1455,7 +1455,7 @@ Standard, plus a test asserting the stream ends after a terminal event.
 
 ## TASK 19.3 — Consume SSE in the web client
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** M
 
