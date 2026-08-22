@@ -23,6 +23,7 @@
     "fake:speaches:scenario": "node scripts/fake-speaches/control.mjs scenario",
     "e2e:install": "playwright install chromium",
     "audit:dead-code": "node scripts/audit-dead-code.mjs",
+    "regenerate:corpus": "tsx scripts/regenerate-corpus.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings 0",
