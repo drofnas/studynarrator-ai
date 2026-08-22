@@ -7,6 +7,7 @@ import {
   RenderIdSchema,
   RenderJobCollectionSchema,
   RenderJobSchema,
+  RenderStartOptionsSchema,
   RenderWaveformSchema,
   type RenderClient,
   type RenderJob,
@@ -61,11 +62,16 @@ export function createRestRenderClient(
         (body) => RenderEstimateContextResultSchema.parse(body),
       );
     },
-    async startProject(projectId) {
+    async startProject(projectId, options) {
+      const parsed = RenderStartOptionsSchema.parse(options);
       return await read(
         await fetchInput(
           `/api/projects/${encodeURIComponent(projectId)}/renders`,
-          { method: "POST" },
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(parsed),
+          },
         ),
         (body) => RenderJobSchema.parse(body),
       );

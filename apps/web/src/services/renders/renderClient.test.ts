@@ -69,6 +69,45 @@ class FakeEventSource {
 }
 
 describe("render REST client", () => {
+  it("posts default-enabled and disabled render start options", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify(progressJob), {
+          status: 202,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    const client = createRestRenderClient(fetchMock as typeof fetch);
+
+    await expect(client.startProject(progressJob.projectId)).resolves.toEqual(
+      progressJob,
+    );
+    await expect(
+      client.startProject(progressJob.projectId, {
+        diskSpaceCheckEnabled: false,
+      }),
+    ).resolves.toEqual(progressJob);
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      `/api/projects/${progressJob.projectId}/renders`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ diskSpaceCheckEnabled: true }),
+      },
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      `/api/projects/${progressJob.projectId}/renders`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ diskSpaceCheckEnabled: false }),
+      },
+    );
+  });
+
   it("posts strict estimate context and validates the response", async () => {
     const context = {
       freeSpaceBytes: 5_000_000,

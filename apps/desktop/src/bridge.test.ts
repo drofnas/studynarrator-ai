@@ -407,6 +407,22 @@ describe("Electron boundary", () => {
     );
     expect(() => bridge.renders.renderAudioSource("../outside")).toThrow();
     await expect(
+      bridge.renders.startProject(renderJob.projectId),
+    ).resolves.toEqual(renderJob);
+    expect(invoke).toHaveBeenCalledWith(RENDER_CHANNELS.startProject, {
+      projectId: renderJob.projectId,
+      options: { diskSpaceCheckEnabled: true },
+    });
+    await expect(
+      bridge.renders.startProject(renderJob.projectId, {
+        diskSpaceCheckEnabled: false,
+      }),
+    ).resolves.toEqual(renderJob);
+    expect(invoke).toHaveBeenCalledWith(RENDER_CHANNELS.startProject, {
+      projectId: renderJob.projectId,
+      options: { diskSpaceCheckEnabled: false },
+    });
+    await expect(
       bridge.renders.getEstimateContext({
         modelId: "model",
         voiceIds: ["voice"],
@@ -485,6 +501,22 @@ describe("Electron boundary", () => {
         apiKey: "test-secret-must-not-appear",
       }),
     ).rejects.toThrow("The request does not match the connection contract.");
+    renders.startProject.mockRejectedValueOnce(
+      Object.assign(
+        new Error(
+          "Render blocked: estimated peak disk use is 96000 bytes, but the data volume has 100000 free bytes and 90000 usable bytes after the required 10% reserve.",
+        ),
+        { code: "RENDER_DISK_SPACE_INSUFFICIENT" },
+      ),
+    );
+    await expect(
+      handlers.get(RENDER_CHANNELS.startProject)?.(undefined, {
+        projectId: renderJob.projectId,
+        options: { diskSpaceCheckEnabled: true },
+      }),
+    ).rejects.toThrow(
+      "Render blocked: estimated peak disk use is 96000 bytes, but the data volume has 100000 free bytes and 90000 usable bytes after the required 10% reserve.",
+    );
   });
 
   it("invokes every public IPC contract with schema-valid input and output", async () => {
@@ -699,7 +731,10 @@ describe("Electron boundary", () => {
       },
       [SPEECH_CACHE_CHANNELS.clearProject]: { projectId: project.id },
       [SPEECH_CACHE_CHANNELS.clearEntry]: { cacheKey: "a".repeat(64) },
-      [RENDER_CHANNELS.startProject]: { projectId: project.id },
+      [RENDER_CHANNELS.startProject]: {
+        projectId: project.id,
+        options: { diskSpaceCheckEnabled: false },
+      },
       [RENDER_CHANNELS.getEstimateContext]: {
         modelId: "model",
         voiceIds: ["voice"],
@@ -757,6 +792,9 @@ describe("Electron boundary", () => {
         notes: "",
       },
     ]);
+    expect(renders.startProject).toHaveBeenCalledWith(project.id, {
+      diskSpaceCheckEnabled: false,
+    });
     expect(scriptGeneration.resolvePromptExport).toHaveBeenCalledWith(
       null,
       "update",

@@ -24,6 +24,11 @@ import {
 import {
   ProjectReplaceInputSchema,
   DEFAULT_SYSTEM_TIMING,
+  RENDER_DISK_HARD_RESERVE_PERCENT,
+  RENDER_DISK_SOFT_RESERVE_PERCENT,
+  renderDiskSpaceBlockMessage,
+  renderDiskSpaceUsableBytes,
+  renderDiskSpaceWarningMessage,
   type IgnoredDiagnosticCollection,
   type PersistenceClient,
   type ProjectDetail,
@@ -78,6 +83,31 @@ type EstimateContextState =
   | { status: "ready"; value: RenderEstimateContextResult }
   | { status: "unavailable" };
 type ProjectTab = "script" | "settings" | "details" | "render";
+
+const RENDER_DISK_SPACE_CHECK_STORAGE_KEY =
+  "studynarrator.render.disk-space-check.v1";
+
+function storedDiskSpaceCheckEnabled(): boolean {
+  try {
+    return (
+      window.localStorage.getItem(RENDER_DISK_SPACE_CHECK_STORAGE_KEY) !==
+      "false"
+    );
+  } catch {
+    return true;
+  }
+}
+
+function storeDiskSpaceCheckEnabled(enabled: boolean): void {
+  try {
+    window.localStorage.setItem(
+      RENDER_DISK_SPACE_CHECK_STORAGE_KEY,
+      String(enabled),
+    );
+  } catch {
+    // The in-memory preference still applies when browser storage is blocked.
+  }
+}
 
 const projectTabs: Array<{ id: ProjectTab; label: string }> = [
   { id: "script", label: "Script Editor" },
@@ -224,6 +254,9 @@ export function ProjectsPage({
   const [selectedRenderJob, setSelectedRenderJob] = useState<RenderJob>();
   const [completedRenderJob, setCompletedRenderJob] = useState<RenderJob>();
   const [renderStarting, setRenderStarting] = useState(false);
+  const [diskSpaceCheckEnabled, setDiskSpaceCheckEnabled] = useState(
+    storedDiskSpaceCheckEnabled,
+  );
   const [renderWaveform, setRenderWaveform] = useState<RenderWaveform>();
   const [renderError, setRenderError] = useState("");
   const [estimateContextState, setEstimateContextState] =
@@ -1097,15 +1130,47 @@ export function ProjectsPage({
       currentRouteProjectIdRef.current === renderProjectId;
     setRenderStarting(true);
     setRenderError("");
+    let startNotice = "Rendering started.";
     try {
       if (isDirty && !(await saveNow()))
         throw new Error("Save valid project changes before rendering.");
-      const job = await renderClient.startProject(renderProjectId);
+      if (
+        diskSpaceCheckEnabled &&
+        renderEstimates &&
+        estimateContextState.status === "ready"
+      ) {
+        const freeSpaceBytes = estimateContextState.value.freeSpaceBytes;
+        const hardUsableBytes = renderDiskSpaceUsableBytes(
+          freeSpaceBytes,
+          RENDER_DISK_HARD_RESERVE_PERCENT,
+        );
+        if (renderEstimates.peakDiskBytes > hardUsableBytes)
+          throw new Error(
+            renderDiskSpaceBlockMessage(
+              renderEstimates.peakDiskBytes,
+              freeSpaceBytes,
+              hardUsableBytes,
+            ),
+          );
+        const softUsableBytes = renderDiskSpaceUsableBytes(
+          freeSpaceBytes,
+          RENDER_DISK_SOFT_RESERVE_PERCENT,
+        );
+        if (renderEstimates.peakDiskBytes > softUsableBytes)
+          startNotice = renderDiskSpaceWarningMessage(
+            renderEstimates.peakDiskBytes,
+            freeSpaceBytes,
+            softUsableBytes,
+          );
+      }
+      const job = await renderClient.startProject(renderProjectId, {
+        diskSpaceCheckEnabled,
+      });
       if (!isCurrentRenderStart()) return;
       renderStartRevisionRef.current += 1;
       setSelectedRenderJob(job);
       if (job.state === "complete") setCompletedRenderJob(job);
-      setNotice("Rendering started.");
+      setNotice(startNotice);
     } catch (error) {
       if (isCurrentRenderStart()) setRenderError(message(error));
     } finally {
@@ -1720,6 +1785,18 @@ export function ProjectsPage({
                   render may take longer while voice segments are generated;
                   later edits are faster when unchanged segments can be reused.
                 </p>
+                <label className={styles.check}>
+                  <input
+                    type="checkbox"
+                    checked={diskSpaceCheckEnabled}
+                    onChange={(event) => {
+                      const enabled = event.target.checked;
+                      setDiskSpaceCheckEnabled(enabled);
+                      storeDiskSpaceCheckEnabled(enabled);
+                    }}
+                  />
+                  Block renders when disk space is insufficient
+                </label>
                 {renderError ? (
                   <p className={styles.fieldError} role="alert">
                     {renderError}

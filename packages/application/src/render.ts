@@ -12,13 +12,23 @@ import {
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { zipSync } from "fflate";
 import {
+  estimateCacheBytes,
+  estimatePeakDiskBytes,
+  estimatePlanDurationMs,
+  type EstimablePlan,
+} from "@studynarrator/core";
+import {
   RENDER_CONTRACT_VERSION,
+  RENDER_DISK_HARD_RESERVE_PERCENT,
+  RENDER_DISK_SOFT_RESERVE_PERCENT,
   RenderArtifactIdSchema,
   RenderEstimateContextInputSchema,
   RenderEstimateContextResultSchema,
   RenderHistorySegmentCollectionSchema,
   RenderIdSchema,
   RenderJobSchema,
+  RenderStartOptionsSchema,
+  renderDiskSpaceBlockMessage,
   RenderWaveformSchema,
   type RenderArtifact,
   type RenderClient,
@@ -30,6 +40,7 @@ import {
   type RenderPlanEntry,
   type RenderProgress,
   type RenderSegment,
+  type RenderStartOptions,
   type RenderWaveform,
 } from "@studynarrator/shared-types";
 import { ProjectIdSchema } from "@studynarrator/shared-types";
@@ -60,8 +71,34 @@ class RenderMediaUnavailableError extends Error {
   readonly code = "RENDER_MEDIA_UNAVAILABLE";
 }
 
+export class RenderDiskSpaceError extends Error {
+  readonly code = "RENDER_DISK_SPACE_INSUFFICIENT";
+  readonly estimatedPeakBytes: number;
+  readonly freeSpaceBytes: bigint;
+  readonly usableBytes: bigint;
+
+  constructor(
+    estimatedPeakBytes: number,
+    freeSpaceBytes: bigint,
+    usableBytes: bigint,
+  ) {
+    super(
+      renderDiskSpaceBlockMessage(
+        estimatedPeakBytes,
+        freeSpaceBytes,
+        usableBytes,
+      ),
+    );
+    this.name = "RenderDiskSpaceError";
+    this.estimatedPeakBytes = estimatedPeakBytes;
+    this.freeSpaceBytes = freeSpaceBytes;
+    this.usableBytes = usableBytes;
+  }
+}
+
 interface RenderLifecycleLogger {
   info(bindings: Record<string, unknown>, message: string): void;
+  warn(bindings: Record<string, unknown>, message: string): void;
   error(bindings: Record<string, unknown>, message: string): void;
 }
 
@@ -1176,6 +1213,82 @@ export async function createRenderService(options: {
     enqueue(recovered.id);
   }
 
+  const estimateRenderPeakDiskBytes = (
+    computed: ComputedRenderPlan,
+  ): number => {
+    const modelId = computed.snapshot.connection.modelId;
+    const voiceIds = [
+      ...new Set(
+        computed.plan.entries
+          .filter((entry) => entry.type === "speech")
+          .map(({ voiceId }) => voiceId),
+      ),
+    ];
+    const millisecondsPerNormalizedCharacterByVoice = Object.create(
+      null,
+    ) as Record<string, number>;
+    for (const voiceId of voiceIds) {
+      try {
+        const calibration = options.repository.getVoiceTimingCalibration(
+          modelId,
+          voiceId,
+        );
+        if (calibration?.modelId === modelId && calibration.voiceId === voiceId)
+          millisecondsPerNormalizedCharacterByVoice[voiceId] =
+            calibration.millisecondsPerNormalizedCharacter;
+      } catch {
+        // Missing calibration must fall back to the bundled timing estimate.
+      }
+    }
+    const calibration = { millisecondsPerNormalizedCharacterByVoice };
+    const speechPlan: EstimablePlan = {
+      entries: computed.plan.entries.filter((entry) => entry.type === "speech"),
+    };
+    const speechDurationMs = estimatePlanDurationMs(speechPlan, calibration);
+    const totalDurationMs = estimatePlanDurationMs(computed.plan, calibration);
+    const speechCacheBytes = estimateCacheBytes(speechDurationMs, 24_000, 2, 1);
+    return estimatePeakDiskBytes({
+      speechCacheBytes,
+      totalDurationMs,
+      bitrateKbps: 192,
+      sampleRate: 24_000,
+      bytesPerSample: 2,
+      channels: 1,
+    });
+  };
+
+  const preflightDiskSpace = async (
+    computed: ComputedRenderPlan,
+  ): Promise<void> => {
+    const estimatedPeakBytes = estimateRenderPeakDiskBytes(computed);
+    const stats = await readFileSystemStats(options.dataDirectory);
+    if (stats.bavail < 0n || stats.bsize < 0n)
+      throw new Error("Data-volume free space could not be measured.");
+    const freeSpaceBytes = stats.bavail * stats.bsize;
+    const hardUsableBytes =
+      (freeSpaceBytes * BigInt(100 - RENDER_DISK_HARD_RESERVE_PERCENT)) / 100n;
+    if (BigInt(estimatedPeakBytes) > hardUsableBytes)
+      throw new RenderDiskSpaceError(
+        estimatedPeakBytes,
+        freeSpaceBytes,
+        hardUsableBytes,
+      );
+    const softUsableBytes =
+      (freeSpaceBytes * BigInt(100 - RENDER_DISK_SOFT_RESERVE_PERCENT)) / 100n;
+    if (BigInt(estimatedPeakBytes) > softUsableBytes)
+      options.logger.warn(
+        {
+          event: "render-disk-space-warning",
+          projectId: computed.plan.projectId,
+          estimatedPeakBytes: String(estimatedPeakBytes),
+          freeSpaceBytes: freeSpaceBytes.toString(),
+          usableBytes: softUsableBytes.toString(),
+          reservePercent: RENDER_DISK_SOFT_RESERVE_PERCENT,
+        },
+        "Render is approaching available disk space",
+      );
+  };
+
   const createNewJob = async (
     computed: ComputedRenderPlan,
   ): Promise<RenderJob> => {
@@ -1222,7 +1335,10 @@ export async function createRenderService(options: {
     return job;
   };
 
-  const startFromProject = async (projectId: string): Promise<RenderJob> => {
+  const startFromProject = async (
+    projectId: string,
+    startOptions: RenderStartOptions,
+  ): Promise<RenderJob> => {
     const active = options.repository
       .listRenderJobs(projectId)
       .find((candidate) => NONTERMINAL.has(candidate.state));
@@ -1231,6 +1347,8 @@ export async function createRenderService(options: {
     if (starting) return await starting;
     const promise = (async () => {
       const computed = await options.planComputer.compute(projectId);
+      if (startOptions.diskSpaceCheckEnabled)
+        await preflightDiskSpace(computed);
       return createNewJob(computed);
     })().finally(() => startingProjects.delete(projectId));
     startingProjects.set(projectId, promise);
@@ -1238,8 +1356,11 @@ export async function createRenderService(options: {
   };
 
   return {
-    startProject: (projectId) =>
-      startFromProject(ProjectIdSchema.parse(projectId)),
+    startProject: (projectId, startOptions) =>
+      startFromProject(
+        ProjectIdSchema.parse(projectId),
+        RenderStartOptionsSchema.parse(startOptions),
+      ),
     async getEstimateContext(input) {
       const parsed = RenderEstimateContextInputSchema.parse(input);
       const stats = await readFileSystemStats(options.dataDirectory);

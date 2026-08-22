@@ -16,6 +16,7 @@ import {
   RenderJobCollectionSchema,
   RenderJobSchema,
   RenderSegmentInputSchema,
+  RenderStartOptionsSchema,
   RenderWaveformSchema,
   type RenderJob,
 } from "@studynarrator/shared-types";
@@ -60,6 +61,7 @@ export function createRendersRouter(
             RenderJobSchema.parse(
               await renders.startProject(
                 ProjectIdSchema.parse(request.params.projectId),
+                RenderStartOptionsSchema.parse(request.body),
               ),
             ),
           );

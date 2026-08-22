@@ -19,6 +19,7 @@ import {
   withRenderPlanHash,
   type RenderPlanStore,
 } from "@studynarrator/rendering";
+import type { CachedSpeechSynthesis } from "./cachedSpeech.js";
 import { createRenderService, type RenderRepository } from "./render.js";
 import type { ComputedRenderPlan } from "./renderPlan.js";
 import { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
@@ -257,11 +258,12 @@ async function fixture(
       silenceDurationMs: 0,
     },
   });
+  const snapshotJob = vi.fn(async (renderId: string) => {
+    if (!/^[0-9a-f-]{36}$/u.test(renderId))
+      throw new Error("Invalid render id in test fixture.");
+  });
   const plans: RenderPlanStore = {
-    async snapshotJob(renderId) {
-      if (!/^[0-9a-f-]{36}$/u.test(renderId))
-        throw new Error("Invalid render id in test fixture.");
-    },
+    snapshotJob,
     async cloneJobSnapshot(renderId) {
       if (!/^[0-9a-f-]{36}$/u.test(renderId))
         throw new Error("Invalid render id in test fixture.");
@@ -290,56 +292,66 @@ async function fixture(
     project,
   );
   const wav = createPcmSilence(1_000).bytes!;
-  const logger = { info: vi.fn(), error: vi.fn() };
+  const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
   let nextId = 10;
   const computed: ComputedRenderPlan = {
     snapshot,
     plan,
     silenceAssets: new Map(),
   };
+  const computePlan = vi.fn(async () => computed);
+  const synthesize = vi.fn<CachedSpeechSynthesis["synthesize"]>(async () => {
+    if (options.synthesisGate) await options.synthesisGate;
+    if (options.synthesisFailure) throw options.synthesisFailure;
+    return {
+      key: cacheKey,
+      status: "miss",
+      bytes: wav,
+      metadata: {
+        schemaVersion: 1,
+        normalizationVersion: 1,
+        chunkingVersion: 1,
+        adapterId: "test",
+        adapterVersion: 1,
+        serverIdentityHash: sha(baseUrl),
+        modelId: "model",
+        voiceId: "voice",
+        speed,
+        textHash: sha(normalizedText),
+        responseFormat: "wav",
+        key: cacheKey,
+        audioChecksum: sha(wav),
+        byteLength: wav.byteLength,
+        createdAt: timestamp,
+        lastUsedAt: timestamp,
+        projectIds: [projectId],
+        scratchpadUsed: false,
+      },
+    };
+  });
   const service = await createRenderService({
     repository,
     plans,
     dataDirectory,
-    planComputer: { compute: async () => computed },
-    speech: {
-      async synthesize() {
-        if (options.synthesisGate) await options.synthesisGate;
-        if (options.synthesisFailure) throw options.synthesisFailure;
-        return {
-          key: cacheKey,
-          status: "miss",
-          bytes: wav,
-          metadata: {
-            schemaVersion: 1,
-            normalizationVersion: 1,
-            chunkingVersion: 1,
-            adapterId: "test",
-            adapterVersion: 1,
-            serverIdentityHash: sha(baseUrl),
-            modelId: "model",
-            voiceId: "voice",
-            speed,
-            textHash: sha(normalizedText),
-            responseFormat: "wav",
-            key: cacheKey,
-            audioChecksum: sha(wav),
-            byteLength: wav.byteLength,
-            createdAt: timestamp,
-            lastUsedAt: timestamp,
-            projectIds: [projectId],
-            scratchpadUsed: false,
-          },
-        };
-      },
-    },
+    planComputer: { compute: computePlan },
+    speech: { synthesize },
     createId: () =>
       `00000000-0000-4000-8000-${String(nextId++).padStart(12, "0")}`,
     now: () => new Date(timestamp),
     logger,
     ...(options.statfs ? { statfs: options.statfs } : {}),
   });
-  return { service, repository, plan, projectId, dataDirectory, logger };
+  return {
+    service,
+    repository,
+    plan,
+    projectId,
+    dataDirectory,
+    logger,
+    computePlan,
+    snapshotJob,
+    synthesize,
+  };
 }
 
 async function terminal(
@@ -413,6 +425,140 @@ describe("render coordinator", () => {
       calibrations: [],
     });
     expect(repository.calibrationReads).toEqual([]);
+  });
+
+  it("blocks before creating render work when the default peak estimate exceeds the exact hard reserve", async () => {
+    const readStats = vi.fn(async () => ({ bavail: 100_000n, bsize: 1n }));
+    const {
+      service,
+      repository,
+      projectId,
+      dataDirectory,
+      computePlan,
+      snapshotJob,
+      synthesize,
+      logger,
+    } = await fixture({ statfs: readStats });
+
+    await expect(service.startProject(projectId)).rejects.toMatchObject({
+      name: "RenderDiskSpaceError",
+      code: "RENDER_DISK_SPACE_INSUFFICIENT",
+      estimatedPeakBytes: 96_000,
+      freeSpaceBytes: 100_000n,
+      usableBytes: 90_000n,
+      message:
+        "Render blocked: estimated peak disk use is 96000 bytes, but the data volume has 100000 free bytes and 90000 usable bytes after the required 10% reserve.",
+    });
+    expect(computePlan).toHaveBeenCalledWith(projectId);
+    expect(readStats).toHaveBeenCalledWith(dataDirectory);
+    expect(repository.jobs.size).toBe(0);
+    expect(repository.segments.size).toBe(0);
+    expect(snapshotJob).not.toHaveBeenCalled();
+    expect(synthesize).not.toHaveBeenCalled();
+    expect(logger.warn).not.toHaveBeenCalled();
+    await service.close();
+  });
+
+  it("allows the same insufficient render when the check is disabled", async () => {
+    const readStats = vi.fn(async () => ({ bavail: 100_000n, bsize: 1n }));
+    const { service, projectId, synthesize, logger } = await fixture({
+      statfs: readStats,
+    });
+
+    const completed = await terminal(
+      service,
+      (
+        await service.startProject(projectId, {
+          diskSpaceCheckEnabled: false,
+        })
+      ).id,
+    );
+
+    expect(completed.state).toBe("complete");
+    expect(readStats).not.toHaveBeenCalled();
+    expect(synthesize).toHaveBeenCalledOnce();
+    expect(logger.warn).not.toHaveBeenCalled();
+    await service.close();
+  });
+
+  it("warns with byte-only metadata inside the soft reserve and continues", async () => {
+    const { service, projectId, logger } = await fixture({
+      statfs: async () => ({ bavail: 120_000n, bsize: 1n }),
+    });
+
+    const completed = await terminal(
+      service,
+      (await service.startProject(projectId)).id,
+    );
+
+    expect(completed.state).toBe("complete");
+    expect(logger.warn).toHaveBeenCalledWith(
+      {
+        event: "render-disk-space-warning",
+        projectId,
+        estimatedPeakBytes: "96000",
+        freeSpaceBytes: "120000",
+        usableBytes: "90000",
+        reservePercent: 25,
+      },
+      "Render is approaching available disk space",
+    );
+    await service.close();
+  });
+
+  it("allows the exact hard boundary and uses persisted calibration in the peak math", async () => {
+    const { service, repository, projectId, logger } = await fixture({
+      statfs: async () => ({ bavail: 53_334n, bsize: 1n }),
+    });
+    repository.calibrations.set("model:voice", {
+      modelId: "model",
+      voiceId: "voice",
+      millisecondsPerNormalizedCharacter: 40,
+      sampleCount: 3,
+      updatedAt: "2026-08-13T12:00:00.000Z",
+    });
+
+    const completed = await terminal(
+      service,
+      (await service.startProject(projectId)).id,
+    );
+
+    expect(completed.state).toBe("complete");
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: "render-disk-space-warning",
+        estimatedPeakBytes: "48000",
+        freeSpaceBytes: "53334",
+        usableBytes: "40000",
+      }),
+      "Render is approaching available disk space",
+    );
+    expect(repository.calibrationReads).toEqual([
+      { modelId: "model", voiceId: "voice" },
+      { modelId: "model", voiceId: "voice" },
+    ]);
+    await service.close();
+  });
+
+  it("allows the exact default hard boundary because refusal is strictly greater-than", async () => {
+    const { service, projectId, logger } = await fixture({
+      statfs: async () => ({ bavail: 106_667n, bsize: 1n }),
+    });
+
+    const completed = await terminal(
+      service,
+      (await service.startProject(projectId)).id,
+    );
+
+    expect(completed.state).toBe("complete");
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        estimatedPeakBytes: "96000",
+        freeSpaceBytes: "106667",
+      }),
+      "Render is approaching available disk space",
+    );
+    await service.close();
   });
 
   it("notifies observers for progress updates and the terminal state exactly once", async () => {
@@ -527,6 +673,8 @@ describe("render coordinator", () => {
     expect(repository.calibrationReads).toEqual([
       { modelId: "model", voiceId: "voice" },
       { modelId: "model", voiceId: "voice" },
+      { modelId: "model", voiceId: "voice" },
+      { modelId: "model", voiceId: "voice" },
     ]);
     expect(repository.calibrationUpserts).toHaveLength(2);
     expect(repository.calibrationUpserts.at(-1)).toEqual({
@@ -598,7 +746,9 @@ describe("render coordinator", () => {
       (await failedFixture.service.startProject(failedFixture.projectId)).id,
     );
     expect(failed.state).toBe("failed");
-    expect(failedFixture.repository.calibrationReads).toEqual([]);
+    expect(failedFixture.repository.calibrationReads).toEqual([
+      { modelId: "model", voiceId: "voice" },
+    ]);
     expect(failedFixture.repository.calibrationUpserts).toEqual([]);
     await failedFixture.service.close();
 
@@ -615,7 +765,9 @@ describe("render coordinator", () => {
     const canceled = await terminal(canceledFixture.service, started.id);
 
     expect(canceled.state).toBe("canceled");
-    expect(canceledFixture.repository.calibrationReads).toEqual([]);
+    expect(canceledFixture.repository.calibrationReads).toEqual([
+      { modelId: "model", voiceId: "voice" },
+    ]);
     expect(canceledFixture.repository.calibrationUpserts).toEqual([]);
     await canceledFixture.service.close();
   });

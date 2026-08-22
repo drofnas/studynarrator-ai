@@ -32,6 +32,7 @@ import {
   RenderJobCollectionSchema,
   RenderJobSchema,
   RenderProjectInputSchema,
+  RenderProjectStartInputSchema,
   RenderSegmentInputSchema,
   RenderWaveformSchema,
   SYSTEM_DIAGNOSTICS_CHANNEL,
@@ -459,6 +460,11 @@ export function registerRenderHandlers(
         /* eslint-disable preserve-caught-error */
         if (record && Array.isArray(record.issues))
           throw new Error("The request does not match the render contract.");
+        if (
+          record?.code === "RENDER_DISK_SPACE_INSUFFICIENT" &&
+          typeof record.message === "string"
+        )
+          throw new Error(record.message);
         throw new Error(
           "StudyNarrator could not complete the render operation.",
         );
@@ -467,8 +473,10 @@ export function registerRenderHandlers(
     });
   };
   handle(RENDER_CHANNELS.startProject, async (input) => {
-    const { projectId } = RenderProjectInputSchema.parse(input);
-    return RenderJobSchema.parse(await renders.startProject(projectId));
+    const { projectId, options } = RenderProjectStartInputSchema.parse(input);
+    return RenderJobSchema.parse(
+      await renders.startProject(projectId, options),
+    );
   });
   handle(RENDER_CHANNELS.getEstimateContext, async (input) => {
     const parsed = RenderEstimateContextInputSchema.parse(input);

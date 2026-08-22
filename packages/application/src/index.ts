@@ -174,6 +174,7 @@ export {
   type RenderPlanRepository,
 } from "./renderPlan.js";
 export {
+  RenderDiskSpaceError,
   createRenderService,
   type RenderRepository,
   type RenderService,

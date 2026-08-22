@@ -549,6 +549,45 @@ function renderPage(
   };
 }
 
+function installMemoryLocalStorage(initial: Record<string, string> = {}) {
+  const values = new Map(Object.entries(initial));
+  const setItem = vi.fn((key: string, value: string) => {
+    values.set(key, value);
+  });
+  const storage: Storage = {
+    get length() {
+      return values.size;
+    },
+    clear: vi.fn(() => values.clear()),
+    getItem: vi.fn((key: string) => values.get(key) ?? null),
+    key: vi.fn((index: number) => [...values.keys()][index] ?? null),
+    removeItem: vi.fn((key: string) => {
+      values.delete(key);
+    }),
+    setItem,
+  };
+  vi.stubGlobal("localStorage", storage);
+  return { storage, setItem };
+}
+
+function renderClientWithEstimateContext(
+  getEstimateContext: RenderClient["getEstimateContext"],
+) {
+  const fallbackJob = renderJobFixture(
+    "00000000-0000-4000-8000-000000000091",
+    "complete",
+  );
+  const startProject = vi.fn(async () => fallbackJob);
+  return {
+    startProject,
+    renderClient: {
+      ...renderClientFixture([], vi.fn()),
+      startProject,
+      getEstimateContext,
+    },
+  };
+}
+
 function deferred<T>() {
   let resolvePromise: (value: T) => void = () => undefined;
   let rejectPromise: (reason: unknown) => void = () => undefined;
@@ -616,6 +655,7 @@ function estimateValue(strip: HTMLElement, label: string): HTMLElement {
 }
 
 beforeEach(() => {
+  window.localStorage?.clear();
   vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(
     () => undefined,
   );
@@ -990,6 +1030,131 @@ describe("Projects workbench", () => {
       expect(estimateValue(currentStrip, "Free space")).toHaveTextContent(
         "2.0 GiB",
       ),
+    );
+  });
+
+  it("defaults the disk-space block on and persists only its boolean client preference", async () => {
+    const { setItem } = installMemoryLocalStorage();
+    const first = fixture();
+    renderPage(first.client, first.analyze, {
+      renderClient: renderClientFixture([], vi.fn()),
+    });
+    await openProjectTab("Render");
+
+    const checkbox = await screen.findByRole("checkbox", {
+      name: "Block renders when disk space is insufficient",
+    });
+    expect(checkbox).toBeChecked();
+    await userEvent.click(checkbox);
+    expect(checkbox).not.toBeChecked();
+    expect(setItem).toHaveBeenCalledWith(
+      "studynarrator.render.disk-space-check.v1",
+      "false",
+    );
+
+    cleanup();
+    const second = fixture();
+    renderPage(second.client, second.analyze, {
+      renderClient: renderClientFixture([], vi.fn()),
+    });
+    await openProjectTab("Render");
+    const restored = await screen.findByRole("checkbox", {
+      name: "Block renders when disk space is insufficient",
+    });
+    expect(restored).not.toBeChecked();
+
+    setItem.mockImplementation(() => {
+      throw new Error("browser storage unavailable");
+    });
+    await userEvent.click(restored);
+    expect(restored).toBeChecked();
+  });
+
+  it("blocks a known insufficient render locally with the same byte-only message", async () => {
+    const { client, analyze } = fixture();
+    const { renderClient, startProject } = renderClientWithEstimateContext(
+      vi.fn(async () => ({ freeSpaceBytes: 1, calibrations: [] })),
+    );
+    renderPage(client, analyze, { renderClient });
+    await openProjectTab("Render");
+    const renderButton = await screen.findByRole("button", { name: "Render" });
+    await waitFor(() => expect(renderButton).toBeEnabled());
+
+    await userEvent.click(renderButton);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Render blocked: estimated peak disk use is 178800 bytes, but the data volume has 1 free bytes and 0 usable bytes after the required 10% reserve.",
+    );
+    expect(startProject).not.toHaveBeenCalled();
+  });
+
+  it("shows the soft disk warning and continues with the enabled option", async () => {
+    const { client, analyze } = fixture();
+    const { renderClient, startProject } = renderClientWithEstimateContext(
+      vi.fn(async () => ({ freeSpaceBytes: 220_000, calibrations: [] })),
+    );
+    renderPage(client, analyze, { renderClient });
+    await openProjectTab("Render");
+    const renderButton = await screen.findByRole("button", { name: "Render" });
+    await waitFor(() => expect(renderButton).toBeEnabled());
+
+    await userEvent.click(renderButton);
+
+    await waitFor(() =>
+      expect(startProject).toHaveBeenCalledWith(project.id, {
+        diskSpaceCheckEnabled: true,
+      }),
+    );
+    expect(
+      await screen.findByText(
+        "Disk space warning: estimated peak disk use is 178800 bytes; the data volume has 220000 free bytes and 165000 usable bytes after the recommended 25% reserve. Rendering will continue.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("allows known insufficient space when disabled and transports false", async () => {
+    const { client, analyze } = fixture();
+    const { renderClient, startProject } = renderClientWithEstimateContext(
+      vi.fn(async () => ({ freeSpaceBytes: 1, calibrations: [] })),
+    );
+    renderPage(client, analyze, { renderClient });
+    await openProjectTab("Render");
+    await userEvent.click(
+      await screen.findByRole("checkbox", {
+        name: "Block renders when disk space is insufficient",
+      }),
+    );
+    const renderButton = await screen.findByRole("button", { name: "Render" });
+    await waitFor(() => expect(renderButton).toBeEnabled());
+
+    await userEvent.click(renderButton);
+
+    await waitFor(() =>
+      expect(startProject).toHaveBeenCalledWith(project.id, {
+        diskSpaceCheckEnabled: false,
+      }),
+    );
+    expect(screen.queryByText(/Disk space warning:/u)).not.toBeInTheDocument();
+  });
+
+  it("never blocks from script estimates when measured free space is unavailable", async () => {
+    const { client, analyze } = fixture();
+    const { renderClient, startProject } = renderClientWithEstimateContext(
+      vi.fn(async () => {
+        throw new Error("statfs unavailable");
+      }),
+    );
+    renderPage(client, analyze, { renderClient });
+    await openProjectTab("Render");
+    const renderButton = await screen.findByRole("button", { name: "Render" });
+    await waitFor(() => expect(renderButton).toBeEnabled());
+
+    await userEvent.click(renderButton);
+
+    await waitFor(() =>
+      expect(startProject).toHaveBeenCalledWith(project.id, {
+        diskSpaceCheckEnabled: true,
+      }),
     );
   });
 
@@ -2149,7 +2314,11 @@ describe("Projects workbench", () => {
     const renderButton = await screen.findByRole("button", { name: "Render" });
     await waitFor(() => expect(renderButton).toBeEnabled());
     fireEvent.click(renderButton);
-    await waitFor(() => expect(startProject).toHaveBeenCalledWith(project.id));
+    await waitFor(() =>
+      expect(startProject).toHaveBeenCalledWith(project.id, {
+        diskSpaceCheckEnabled: true,
+      }),
+    );
 
     await userEvent.click(
       screen.getByRole("link", { name: /Back to Projects/u }),
@@ -2247,7 +2416,11 @@ describe("Projects workbench", () => {
     });
     await waitFor(() => expect(firstRenderButton).toBeEnabled());
     fireEvent.click(firstRenderButton);
-    await waitFor(() => expect(startProject).toHaveBeenCalledWith(project.id));
+    await waitFor(() =>
+      expect(startProject).toHaveBeenCalledWith(project.id, {
+        diskSpaceCheckEnabled: true,
+      }),
+    );
 
     await userEvent.click(
       screen.getByRole("link", { name: /Back to Projects/u }),
@@ -2265,7 +2438,9 @@ describe("Projects workbench", () => {
     await waitFor(() => expect(activeRenderButton).toBeEnabled());
     fireEvent.click(activeRenderButton);
     await waitFor(() =>
-      expect(startProject).toHaveBeenCalledWith(nextProject.id),
+      expect(startProject).toHaveBeenCalledWith(nextProject.id, {
+        diskSpaceCheckEnabled: true,
+      }),
     );
     expect(screen.getByRole("button", { name: "Rendering…" })).toBeDisabled();
 
@@ -2413,7 +2588,11 @@ describe("Projects workbench", () => {
     });
     await waitFor(() => expect(renderButton).toBeEnabled());
     fireEvent.click(renderButton);
-    await waitFor(() => expect(start).toHaveBeenCalledWith(project.id));
+    await waitFor(() =>
+      expect(start).toHaveBeenCalledWith(project.id, {
+        diskSpaceCheckEnabled: true,
+      }),
+    );
     expect(
       await screen.findByLabelText(
         /Audio player for Completed project render/u,

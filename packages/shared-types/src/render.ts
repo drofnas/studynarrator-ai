@@ -24,6 +24,56 @@ export const RENDER_CHANNELS = Object.freeze({
 
 export const RenderIdSchema = z.uuid();
 export const RenderArtifactIdSchema = z.uuid();
+
+export const RENDER_DISK_HARD_RESERVE_PERCENT = 10;
+/** A render warns when its peak estimate enters the final 25% of free space. */
+export const RENDER_DISK_SOFT_RESERVE_PERCENT = 25;
+export const DEFAULT_RENDER_START_OPTIONS = Object.freeze({
+  diskSpaceCheckEnabled: true,
+});
+
+export const RenderStartOptionsSchema = z
+  .object({ diskSpaceCheckEnabled: z.boolean().default(true) })
+  .strict()
+  .default(DEFAULT_RENDER_START_OPTIONS);
+export type RenderStartOptions = z.infer<typeof RenderStartOptionsSchema>;
+
+function checkedByteCount(value: number | bigint, name: string): bigint {
+  if (typeof value === "bigint") {
+    if (value < 0n) throw new RangeError(`${name} must be nonnegative.`);
+    return value;
+  }
+  if (!Number.isSafeInteger(value) || value < 0)
+    throw new RangeError(`${name} must be a nonnegative safe integer.`);
+  return BigInt(value);
+}
+
+export function renderDiskSpaceUsableBytes(
+  freeSpaceBytes: number,
+  reservePercent:
+    | typeof RENDER_DISK_HARD_RESERVE_PERCENT
+    | typeof RENDER_DISK_SOFT_RESERVE_PERCENT,
+): number {
+  const freeBytes = checkedByteCount(freeSpaceBytes, "freeSpaceBytes");
+  return Number((freeBytes * BigInt(100 - reservePercent)) / 100n);
+}
+
+export function renderDiskSpaceBlockMessage(
+  estimatedPeakBytes: number | bigint,
+  freeSpaceBytes: number | bigint,
+  usableBytes: number | bigint,
+): string {
+  return `Render blocked: estimated peak disk use is ${checkedByteCount(estimatedPeakBytes, "estimatedPeakBytes").toString()} bytes, but the data volume has ${checkedByteCount(freeSpaceBytes, "freeSpaceBytes").toString()} free bytes and ${checkedByteCount(usableBytes, "usableBytes").toString()} usable bytes after the required 10% reserve.`;
+}
+
+export function renderDiskSpaceWarningMessage(
+  estimatedPeakBytes: number | bigint,
+  freeSpaceBytes: number | bigint,
+  usableBytes: number | bigint,
+): string {
+  return `Disk space warning: estimated peak disk use is ${checkedByteCount(estimatedPeakBytes, "estimatedPeakBytes").toString()} bytes; the data volume has ${checkedByteCount(freeSpaceBytes, "freeSpaceBytes").toString()} free bytes and ${checkedByteCount(usableBytes, "usableBytes").toString()} usable bytes after the recommended 25% reserve. Rendering will continue.`;
+}
+
 const RenderStateSchema = z.enum([
   "queued",
   "validating",
@@ -315,6 +365,12 @@ export type RenderEstimateContextResult = z.infer<
 export const RenderProjectInputSchema = z
   .object({ projectId: ProjectIdSchema })
   .strict();
+export const RenderProjectStartInputSchema = z
+  .object({
+    projectId: ProjectIdSchema,
+    options: RenderStartOptionsSchema,
+  })
+  .strict();
 export const RenderIdInputSchema = z
   .object({ renderId: RenderIdSchema })
   .strict();
@@ -338,7 +394,10 @@ type RenderArtifactExportResult = z.infer<
 >;
 
 export interface RenderClient {
-  startProject(projectId: string): Promise<RenderJob>;
+  startProject(
+    projectId: string,
+    options?: RenderStartOptions,
+  ): Promise<RenderJob>;
   getEstimateContext(
     input: RenderEstimateContextInput,
   ): Promise<RenderEstimateContextResult>;

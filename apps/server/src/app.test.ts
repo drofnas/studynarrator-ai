@@ -6,6 +6,7 @@ import Database from "better-sqlite3";
 import request from "supertest";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  RenderDiskSpaceError,
   createConnectionService,
   createPersistenceService,
   createScriptGenerationService,
@@ -545,6 +546,49 @@ describe("Express diagnostics API", () => {
       },
     });
     expect(JSON.stringify(response.body)).not.toContain("must-not-leak");
+  });
+});
+
+describe("render start preflight boundary", () => {
+  it("defaults and transports strict options and preserves the safe 507 message", async () => {
+    const { app, renders } = await fixture();
+    const startProject = vi.spyOn(renders, "startProject");
+    const projectId = "00000000-0000-4000-8000-000000000001";
+
+    await request(app).post(`/api/projects/${projectId}/renders`).expect(202);
+    expect(startProject).toHaveBeenNthCalledWith(1, projectId, {
+      diskSpaceCheckEnabled: true,
+    });
+
+    await request(app)
+      .post(`/api/projects/${projectId}/renders`)
+      .send({ diskSpaceCheckEnabled: false })
+      .expect(202);
+    expect(startProject).toHaveBeenNthCalledWith(2, projectId, {
+      diskSpaceCheckEnabled: false,
+    });
+
+    await request(app)
+      .post(`/api/projects/${projectId}/renders`)
+      .send({ diskSpaceCheckEnabled: true, scriptLengthLimit: 1 })
+      .expect(400);
+    expect(startProject).toHaveBeenCalledTimes(2);
+
+    startProject.mockRejectedValueOnce(
+      new RenderDiskSpaceError(96_000, 100_000n, 90_000n),
+    );
+    const blocked = await request(app)
+      .post(`/api/projects/${projectId}/renders`)
+      .send({ diskSpaceCheckEnabled: true })
+      .expect(507);
+    expect(blocked.body).toEqual({
+      error: {
+        code: "RENDER_DISK_SPACE_INSUFFICIENT",
+        message:
+          "Render blocked: estimated peak disk use is 96000 bytes, but the data volume has 100000 free bytes and 90000 usable bytes after the required 10% reserve.",
+      },
+    });
+    expect(JSON.stringify(blocked.body)).not.toContain(projectId);
   });
 });
 

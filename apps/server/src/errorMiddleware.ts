@@ -158,6 +158,13 @@ function handleBoundaryError(
       typeof errorRecord.message === "string"
         ? errorRecord.message
         : "StudyNarrator could not complete the render plan operation.";
+  } else if (errorRecord?.code === "RENDER_DISK_SPACE_INSUFFICIENT") {
+    status = 507;
+    code = "RENDER_DISK_SPACE_INSUFFICIENT";
+    message =
+      typeof errorRecord.message === "string"
+        ? errorRecord.message
+        : "The render would exhaust available disk space.";
   } else if (errorRecord?.code === "RENDER_MEDIA_UNAVAILABLE") {
     status = 404;
     code = "RENDER_MEDIA_UNAVAILABLE";

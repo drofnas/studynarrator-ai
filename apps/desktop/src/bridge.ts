@@ -22,6 +22,7 @@ import {
   RenderIdSchema,
   RenderJobCollectionSchema,
   RenderJobSchema,
+  RenderStartOptionsSchema,
   RenderWaveformSchema,
   SYSTEM_DIAGNOSTICS_CHANNEL,
   SystemDiagnosticsSchema,
@@ -239,9 +240,12 @@ export function createPreloadBridge(
     },
   };
   const renders: RenderClient = {
-    async startProject(projectId) {
+    async startProject(projectId, options) {
       return RenderJobSchema.parse(
-        await invoke(RENDER_CHANNELS.startProject, { projectId }),
+        await invoke(RENDER_CHANNELS.startProject, {
+          projectId,
+          options: RenderStartOptionsSchema.parse(options),
+        }),
       );
     },
     async getEstimateContext(input) {
