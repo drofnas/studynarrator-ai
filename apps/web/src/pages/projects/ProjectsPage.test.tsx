@@ -1809,6 +1809,105 @@ describe("Projects workbench", () => {
     expect(unsubscribe).not.toHaveBeenCalled();
   });
 
+  it("discards a delayed render start after navigating to another project", async () => {
+    const { client, analyze } = fixture();
+    const nextProject: ProjectDetail = {
+      ...project,
+      id: "00000000-0000-4000-8000-000000000002",
+      name: "Navigation target",
+    };
+    client.projects.list = vi.fn(async () =>
+      [project, nextProject].map((item): ProjectSummary => ({
+        id: item.id,
+        name: item.name,
+        description: item.description,
+        scriptHash: item.scriptHash,
+        scriptLineCount: item.scriptSource.split("\n").length,
+        audioDurationMs: null,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+      })),
+    );
+    client.projects.get = vi.fn(async (id: string) =>
+      structuredClone(id === project.id ? project : nextProject),
+    );
+
+    const staleProjectJob = renderJobFixture(
+      "00000000-0000-4000-8000-000000000095",
+      "synthesizing",
+    );
+    const activeProjectJob: RenderJob = {
+      ...renderJobFixture(
+        "00000000-0000-4000-8000-000000000096",
+        "synthesizing",
+        2,
+      ),
+      projectId: nextProject.id,
+    };
+    const startRequest = deferred<RenderJob>();
+    const listRequest = deferred<RenderJob[]>();
+    const unsubscribe = vi.fn();
+    const subscribe = vi.fn(() => unsubscribe);
+    const startProject = vi.fn(() => startRequest.promise);
+    const listRenders = vi.fn((id: string) =>
+      id === nextProject.id ? listRequest.promise : Promise.resolve([]),
+    );
+    const renderClient: RenderProgressClient = {
+      ...renderClientFixture([], vi.fn(), subscribe),
+      startProject,
+      list: listRenders,
+    };
+
+    renderPage(client, analyze, { renderClient });
+    await openProjectTab("Render");
+    const renderButton = await screen.findByRole("button", { name: "Render" });
+    await waitFor(() => expect(renderButton).toBeEnabled());
+    fireEvent.click(renderButton);
+    await waitFor(() => expect(startProject).toHaveBeenCalledWith(project.id));
+
+    await userEvent.click(
+      screen.getByRole("link", { name: /Back to Projects/u }),
+    );
+    await userEvent.click(
+      await screen.findByRole("link", { name: nextProject.name }),
+    );
+    expect(
+      await screen.findByDisplayValue(nextProject.name),
+    ).toBeInTheDocument();
+    await openProjectTab("Render");
+    await waitFor(() =>
+      expect(listRenders).toHaveBeenCalledWith(nextProject.id),
+    );
+
+    await act(async () => {
+      startRequest.resolve(staleProjectJob);
+      await startRequest.promise;
+    });
+    expect(
+      screen.queryByText("1 of 4 chunks complete"),
+    ).not.toBeInTheDocument();
+    expect(subscribe).not.toHaveBeenCalledWith(
+      staleProjectJob.id,
+      expect.any(Function),
+      expect.any(Function),
+    );
+
+    await act(async () => {
+      listRequest.resolve([activeProjectJob]);
+      await listRequest.promise;
+    });
+    expect(
+      await screen.findByText("2 of 4 chunks complete"),
+    ).toBeInTheDocument();
+    expect(subscribe).toHaveBeenCalledOnce();
+    expect(subscribe).toHaveBeenCalledWith(
+      activeProjectJob.id,
+      expect.any(Function),
+      expect.any(Function),
+    );
+    expect(unsubscribe).not.toHaveBeenCalled();
+  });
+
   it("retains polling for an Electron render client without subscriptions and stops on terminal state", async () => {
     const { client, analyze } = fixture();
     const activeJob = renderJobFixture(

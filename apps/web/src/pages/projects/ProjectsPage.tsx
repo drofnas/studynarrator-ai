@@ -227,6 +227,7 @@ export function ProjectsPage({
   const savedRevisionRef = useRef(0);
   const analysisRevisionRef = useRef(0);
   const renderStartRevisionRef = useRef(0);
+  const currentProjectIdRef = useRef(projectId);
   const saveQueueRef = useRef<Promise<boolean>>(Promise.resolve(true));
   const autosaveTimerRef = useRef<number | undefined>(undefined);
   const saveNowRef = useRef<() => Promise<boolean>>(() =>
@@ -234,6 +235,7 @@ export function ProjectsPage({
   );
 
   draftRef.current = draft;
+  currentProjectIdRef.current = projectId;
   const isDirty =
     saveState === "unsaved" ||
     saveState === "saving" ||
@@ -961,12 +963,14 @@ export function ProjectsPage({
 
   const startRender = async () => {
     if (!renderClient || !project) return;
+    const renderProjectId = project.id;
     setRenderStarting(true);
     setRenderError("");
     try {
       if (isDirty && !(await saveNow()))
         throw new Error("Save valid project changes before rendering.");
-      const job = await renderClient.startProject(project.id);
+      const job = await renderClient.startProject(renderProjectId);
+      if (currentProjectIdRef.current !== renderProjectId) return;
       renderStartRevisionRef.current += 1;
       setSelectedRenderJob(job);
       if (job.state === "complete") setCompletedRenderJob(job);
