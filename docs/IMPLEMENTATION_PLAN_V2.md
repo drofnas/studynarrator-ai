@@ -110,7 +110,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 20.4 | Show estimates in the script editor                | P1       | M    | complete    |
 | 20.5 | Add the preflight disk space check                 | P1       | S    | complete    |
 | 21.1 | Add the retention settings table and service       | P1       | S    | complete    |
-| 21.2 | Add the cache sweeper                              | P1       | M    | todo        |
+| 21.2 | Add the cache sweeper                              | P1       | M    | complete    |
 | 21.3 | Add render pinning                                 | P1       | S    | todo        |
 | 21.4 | Add the retention settings screen                  | P1       | M    | todo        |
 | 22   | Host header allowlist                              | P1       | S    | todo        |
@@ -1689,7 +1689,7 @@ Standard.
 
 ## TASK 21.2 — Add the cache sweeper
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** M
 

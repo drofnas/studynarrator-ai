@@ -33,6 +33,7 @@ const logger = {
 const recorded = vi.hoisted(() => ({
   calls: [] as string[],
   renderLoggers: [] as unknown[],
+  speechCacheStatusCalls: 0,
   restoreInputs: [] as {
     Database: unknown;
     databasePath: string;
@@ -78,7 +79,13 @@ vi.mock("./cachedSpeech.js", async (importOriginal) => {
     ...actual,
     createApplicationSpeechCache: vi.fn((dataDirectory: string) => {
       recorded.calls.push("speechCache");
-      return { dataDirectory } as unknown;
+      return {
+        dataDirectory,
+        status: async () => {
+          recorded.speechCacheStatusCalls += 1;
+          return { inFlight: 0 };
+        },
+      } as unknown;
     }),
     createSpeechCacheService: vi.fn(() => {
       recorded.calls.push("speechCacheService");
@@ -155,6 +162,13 @@ type OpenedRepository = Awaited<ReturnType<typeof openStudyNarratorRepository>>;
 
 function fakeRepository(closeLog: string[]): OpenedRepository {
   return {
+    getRetentionSettings: () => ({
+      speechCacheTtl: "7d",
+      jobSnapshotTtl: "never",
+      renderArtifactTtl: "never",
+      speechCacheSizeCapBytes: 1024,
+      updatedAt: "2026-01-10T00:00:00.000Z",
+    }),
     listRecoverableRenderJobs: () => [],
     runMarker: () =>
       storagePass(resolve(process.cwd(), "studynarrator.sqlite")),
@@ -184,6 +198,7 @@ describe("createStudyNarratorServices", () => {
   beforeEach(() => {
     recorded.calls.length = 0;
     recorded.renderLoggers.length = 0;
+    recorded.speechCacheStatusCalls = 0;
     recorded.restoreInputs.length = 0;
     closeLog = [];
     vi.resetAllMocks();
@@ -306,6 +321,23 @@ describe("createStudyNarratorServices", () => {
       });
       await services.dispose();
       expect(closeLog).toEqual(["close"]);
+    });
+  });
+
+  it("skips the startup cache sweep while a recovered render is nonterminal", async () => {
+    await withDataDirectory(async (dataDirectory) => {
+      let recoverableCalls = 0;
+      vi.mocked(openStudyNarratorRepository).mockImplementation(
+        async () =>
+          ({
+            ...fakeRepository(closeLog),
+            listRecoverableRenderJobs: () =>
+              recoverableCalls++ === 0 ? ([{}] as unknown as []) : [],
+          }) as unknown as OpenedRepository,
+      );
+      const services = await servicesIn(dataDirectory);
+      expect(recorded.speechCacheStatusCalls).toBe(0);
+      await services.dispose();
     });
   });
 

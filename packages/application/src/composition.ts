@@ -29,6 +29,7 @@ import {
 import { createFfmpegProbe, type Logger } from "@studynarrator/runtime";
 import {
   createRenderPlanStore,
+  createSpeechCacheSweeper,
   readSpeechCacheMetadata,
   SPEECH_CACHE_SCHEMA_VERSION,
 } from "@studynarrator/rendering";
@@ -96,6 +97,8 @@ export interface StudyNarratorServices {
  * successful run (task 10.2); both steps are idempotent on re-run and
  * remove nothing this build or the user still needs.
  */
+const SPEECH_CACHE_SWEEP_INTERVAL_MILLISECONDS = 6 * 60 * 60 * 1_000;
+
 const layoutSteps: LayoutStep[] = [
   removeStandaloneRenderPlans,
   createSpeechCacheSweep({
@@ -145,6 +148,7 @@ export async function createStudyNarratorServices(options: {
   let projectPreview: ProjectPreviewClient | undefined;
   let renders: RenderService | undefined;
   let scriptGeneration: ScriptGenerationService | undefined;
+  let speechCacheSweepInterval: NodeJS.Timeout | undefined;
   try {
     await readDataDirectoryManifest(descriptor.dataDirectory, {
       appVersion: descriptor.appVersion,
@@ -158,6 +162,31 @@ export async function createStudyNarratorServices(options: {
       logger: options.logger,
     });
     repository = openedRepository;
+    const speechCacheSweeper = createSpeechCacheSweeper({
+      cache,
+      rootDirectory: resolve(descriptor.dataDirectory, "cache/speech"),
+    });
+    const runSpeechCacheSweep = async () => {
+      try {
+        if (openedRepository.listRecoverableRenderJobs().length > 0) return;
+        const retention = openedRepository.getRetentionSettings();
+        await speechCacheSweeper.sweep({
+          ttl: retention.speechCacheTtl,
+          sizeCapBytes: retention.speechCacheSizeCapBytes,
+        });
+      } catch (error) {
+        options.logger.warn(
+          { event: "speech-cache-sweep-failed", error },
+          "Speech cache sweep failed",
+        );
+      }
+    };
+    void runSpeechCacheSweep();
+    speechCacheSweepInterval = setInterval(
+      () => void runSpeechCacheSweep(),
+      SPEECH_CACHE_SWEEP_INTERVAL_MILLISECONDS,
+    );
+    speechCacheSweepInterval.unref();
     const backups: PersistenceBackupsClient = {
       list: () => listPersistenceBackups(databasePath),
       restore: () => {
@@ -335,6 +364,7 @@ export async function createStudyNarratorServices(options: {
     context,
     logger: options.logger,
     dispose: async () => {
+      if (speechCacheSweepInterval) clearInterval(speechCacheSweepInterval);
       await renders?.close();
       repository.close();
     },

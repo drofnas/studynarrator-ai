@@ -23,6 +23,8 @@ import {
 } from "@studynarrator/shared-types";
 import { z } from "zod";
 
+export { createSpeechCacheSweeper } from "./speechCacheSweeper.js";
+
 export const SPEECH_CACHE_SCHEMA_VERSION = 1;
 export const SPEECH_NORMALIZATION_VERSION = 1;
 export const SPEECH_CHUNKING_VERSION = 1;
