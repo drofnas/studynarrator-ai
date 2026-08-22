@@ -102,7 +102,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 18.2 | Log startup and migration events                   | P1       | S    | complete    |
 | 18.3 | Log render lifecycle and boundary errors           | P1       | S    | complete    |
 | 19.1 | Add a render progress observer                     | P1       | S    | complete    |
-| 19.2 | Add the SSE endpoint                               | P1       | S    | todo        |
+| 19.2 | Add the SSE endpoint                               | P1       | S    | complete    |
 | 19.3 | Consume SSE in the web client                      | P1       | M    | todo        |
 | 20.1 | Add the voice timing calibration table             | P1       | S    | todo        |
 | 20.2 | Record calibration after each render               | P1       | S    | todo        |
@@ -1427,7 +1427,7 @@ Standard, plus a test asserting a subscriber sees the terminal event exactly onc
 
 ## TASK 19.2 — Add the SSE endpoint
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 
