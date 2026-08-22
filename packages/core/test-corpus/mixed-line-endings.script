@@ -1,0 +1,4 @@
+[speaker_teacher] Windows line.
+[pause_short]
+[speaker_student] Unix {{line|format}}.
+Final line uses LF.

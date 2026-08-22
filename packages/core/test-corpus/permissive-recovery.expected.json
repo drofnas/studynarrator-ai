@@ -1,0 +1,422 @@
+{
+  "parse": {
+    "grammarVersion": 1,
+    "cirSchemaVersion": 1,
+    "source": "[unknown_control] Literal unknown directive.\n[speaker_] Literal malformed standalone speaker.\n[pause_short!] Literal malformed standalone pause.\n[section Missing colon]\n[section:]\n[speaker_teacher] Keep [speaker_bad name] and [pause_long!] literal.\n[speaker_teacher] {{|sense}} and {{term|bad sense}} and {{unclosed|sense\n",
+    "nodes": [
+      {
+        "ordinal": 1,
+        "range": {
+          "start": {
+            "line": 1,
+            "column": 1
+          },
+          "end": {
+            "line": 1,
+            "column": 45
+          }
+        },
+        "type": "speech",
+        "speakerId": "narrator",
+        "rawText": "[unknown_control] Literal unknown directive.",
+        "readableText": "[unknown_control] Literal unknown directive.",
+        "annotations": []
+      },
+      {
+        "ordinal": 2,
+        "range": {
+          "start": {
+            "line": 2,
+            "column": 1
+          },
+          "end": {
+            "line": 2,
+            "column": 49
+          }
+        },
+        "type": "speech",
+        "speakerId": "narrator",
+        "rawText": "[speaker_] Literal malformed standalone speaker.",
+        "readableText": "[speaker_] Literal malformed standalone speaker.",
+        "annotations": []
+      },
+      {
+        "ordinal": 3,
+        "range": {
+          "start": {
+            "line": 3,
+            "column": 1
+          },
+          "end": {
+            "line": 3,
+            "column": 51
+          }
+        },
+        "type": "speech",
+        "speakerId": "narrator",
+        "rawText": "[pause_short!] Literal malformed standalone pause.",
+        "readableText": "[pause_short!] Literal malformed standalone pause.",
+        "annotations": []
+      },
+      {
+        "ordinal": 4,
+        "range": {
+          "start": {
+            "line": 4,
+            "column": 1
+          },
+          "end": {
+            "line": 4,
+            "column": 24
+          }
+        },
+        "type": "speech",
+        "speakerId": "narrator",
+        "rawText": "[section Missing colon]",
+        "readableText": "[section Missing colon]",
+        "annotations": []
+      },
+      {
+        "ordinal": 5,
+        "range": {
+          "start": {
+            "line": 5,
+            "column": 1
+          },
+          "end": {
+            "line": 5,
+            "column": 11
+          }
+        },
+        "type": "speech",
+        "speakerId": "narrator",
+        "rawText": "[section:]",
+        "readableText": "[section:]",
+        "annotations": []
+      },
+      {
+        "ordinal": 6,
+        "range": {
+          "start": {
+            "line": 6,
+            "column": 19
+          },
+          "end": {
+            "line": 6,
+            "column": 69
+          }
+        },
+        "type": "speech",
+        "speakerId": "teacher",
+        "rawText": "Keep [speaker_bad name] and [pause_long!] literal.",
+        "readableText": "Keep [speaker_bad name] and [pause_long!] literal.",
+        "annotations": []
+      },
+      {
+        "ordinal": 7,
+        "range": {
+          "start": {
+            "line": 7,
+            "column": 19
+          },
+          "end": {
+            "line": 7,
+            "column": 73
+          }
+        },
+        "type": "speech",
+        "speakerId": "teacher",
+        "rawText": "{{|sense}} and {{term|bad sense}} and {{unclosed|sense",
+        "readableText": "{{|sense}} and {{term|bad sense}} and {{unclosed|sense",
+        "annotations": []
+      }
+    ],
+    "discoveries": {
+      "speakers": [
+        {
+          "id": "narrator",
+          "occurrences": [
+            {
+              "range": {
+                "start": {
+                  "line": 1,
+                  "column": 1
+                },
+                "end": {
+                  "line": 1,
+                  "column": 45
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": "teacher",
+          "occurrences": [
+            {
+              "range": {
+                "start": {
+                  "line": 6,
+                  "column": 1
+                },
+                "end": {
+                  "line": 6,
+                  "column": 18
+                }
+              }
+            },
+            {
+              "range": {
+                "start": {
+                  "line": 7,
+                  "column": 1
+                },
+                "end": {
+                  "line": 7,
+                  "column": 18
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "pauses": [],
+      "sections": [],
+      "pronunciations": []
+    },
+    "summary": {
+      "speakerCount": 2,
+      "pauseIdCount": 0,
+      "sectionCount": 0,
+      "speechSegmentCount": 7,
+      "explicitPauseSegmentCount": 0,
+      "pronunciationAnnotationCount": 0,
+      "paragraphBreakCount": 0,
+      "characterCount": 322
+    },
+    "errors": [
+      {
+        "code": "MALFORMED_DIRECTIVE",
+        "message": "Beginning-of-line bracket text is not a recognized directive.",
+        "line": 1,
+        "column": 1,
+        "offendingText": "[unknown_control] Literal unknown directive.",
+        "ignorePattern": "[unknown_control]",
+        "suggestion": "Use [speaker_name], [pause_name], or [section: Title], escape a literal [ as \\[, or ignore this pattern."
+      },
+      {
+        "code": "INVALID_SPEAKER_DIRECTIVE",
+        "message": "Speaker directive does not contain a valid speaker name.",
+        "line": 2,
+        "column": 1,
+        "offendingText": "[speaker_] Literal malformed standalone speaker.",
+        "ignorePattern": "[speaker_]",
+        "suggestion": "Use [speaker_name] with a name containing only letters, numbers, underscores, or hyphens."
+      },
+      {
+        "code": "MALFORMED_PAUSE_DIRECTIVE",
+        "message": "Pause directive contains an invalid pause ID.",
+        "line": 3,
+        "column": 1,
+        "offendingText": "[pause_short!] Literal malformed standalone pause.",
+        "ignorePattern": "[pause_short!]",
+        "suggestion": "Use a pause such as [pause_short], optionally surrounded by speech."
+      },
+      {
+        "code": "MALFORMED_SECTION_DIRECTIVE",
+        "message": "Section directive must contain a title and occupy its own line.",
+        "line": 4,
+        "column": 1,
+        "offendingText": "[section Missing colon]",
+        "ignorePattern": "[section Missing colon]",
+        "suggestion": "Use [section: Section title] on a line by itself, or ignore this pattern to keep it as literal speech."
+      },
+      {
+        "code": "MALFORMED_SECTION_DIRECTIVE",
+        "message": "Section directive must contain a title and occupy its own line.",
+        "line": 5,
+        "column": 1,
+        "offendingText": "[section:]",
+        "ignorePattern": "[section:]",
+        "suggestion": "Use [section: Section title] on a line by itself, or ignore this pattern to keep it as literal speech."
+      },
+      {
+        "code": "INVALID_SPEAKER_DIRECTIVE",
+        "message": "Speaker directive does not contain a valid speaker name.",
+        "line": 6,
+        "column": 24,
+        "offendingText": "[speaker_teacher] Keep [speaker_bad name] and [pause_long!] literal.",
+        "ignorePattern": "[speaker_bad name]",
+        "suggestion": "Use [speaker_name] with a name containing only letters, numbers, underscores, or hyphens."
+      },
+      {
+        "code": "MALFORMED_PAUSE_DIRECTIVE",
+        "message": "Pause directive contains an invalid pause ID.",
+        "line": 6,
+        "column": 47,
+        "offendingText": "[speaker_teacher] Keep [speaker_bad name] and [pause_long!] literal.",
+        "ignorePattern": "[pause_long!]",
+        "suggestion": "Use a pause such as [pause_short], optionally surrounded by speech."
+      },
+      {
+        "code": "INVALID_PRONUNCIATION_ANNOTATION",
+        "message": "Pronunciation annotation must contain one nonempty display text and one sense.",
+        "line": 7,
+        "column": 19,
+        "offendingText": "[speaker_teacher] {{|sense}} and {{term|bad sense}} and {{unclosed|sense",
+        "ignorePattern": "{{|sense}}",
+        "suggestion": "Use the form {{display text|sense}} with exactly one | separator."
+      },
+      {
+        "code": "INVALID_PRONUNCIATION_SENSE",
+        "message": "Pronunciation sense contains unsupported characters or is empty.",
+        "line": 7,
+        "column": 41,
+        "offendingText": "[speaker_teacher] {{|sense}} and {{term|bad sense}} and {{unclosed|sense",
+        "ignorePattern": "{{term|bad sense}}",
+        "suggestion": "Use only letters, numbers, underscores, or hyphens for the sense."
+      },
+      {
+        "code": "UNCLOSED_PRONUNCIATION_ANNOTATION",
+        "message": "Pronunciation annotation is missing its closing braces.",
+        "line": 7,
+        "column": 57,
+        "offendingText": "[speaker_teacher] {{|sense}} and {{term|bad sense}} and {{unclosed|sense",
+        "ignorePattern": "{{unclosed|sense",
+        "suggestion": "Close the annotation as {{display text|sense}} or escape literal braces as \\{{."
+      }
+    ],
+    "warnings": []
+  },
+  "transform": {
+    "transformVersion": 1,
+    "source": "[unknown_control] Literal unknown directive.\n[speaker_] Literal malformed standalone speaker.\n[pause_short!] Literal malformed standalone pause.\n[section Missing colon]\n[section:]\n[speaker_teacher] Keep [speaker_bad name] and [pause_long!] literal.\n[speaker_teacher] {{|sense}} and {{term|bad sense}} and {{unclosed|sense\n",
+    "segments": [
+      {
+        "nodeOrdinal": 1,
+        "speakerId": "narrator",
+        "sourceRange": {
+          "start": {
+            "line": 1,
+            "column": 1
+          },
+          "end": {
+            "line": 1,
+            "column": 45
+          }
+        },
+        "readableText": "[unknown_control] Literal unknown directive.",
+        "ttsText": "[unknown_control] Literal unknown directive.",
+        "matches": []
+      },
+      {
+        "nodeOrdinal": 2,
+        "speakerId": "narrator",
+        "sourceRange": {
+          "start": {
+            "line": 2,
+            "column": 1
+          },
+          "end": {
+            "line": 2,
+            "column": 49
+          }
+        },
+        "readableText": "[speaker_] Literal malformed standalone speaker.",
+        "ttsText": "[speaker_] Literal malformed standalone speaker.",
+        "matches": []
+      },
+      {
+        "nodeOrdinal": 3,
+        "speakerId": "narrator",
+        "sourceRange": {
+          "start": {
+            "line": 3,
+            "column": 1
+          },
+          "end": {
+            "line": 3,
+            "column": 51
+          }
+        },
+        "readableText": "[pause_short!] Literal malformed standalone pause.",
+        "ttsText": "[pause_short!] Literal malformed standalone pause.",
+        "matches": []
+      },
+      {
+        "nodeOrdinal": 4,
+        "speakerId": "narrator",
+        "sourceRange": {
+          "start": {
+            "line": 4,
+            "column": 1
+          },
+          "end": {
+            "line": 4,
+            "column": 24
+          }
+        },
+        "readableText": "[section Missing colon]",
+        "ttsText": "[section Missing colon]",
+        "matches": []
+      },
+      {
+        "nodeOrdinal": 5,
+        "speakerId": "narrator",
+        "sourceRange": {
+          "start": {
+            "line": 5,
+            "column": 1
+          },
+          "end": {
+            "line": 5,
+            "column": 11
+          }
+        },
+        "readableText": "[section:]",
+        "ttsText": "[section:]",
+        "matches": []
+      },
+      {
+        "nodeOrdinal": 6,
+        "speakerId": "teacher",
+        "sourceRange": {
+          "start": {
+            "line": 6,
+            "column": 19
+          },
+          "end": {
+            "line": 6,
+            "column": 69
+          }
+        },
+        "readableText": "Keep [speaker_bad name] and [pause_long!] literal.",
+        "ttsText": "Keep [speaker_bad name] and [pause_long!] literal.",
+        "matches": []
+      },
+      {
+        "nodeOrdinal": 7,
+        "speakerId": "teacher",
+        "sourceRange": {
+          "start": {
+            "line": 7,
+            "column": 19
+          },
+          "end": {
+            "line": 7,
+            "column": 73
+          }
+        },
+        "readableText": "{{|sense}} and {{term|bad sense}} and {{unclosed|sense",
+        "ttsText": "{{|sense}} and {{term|bad sense}} and {{unclosed|sense",
+        "matches": []
+      }
+    ],
+    "readableTranscript": "[unknown_control] Literal unknown directive.\n[speaker_] Literal malformed standalone speaker.\n[pause_short!] Literal malformed standalone pause.\n[section Missing colon]\n[section:]\nKeep [speaker_bad name] and [pause_long!] literal.\n{{|sense}} and {{term|bad sense}} and {{unclosed|sense",
+    "ttsTranscript": "[unknown_control] Literal unknown directive.\n[speaker_] Literal malformed standalone speaker.\n[pause_short!] Literal malformed standalone pause.\n[section Missing colon]\n[section:]\nKeep [speaker_bad name] and [pause_long!] literal.\n{{|sense}} and {{term|bad sense}} and {{unclosed|sense",
+    "matches": [],
+    "errors": [],
+    "warnings": [],
+    "synthesisReady": false
+  }
+}

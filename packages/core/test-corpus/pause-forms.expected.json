@@ -1,0 +1,375 @@
+{
+  "parse": {
+    "grammarVersion": 1,
+    "cirSchemaVersion": 1,
+    "source": "[pause_short]\n[pause_medium] Leading pause before speech.\nInline before [pause_long] inline after.\n[pause_short][pause_medium]\nTrailing pause follows speech [pause_long]\n",
+    "nodes": [
+      {
+        "ordinal": 1,
+        "range": {
+          "start": {
+            "line": 1,
+            "column": 1
+          },
+          "end": {
+            "line": 1,
+            "column": 14
+          }
+        },
+        "type": "pause",
+        "pauseId": "pause_short"
+      },
+      {
+        "ordinal": 2,
+        "range": {
+          "start": {
+            "line": 2,
+            "column": 1
+          },
+          "end": {
+            "line": 2,
+            "column": 15
+          }
+        },
+        "type": "pause",
+        "pauseId": "pause_medium"
+      },
+      {
+        "ordinal": 3,
+        "range": {
+          "start": {
+            "line": 2,
+            "column": 16
+          },
+          "end": {
+            "line": 2,
+            "column": 44
+          }
+        },
+        "type": "speech",
+        "speakerId": "narrator",
+        "rawText": "Leading pause before speech.",
+        "readableText": "Leading pause before speech.",
+        "annotations": []
+      },
+      {
+        "ordinal": 4,
+        "range": {
+          "start": {
+            "line": 3,
+            "column": 1
+          },
+          "end": {
+            "line": 3,
+            "column": 14
+          }
+        },
+        "type": "speech",
+        "speakerId": "narrator",
+        "rawText": "Inline before",
+        "readableText": "Inline before",
+        "annotations": []
+      },
+      {
+        "ordinal": 5,
+        "range": {
+          "start": {
+            "line": 3,
+            "column": 15
+          },
+          "end": {
+            "line": 3,
+            "column": 27
+          }
+        },
+        "type": "pause",
+        "pauseId": "pause_long"
+      },
+      {
+        "ordinal": 6,
+        "range": {
+          "start": {
+            "line": 3,
+            "column": 28
+          },
+          "end": {
+            "line": 3,
+            "column": 41
+          }
+        },
+        "type": "speech",
+        "speakerId": "narrator",
+        "rawText": "inline after.",
+        "readableText": "inline after.",
+        "annotations": []
+      },
+      {
+        "ordinal": 7,
+        "range": {
+          "start": {
+            "line": 4,
+            "column": 1
+          },
+          "end": {
+            "line": 4,
+            "column": 14
+          }
+        },
+        "type": "pause",
+        "pauseId": "pause_short"
+      },
+      {
+        "ordinal": 8,
+        "range": {
+          "start": {
+            "line": 4,
+            "column": 14
+          },
+          "end": {
+            "line": 4,
+            "column": 28
+          }
+        },
+        "type": "pause",
+        "pauseId": "pause_medium"
+      },
+      {
+        "ordinal": 9,
+        "range": {
+          "start": {
+            "line": 5,
+            "column": 1
+          },
+          "end": {
+            "line": 5,
+            "column": 30
+          }
+        },
+        "type": "speech",
+        "speakerId": "narrator",
+        "rawText": "Trailing pause follows speech",
+        "readableText": "Trailing pause follows speech",
+        "annotations": []
+      },
+      {
+        "ordinal": 10,
+        "range": {
+          "start": {
+            "line": 5,
+            "column": 31
+          },
+          "end": {
+            "line": 5,
+            "column": 43
+          }
+        },
+        "type": "pause",
+        "pauseId": "pause_long"
+      }
+    ],
+    "discoveries": {
+      "speakers": [
+        {
+          "id": "narrator",
+          "occurrences": [
+            {
+              "range": {
+                "start": {
+                  "line": 2,
+                  "column": 16
+                },
+                "end": {
+                  "line": 2,
+                  "column": 44
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "pauses": [
+        {
+          "id": "pause_short",
+          "occurrences": [
+            {
+              "range": {
+                "start": {
+                  "line": 1,
+                  "column": 1
+                },
+                "end": {
+                  "line": 1,
+                  "column": 14
+                }
+              }
+            },
+            {
+              "range": {
+                "start": {
+                  "line": 4,
+                  "column": 1
+                },
+                "end": {
+                  "line": 4,
+                  "column": 14
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": "pause_medium",
+          "occurrences": [
+            {
+              "range": {
+                "start": {
+                  "line": 2,
+                  "column": 1
+                },
+                "end": {
+                  "line": 2,
+                  "column": 15
+                }
+              }
+            },
+            {
+              "range": {
+                "start": {
+                  "line": 4,
+                  "column": 14
+                },
+                "end": {
+                  "line": 4,
+                  "column": 28
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": "pause_long",
+          "occurrences": [
+            {
+              "range": {
+                "start": {
+                  "line": 3,
+                  "column": 15
+                },
+                "end": {
+                  "line": 3,
+                  "column": 27
+                }
+              }
+            },
+            {
+              "range": {
+                "start": {
+                  "line": 5,
+                  "column": 31
+                },
+                "end": {
+                  "line": 5,
+                  "column": 43
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "sections": [],
+      "pronunciations": []
+    },
+    "summary": {
+      "speakerCount": 1,
+      "pauseIdCount": 3,
+      "sectionCount": 0,
+      "speechSegmentCount": 4,
+      "explicitPauseSegmentCount": 6,
+      "pronunciationAnnotationCount": 0,
+      "paragraphBreakCount": 0,
+      "characterCount": 170
+    },
+    "errors": [],
+    "warnings": []
+  },
+  "transform": {
+    "transformVersion": 1,
+    "source": "[pause_short]\n[pause_medium] Leading pause before speech.\nInline before [pause_long] inline after.\n[pause_short][pause_medium]\nTrailing pause follows speech [pause_long]\n",
+    "segments": [
+      {
+        "nodeOrdinal": 3,
+        "speakerId": "narrator",
+        "sourceRange": {
+          "start": {
+            "line": 2,
+            "column": 16
+          },
+          "end": {
+            "line": 2,
+            "column": 44
+          }
+        },
+        "readableText": "Leading pause before speech.",
+        "ttsText": "Leading pause before speech.",
+        "matches": []
+      },
+      {
+        "nodeOrdinal": 4,
+        "speakerId": "narrator",
+        "sourceRange": {
+          "start": {
+            "line": 3,
+            "column": 1
+          },
+          "end": {
+            "line": 3,
+            "column": 14
+          }
+        },
+        "readableText": "Inline before",
+        "ttsText": "Inline before",
+        "matches": []
+      },
+      {
+        "nodeOrdinal": 6,
+        "speakerId": "narrator",
+        "sourceRange": {
+          "start": {
+            "line": 3,
+            "column": 28
+          },
+          "end": {
+            "line": 3,
+            "column": 41
+          }
+        },
+        "readableText": "inline after.",
+        "ttsText": "inline after.",
+        "matches": []
+      },
+      {
+        "nodeOrdinal": 9,
+        "speakerId": "narrator",
+        "sourceRange": {
+          "start": {
+            "line": 5,
+            "column": 1
+          },
+          "end": {
+            "line": 5,
+            "column": 30
+          }
+        },
+        "readableText": "Trailing pause follows speech",
+        "ttsText": "Trailing pause follows speech",
+        "matches": []
+      }
+    ],
+    "readableTranscript": "Leading pause before speech.\nInline before\ninline after.\nTrailing pause follows speech",
+    "ttsTranscript": "Leading pause before speech.\nInline before\ninline after.\nTrailing pause follows speech",
+    "matches": [],
+    "errors": [],
+    "warnings": [],
+    "synthesisReady": true
+  }
+}

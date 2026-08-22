@@ -1,0 +1,7 @@
+[unknown_control] Literal unknown directive.
+[speaker_] Literal malformed standalone speaker.
+[pause_short!] Literal malformed standalone pause.
+[section Missing colon]
+[section:]
+[speaker_teacher] Keep [speaker_bad name] and [pause_long!] literal.
+[speaker_teacher] {{|sense}} and {{term|bad sense}} and {{unclosed|sense

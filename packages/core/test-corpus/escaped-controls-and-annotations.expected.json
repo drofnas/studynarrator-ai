@@ -1,0 +1,179 @@
+{
+  "parse": {
+    "grammarVersion": 1,
+    "cirSchemaVersion": 1,
+    "source": "\\[speaker_teacher] is literal at the beginning.\n[speaker_teacher] Literal \\[pause_short] and \\[speaker_student] remain spoken.\nLiteral \\{{resume|cv}} annotation markup remains spoken.\n",
+    "nodes": [
+      {
+        "ordinal": 1,
+        "range": {
+          "start": {
+            "line": 1,
+            "column": 1
+          },
+          "end": {
+            "line": 1,
+            "column": 48
+          }
+        },
+        "type": "speech",
+        "speakerId": "narrator",
+        "rawText": "\\[speaker_teacher] is literal at the beginning.",
+        "readableText": "[speaker_teacher] is literal at the beginning.",
+        "annotations": []
+      },
+      {
+        "ordinal": 2,
+        "range": {
+          "start": {
+            "line": 2,
+            "column": 19
+          },
+          "end": {
+            "line": 2,
+            "column": 79
+          }
+        },
+        "type": "speech",
+        "speakerId": "teacher",
+        "rawText": "Literal \\[pause_short] and \\[speaker_student] remain spoken.",
+        "readableText": "Literal [pause_short] and [speaker_student] remain spoken.",
+        "annotations": []
+      },
+      {
+        "ordinal": 3,
+        "range": {
+          "start": {
+            "line": 3,
+            "column": 1
+          },
+          "end": {
+            "line": 3,
+            "column": 57
+          }
+        },
+        "type": "speech",
+        "speakerId": "teacher",
+        "rawText": "Literal \\{{resume|cv}} annotation markup remains spoken.",
+        "readableText": "Literal {{resume|cv}} annotation markup remains spoken.",
+        "annotations": []
+      }
+    ],
+    "discoveries": {
+      "speakers": [
+        {
+          "id": "narrator",
+          "occurrences": [
+            {
+              "range": {
+                "start": {
+                  "line": 1,
+                  "column": 1
+                },
+                "end": {
+                  "line": 1,
+                  "column": 48
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": "teacher",
+          "occurrences": [
+            {
+              "range": {
+                "start": {
+                  "line": 2,
+                  "column": 1
+                },
+                "end": {
+                  "line": 2,
+                  "column": 18
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "pauses": [],
+      "sections": [],
+      "pronunciations": []
+    },
+    "summary": {
+      "speakerCount": 2,
+      "pauseIdCount": 0,
+      "sectionCount": 0,
+      "speechSegmentCount": 3,
+      "explicitPauseSegmentCount": 0,
+      "pronunciationAnnotationCount": 0,
+      "paragraphBreakCount": 0,
+      "characterCount": 184
+    },
+    "errors": [],
+    "warnings": []
+  },
+  "transform": {
+    "transformVersion": 1,
+    "source": "\\[speaker_teacher] is literal at the beginning.\n[speaker_teacher] Literal \\[pause_short] and \\[speaker_student] remain spoken.\nLiteral \\{{resume|cv}} annotation markup remains spoken.\n",
+    "segments": [
+      {
+        "nodeOrdinal": 1,
+        "speakerId": "narrator",
+        "sourceRange": {
+          "start": {
+            "line": 1,
+            "column": 1
+          },
+          "end": {
+            "line": 1,
+            "column": 48
+          }
+        },
+        "readableText": "[speaker_teacher] is literal at the beginning.",
+        "ttsText": "[speaker_teacher] is literal at the beginning.",
+        "matches": []
+      },
+      {
+        "nodeOrdinal": 2,
+        "speakerId": "teacher",
+        "sourceRange": {
+          "start": {
+            "line": 2,
+            "column": 19
+          },
+          "end": {
+            "line": 2,
+            "column": 79
+          }
+        },
+        "readableText": "Literal [pause_short] and [speaker_student] remain spoken.",
+        "ttsText": "Literal [pause_short] and [speaker_student] remain spoken.",
+        "matches": []
+      },
+      {
+        "nodeOrdinal": 3,
+        "speakerId": "teacher",
+        "sourceRange": {
+          "start": {
+            "line": 3,
+            "column": 1
+          },
+          "end": {
+            "line": 3,
+            "column": 57
+          }
+        },
+        "readableText": "Literal {{resume|cv}} annotation markup remains spoken.",
+        "ttsText": "Literal {{resume|cv}} annotation markup remains spoken.",
+        "matches": []
+      }
+    ],
+    "readableTranscript": "[speaker_teacher] is literal at the beginning.\nLiteral [pause_short] and [speaker_student] remain spoken.\nLiteral {{resume|cv}} annotation markup remains spoken.",
+    "ttsTranscript": "[speaker_teacher] is literal at the beginning.\nLiteral [pause_short] and [speaker_student] remain spoken.\nLiteral {{resume|cv}} annotation markup remains spoken.",
+    "matches": [],
+    "errors": [],
+    "warnings": [],
+    "synthesisReady": true
+  }
+}
