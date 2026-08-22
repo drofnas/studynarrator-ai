@@ -15,7 +15,7 @@ Use it to:
 
 StudyNarrator does not bundle a speech engine. It sends synthesis requests to an external [Speaches](https://speaches.ai/) server through the OpenAI-compatible text-to-speech API.
 
-> **Beta status:** Docker Web is the production-style distribution in this repository. You can run the Electron client from source, but this release does not include a desktop installer.
+> **Beta distribution status:** Docker Web is a supported single-user distribution. Its supported Docker upgrade path retains the `studynarrator-data` named volume mounted at `/data`; application migrations run at startup. Electron is available from source only; unsigned desktop installers are not published, and cross-target native verification remains deferred.
 
 ## Quick start: Docker Web
 

@@ -92,6 +92,8 @@ See the upstream [Speaches text-to-speech guide](https://speaches.ai/usage/text-
 
 ## 3. Start StudyNarrator
 
+> **Distribution support:** Docker Web is a supported single-user distribution. Its supported Docker upgrade path retains the `studynarrator-data` named volume mounted at `/data`; application migrations run at startup.
+
 Clone this repository in a different directory, then create its local environment file:
 
 ```sh

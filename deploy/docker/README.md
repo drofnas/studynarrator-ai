@@ -2,6 +2,10 @@
 
 This package runs StudyNarrator only. It does not install, start, update, or otherwise manage Speaches, model files, Python, or GPU drivers.
 
+## Distribution support
+
+Docker Web is a supported single-user distribution. Its supported Docker upgrade path retains the `studynarrator-data` named volume mounted at `/data`; application migrations run at startup.
+
 ## Start
 
 Requirements: Docker Engine or Docker Desktop with Docker Compose.
