@@ -148,7 +148,7 @@ describe("host allowlist middleware", () => {
       .expect(200, "export const ready = true;");
   });
 
-  it.each(["", "localhost:0", "localhost:invalid", "::1", "[::1"])(
+  it.each(["", "localhost:0", "localhost:invalid", "::1", "[::1]:0"])(
     "rejects malformed Host header %j",
     async (host) => {
       const app = createTestApplication(DEFAULT_HOST_ALLOWLIST);
