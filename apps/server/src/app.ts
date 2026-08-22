@@ -7,8 +7,6 @@ import express, {
 import { createReadStream } from "node:fs";
 import { resolve } from "node:path";
 import {
-  ConnectionSetupStateSchema,
-  ConnectionTestSummarySchema,
   ProjectIdSchema,
   ProjectPreviewInputSchema,
   ProjectPreviewResultSchema,
@@ -23,18 +21,9 @@ import {
   ScriptGenerationPromptExportInputSchema,
   ScriptGenerationPromptInputSchema,
   ScriptGenerationSkillInputSchema,
-  RedactedConnectionDiagnosticsSchema,
-  ScratchpadPreviewInputSchema,
-  ScratchpadPreviewResultSchema,
   SpeechCacheCleanupResultSchema,
   SpeechCacheKeyInputSchema,
   SpeechCacheStatusSchema,
-  SpeechCatalogSchema,
-  SpeechCatalogDiscoveryInputSchema,
-  SpeechBackendConnectionAuthoringSchema,
-  SpeechBackendConnectionSchema,
-  VoiceCatalogModelInputSchema,
-  VoiceCatalogSchema,
   type SpeechBackendConnectionClient,
   type PersistenceClient,
   type ProjectPreviewClient,
@@ -52,8 +41,11 @@ import {
 } from "@studynarrator/application";
 import { asyncHandler } from "./asyncHandler.js";
 import { boundaryError } from "./errorMiddleware.js";
+import { createConnectionRouter } from "./routes/connection.js";
 import { createPersistenceRouter } from "./routes/persistence.js";
+import { createScratchpadRouter } from "./routes/scratchpad.js";
 import { createSystemRouter } from "./routes/system.js";
+import { createVoiceCatalogRouter } from "./routes/voiceCatalog.js";
 
 function streamRenderMedia(
   request: Request,
@@ -157,152 +149,11 @@ export function createExpressApp(options: {
     createPersistenceRouter(options.persistence, app);
   }
 
-  if (options.connection) {
-    const connection = options.connection;
-    app.get(
-      "/api/connection",
-      asyncHandler(async (_request, response) => {
-        response.json(
-          SpeechBackendConnectionSchema.parse(await connection.get()),
-        );
-      }),
-    );
-    app.put(
-      "/api/connection",
-      asyncHandler(async (request, response) => {
-        response.json(
-          SpeechBackendConnectionSchema.parse(
-            await connection.update(
-              SpeechBackendConnectionAuthoringSchema.parse(request.body),
-            ),
-          ),
-        );
-      }),
-    );
-    app.post(
-      "/api/connection/test",
-      asyncHandler(async (_request, response) => {
-        response.json(
-          ConnectionTestSummarySchema.parse(await connection.test()),
-        );
-      }),
-    );
-    app.post(
-      "/api/connection/speech-catalog",
-      asyncHandler(async (request, response) => {
-        const controller = new AbortController();
-        const abort = () => controller.abort();
-        request.once("aborted", abort);
-        const abortIfDisconnected = () => {
-          if (!response.writableEnded) abort();
-        };
-        response.once("close", abortIfDisconnected);
-        try {
-          response.json(
-            SpeechCatalogSchema.parse(
-              await connection.discoverSpeechCatalog(
-                SpeechCatalogDiscoveryInputSchema.parse(request.body),
-                controller.signal,
-              ),
-            ),
-          );
-        } finally {
-          request.off("aborted", abort);
-          response.off("close", abortIfDisconnected);
-        }
-      }),
-    );
-    app.get(
-      "/api/connection/diagnostics",
-      asyncHandler(async (_request, response) => {
-        response.json(
-          RedactedConnectionDiagnosticsSchema.parse(
-            await connection.exportDiagnostics(),
-          ),
-        );
-      }),
-    );
-    app.get(
-      "/api/setup",
-      asyncHandler(async (_request, response) => {
-        response.json(
-          ConnectionSetupStateSchema.parse(await connection.getSetupState()),
-        );
-      }),
-    );
-    app.post(
-      "/api/setup/complete",
-      asyncHandler(async (_request, response) => {
-        response.json(
-          ConnectionSetupStateSchema.parse(
-            await connection.completeOnboarding(),
-          ),
-        );
-      }),
-    );
-  } else {
-    app.get("/api/connection", persistenceUnavailable);
-    app.put("/api/connection", persistenceUnavailable);
-    app.post("/api/connection/test", persistenceUnavailable);
-    app.post("/api/connection/speech-catalog", persistenceUnavailable);
-    app.get("/api/connection/diagnostics", persistenceUnavailable);
-    app.get("/api/setup", persistenceUnavailable);
-    app.post("/api/setup/complete", persistenceUnavailable);
-  }
+  createConnectionRouter(options.connection, persistenceUnavailable, app);
 
-  if (options.voiceCatalog) {
-    const voiceCatalog = options.voiceCatalog;
-    app.get(
-      "/api/voice-catalog",
-      asyncHandler(async (request, response) => {
-        const { modelId } = VoiceCatalogModelInputSchema.parse(request.query);
-        response.json(
-          VoiceCatalogSchema.parse(await voiceCatalog.get(modelId)),
-        );
-      }),
-    );
-    app.put(
-      "/api/voice-catalog",
-      asyncHandler(async (request, response) => {
-        response.json(
-          VoiceCatalogSchema.parse(
-            await voiceCatalog.replace(VoiceCatalogSchema.parse(request.body)),
-          ),
-        );
-      }),
-    );
-  } else {
-    app.get("/api/voice-catalog", persistenceUnavailable);
-    app.put("/api/voice-catalog", persistenceUnavailable);
-  }
+  createVoiceCatalogRouter(options.voiceCatalog, persistenceUnavailable, app);
 
-  if (options.scratchpad) {
-    app.post(
-      "/api/scratchpad/preview",
-      asyncHandler(async (request, response) => {
-        const controller = new AbortController();
-        const abort = () => controller.abort();
-        request.once("aborted", abort);
-        const abortIfDisconnected = () => {
-          if (!response.writableEnded) abort();
-        };
-        response.once("close", abortIfDisconnected);
-        try {
-          response.json(
-            ScratchpadPreviewResultSchema.parse(
-              await options.scratchpad!.preview(
-                ScratchpadPreviewInputSchema.parse(request.body),
-                controller.signal,
-              ),
-            ),
-          );
-        } finally {
-          request.off("aborted", abort);
-          response.off("close", abortIfDisconnected);
-        }
-      }),
-    );
-  }
+  createScratchpadRouter(options.scratchpad, app);
 
   if (options.projectPreview) {
     app.post(
