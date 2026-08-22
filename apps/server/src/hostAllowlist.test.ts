@@ -29,7 +29,10 @@ function createTestApplication(allowedHosts: readonly string[]) {
   return app;
 }
 
-async function requestWithoutHost(app: ReturnType<typeof express>) {
+async function requestWithRawHttp(
+  app: ReturnType<typeof express>,
+  rawRequest: string,
+) {
   const server = createServer(app);
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
@@ -51,7 +54,7 @@ async function requestWithoutHost(app: ReturnType<typeof express>) {
         let response = "";
         socket.setEncoding("utf8");
         socket.once("connect", () => {
-          socket.write("GET /api/health HTTP/1.0\r\n\r\n");
+          socket.write(rawRequest);
         });
         socket.on("data", (chunk: string) => {
           response += chunk;
@@ -72,6 +75,10 @@ async function requestWithoutHost(app: ReturnType<typeof express>) {
       });
     });
   }
+}
+
+async function requestWithoutHost(app: ReturnType<typeof express>) {
+  return requestWithRawHttp(app, "GET /api/health HTTP/1.0\r\n\r\n");
 }
 
 describe("host allowlist middleware", () => {
@@ -163,6 +170,31 @@ describe("host allowlist middleware", () => {
     expect(() =>
       BoundaryErrorSchema.parse(JSON.parse(response.body)),
     ).not.toThrow();
+  });
+
+  it("rejects duplicate Host headers even if the first is allowed", async () => {
+    const app = createTestApplication(DEFAULT_HOST_ALLOWLIST);
+
+    const response = await requestWithRawHttp(
+      app,
+      [
+        "GET /api/health HTTP/1.1",
+        "Host: 127.0.0.1",
+        "Host: evil.example.com",
+        "Connection: close",
+        "",
+        "",
+      ].join("\r\n"),
+    );
+
+    expect(response.status).toBe(403);
+    expect(BoundaryErrorSchema.parse(JSON.parse(response.body))).toEqual({
+      error: {
+        code: "HOST_NOT_ALLOWED",
+        message: "The request host is not allowed.",
+      },
+    });
+    expect(response.body).not.toContain("evil.example.com");
   });
 
   it("validates configured additional hosts", () => {

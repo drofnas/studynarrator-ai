@@ -61,6 +61,20 @@ function normalizeRequestHost(value: unknown): string | undefined {
   return typeof value === "string" ? normalizeHost(value, false) : undefined;
 }
 
+function getSingleRawHost(rawHeaders: readonly string[]): string | undefined {
+  if (rawHeaders.length % 2 !== 0) return undefined;
+  let host: string | undefined;
+  for (let index = 0; index < rawHeaders.length; index += 2) {
+    const fieldName = rawHeaders[index];
+    const fieldValue = rawHeaders[index + 1];
+    if (fieldName === undefined || fieldValue === undefined) return undefined;
+    if (fieldName.toLowerCase() !== "host") continue;
+    if (host !== undefined) return undefined;
+    host = fieldValue;
+  }
+  return host;
+}
+
 export function createHostAllowlistMiddleware(
   allowedHosts: readonly string[] = DEFAULT_HOST_ALLOWLIST,
 ): RequestHandler {
@@ -74,7 +88,7 @@ export function createHostAllowlistMiddleware(
   );
 
   return (request, response, next) => {
-    const host = normalizeRequestHost(request.headers.host);
+    const host = normalizeRequestHost(getSingleRawHost(request.rawHeaders));
     if (host === undefined || !normalizedHosts.has(host)) {
       response.status(403).json(FORBIDDEN_HOST_RESPONSE);
       return;
