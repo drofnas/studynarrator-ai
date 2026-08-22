@@ -96,7 +96,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 16.3 | Reduce both bootstraps to the factory              | P1       | S    | complete    |
 | 17.1 | Add the async handler and error middleware         | P1       | S    | complete    |
 | 17.2 | Extract the system and persistence routers         | P1       | S    | complete    |
-| 17.3 | Extract the connection and catalog routers         | P1       | S    | todo        |
+| 17.3 | Extract the connection and catalog routers         | P1       | S    | complete    |
 | 17.4 | Extract the render and cache routers               | P1       | M    | todo        |
 | 18.1 | Add the logger module                              | P1       | S    | todo        |
 | 18.2 | Log startup and migration events                   | P1       | S    | todo        |
@@ -1250,7 +1250,7 @@ Standard, plus `npm run test:e2e:web`.
 
 ## TASK 17.3 — Extract the connection and catalog routers
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 
