@@ -4,7 +4,7 @@ This guide covers the Speaches installation, the speech model download, the firs
 
 ## Unsigned desktop installers: verify before opening
 
-Current desktop installers are unsigned because code signing and notarization are not yet available. Obtain installers only from the [official StudyNarrator GitHub Release](https://github.com/drofnas/studynarrator-ai/releases), then verify the installer against the published SHA-256 checksum in `SHA256SUMS.txt` before bypassing any warning. Do not continue if the checksum does not match.
+If a future desktop installer is published in an [official StudyNarrator GitHub Release](https://github.com/drofnas/studynarrator-ai/releases), it will be unsigned until code signing and notarization are available. Download it only from that published release, never a draft, then verify the installer against the published SHA-256 checksum in `SHA256SUMS.txt` before bypassing any warning. Do not continue if the checksum does not match.
 
 After the checksum matches, use only the warning-specific path below; do not disable Gatekeeper or SmartScreen globally.
 
