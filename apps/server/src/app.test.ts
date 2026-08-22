@@ -310,6 +310,7 @@ async function fixture(logger?: {
     startProject: async () => renderJob(),
     list: async () => [renderJob()],
     get: async () => renderJob(),
+    subscribe: () => () => undefined,
     cancel: async () => renderJob(),
     retry: async () => renderJob(),
     listArtifacts: async () => [artifact],

@@ -98,6 +98,7 @@ export interface RenderService extends Omit<
     renderId: string,
     ordinal: number,
   ): Promise<ResolvedRenderMedia>;
+  subscribe(renderId: string, callback: (job: RenderJob) => void): () => void;
   resolveDetailsArchive?(renderId: string): Promise<{
     bytes: Uint8Array;
     fileName: string;
@@ -250,6 +251,7 @@ export async function createRenderService(options: {
 
   const queue: string[] = [];
   const controllers = new Map<string, AbortController>();
+  const subscribers = new Map<string, Set<(job: RenderJob) => void>>();
   const userCanceled = new Set<string>();
   const startingProjects = new Map<string, Promise<RenderJob>>();
   const ffprobePath =
@@ -306,6 +308,13 @@ export async function createRenderService(options: {
         },
         "Render phase transitioned",
       );
+    for (const subscriber of [...(subscribers.get(persisted.id) ?? [])]) {
+      try {
+        subscriber(persisted);
+      } catch {
+        // Observer failures must not interrupt the render or other observers.
+      }
+    }
     return persisted;
   };
 
@@ -1136,6 +1145,20 @@ export async function createRenderService(options: {
         options.repository.getRenderJob(RenderIdSchema.parse(renderId)),
       );
     },
+    subscribe(renderIdInput, callback) {
+      const renderId = RenderIdSchema.parse(renderIdInput);
+      const listeners = subscribers.get(renderId) ?? new Set();
+      listeners.add(callback);
+      subscribers.set(renderId, listeners);
+      let subscribed = true;
+      return () => {
+        if (!subscribed) return;
+        subscribed = false;
+        listeners.delete(callback);
+        if (listeners.size === 0 && subscribers.get(renderId) === listeners)
+          subscribers.delete(renderId);
+      };
+    },
     async cancel(renderIdInput) {
       const renderId = RenderIdSchema.parse(renderIdInput);
       const job = options.repository.getRenderJob(renderId);
@@ -1208,7 +1231,11 @@ export async function createRenderService(options: {
         controller.abort(
           new DOMException("StudyNarrator is shutting down.", "AbortError"),
         );
-      await drainPromise;
+      try {
+        await drainPromise;
+      } finally {
+        subscribers.clear();
+      }
     },
   };
 }

@@ -36,6 +36,7 @@ export const APPLICATION_SERVICE_MANIFEST = Object.freeze([
   "renders.startProject",
   "renders.list",
   "renders.get",
+  "renders.subscribe",
   "renders.cancel",
   "renders.retry",
   "renders.artifacts",

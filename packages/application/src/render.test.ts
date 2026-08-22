@@ -20,6 +20,7 @@ import {
 } from "@studynarrator/rendering";
 import { createRenderService, type RenderRepository } from "./render.js";
 import type { ComputedRenderPlan } from "./renderPlan.js";
+import { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -304,6 +305,71 @@ async function terminal(
 }
 
 describe("render coordinator", () => {
+  it("declares the progress observer in the application-service manifest", () => {
+    expect(APPLICATION_SERVICE_MANIFEST).toContain("renders.subscribe");
+  });
+
+  it("notifies observers for progress updates and the terminal state exactly once", async () => {
+    const { service, projectId } = await fixture();
+    const started = await service.startProject(projectId);
+    const observed: RenderJob[] = [];
+    service.subscribe(started.id, (job) => observed.push(job));
+
+    const completed = await terminal(service, started.id);
+
+    expect(completed.state).toBe("complete");
+    expect(observed.map(({ state }) => state)).toEqual([
+      "validating",
+      "synthesizing",
+      "synthesizing",
+      "assembling",
+      "encoding",
+      "writing_artifacts",
+      "complete",
+    ]);
+    expect(
+      observed.filter(({ state }) =>
+        ["complete", "failed", "canceled"].includes(state),
+      ),
+    ).toEqual([completed]);
+    await service.close();
+  });
+
+  it("stops delivery after an idempotent unsubscribe", async () => {
+    const { service, projectId } = await fixture();
+    const started = await service.startProject(projectId);
+    let unsubscribe: () => void = () => undefined;
+    const observer = vi.fn(() => unsubscribe());
+    unsubscribe = service.subscribe(started.id, observer);
+
+    await terminal(service, started.id);
+    unsubscribe();
+    unsubscribe();
+
+    expect(observer).toHaveBeenCalledOnce();
+    await service.close();
+  });
+
+  it("isolates throwing observers from the render and other observers", async () => {
+    const { service, projectId } = await fixture();
+    const started = await service.startProject(projectId);
+    const throwingObserver = vi.fn(() => {
+      throw new Error("observer failure");
+    });
+    const observed: RenderJob[] = [];
+    service.subscribe(started.id, throwingObserver);
+    service.subscribe(started.id, (job) => observed.push(job));
+
+    const completed = await terminal(service, started.id);
+
+    expect(completed.state).toBe("complete");
+    expect(throwingObserver).toHaveBeenCalledTimes(observed.length);
+    expect(observed.filter(({ state }) => state === "complete")).toHaveLength(
+      1,
+    );
+    await service.close();
+  });
+
   it("synthesizes, normalizes, encodes, validates, and atomically publishes the v1 bundle", async () => {
     const { service, repository, dataDirectory, projectId, logger } =
       await fixture();
