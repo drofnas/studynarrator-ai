@@ -327,7 +327,9 @@ describe("script prompt kit", () => {
       "Clipboard access was denied",
     );
     expect(
-      screen.getByRole("textbox", { name: "Create a script prompt editor" }),
+      await screen.findByRole("textbox", {
+        name: "Create a script prompt editor",
+      }),
     ).toBeInTheDocument();
   });
 
