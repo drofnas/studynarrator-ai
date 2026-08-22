@@ -71,62 +71,62 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 
 ## TASK TABLE
 
-| #    | Task                                               | Priority | Size | Status      |
-| ---- | -------------------------------------------------- | -------- | ---- | ----------- |
-| 9.1  | Add migration 4 and bump the schema version        | P0       | S    | complete    |
-| 9.2  | Rename the connection types in shared-types        | P0       | S    | complete    |
-| 9.3  | Propagate the rename through persistence           | P0       | S    | complete    |
-| 9.4  | Propagate the rename through application           | P0       | M    | complete    |
-| 9.5  | Propagate the rename through server and desktop    | P0       | S    | complete    |
-| 9.6  | Propagate the rename through the web client        | P0       | M    | complete    |
-| 10.1 | Write and read the data directory manifest         | P0       | M    | complete    |
-| 10.2 | Add the layout step runner                         | P0       | S    | done (10.x) |
-| 10.3 | Convert cache metadata parsing to Zod              | P0       | S    | complete    |
-| 10.4 | Add the two initial layout steps                   | P0       | S    | complete    |
-| 11.1 | Add the CI check job                               | P0       | S    | complete    |
-| 11.2 | Add the CI e2e and docker jobs                     | P0       | S    | complete    |
-| 12.1 | Correct the README                                 | P0       | S    | complete    |
-| 12.2 | Write UPGRADE.md                                   | P0       | S    | complete    |
-| 12.3 | Split setup into SETUP.md                          | P0       | S    | complete    |
-| 13   | Lower the Node requirement to 24                   | P1       | S    | complete    |
-| 14   | Make the Vitest configs disjoint                   | P1       | XS   | complete    |
-| 15   | Add coverage thresholds                            | P1       | S    | complete    |
-| 16.1 | Extract the runtime descriptor type                | P1       | S    | complete    |
-| 16.2 | Extract the shared service factory                 | P1       | M    | complete    |
-| 16.3 | Reduce both bootstraps to the factory              | P1       | S    | complete    |
-| 17.1 | Add the async handler and error middleware         | P1       | S    | complete    |
-| 17.2 | Extract the system and persistence routers         | P1       | S    | complete    |
-| 17.3 | Extract the connection and catalog routers         | P1       | S    | complete    |
-| 17.4 | Extract the render and cache routers               | P1       | M    | complete    |
-| 18.1 | Add the logger module                              | P1       | S    | complete    |
-| 18.2 | Log startup and migration events                   | P1       | S    | complete    |
-| 18.3 | Log render lifecycle and boundary errors           | P1       | S    | complete    |
-| 19.1 | Add a render progress observer                     | P1       | S    | complete    |
-| 19.2 | Add the SSE endpoint                               | P1       | S    | complete    |
-| 19.3 | Consume SSE in the web client                      | P1       | M    | complete    |
-| 20.1 | Add the voice timing calibration table             | P1       | S    | complete    |
-| 20.2 | Record calibration after each render               | P1       | S    | complete    |
-| 20.3 | Add the estimation functions                       | P1       | S    | complete    |
-| 20.4 | Show estimates in the script editor                | P1       | M    | complete    |
-| 20.5 | Add the preflight disk space check                 | P1       | S    | complete    |
-| 21.1 | Add the retention settings table and service       | P1       | S    | complete    |
-| 21.2 | Add the cache sweeper                              | P1       | M    | complete    |
-| 21.3 | Add render pinning                                 | P1       | S    | complete    |
-| 21.4 | Add the retention settings screen                  | P1       | M    | complete    |
-| 22   | Host header allowlist                              | P1       | S    | complete    |
-| 23.1 | Add electron-builder configuration                 | P1       | M    | complete    |
-| 23.2 | Verify the native rebuild per target               | P1       | S    | todo        |
-| 23.3 | Add the release workflow, unsigned                 | P1       | S    | todo        |
-| 23.4 | Add signing and notarization                       | P1       | M    | todo        |
-| 23.5 | Decide and document the Docker support level       | P1       | S    | todo        |
-| 24.1 | Build the golden corpus fixtures                   | P1       | M    | todo        |
-| 24.2 | Add the golden corpus test and regeneration script | P1       | S    | todo        |
-| 25.1 | Split the rendering package                        | P2       | M    | todo        |
-| 25.2 | Split the persistence repository                   | P2       | M    | todo        |
-| 25.3 | Split the speaches adapter                         | P2       | M    | todo        |
-| 25.4 | Split the render service                           | P2       | M    | todo        |
-| 25.5 | Split ProjectsPage                                 | P2       | M    | todo        |
-| 26   | Single typed contract map                          | P2       | —    | todo        |
+| #    | Task                                               | Priority | Size | Status                                    |
+| ---- | -------------------------------------------------- | -------- | ---- | ----------------------------------------- |
+| 9.1  | Add migration 4 and bump the schema version        | P0       | S    | complete                                  |
+| 9.2  | Rename the connection types in shared-types        | P0       | S    | complete                                  |
+| 9.3  | Propagate the rename through persistence           | P0       | S    | complete                                  |
+| 9.4  | Propagate the rename through application           | P0       | M    | complete                                  |
+| 9.5  | Propagate the rename through server and desktop    | P0       | S    | complete                                  |
+| 9.6  | Propagate the rename through the web client        | P0       | M    | complete                                  |
+| 10.1 | Write and read the data directory manifest         | P0       | M    | complete                                  |
+| 10.2 | Add the layout step runner                         | P0       | S    | done (10.x)                               |
+| 10.3 | Convert cache metadata parsing to Zod              | P0       | S    | complete                                  |
+| 10.4 | Add the two initial layout steps                   | P0       | S    | complete                                  |
+| 11.1 | Add the CI check job                               | P0       | S    | complete                                  |
+| 11.2 | Add the CI e2e and docker jobs                     | P0       | S    | complete                                  |
+| 12.1 | Correct the README                                 | P0       | S    | complete                                  |
+| 12.2 | Write UPGRADE.md                                   | P0       | S    | complete                                  |
+| 12.3 | Split setup into SETUP.md                          | P0       | S    | complete                                  |
+| 13   | Lower the Node requirement to 24                   | P1       | S    | complete                                  |
+| 14   | Make the Vitest configs disjoint                   | P1       | XS   | complete                                  |
+| 15   | Add coverage thresholds                            | P1       | S    | complete                                  |
+| 16.1 | Extract the runtime descriptor type                | P1       | S    | complete                                  |
+| 16.2 | Extract the shared service factory                 | P1       | M    | complete                                  |
+| 16.3 | Reduce both bootstraps to the factory              | P1       | S    | complete                                  |
+| 17.1 | Add the async handler and error middleware         | P1       | S    | complete                                  |
+| 17.2 | Extract the system and persistence routers         | P1       | S    | complete                                  |
+| 17.3 | Extract the connection and catalog routers         | P1       | S    | complete                                  |
+| 17.4 | Extract the render and cache routers               | P1       | M    | complete                                  |
+| 18.1 | Add the logger module                              | P1       | S    | complete                                  |
+| 18.2 | Log startup and migration events                   | P1       | S    | complete                                  |
+| 18.3 | Log render lifecycle and boundary errors           | P1       | S    | complete                                  |
+| 19.1 | Add a render progress observer                     | P1       | S    | complete                                  |
+| 19.2 | Add the SSE endpoint                               | P1       | S    | complete                                  |
+| 19.3 | Consume SSE in the web client                      | P1       | M    | complete                                  |
+| 20.1 | Add the voice timing calibration table             | P1       | S    | complete                                  |
+| 20.2 | Record calibration after each render               | P1       | S    | complete                                  |
+| 20.3 | Add the estimation functions                       | P1       | S    | complete                                  |
+| 20.4 | Show estimates in the script editor                | P1       | M    | complete                                  |
+| 20.5 | Add the preflight disk space check                 | P1       | S    | complete                                  |
+| 21.1 | Add the retention settings table and service       | P1       | S    | complete                                  |
+| 21.2 | Add the cache sweeper                              | P1       | M    | complete                                  |
+| 21.3 | Add render pinning                                 | P1       | S    | complete                                  |
+| 21.4 | Add the retention settings screen                  | P1       | M    | complete                                  |
+| 22   | Host header allowlist                              | P1       | S    | complete                                  |
+| 23.1 | Add electron-builder configuration                 | P1       | M    | complete                                  |
+| 23.2 | Verify the native rebuild per target               | P1       | S    | deferred (human-led; future verification) |
+| 23.3 | Add the release workflow, unsigned                 | P1       | S    | todo                                      |
+| 23.4 | Add signing and notarization                       | P1       | M    | todo                                      |
+| 23.5 | Decide and document the Docker support level       | P1       | S    | todo                                      |
+| 24.1 | Build the golden corpus fixtures                   | P1       | M    | todo                                      |
+| 24.2 | Add the golden corpus test and regeneration script | P1       | S    | todo                                      |
+| 25.1 | Split the rendering package                        | P2       | M    | todo                                      |
+| 25.2 | Split the persistence repository                   | P2       | M    | todo                                      |
+| 25.3 | Split the speaches adapter                         | P2       | M    | todo                                      |
+| 25.4 | Split the render service                           | P2       | M    | todo                                      |
+| 25.5 | Split ProjectsPage                                 | P2       | M    | todo                                      |
+| 26   | Single typed contract map                          | P2       | —    | todo                                      |
 | 27.1 | Add TanStack Query and the provider                | P2       | S    |
 | 27.2 | Migrate the read-only pages                        | P2       | M    |
 | 27.3 | Migrate the mutating pages                         | P2       | M    |
@@ -1879,7 +1879,7 @@ Launch the unpacked application and confirm it opens.
 
 ## TASK 23.2 — Verify the native rebuild per target
 
-**Status:** todo
+**Status:** deferred (human-led; future verification)
 
 **Priority:** P1 · **Size:** S · **Human-led**
 
