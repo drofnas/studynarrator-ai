@@ -50,7 +50,13 @@ test.describe("render execution", () => {
 
     await openRoute(page, studyNarrator, `/projects/${created.id}?tab=render`);
     await expect(page.getByRole("button", { name: "Render" })).toBeEnabled();
+    const renderEventsRequest = page.waitForRequest(
+      (renderRequest) =>
+        renderRequest.method() === "GET" &&
+        /\/api\/renders\/[^/]+\/events$/u.test(renderRequest.url()),
+    );
     await page.getByRole("button", { name: "Render" }).click();
+    await renderEventsRequest;
     await expect(
       page.getByRole("button", { name: "Rendering…" }),
     ).toBeDisabled();

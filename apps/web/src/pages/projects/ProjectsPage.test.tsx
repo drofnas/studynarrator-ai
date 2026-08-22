@@ -38,6 +38,7 @@ import type {
 import type { ScriptAnalyzer } from "@/workers/parser/parserClient.js";
 import type { ScriptAnalysisInput } from "@/workers/parser/parserWorkerProtocol.js";
 import { GLOBAL_VOICE_CATALOG_MODEL_ID } from "@/features/projects/projectAuthoring.js";
+import type { RenderProgressClient } from "@/services/renders/renderClient.js";
 import { ProjectsPage } from "./ProjectsPage.js";
 import { ConnectionProvider } from "@/features/connections/ConnectionProvider.js";
 
@@ -208,6 +209,89 @@ function frozenPlan(
       cacheMisses: 1,
       silenceDurationMs: 750,
     },
+  };
+}
+
+function renderJobFixture(
+  id: string,
+  state: RenderJob["state"],
+  completedChunks = state === "complete" ? 4 : 1,
+): RenderJob {
+  const terminal = ["complete", "failed", "canceled"].includes(state);
+  return {
+    contractVersion: 1,
+    id,
+    projectId: project.id,
+    planId: "00000000-0000-4000-8000-000000000090",
+    retryOfRenderId: null,
+    state,
+    progress: {
+      phase: state,
+      sectionTitle: "Opening",
+      sectionOrdinal: 1,
+      sectionCount: 1,
+      entryOrdinal: 1,
+      speechOrdinal: 1,
+      speechCount: 1,
+      chunkOrdinal: terminal ? null : 1,
+      completedChunks,
+      totalChunks: 4,
+      cacheHits: 0,
+      cacheMisses: 4,
+      ttsRequests: completedChunks,
+      speakerId: terminal ? null : "teacher",
+      voiceId: terminal ? null : "voice_teacher",
+      excerpt: terminal ? null : "Study this.",
+      elapsedMs: completedChunks * 500,
+    },
+    error:
+      state === "failed"
+        ? {
+            code: "RENDER_SYNTHESIS_FAILED",
+            message: "Speech generation failed.",
+            retryable: true,
+            phase: "synthesizing",
+            entryOrdinal: 1,
+            chunkOrdinal: 1,
+            sourceRange: null,
+            speakerId: "teacher",
+            voiceId: "voice_teacher",
+          }
+        : null,
+    createdAt: "2026-08-12T14:00:00.000Z",
+    startedAt: "2026-08-12T14:00:00.100Z",
+    finishedAt: terminal ? "2026-08-12T14:00:02.000Z" : null,
+  };
+}
+
+function renderClientFixture(
+  jobs: RenderJob[],
+  get: RenderClient["get"],
+  subscribe?: NonNullable<RenderProgressClient["subscribe"]>,
+): RenderProgressClient {
+  const fallbackJob =
+    jobs[0] ??
+    renderJobFixture("00000000-0000-4000-8000-000000000091", "complete");
+  return {
+    startProject: vi.fn(async () => fallbackJob),
+    list: vi.fn(async () => jobs),
+    get,
+    cancel: vi.fn(async () => fallbackJob),
+    retry: vi.fn(async () => fallbackJob),
+    listArtifacts: vi.fn(async () => []),
+    exportArtifact: vi.fn(),
+    exportAudio: vi.fn(),
+    exportDetails: vi.fn(),
+    listSegments: vi.fn(async () => []),
+    getWaveform: vi.fn(async () => ({
+      status: "unavailable" as const,
+      renderId: fallbackJob.id,
+      reason: "audioMissing" as const,
+    })),
+    renderAudioSource: vi.fn((renderId: string) => `/renders/${renderId}.mp3`),
+    segmentAudioSource: vi.fn(),
+    exportSegment: vi.fn(),
+    ...(subscribe ? { subscribe } : {}),
   };
 }
 
@@ -1453,7 +1537,7 @@ describe("Projects workbench", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("starts rendering immediately, reports chunk progress, and restores prior audio after failure", async () => {
+  it("streams render progress and restores prior audio after a terminal failure", async () => {
     const { client, analyze } = fixture();
     const priorJob: RenderJob = {
       contractVersion: 1,
@@ -1524,11 +1608,26 @@ describe("Projects workbench", () => {
     };
     const startRequest = deferred<RenderJob>();
     const getRender = vi.fn(async () => failedJob);
+    let publish: ((job: RenderJob) => void) | undefined;
+    let reportDropped: (() => void) | undefined;
+    const unsubscribe = vi.fn();
+    const subscribe = vi.fn(
+      (
+        _renderId: string,
+        onJob: (job: RenderJob) => void,
+        onDropped: () => void,
+      ) => {
+        publish = onJob;
+        reportDropped = onDropped;
+        return unsubscribe;
+      },
+    );
     const renderClient = {
       start: vi.fn(() => startRequest.promise),
       startProject: vi.fn(() => startRequest.promise),
       list: vi.fn(async () => [priorJob]),
       get: getRender,
+      subscribe,
       cancel: vi.fn(),
       retry: vi.fn(),
       listArtifacts: vi.fn(async () => []),
@@ -1546,7 +1645,7 @@ describe("Projects workbench", () => {
       ),
       segmentAudioSource: vi.fn(),
       exportSegment: vi.fn(),
-    } as unknown as RenderClient;
+    } as unknown as RenderProgressClient;
     renderPage(client, analyze, { renderClient });
     await openProjectTab("Render");
     const player = await screen.findByLabelText(
@@ -1584,18 +1683,107 @@ describe("Projects workbench", () => {
       "11",
     );
 
-    await waitFor(
-      () => expect(getRender).toHaveBeenCalledWith(renderingJob.id),
-      { timeout: 1_500 },
+    await waitFor(() =>
+      expect(subscribe).toHaveBeenCalledWith(
+        renderingJob.id,
+        expect.any(Function),
+        expect.any(Function),
+      ),
     );
+    expect(reportDropped).toEqual(expect.any(Function));
+    expect(getRender).not.toHaveBeenCalled();
+
+    const streamedJob: RenderJob = {
+      ...renderingJob,
+      progress: {
+        ...renderingJob.progress,
+        completedChunks: 12,
+        elapsedMs: 750,
+      },
+    };
+    act(() => publish!(streamedJob));
+    expect(
+      await screen.findByText("Processing chunk 13 of 300"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("12 of 300 chunks complete")).toBeInTheDocument();
+
+    act(() => publish!(failedJob));
     expect(
       await screen.findByRole("button", { name: "Try again" }),
     ).toBeEnabled();
+    await waitFor(() => expect(unsubscribe).toHaveBeenCalledOnce());
+    expect(getRender).not.toHaveBeenCalled();
     expect(player).toHaveAttribute("aria-disabled", "false");
     expect(screen.getByRole("button", { name: "Download" })).toBeEnabled();
     expect(
       screen.getByRole("button", { name: "Download Details" }),
     ).toBeEnabled();
+  });
+
+  it("performs one reconciliation GET after repeated stream drop signals and unsubscribes on unmount", async () => {
+    const { client, analyze } = fixture();
+    const activeJob = renderJobFixture(
+      "00000000-0000-4000-8000-000000000092",
+      "synthesizing",
+    );
+    const reconciledJob = renderJobFixture(activeJob.id, "synthesizing", 2);
+    const getRender = vi.fn(async () => reconciledJob);
+    let reportDropped: (() => void) | undefined;
+    const unsubscribe = vi.fn();
+    const subscribe = vi.fn(
+      (
+        _renderId: string,
+        _onJob: (job: RenderJob) => void,
+        onDropped: () => void,
+      ) => {
+        reportDropped = onDropped;
+        return unsubscribe;
+      },
+    );
+    const renderClient = renderClientFixture([activeJob], getRender, subscribe);
+    const page = renderPage(client, analyze, { renderClient });
+    await openProjectTab("Render");
+    await waitFor(() => expect(subscribe).toHaveBeenCalledOnce());
+
+    act(() => {
+      reportDropped!();
+      reportDropped!();
+      reportDropped!();
+    });
+    await waitFor(() => expect(getRender).toHaveBeenCalledWith(activeJob.id));
+    expect(getRender).toHaveBeenCalledOnce();
+    expect(subscribe).toHaveBeenCalledOnce();
+    expect(
+      await screen.findByText("2 of 4 chunks complete"),
+    ).toBeInTheDocument();
+
+    page.unmount();
+    expect(unsubscribe).toHaveBeenCalledOnce();
+    act(() => reportDropped!());
+    expect(getRender).toHaveBeenCalledOnce();
+  });
+
+  it("retains polling for an Electron render client without subscriptions and stops on terminal state", async () => {
+    const { client, analyze } = fixture();
+    const activeJob = renderJobFixture(
+      "00000000-0000-4000-8000-000000000093",
+      "synthesizing",
+    );
+    const failedJob = renderJobFixture(activeJob.id, "failed");
+    const getRender = vi.fn(async () => failedJob);
+    const clearInterval = vi.spyOn(window, "clearInterval");
+    const renderClient = renderClientFixture([activeJob], getRender);
+
+    renderPage(client, analyze, { renderClient });
+    await openProjectTab("Render");
+    await waitFor(() => expect(getRender).toHaveBeenCalledWith(activeJob.id), {
+      timeout: 1_500,
+    });
+    expect(
+      await screen.findByRole("button", { name: "Try again" }),
+    ).toBeEnabled();
+    await waitFor(() => expect(clearInterval).toHaveBeenCalled());
+    expect(getRender).toHaveBeenCalledOnce();
   });
 
   it("starts the project render and exposes only completed playback and downloads", async () => {

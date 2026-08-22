@@ -7,6 +7,7 @@ import {
   RenderJobSchema,
   RenderWaveformSchema,
   type RenderClient,
+  type RenderJob,
   type StudyNarratorBridge,
 } from "@studynarrator/shared-types";
 
@@ -32,9 +33,20 @@ async function read<T>(
   return parse(body);
 }
 
+export interface RenderProgressClient extends RenderClient {
+  subscribe?: (
+    renderId: string,
+    onJob: (job: RenderJob) => void,
+    onDropped: () => void,
+  ) => () => void;
+}
+
+type RenderEventSourceFactory = (url: string) => EventSource;
+
 export function createRestRenderClient(
   fetchInput: typeof fetch = fetch,
-): RenderClient {
+  createEventSource: RenderEventSourceFactory = (url) => new EventSource(url),
+): RenderProgressClient {
   return {
     async startProject(projectId) {
       return await read(
@@ -58,6 +70,54 @@ export function createRestRenderClient(
         await fetchInput(`/api/renders/${encodeURIComponent(renderId)}`),
         (body) => RenderJobSchema.parse(body),
       );
+    },
+    subscribe(renderId, onJob, onDropped) {
+      const source = createEventSource(
+        `/api/renders/${encodeURIComponent(RenderIdSchema.parse(renderId))}/events`,
+      );
+      let closed = false;
+      let dropped = false;
+
+      const close = () => {
+        if (closed) return;
+        closed = true;
+        source.close();
+      };
+      const reportDropped = () => {
+        if (closed || dropped) return;
+        dropped = true;
+        onDropped();
+      };
+      const parse = (event: MessageEvent<string>) => {
+        if (closed) return undefined;
+        try {
+          return RenderJobSchema.parse(JSON.parse(event.data) as unknown);
+        } catch {
+          close();
+          if (!dropped) {
+            dropped = true;
+            onDropped();
+          }
+          return undefined;
+        }
+      };
+
+      source.addEventListener("progress", (event) => {
+        const job = parse(event as MessageEvent<string>);
+        if (job) onJob(job);
+      });
+      source.addEventListener("terminal", (event) => {
+        const job = parse(event as MessageEvent<string>);
+        if (!job) return;
+        try {
+          onJob(job);
+        } finally {
+          close();
+        }
+      });
+      source.addEventListener("error", reportDropped);
+
+      return close;
     },
     async cancel(renderId) {
       return await read(
@@ -176,6 +236,6 @@ export function createRestRenderClient(
 
 export function resolveRenderClient(
   browserWindow: Window = window,
-): RenderClient {
+): RenderProgressClient {
   return browserWindow.studyNarrator?.renders ?? createRestRenderClient();
 }

@@ -23,7 +23,6 @@ import {
   type PersistenceClient,
   type ProjectDetail,
   type ProjectPreviewClient,
-  type RenderClient,
   type RenderJob,
   type RenderWaveform,
   type ProjectSummary,
@@ -60,6 +59,7 @@ import {
   ScriptSourceEditor,
   type ScriptSourceEditorHandle,
 } from "@/features/projects/ScriptSourceEditor.js";
+import type { RenderProgressClient } from "@/services/renders/renderClient.js";
 
 type SaveState = "saved" | "unsaved" | "saving" | "invalid" | "failed";
 type AnalysisState = "idle" | "parsing" | "ready" | "failed";
@@ -154,7 +154,7 @@ export function ProjectsPage({
   client: PersistenceClient;
   analyzer: ScriptAnalyzer;
   previewClient: ProjectPreviewClient;
-  renderClient?: RenderClient;
+  renderClient?: RenderProgressClient;
 }) {
   const connections = useConnections();
   const { projectId } = useParams();
@@ -436,21 +436,56 @@ export function ProjectsPage({
     };
   }, [projectId, renderClient]);
 
+  const activeRenderId =
+    selectedRenderJob &&
+    selectedRenderJob.projectId === projectId &&
+    !terminalRenderStates.has(selectedRenderJob.state)
+      ? selectedRenderJob.id
+      : undefined;
+
   useEffect(() => {
-    if (
-      !renderClient ||
-      !selectedRenderJob ||
-      ["complete", "failed", "canceled"].includes(selectedRenderJob.state)
-    )
-      return;
+    if (!renderClient || !activeRenderId) return;
     let active = true;
-    const timer = window.setInterval(() => {
+    const applyJob = (job: RenderJob) => {
+      if (!active) return;
+      setSelectedRenderJob(job);
+      if (job.state === "complete") setCompletedRenderJob(job);
+    };
+
+    if (renderClient.subscribe) {
+      let reconciled = false;
+      const unsubscribe = renderClient.subscribe(
+        activeRenderId,
+        applyJob,
+        () => {
+          if (!active || reconciled) return;
+          reconciled = true;
+          void renderClient
+            .get(activeRenderId)
+            .then(applyJob)
+            .catch((error: unknown) => {
+              if (active) setRenderError(message(error));
+            });
+        },
+      );
+      return () => {
+        active = false;
+        unsubscribe();
+      };
+    }
+
+    let timer: number | undefined;
+    const stopPolling = () => {
+      if (timer === undefined) return;
+      window.clearInterval(timer);
+      timer = undefined;
+    };
+    timer = window.setInterval(() => {
       void renderClient
-        .get(selectedRenderJob.id)
+        .get(activeRenderId)
         .then((job) => {
-          if (!active) return;
-          setSelectedRenderJob(job);
-          if (job.state === "complete") setCompletedRenderJob(job);
+          applyJob(job);
+          if (terminalRenderStates.has(job.state)) stopPolling();
         })
         .catch((error: unknown) => {
           if (active) setRenderError(message(error));
@@ -458,9 +493,9 @@ export function ProjectsPage({
     }, 500);
     return () => {
       active = false;
-      window.clearInterval(timer);
+      stopPolling();
     };
-  }, [renderClient, selectedRenderJob]);
+  }, [activeRenderId, renderClient]);
 
   useEffect(() => {
     if (!renderClient || !completedRenderJob) {
