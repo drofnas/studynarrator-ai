@@ -40,6 +40,7 @@ const ENTRYPOINT_BASENAMES = new Set([
 const SCRIPT_BINARIES = new Map([
   ["concurrently", "concurrently"],
   ["electron", "electron"],
+  ["electron-builder", "electron-builder"],
   ["eslint", "eslint"],
   ["playwright", "@playwright/test"],
   ["prettier", "prettier"],
