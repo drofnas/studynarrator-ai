@@ -104,7 +104,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 19.1 | Add a render progress observer                     | P1       | S    | complete    |
 | 19.2 | Add the SSE endpoint                               | P1       | S    | complete    |
 | 19.3 | Consume SSE in the web client                      | P1       | M    | complete    |
-| 20.1 | Add the voice timing calibration table             | P1       | S    | todo        |
+| 20.1 | Add the voice timing calibration table             | P1       | S    | complete    |
 | 20.2 | Record calibration after each render               | P1       | S    | todo        |
 | 20.3 | Add the estimation functions                       | P1       | S    | todo        |
 | 20.4 | Show estimates in the script editor                | P1       | M    | todo        |
@@ -1494,7 +1494,7 @@ A 15,000-word script produces roughly two hours of audio, a ~115 MB MP3, and rou
 
 ## TASK 20.1 — Add the voice timing calibration table
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 
