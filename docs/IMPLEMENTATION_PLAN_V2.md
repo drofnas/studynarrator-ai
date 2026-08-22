@@ -109,7 +109,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 20.3 | Add the estimation functions                       | P1       | S    | complete    |
 | 20.4 | Show estimates in the script editor                | P1       | M    | complete    |
 | 20.5 | Add the preflight disk space check                 | P1       | S    | complete    |
-| 21.1 | Add the retention settings table and service       | P1       | S    | todo        |
+| 21.1 | Add the retention settings table and service       | P1       | S    | complete    |
 | 21.2 | Add the cache sweeper                              | P1       | M    | todo        |
 | 21.3 | Add render pinning                                 | P1       | S    | todo        |
 | 21.4 | Add the retention settings screen                  | P1       | M    | todo        |
@@ -1662,7 +1662,7 @@ Three classes, treated separately. One global TTL would delete the wrong thing.
 
 ## TASK 21.1 — Add the retention settings table and service
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 

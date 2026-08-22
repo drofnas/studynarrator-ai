@@ -2,6 +2,7 @@ import { chmod, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import {
   DATABASE_SCHEMA_VERSION,
+  DEFAULT_RETENTION_SETTINGS,
   type PersistenceBackup,
 } from "@studynarrator/shared-types";
 import { MigrationFailureError, SchemaTooNewError } from "./errors.js";
@@ -394,6 +395,38 @@ export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
           PRIMARY KEY (model_id, voice_id)
         );
       `);
+    },
+  },
+  {
+    version: 6,
+    name: "retention-settings",
+    up(database) {
+      database.exec(`
+        CREATE TABLE retention_settings (
+          singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
+          speech_cache_ttl TEXT NOT NULL CHECK (speech_cache_ttl IN ('8h', '24h', '7d', 'never')),
+          job_snapshot_ttl TEXT NOT NULL CHECK (job_snapshot_ttl IN ('8h', '24h', '7d', 'never')),
+          render_artifact_ttl TEXT NOT NULL CHECK (render_artifact_ttl IN ('8h', '24h', '7d', 'never')),
+          speech_cache_size_cap_bytes INTEGER NOT NULL CHECK (typeof(speech_cache_size_cap_bytes) = 'integer' AND speech_cache_size_cap_bytes > 0),
+          updated_at TEXT NOT NULL
+        );
+      `);
+      database
+        .prepare(
+          `
+          INSERT INTO retention_settings (
+            singleton_id, speech_cache_ttl, job_snapshot_ttl, render_artifact_ttl,
+            speech_cache_size_cap_bytes, updated_at
+          ) VALUES (1, ?, ?, ?, ?, ?)
+        `,
+        )
+        .run(
+          DEFAULT_RETENTION_SETTINGS.speechCacheTtl,
+          DEFAULT_RETENTION_SETTINGS.jobSnapshotTtl,
+          DEFAULT_RETENTION_SETTINGS.renderArtifactTtl,
+          DEFAULT_RETENTION_SETTINGS.speechCacheSizeCapBytes,
+          new Date().toISOString(),
+        );
     },
   },
 ]);

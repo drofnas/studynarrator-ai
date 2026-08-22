@@ -15,6 +15,7 @@ import {
   listBackups,
   listPersistenceBackups,
   MigrationFailureError,
+  PersistenceNotFoundError,
   pruneBackups,
   STUDYNARRATOR_MIGRATIONS,
   migrateDatabase,
@@ -24,7 +25,10 @@ import {
   type DatabaseConstructor,
   type Migration,
 } from "./index.js";
-import { DATABASE_SCHEMA_VERSION } from "@studynarrator/shared-types";
+import {
+  DATABASE_SCHEMA_VERSION,
+  DEFAULT_RETENTION_SETTINGS,
+} from "@studynarrator/shared-types";
 
 const DatabaseAdapter = Database as unknown as DatabaseConstructor;
 const projectId = "00000000-0000-4000-8000-000000000001";
@@ -64,9 +68,10 @@ describe("database baseline", () => {
       { version: 3, name: "global-named-sense-defaults" },
       { version: 4, name: "neutral-speech-backend-naming" },
       { version: 5, name: "voice-timing-calibration" },
+      { version: 6, name: "retention-settings" },
     ]);
-    expect(first.appliedVersions).toEqual([1, 2, 3, 4, 5]);
-    expect(first.databaseSchemaVersion).toBe(5);
+    expect(first.appliedVersions).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(first.databaseSchemaVersion).toBe(6);
     expect(first.backupPath).toBeNull();
     expect(
       first.database.prepare("SELECT version FROM schema_migrations").all(),
@@ -76,6 +81,7 @@ describe("database baseline", () => {
       { version: 3 },
       { version: 4 },
       { version: 5 },
+      { version: 6 },
     ]);
     expect(
       first.database
@@ -180,6 +186,84 @@ describe("database baseline", () => {
     expect(() =>
       insert.run("model", "zero-count", 1, 0, "2026-08-21T00:00:00.000Z"),
     ).toThrow(/CHECK constraint failed/u);
+    migrated.database.close();
+  });
+
+  it("creates constrained singleton retention settings with conservative defaults", async () => {
+    const databasePath = await temporaryDatabase(
+      "studynarrator-retention-settings-schema-",
+    );
+    const migrated = await migrateDatabase({
+      Database: DatabaseAdapter,
+      databasePath,
+    });
+    const database = migrated.database as Database.Database;
+
+    expect(columns(database, "retention_settings")).toEqual([
+      "singleton_id",
+      "speech_cache_ttl",
+      "job_snapshot_ttl",
+      "render_artifact_ttl",
+      "speech_cache_size_cap_bytes",
+      "updated_at",
+    ]);
+    const seeded = database
+      .prepare("SELECT * FROM retention_settings")
+      .get() as Record<string, unknown>;
+    expect(seeded).toMatchObject({
+      singleton_id: 1,
+      speech_cache_ttl: DEFAULT_RETENTION_SETTINGS.speechCacheTtl,
+      job_snapshot_ttl: DEFAULT_RETENTION_SETTINGS.jobSnapshotTtl,
+      render_artifact_ttl: DEFAULT_RETENTION_SETTINGS.renderArtifactTtl,
+      speech_cache_size_cap_bytes:
+        DEFAULT_RETENTION_SETTINGS.speechCacheSizeCapBytes,
+    });
+    expect(new Date(String(seeded.updated_at)).toISOString()).toBe(
+      seeded.updated_at,
+    );
+
+    for (const column of [
+      "speech_cache_ttl",
+      "job_snapshot_ttl",
+      "render_artifact_ttl",
+    ]) {
+      expect(() =>
+        database
+          .prepare(`UPDATE retention_settings SET ${column} = ?`)
+          .run("30d"),
+      ).toThrow(/CHECK constraint failed/u);
+    }
+    expect(() =>
+      database
+        .prepare(
+          "UPDATE retention_settings SET speech_cache_size_cap_bytes = ?",
+        )
+        .run(0),
+    ).toThrow(/CHECK constraint failed/u);
+    expect(() =>
+      database
+        .prepare(
+          "UPDATE retention_settings SET speech_cache_size_cap_bytes = ?",
+        )
+        .run(1.5),
+    ).toThrow(/CHECK constraint failed/u);
+    expect(() =>
+      database
+        .prepare(
+          `
+          INSERT INTO retention_settings (
+            singleton_id, speech_cache_ttl, job_snapshot_ttl, render_artifact_ttl,
+            speech_cache_size_cap_bytes, updated_at
+          ) VALUES (2, '8h', '24h', '7d', 1, ?)
+        `,
+        )
+        .run("2026-08-21T00:00:00.000Z"),
+    ).toThrow(/CHECK constraint failed/u);
+    expect(
+      database
+        .prepare("SELECT count(*) AS count FROM retention_settings")
+        .get(),
+    ).toEqual({ count: 1 });
     migrated.database.close();
   });
 
@@ -563,9 +647,9 @@ describe("database baseline", () => {
       databasePath,
       logger,
     });
-    expect(upgraded.appliedVersions).toEqual([3, 4, 5]);
-    expect(upgraded.databaseSchemaVersion).toBe(5);
-    expect(upgraded.backupPath).toContain("-v0002-to-v0005-");
+    expect(upgraded.appliedVersions).toEqual([3, 4, 5, 6]);
+    expect(upgraded.databaseSchemaVersion).toBe(6);
+    expect(upgraded.backupPath).toContain("-v0002-to-v0006-");
     if (upgraded.backupPath === null)
       throw new Error("Expected the migration backup path.");
     expect(logger.info).toHaveBeenNthCalledWith(
@@ -574,7 +658,7 @@ describe("database baseline", () => {
         event: "database-migration-backup-created",
         backupPath: upgraded.backupPath,
         fromDatabaseSchemaVersion: 2,
-        toDatabaseSchemaVersion: 5,
+        toDatabaseSchemaVersion: 6,
       },
       "Database migration backup created",
     );
@@ -607,6 +691,15 @@ describe("database baseline", () => {
     );
     expect(logger.info).toHaveBeenNthCalledWith(
       5,
+      {
+        event: "database-migration-applied",
+        migrationVersion: 6,
+        migrationName: "retention-settings",
+      },
+      "Database migration applied",
+    );
+    expect(logger.info).toHaveBeenNthCalledWith(
+      6,
       {
         event: "database-backups-pruned",
         removedCount: 0,
@@ -706,8 +799,8 @@ describe("database baseline", () => {
       Database: DatabaseAdapter,
       databasePath,
     });
-    expect(upgraded.appliedVersions).toEqual([4, 5]);
-    expect(upgraded.databaseSchemaVersion).toBe(5);
+    expect(upgraded.appliedVersions).toEqual([4, 5, 6]);
+    expect(upgraded.databaseSchemaVersion).toBe(6);
     expect(
       upgraded.database
         .prepare(
@@ -811,7 +904,7 @@ describe("database baseline", () => {
         .run("keep-me");
       old.close();
 
-      if (version > 5) {
+      if (version > 6) {
         await expect(
           migrateDatabase({ Database: DatabaseAdapter, databasePath }),
         ).rejects.toBeInstanceOf(SchemaTooNewError);
@@ -849,7 +942,7 @@ describe("database baseline", () => {
       .run();
     baseline.database.close();
     const failing: Migration = {
-      version: 6,
+      version: 7,
       name: "intentional-test-failure",
       up(database) {
         database.exec(
@@ -869,7 +962,7 @@ describe("database baseline", () => {
       failure = error as MigrationFailureError;
     }
     expect(failure).toBeInstanceOf(MigrationFailureError);
-    expect(failure?.backupPath).toContain("-v0005-to-v0006-");
+    expect(failure?.backupPath).toContain("-v0006-to-v0007-");
     expect((await stat(failure!.backupPath!)).mode & 0o777).toBe(0o600);
     expect((await readFile(failure!.backupPath!)).byteLength).toBeGreaterThan(
       0,
@@ -1005,7 +1098,7 @@ describe("StudyNarratorRepository", () => {
     });
     expect(first.status()).toMatchObject({
       contractVersion: 1,
-      databaseSchemaVersion: 5,
+      databaseSchemaVersion: 6,
     });
     const created = first.createProject({
       name: "Persistence restart proof",
@@ -1251,6 +1344,80 @@ describe("StudyNarratorRepository", () => {
     reopened.close();
   });
 
+  it("updates validated retention settings and persists them across reopen", async () => {
+    const databasePath = await temporaryDatabase(
+      "studynarrator-retention-settings-repository-",
+    );
+    const repository = await openStudyNarratorRepository({
+      Database: DatabaseAdapter,
+      databasePath,
+      now: () => new Date("2026-08-21T12:00:00.000Z"),
+    });
+    expect(repository.getRetentionSettings()).toMatchObject(
+      DEFAULT_RETENTION_SETTINGS,
+    );
+
+    const authored = {
+      speechCacheTtl: "8h" as const,
+      jobSnapshotTtl: "24h" as const,
+      renderArtifactTtl: "7d" as const,
+      speechCacheSizeCapBytes: 1_024,
+    };
+    const expected = {
+      ...authored,
+      updatedAt: "2026-08-21T12:00:00.000Z",
+    };
+    expect(repository.updateRetentionSettings(authored)).toEqual(expected);
+    expect(repository.getRetentionSettings()).toEqual(expected);
+    expect(() =>
+      repository.updateRetentionSettings({
+        ...authored,
+        speechCacheTtl: "30d",
+      } as unknown as typeof authored),
+    ).toThrow();
+    expect(() =>
+      repository.updateRetentionSettings({
+        ...authored,
+        speechCacheSizeCapBytes: 0,
+      }),
+    ).toThrow();
+    repository.close();
+
+    const reopened = await openStudyNarratorRepository({
+      Database: DatabaseAdapter,
+      databasePath,
+    });
+    expect(reopened.getRetentionSettings()).toEqual(expected);
+    reopened.close();
+  });
+
+  it("throws when the retention settings singleton is missing", async () => {
+    const databasePath = await temporaryDatabase(
+      "studynarrator-retention-settings-missing-",
+    );
+    const repository = await openStudyNarratorRepository({
+      Database: DatabaseAdapter,
+      databasePath,
+    });
+    repository.close();
+
+    const database = new Database(databasePath);
+    database.prepare("DELETE FROM retention_settings").run();
+    database.close();
+
+    const reopened = await openStudyNarratorRepository({
+      Database: DatabaseAdapter,
+      databasePath,
+    });
+    expect(() => reopened.getRetentionSettings()).toThrow(
+      PersistenceNotFoundError,
+    );
+    expect(() =>
+      reopened.updateRetentionSettings(DEFAULT_RETENTION_SETTINGS),
+    ).toThrow(PersistenceNotFoundError);
+    reopened.close();
+  });
+
   it("persists marker evidence and durable render state", async () => {
     const databasePath = await temporaryDatabase("studynarrator-render-state-");
     const repository = await openStudyNarratorRepository({
@@ -1260,7 +1427,7 @@ describe("StudyNarratorRepository", () => {
     });
     expect(repository.runMarker()).toMatchObject({
       markerKey: "runtime.storage-self-test",
-      migrationVersion: 5,
+      migrationVersion: 6,
     });
     const project = repository.createProject({ name: "Rendered" });
     repository.replaceProject(project.id, {

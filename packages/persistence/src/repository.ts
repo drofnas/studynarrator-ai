@@ -20,6 +20,8 @@ import {
   ProjectIdSchema,
   ProjectReplaceInputSchema,
   ProjectSummaryCollectionSchema,
+  RetentionSettingsAuthoringSchema,
+  RetentionSettingsSchema,
   SystemTimingConfigurationSchema,
   SpeechBackendConnectionAuthoringSchema,
   SpeechBackendConnectionSchema,
@@ -39,6 +41,8 @@ import {
   type ProjectDuplicateInput,
   type ProjectReplaceInput,
   type ProjectSummary,
+  type RetentionSettings,
+  type RetentionSettingsAuthoring,
   type SystemTimingConfiguration,
   type SystemTransitionPauseConfiguration,
   type SystemTransitionPauseSetting,
@@ -157,6 +161,14 @@ interface VoiceTimingCalibrationRow {
   updated_at: string;
 }
 
+interface RetentionSettingsRow {
+  speech_cache_ttl: RetentionSettings["speechCacheTtl"];
+  job_snapshot_ttl: RetentionSettings["jobSnapshotTtl"];
+  render_artifact_ttl: RetentionSettings["renderArtifactTtl"];
+  speech_cache_size_cap_bytes: number;
+  updated_at: string;
+}
+
 interface MarkerRow {
   key: string;
   value: string;
@@ -227,6 +239,10 @@ export interface StudyNarratorRepository {
   upsertVoiceTimingCalibration(
     calibration: VoiceTimingCalibration,
   ): VoiceTimingCalibration;
+  getRetentionSettings(): RetentionSettings;
+  updateRetentionSettings(
+    settings: RetentionSettingsAuthoring,
+  ): RetentionSettings;
   createRenderJob(job: RenderJob, segments: RenderSegment[]): RenderJob;
   getRenderJob(renderId: string): RenderJob;
   listRenderJobs(projectId: string): RenderJob[];
@@ -452,6 +468,18 @@ function voiceTimingCalibrationFromRow(
     millisecondsPerNormalizedCharacter:
       row.milliseconds_per_normalized_character,
     sampleCount: row.sample_count,
+    updatedAt: row.updated_at,
+  });
+}
+
+function retentionSettingsFromRow(
+  row: RetentionSettingsRow,
+): RetentionSettings {
+  return RetentionSettingsSchema.parse({
+    speechCacheTtl: row.speech_cache_ttl,
+    jobSnapshotTtl: row.job_snapshot_ttl,
+    renderArtifactTtl: row.render_artifact_ttl,
+    speechCacheSizeCapBytes: row.speech_cache_size_cap_bytes,
     updatedAt: row.updated_at,
   });
 }
@@ -721,6 +749,18 @@ function createRepository(options: {
       )
       .get(modelId, voiceId) as VoiceTimingCalibrationRow | undefined;
     return row === undefined ? null : voiceTimingCalibrationFromRow(row);
+  };
+
+  const getRetentionSettings = (): RetentionSettings => {
+    assertOpen();
+    const row = database
+      .prepare("SELECT * FROM retention_settings WHERE singleton_id = 1")
+      .get() as RetentionSettingsRow | undefined;
+    if (!row)
+      throw new PersistenceNotFoundError(
+        "The retention settings were not found.",
+      );
+    return retentionSettingsFromRow(row);
   };
 
   return {
@@ -1251,6 +1291,32 @@ function createRepository(options: {
           );
         return persisted;
       });
+    },
+    getRetentionSettings,
+    updateRetentionSettings(settingsValue) {
+      assertOpen();
+      const settings = RetentionSettingsAuthoringSchema.parse(settingsValue);
+      const result = database
+        .prepare(
+          `
+          UPDATE retention_settings SET
+            speech_cache_ttl = ?, job_snapshot_ttl = ?, render_artifact_ttl = ?,
+            speech_cache_size_cap_bytes = ?, updated_at = ?
+          WHERE singleton_id = 1
+        `,
+        )
+        .run(
+          settings.speechCacheTtl,
+          settings.jobSnapshotTtl,
+          settings.renderArtifactTtl,
+          settings.speechCacheSizeCapBytes,
+          options.now().toISOString(),
+        );
+      if (Number(result.changes ?? 0) !== 1)
+        throw new PersistenceNotFoundError(
+          "The retention settings were not found.",
+        );
+      return getRetentionSettings();
     },
     createRenderJob(jobValue, segmentValues) {
       assertOpen();

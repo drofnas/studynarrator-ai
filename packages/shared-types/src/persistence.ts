@@ -8,7 +8,7 @@ import {
 } from "@studynarrator/core";
 import { z } from "zod";
 
-export const DATABASE_SCHEMA_VERSION = 5;
+export const DATABASE_SCHEMA_VERSION = 6;
 export const PERSISTENCE_CONTRACT_VERSION = 1;
 export const PERSISTENCE_CHANNELS = Object.freeze({
   status: "persistence.status",
@@ -30,6 +30,37 @@ export const PERSISTENCE_CHANNELS = Object.freeze({
 
 export const ProjectIdSchema = z.uuid();
 const TimestampSchema = z.iso.datetime({ offset: true });
+
+const RetentionTtlSchema = z.enum(["8h", "24h", "7d", "never"]);
+
+export const RetentionSettingsAuthoringSchema = z
+  .object({
+    speechCacheTtl: RetentionTtlSchema,
+    jobSnapshotTtl: RetentionTtlSchema,
+    renderArtifactTtl: RetentionTtlSchema,
+    speechCacheSizeCapBytes: z
+      .number()
+      .int()
+      .positive()
+      .max(Number.MAX_SAFE_INTEGER),
+  })
+  .strict();
+export type RetentionSettingsAuthoring = z.infer<
+  typeof RetentionSettingsAuthoringSchema
+>;
+
+export const RetentionSettingsSchema = RetentionSettingsAuthoringSchema.extend({
+  updatedAt: TimestampSchema,
+}).strict();
+export type RetentionSettings = z.infer<typeof RetentionSettingsSchema>;
+
+// Start conservatively at 5 GiB while keeping user-owned render artifacts.
+export const DEFAULT_RETENTION_SETTINGS = Object.freeze({
+  speechCacheTtl: "7d",
+  jobSnapshotTtl: "never",
+  renderArtifactTtl: "never",
+  speechCacheSizeCapBytes: 5 * 1_024 ** 3,
+}) satisfies Readonly<RetentionSettingsAuthoring>;
 
 export const VoiceTimingCalibrationSchema = z
   .object({
