@@ -3,7 +3,10 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { SystemDiagnostics } from "@studynarrator/shared-types";
+import {
+  DATABASE_SCHEMA_VERSION,
+  type SystemDiagnostics,
+} from "@studynarrator/shared-types";
 import { DiagnosticsPage } from "./DiagnosticsPage.js";
 
 afterEach(cleanup);
@@ -34,7 +37,7 @@ const passingDiagnostics: SystemDiagnostics = {
       status: "pass",
       driver: "better-sqlite3",
       sqliteVersion: "3.50.0",
-      migrationVersion: 3,
+      migrationVersion: DATABASE_SCHEMA_VERSION,
       databasePath: "/tmp/studynarrator/web/studynarrator.sqlite",
       latestBackupPath: null,
       markerKey: "runtime.storage-self-test",
@@ -81,7 +84,11 @@ describe("system diagnostics screen", () => {
     expect(await screen.findByText("REST")).toBeInTheDocument();
     expect(screen.getByText("Web")).toBeInTheDocument();
     expect(screen.getAllByText("PASS")).toHaveLength(3);
-    expect(screen.getByText(/Schema 3 · verified/u)).toBeInTheDocument();
+    expect(
+      screen.getByText(`Schema ${DATABASE_SCHEMA_VERSION} · verified`, {
+        exact: false,
+      }),
+    ).toBeInTheDocument();
     expect(screen.getByText(/diagnostics schema 1/u)).toBeInTheDocument();
     expect(screen.getByText("test-revision")).toBeInTheDocument();
   });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SystemDiagnosticsSchema } from "./index.js";
+import { DATABASE_SCHEMA_VERSION, SystemDiagnosticsSchema } from "./index.js";
 
 const validDiagnostics = {
   schemaVersion: 1,
@@ -27,7 +27,7 @@ const validDiagnostics = {
       status: "pass",
       driver: "better-sqlite3",
       sqliteVersion: "3.50.0",
-      migrationVersion: 3,
+      migrationVersion: DATABASE_SCHEMA_VERSION,
       databasePath: "/tmp/studynarrator/studynarrator.sqlite",
       latestBackupPath: null,
       markerKey: "runtime.storage-self-test",
