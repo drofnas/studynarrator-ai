@@ -100,7 +100,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 17.4 | Extract the render and cache routers               | P1       | M    | complete    |
 | 18.1 | Add the logger module                              | P1       | S    | complete    |
 | 18.2 | Log startup and migration events                   | P1       | S    | complete    |
-| 18.3 | Log render lifecycle and boundary errors           | P1       | S    | todo        |
+| 18.3 | Log render lifecycle and boundary errors           | P1       | S    | complete    |
 | 19.1 | Add a render progress observer                     | P1       | S    | todo        |
 | 19.2 | Add the SSE endpoint                               | P1       | S    | todo        |
 | 19.3 | Consume SSE in the web client                      | P1       | M    | todo        |
@@ -1366,7 +1366,7 @@ Standard, plus start the server and confirm the log file contains the start line
 
 ## TASK 18.3 — Log render lifecycle and boundary errors
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 
