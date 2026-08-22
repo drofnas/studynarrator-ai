@@ -498,10 +498,12 @@ function renderPage(
 
 function deferred<T>() {
   let resolvePromise: (value: T) => void = () => undefined;
-  const promise = new Promise<T>((resolve) => {
+  let rejectPromise: (reason: unknown) => void = () => undefined;
+  const promise = new Promise<T>((resolve, reject) => {
     resolvePromise = resolve;
+    rejectPromise = reject;
   });
-  return { promise, resolve: resolvePromise };
+  return { promise, resolve: resolvePromise, reject: rejectPromise };
 }
 
 function installAudioContext() {
@@ -1906,6 +1908,105 @@ describe("Projects workbench", () => {
       expect.any(Function),
     );
     expect(unsubscribe).not.toHaveBeenCalled();
+  });
+
+  it("keeps the current project render pending when a stale start rejects", async () => {
+    const { client, analyze } = fixture();
+    const nextProject: ProjectDetail = {
+      ...project,
+      id: "00000000-0000-4000-8000-000000000002",
+      name: "Navigation target",
+    };
+    client.projects.list = vi.fn(async () =>
+      [project, nextProject].map((item): ProjectSummary => ({
+        id: item.id,
+        name: item.name,
+        description: item.description,
+        scriptHash: item.scriptHash,
+        scriptLineCount: item.scriptSource.split("\n").length,
+        audioDurationMs: null,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+      })),
+    );
+    client.projects.get = vi.fn(async (id: string) =>
+      structuredClone(id === project.id ? project : nextProject),
+    );
+
+    const staleStartRequest = deferred<RenderJob>();
+    const activeStartRequest = deferred<RenderJob>();
+    const activeProjectJob: RenderJob = {
+      ...renderJobFixture(
+        "00000000-0000-4000-8000-000000000097",
+        "synthesizing",
+        2,
+      ),
+      projectId: nextProject.id,
+    };
+    const unsubscribe = vi.fn();
+    const subscribe = vi.fn(() => unsubscribe);
+    const startProject = vi.fn((id: string) =>
+      id === project.id
+        ? staleStartRequest.promise
+        : activeStartRequest.promise,
+    );
+    const renderClient: RenderProgressClient = {
+      ...renderClientFixture([], vi.fn(), subscribe),
+      startProject,
+      list: vi.fn(async () => []),
+    };
+
+    renderPage(client, analyze, { renderClient });
+    await openProjectTab("Render");
+    const firstRenderButton = await screen.findByRole("button", {
+      name: "Render",
+    });
+    await waitFor(() => expect(firstRenderButton).toBeEnabled());
+    fireEvent.click(firstRenderButton);
+    await waitFor(() => expect(startProject).toHaveBeenCalledWith(project.id));
+
+    await userEvent.click(
+      screen.getByRole("link", { name: /Back to Projects/u }),
+    );
+    await userEvent.click(
+      await screen.findByRole("link", { name: nextProject.name }),
+    );
+    expect(
+      await screen.findByDisplayValue(nextProject.name),
+    ).toBeInTheDocument();
+    await openProjectTab("Render");
+    const activeRenderButton = await screen.findByRole("button", {
+      name: "Render",
+    });
+    await waitFor(() => expect(activeRenderButton).toBeEnabled());
+    fireEvent.click(activeRenderButton);
+    await waitFor(() =>
+      expect(startProject).toHaveBeenCalledWith(nextProject.id),
+    );
+    expect(screen.getByRole("button", { name: "Rendering…" })).toBeDisabled();
+
+    await act(async () => {
+      staleStartRequest.reject(new Error("Project A render start failed."));
+      await staleStartRequest.promise.catch(() => undefined);
+    });
+    expect(
+      screen.queryByText("Project A render start failed."),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Rendering…" })).toBeDisabled();
+    expect(screen.getByText("Preparing render…")).toBeInTheDocument();
+
+    await act(async () => {
+      activeStartRequest.resolve(activeProjectJob);
+      await activeStartRequest.promise;
+    });
+    expect(
+      await screen.findByText("2 of 4 chunks complete"),
+    ).toBeInTheDocument();
+    expect(subscribe).toHaveBeenCalledWith(
+      activeProjectJob.id,
+      expect.any(Function),
+      expect.any(Function),
+    );
   });
 
   it("retains polling for an Electron render client without subscriptions and stops on terminal state", async () => {

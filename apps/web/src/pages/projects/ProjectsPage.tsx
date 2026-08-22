@@ -227,7 +227,8 @@ export function ProjectsPage({
   const savedRevisionRef = useRef(0);
   const analysisRevisionRef = useRef(0);
   const renderStartRevisionRef = useRef(0);
-  const currentProjectIdRef = useRef(projectId);
+  const renderStartOperationRef = useRef(0);
+  const currentRouteProjectIdRef = useRef(projectId);
   const saveQueueRef = useRef<Promise<boolean>>(Promise.resolve(true));
   const autosaveTimerRef = useRef<number | undefined>(undefined);
   const saveNowRef = useRef<() => Promise<boolean>>(() =>
@@ -235,7 +236,7 @@ export function ProjectsPage({
   );
 
   draftRef.current = draft;
-  currentProjectIdRef.current = projectId;
+  currentRouteProjectIdRef.current = projectId;
   const isDirty =
     saveState === "unsaved" ||
     saveState === "saving" ||
@@ -252,6 +253,11 @@ export function ProjectsPage({
     Boolean(
       selectedRenderJob && !terminalRenderStates.has(selectedRenderJob.state),
     );
+
+  useEffect(() => {
+    renderStartOperationRef.current += 1;
+    setRenderStarting(false);
+  }, [projectId]);
 
   useEffect(() => {
     if (!selectedConnection?.baseUrl || speechCatalogState.status !== "idle")
@@ -964,21 +970,25 @@ export function ProjectsPage({
   const startRender = async () => {
     if (!renderClient || !project) return;
     const renderProjectId = project.id;
+    const renderStartOperation = ++renderStartOperationRef.current;
+    const isCurrentRenderStart = () =>
+      renderStartOperationRef.current === renderStartOperation &&
+      currentRouteProjectIdRef.current === renderProjectId;
     setRenderStarting(true);
     setRenderError("");
     try {
       if (isDirty && !(await saveNow()))
         throw new Error("Save valid project changes before rendering.");
       const job = await renderClient.startProject(renderProjectId);
-      if (currentProjectIdRef.current !== renderProjectId) return;
+      if (!isCurrentRenderStart()) return;
       renderStartRevisionRef.current += 1;
       setSelectedRenderJob(job);
       if (job.state === "complete") setCompletedRenderJob(job);
       setNotice("Rendering started.");
     } catch (error) {
-      setRenderError(message(error));
+      if (isCurrentRenderStart()) setRenderError(message(error));
     } finally {
-      setRenderStarting(false);
+      if (isCurrentRenderStart()) setRenderStarting(false);
     }
   };
 
