@@ -105,7 +105,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 19.2 | Add the SSE endpoint                               | P1       | S    | complete    |
 | 19.3 | Consume SSE in the web client                      | P1       | M    | complete    |
 | 20.1 | Add the voice timing calibration table             | P1       | S    | complete    |
-| 20.2 | Record calibration after each render               | P1       | S    | todo        |
+| 20.2 | Record calibration after each render               | P1       | S    | complete    |
 | 20.3 | Add the estimation functions                       | P1       | S    | todo        |
 | 20.4 | Show estimates in the script editor                | P1       | M    | todo        |
 | 20.5 | Add the preflight disk space check                 | P1       | S    | todo        |
@@ -1523,7 +1523,7 @@ Standard, plus a fresh-database migration check.
 
 ## TASK 20.2 — Record calibration after each render
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 
