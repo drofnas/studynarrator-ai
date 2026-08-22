@@ -117,7 +117,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 23.1 | Add electron-builder configuration                 | P1       | M    | complete    |
 | 23.2 | Verify the native rebuild per target               | P1       | S    | deferred    |
 | 23.3 | Add the release workflow, unsigned                 | P1       | S    | complete    |
-| 23.4 | Add signing and notarization                       | P1       | M    | todo        |
+| 23.4 | Add signing and notarization                       | P1       | M    | complete    |
 | 23.5 | Decide and document the Docker support level       | P1       | S    | todo        |
 | 24.1 | Build the golden corpus fixtures                   | P1       | M    | todo        |
 | 24.2 | Add the golden corpus test and regeneration script | P1       | S    | todo        |
@@ -1922,7 +1922,7 @@ Push a `v0.0.0-test` tag on a branch and confirm three artifact sets and a check
 
 ## TASK 23.4 — Add signing and notarization
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** M · **Human-led**
 
@@ -1930,7 +1930,9 @@ macOS needs a Developer ID certificate plus notarization; Windows needs an Authe
 
 If certificates are not yet available: ship unsigned, and add prominent install instructions to `SETUP.md` covering the Gatekeeper and SmartScreen warnings users will see. An unsigned `.dmg` produces a block most users read as a broken application.
 
-**COMMIT:** `ci: sign and notarize desktop installers`
+**COMMIT (when signed):** `ci: sign and notarize desktop installers`
+
+**COMMIT (unsigned fallback):** `docs: explain unsigned desktop installer warnings`
 
 ---
 
