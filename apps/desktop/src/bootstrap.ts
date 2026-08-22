@@ -4,6 +4,7 @@ import {
   createStudyNarratorServices,
   type StudyNarratorRuntimeDescriptor,
 } from "@studynarrator/application";
+import { createLogger } from "@studynarrator/runtime";
 import { APPLICATION_VERSION } from "@studynarrator/shared-types";
 
 export function resolveDesktopDataDirectory(
@@ -27,6 +28,9 @@ export async function createDesktopServices(options: {
     options.defaultDataDirectory,
     environment,
   );
+  const logger = createLogger({
+    filePath: resolve(dataDirectory, "logs/studynarrator.log"),
+  });
   const descriptor = {
     client: "electron",
     distribution: "electron" as const,
@@ -42,6 +46,7 @@ export async function createDesktopServices(options: {
   return createStudyNarratorServices({
     Database,
     descriptor,
+    logger,
     ...(environment.STUDYNARRATOR_FFMPEG_PATH
       ? { ffmpegPath: environment.STUDYNARRATOR_FFMPEG_PATH }
       : {}),

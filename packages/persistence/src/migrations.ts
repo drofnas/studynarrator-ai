@@ -11,16 +11,23 @@ import {
   V3_GLOBAL_NAMED_SENSE_LEXICON,
 } from "./migrationSeeds.js";
 
-interface StatementLike {
-  run(...parameters: unknown[]): { changes?: number | bigint };
-  get(...parameters: unknown[]): unknown;
-  all(...parameters: unknown[]): unknown[];
+interface StatementLike<BindParameters extends unknown[], Result> {
+  run(...parameters: BindParameters): { changes?: number | bigint };
+  get(...parameters: BindParameters): Result | undefined;
+  all(...parameters: BindParameters): Result[];
 }
 
 export interface DatabaseLike {
-  exec(sql: string): unknown;
-  pragma(source: string, options?: { simple?: boolean }): unknown;
-  prepare(sql: string): StatementLike;
+  exec(sql: string): void;
+  pragma(source: string, options?: { simple?: boolean }): void;
+  prepare<
+    BindParameters extends unknown[] | object = unknown[],
+    Result = unknown,
+  >(
+    sql: string,
+  ): BindParameters extends unknown[]
+    ? StatementLike<BindParameters, Result>
+    : StatementLike<[BindParameters], Result>;
   backup(destinationFile: string): Promise<unknown>;
   close(): void;
 }
@@ -36,6 +43,11 @@ export interface Migration {
   version: number;
   name: string;
   up(database: DatabaseLike): void;
+}
+
+export interface PersistenceLogger {
+  info(fields: Record<string, unknown>, message: string): void;
+  warn(fields: Record<string, unknown>, message: string): void;
 }
 
 const BASELINE_SCHEMA_SQL = `
@@ -594,6 +606,7 @@ export async function migrateDatabase(options: {
   databasePath: string;
   now?: () => Date;
   migrations?: readonly Migration[];
+  logger?: PersistenceLogger;
 }): Promise<MigrationResult> {
   const migrations = options.migrations ?? STUDYNARRATOR_MIGRATIONS;
   validateMigrations(migrations);
@@ -656,6 +669,15 @@ export async function migrateDatabase(options: {
       );
       await database.backup(backupPath);
       await chmod(backupPath, 0o600);
+      options.logger?.info(
+        {
+          event: "database-migration-backup-created",
+          backupPath,
+          fromDatabaseSchemaVersion: currentVersion,
+          toDatabaseSchemaVersion: targetVersion,
+        },
+        "Database migration backup created",
+      );
     }
 
     for (const migration of migrations) {
@@ -684,12 +706,40 @@ export async function migrateDatabase(options: {
         failedMigration = { version: migration.version, name: migration.name };
         throw error;
       }
+      options.logger?.info(
+        {
+          event: "database-migration-applied",
+          migrationVersion: migration.version,
+          migrationName: migration.name,
+        },
+        "Database migration applied",
+      );
     }
     await chmod(options.databasePath, 0o600);
     try {
-      await pruneBackups(options.databasePath, { protectPath: backupPath });
-    } catch {
+      const pruneResult = await pruneBackups(options.databasePath, {
+        protectPath: backupPath,
+      });
+      options.logger?.info(
+        {
+          event: "database-backups-pruned",
+          removedCount: pruneResult.removed.length,
+          retainedCount: pruneResult.retained.length,
+          removedPaths: pruneResult.removed,
+          retainedPaths: pruneResult.retained,
+        },
+        "Database backups pruned",
+      );
+    } catch (error) {
       // Pruning is best effort and must never prevent the application from opening.
+      options.logger?.warn(
+        {
+          event: "database-backup-prune-failed",
+          err: error,
+          protectedBackupPath: backupPath,
+        },
+        "Database backup pruning failed",
+      );
     }
     backupPath ??= await latestBackup(options.databasePath);
     return {

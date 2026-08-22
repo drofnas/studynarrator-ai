@@ -1,7 +1,7 @@
 import { lstat, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   DATA_DIRECTORY_LAYOUT_VERSION,
   DATA_DIRECTORY_MANIFEST_VERSION,
@@ -314,6 +314,64 @@ describe("runLayoutSteps", () => {
     expect(await readManifestJson(directory)).toMatchObject({
       completedSteps: ["step-b"],
     });
+  });
+
+  it("logs skipped, completed, and failed layout step outcomes", async () => {
+    const directory = await seededDirectory("steps-log");
+    await writeDataDirectoryManifest(
+      directory,
+      baseManifest({ completedSteps: ["step-skipped"] }),
+    );
+    const failure = new Error("step failed");
+    const logger = { info: vi.fn(), warn: vi.fn() };
+
+    const result = await runLayoutSteps(
+      directory,
+      [
+        { id: "step-skipped", run: vi.fn() },
+        { id: "step-completed", run: vi.fn() },
+        {
+          id: "step-failed",
+          run: async () => {
+            throw failure;
+          },
+        },
+      ],
+      { logger },
+    );
+
+    expect(result).toEqual({
+      completed: ["step-completed"],
+      failed: [{ id: "step-failed", error: failure }],
+    });
+    expect(logger.info.mock.calls).toEqual([
+      [
+        {
+          event: "data-directory-layout-step",
+          layoutStepId: "step-skipped",
+          outcome: "skipped",
+        },
+        "Data directory layout step skipped",
+      ],
+      [
+        {
+          event: "data-directory-layout-step",
+          layoutStepId: "step-completed",
+          outcome: "completed",
+        },
+        "Data directory layout step completed",
+      ],
+    ]);
+    expect(logger.warn).toHaveBeenCalledOnce();
+    expect(logger.warn).toHaveBeenCalledWith(
+      {
+        event: "data-directory-layout-step",
+        layoutStepId: "step-failed",
+        outcome: "failed",
+        err: failure,
+      },
+      "Data directory layout step failed",
+    );
   });
 
   it("retries a failed step on the next launch", async () => {

@@ -12,6 +12,7 @@ import {
 } from "@studynarrator/shared-types";
 import {
   createSpeechCacheSweep,
+  DATA_DIRECTORY_LAYOUT_VERSION,
   LayoutTooNewError,
   MigrationFailureError,
   PersistenceConflictError,
@@ -25,7 +26,7 @@ import {
   type DatabaseConstructor,
   type LayoutStep,
 } from "@studynarrator/persistence";
-import { createFfmpegProbe } from "@studynarrator/runtime";
+import { createFfmpegProbe, type Logger } from "@studynarrator/runtime";
 import {
   createRenderPlanStore,
   readSpeechCacheMetadata,
@@ -85,6 +86,7 @@ export interface StudyNarratorServices {
   scriptGeneration: ScriptGenerationService | undefined;
   speechCache: SpeechCacheClient;
   context: DiagnosticsContext;
+  logger: Logger;
   dispose(): Promise<void>;
 }
 
@@ -113,9 +115,21 @@ const layoutSteps: LayoutStep[] = [
 export async function createStudyNarratorServices(options: {
   Database: DatabaseConstructor;
   descriptor: StudyNarratorRuntimeDescriptor;
+  logger: Logger;
   ffmpegPath?: string;
 }): Promise<StudyNarratorServices> {
   const descriptor = options.descriptor;
+  options.logger.info(
+    {
+      event: "application-start",
+      appVersion: descriptor.appVersion,
+      databaseSchemaVersion: DATABASE_SCHEMA_VERSION,
+      dataDirectoryLayoutVersion: DATA_DIRECTORY_LAYOUT_VERSION,
+      dataDirectory: descriptor.dataDirectory,
+      distribution: descriptor.distribution,
+    },
+    "Application starting",
+  );
   const databasePath = resolve(
     descriptor.dataDirectory,
     "studynarrator.sqlite",
@@ -135,10 +149,13 @@ export async function createStudyNarratorServices(options: {
     await readDataDirectoryManifest(descriptor.dataDirectory, {
       appVersion: descriptor.appVersion,
     });
-    await runLayoutSteps(descriptor.dataDirectory, layoutSteps);
+    await runLayoutSteps(descriptor.dataDirectory, layoutSteps, {
+      logger: options.logger,
+    });
     const openedRepository = await openStudyNarratorRepository({
       Database: options.Database,
       databasePath,
+      logger: options.logger,
     });
     repository = openedRepository;
     const backups: PersistenceBackupsClient = {
@@ -315,6 +332,7 @@ export async function createStudyNarratorServices(options: {
     scriptGeneration,
     speechCache,
     context,
+    logger: options.logger,
     dispose: async () => {
       await renders?.close();
       repository.close();

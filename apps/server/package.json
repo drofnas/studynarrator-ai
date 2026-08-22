@@ -19,6 +19,7 @@
   "dependencies": {
     "@studynarrator/application": "0.1.0",
     "@studynarrator/persistence": "0.1.0",
+    "@studynarrator/runtime": "0.1.0",
     "@studynarrator/shared-types": "0.1.0",
     "better-sqlite3": "13.0.3",
     "express": "5.2.1"

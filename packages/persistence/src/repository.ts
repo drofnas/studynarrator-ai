@@ -58,6 +58,7 @@ import {
   type DatabaseConstructor,
   type DatabaseLike,
   type Migration,
+  type PersistenceLogger,
 } from "./migrations.js";
 
 const STORAGE_SELF_TEST_KEY = "runtime.storage-self-test";
@@ -1395,12 +1396,14 @@ export async function openStudyNarratorRepository(options: {
   now?: () => Date;
   idFactory?: () => string;
   migrations?: readonly Migration[];
+  logger?: PersistenceLogger;
 }): Promise<StudyNarratorRepository> {
   const now = options.now ?? (() => new Date());
   const migrated = await migrateDatabase({
     Database: options.Database,
     databasePath: options.databasePath,
     now,
+    ...(options.logger === undefined ? {} : { logger: options.logger }),
     ...(options.migrations === undefined
       ? {}
       : { migrations: options.migrations }),

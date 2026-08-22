@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { createRequire } from "node:module";
 import {
   appendFileSync,
   existsSync,
@@ -9,7 +8,7 @@ import {
   statSync,
 } from "node:fs";
 import { dirname } from "node:path";
-import type pino from "pino";
+import pino from "pino";
 import type {
   DestinationStream,
   LevelWithSilent,
@@ -173,13 +172,7 @@ function assertPositiveInteger(value: number, name: string): void {
     throw new Error(`${name} must be a positive integer.`);
 }
 
-function loadPino(): typeof pino {
-  const loadDependency = createRequire(import.meta.url);
-  return loadDependency("pino") as typeof pino;
-}
-
 export function createLogger(options: CreateLoggerOptions = {}): Logger {
-  const pino = loadPino();
   const level =
     options.level ?? process.env.STUDYNARRATOR_LOG_LEVEL ?? DEFAULT_LEVEL;
   const loggerOptions: PinoLoggerOptions = {

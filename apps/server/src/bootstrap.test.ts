@@ -3,8 +3,14 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import Database from "better-sqlite3";
-import { APPLICATION_VERSION } from "@studynarrator/shared-types";
-import { openStudyNarratorRepository } from "@studynarrator/persistence";
+import {
+  APPLICATION_VERSION,
+  DATABASE_SCHEMA_VERSION,
+} from "@studynarrator/shared-types";
+import {
+  DATA_DIRECTORY_LAYOUT_VERSION,
+  openStudyNarratorRepository,
+} from "@studynarrator/persistence";
 import {
   createServerServices,
   resolveServerDataDirectory,
@@ -39,6 +45,45 @@ describe("server data directory manifest", () => {
           await services.dispose();
         }
       }
+    } finally {
+      await rm(dataDirectory, {
+        recursive: true,
+        force: true,
+        maxRetries: 5,
+        retryDelay: 100,
+      });
+    }
+  });
+
+  it("writes one structured startup event to the data directory log", async () => {
+    const dataDirectory = await mkdtemp(
+      join(tmpdir(), "studynarrator-server-log-"),
+    );
+    try {
+      const services = await createServerServices({
+        STUDYNARRATOR_DATA_DIR: dataDirectory,
+      });
+      await services.dispose();
+
+      const entries = (
+        await readFile(join(dataDirectory, "logs", "studynarrator.log"), "utf8")
+      )
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line) as Record<string, unknown>);
+      expect(
+        entries.filter(({ event }) => event === "application-start"),
+      ).toEqual([
+        expect.objectContaining({
+          event: "application-start",
+          appVersion: APPLICATION_VERSION,
+          databaseSchemaVersion: DATABASE_SCHEMA_VERSION,
+          dataDirectoryLayoutVersion: DATA_DIRECTORY_LAYOUT_VERSION,
+          dataDirectory,
+          distribution: "development-web",
+          msg: "Application starting",
+        }),
+      ]);
     } finally {
       await rm(dataDirectory, {
         recursive: true,

@@ -10,7 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   listBackups,
   listPersistenceBackups,
@@ -502,13 +502,57 @@ describe("database baseline", () => {
       );
     v2.database.close();
 
+    const logger = { info: vi.fn(), warn: vi.fn() };
     const upgraded = await migrateDatabase({
       Database: DatabaseAdapter,
       databasePath,
+      logger,
     });
     expect(upgraded.appliedVersions).toEqual([3, 4]);
     expect(upgraded.databaseSchemaVersion).toBe(4);
     expect(upgraded.backupPath).toContain("-v0002-to-v0004-");
+    if (upgraded.backupPath === null)
+      throw new Error("Expected the migration backup path.");
+    expect(logger.info).toHaveBeenNthCalledWith(
+      1,
+      {
+        event: "database-migration-backup-created",
+        backupPath: upgraded.backupPath,
+        fromDatabaseSchemaVersion: 2,
+        toDatabaseSchemaVersion: 4,
+      },
+      "Database migration backup created",
+    );
+    expect(logger.info).toHaveBeenNthCalledWith(
+      2,
+      {
+        event: "database-migration-applied",
+        migrationVersion: 3,
+        migrationName: "global-named-sense-defaults",
+      },
+      "Database migration applied",
+    );
+    expect(logger.info).toHaveBeenNthCalledWith(
+      3,
+      {
+        event: "database-migration-applied",
+        migrationVersion: 4,
+        migrationName: "neutral-speech-backend-naming",
+      },
+      "Database migration applied",
+    );
+    expect(logger.info).toHaveBeenNthCalledWith(
+      4,
+      {
+        event: "database-backups-pruned",
+        removedCount: 0,
+        retainedCount: 1,
+        removedPaths: [],
+        retainedPaths: [upgraded.backupPath],
+      },
+      "Database backups pruned",
+    );
+    expect(logger.warn).not.toHaveBeenCalled();
     expect(
       upgraded.database
         .prepare(

@@ -4,6 +4,7 @@ import {
   createStudyNarratorServices,
   type StudyNarratorRuntimeDescriptor,
 } from "@studynarrator/application";
+import { createLogger } from "@studynarrator/runtime";
 import { APPLICATION_VERSION } from "@studynarrator/shared-types";
 import { resolveServerRuntimeConfiguration } from "./runtimeConfig.js";
 
@@ -24,6 +25,9 @@ export async function createServerServices(environment = process.env) {
     repositoryRoot,
   );
   const dataDirectory = resolveServerDataDirectory(environment);
+  const logger = createLogger({
+    filePath: resolve(dataDirectory, "logs/studynarrator.log"),
+  });
   const descriptor = {
     client: "web",
     transport: "rest",
@@ -38,6 +42,7 @@ export async function createServerServices(environment = process.env) {
   return createStudyNarratorServices({
     Database,
     descriptor,
+    logger,
     ...(environment.STUDYNARRATOR_FFMPEG_PATH
       ? { ffmpegPath: environment.STUDYNARRATOR_FFMPEG_PATH }
       : {}),

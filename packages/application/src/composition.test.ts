@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { DATABASE_SCHEMA_VERSION } from "@studynarrator/shared-types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  DATA_DIRECTORY_LAYOUT_VERSION,
   PersistenceConflictError,
   LayoutTooNewError,
   MigrationFailureError,
@@ -15,13 +16,19 @@ import {
   runLayoutSteps,
   type DatabaseConstructor,
 } from "@studynarrator/persistence";
-import { createFfmpegProbe } from "@studynarrator/runtime";
+import { createFfmpegProbe, type Logger } from "@studynarrator/runtime";
 import {
   createStudyNarratorServices,
   type StudyNarratorRuntimeDescriptor,
   type StudyNarratorServices,
 } from "./composition.js";
 import { PersistenceUnavailableError, type StorageCheck } from "./index.js";
+
+const logger = {
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+} as unknown as Logger;
 
 const recorded = vi.hoisted(() => ({
   calls: [] as string[],
@@ -196,6 +203,7 @@ describe("createStudyNarratorServices", () => {
     return createStudyNarratorServices({
       Database: FakeDatabase as unknown as DatabaseConstructor,
       descriptor: makeDescriptor(dataDirectory),
+      logger,
       ...(ffmpegPath === undefined ? {} : { ffmpegPath }),
     });
   }
@@ -228,6 +236,29 @@ describe("createStudyNarratorServices", () => {
         "layout",
         "open",
       ]);
+      expect(logger.info).toHaveBeenCalledTimes(1);
+      expect(logger.info).toHaveBeenCalledWith(
+        {
+          event: "application-start",
+          appVersion: "0.1.0",
+          databaseSchemaVersion: DATABASE_SCHEMA_VERSION,
+          dataDirectoryLayoutVersion: DATA_DIRECTORY_LAYOUT_VERSION,
+          dataDirectory,
+          distribution: "development-web",
+        },
+        "Application starting",
+      );
+      expect(runLayoutSteps).toHaveBeenCalledWith(
+        dataDirectory,
+        expect.any(Array),
+        { logger },
+      );
+      expect(openStudyNarratorRepository).toHaveBeenCalledWith({
+        Database: FakeDatabase,
+        databasePath: resolve(dataDirectory, "studynarrator.sqlite"),
+        logger,
+      });
+      expect(services.logger).toBe(logger);
       for (const key of [
         "connection",
         "voiceCatalog",
