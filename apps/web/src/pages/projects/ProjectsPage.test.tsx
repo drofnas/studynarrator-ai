@@ -273,6 +273,7 @@ function renderJobFixture(
     projectId: project.id,
     planId: "00000000-0000-4000-8000-000000000090",
     retryOfRenderId: null,
+    pinned: false,
     state,
     progress: {
       phase: state,
@@ -1992,6 +1993,7 @@ describe("Projects workbench", () => {
       projectId: project.id,
       planId: "00000000-0000-4000-8000-000000000011",
       retryOfRenderId: null,
+      pinned: false,
       state: "complete",
       progress: {
         phase: "complete",
@@ -2504,6 +2506,7 @@ describe("Projects workbench", () => {
       projectId: project.id,
       planId: plan.id,
       retryOfRenderId: null,
+      pinned: false,
       state: "complete" as const,
       progress: {
         phase: "complete" as const,

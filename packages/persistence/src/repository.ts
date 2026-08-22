@@ -247,6 +247,7 @@ export interface StudyNarratorRepository {
   getRenderJob(renderId: string): RenderJob;
   listRenderJobs(projectId: string): RenderJob[];
   listRecoverableRenderJobs(): RenderJob[];
+  listPinnedRenderProjectIds(): string[];
   updateRenderJob(job: RenderJob): RenderJob;
   updateRenderSegment(
     segment: RenderSegment,
@@ -277,6 +278,7 @@ interface RenderJobRow {
   // Scheduled for removal; see docs/technical-debt.md.
   plan_id: string;
   retry_of_render_id: string | null;
+  pinned: number;
   state: RenderJob["state"];
   progress_json: string;
   error_json: string | null;
@@ -318,6 +320,7 @@ function renderJobFromRow(row: RenderJobRow): RenderJob {
     projectId: row.project_id,
     planId: row.plan_id,
     retryOfRenderId: row.retry_of_render_id,
+    pinned: booleanFromSql(row.pinned),
     state: row.state,
     progress: JSON.parse(row.progress_json) as unknown,
     error:
@@ -1333,9 +1336,9 @@ function createRepository(options: {
           .prepare(
             `
           INSERT INTO render_jobs (
-            id, project_id, plan_id, retry_of_render_id, state, progress_json, error_json,
+            id, project_id, plan_id, retry_of_render_id, pinned, state, progress_json, error_json,
             created_at, started_at, finished_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
           )
           .run(
@@ -1343,6 +1346,7 @@ function createRepository(options: {
             job.projectId,
             job.planId,
             job.retryOfRenderId,
+            booleanToSql(job.pinned),
             job.state,
             JSON.stringify(job.progress),
             job.error === null ? null : JSON.stringify(job.error),
@@ -1408,16 +1412,27 @@ function createRepository(options: {
         ).map(renderJobFromRow),
       );
     },
+    listPinnedRenderProjectIds() {
+      assertOpen();
+      return (
+        database
+          .prepare(
+            "SELECT DISTINCT project_id FROM render_jobs WHERE pinned = 1 ORDER BY project_id ASC",
+          )
+          .all() as Array<{ project_id: string }>
+      ).map(({ project_id: projectId }) => ProjectIdSchema.parse(projectId));
+    },
     updateRenderJob(jobValue) {
       assertOpen();
       const job = RenderJobSchema.parse(jobValue);
       const result = database
         .prepare(
           `
-        UPDATE render_jobs SET state = ?, progress_json = ?, error_json = ?, started_at = ?, finished_at = ? WHERE id = ?
+        UPDATE render_jobs SET pinned = ?, state = ?, progress_json = ?, error_json = ?, started_at = ?, finished_at = ? WHERE id = ?
       `,
         )
         .run(
+          booleanToSql(job.pinned),
           job.state,
           JSON.stringify(job.progress),
           job.error === null ? null : JSON.stringify(job.error),

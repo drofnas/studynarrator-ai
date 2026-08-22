@@ -179,6 +179,7 @@ export async function createStudyNarratorServices(options: {
         await speechCacheSweeper.sweep({
           ttl: retention.speechCacheTtl,
           sizeCapBytes: retention.speechCacheSizeCapBytes,
+          pinnedProjectIds: openedRepository.listPinnedRenderProjectIds(),
         });
       } catch (error) {
         options.logger.warn(

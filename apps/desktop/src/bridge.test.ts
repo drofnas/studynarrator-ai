@@ -63,8 +63,8 @@ const diagnostics = {
 const persistenceStatus = {
   contractVersion: 1 as const,
   state: "ready" as const,
-  databaseSchemaVersion: 6 as const,
-  targetDatabaseSchemaVersion: 6 as const,
+  databaseSchemaVersion: 7 as const,
+  targetDatabaseSchemaVersion: 7 as const,
   databasePath: "/tmp/studynarrator.sqlite",
   latestBackupPath: null,
 };
@@ -190,6 +190,7 @@ const renderJob = {
   projectId: "00000000-0000-4000-8000-000000000001",
   planId: "00000000-0000-4000-8000-000000000011",
   retryOfRenderId: null,
+  pinned: false,
   state: "complete" as const,
   progress: {
     phase: "complete" as const,

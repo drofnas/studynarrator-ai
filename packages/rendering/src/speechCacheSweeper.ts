@@ -155,6 +155,18 @@ function isExpired(
   );
 }
 
+function isPinned(
+  entry: SpeechCacheEntry,
+  pinnedProjectIds: ReadonlySet<string>,
+): boolean {
+  return (
+    entry.metadata.status === "ok" &&
+    entry.metadata.metadata.projectIds.some((projectId) =>
+      pinnedProjectIds.has(projectId),
+    )
+  );
+}
+
 /** Reclaims only validated key-pairs below the speech cache's managed root. */
 export function createSpeechCacheSweeper(options: {
   cache: SpeechCache;
@@ -168,6 +180,7 @@ export function createSpeechCacheSweeper(options: {
       sizeCapBytes: number;
       preview?: boolean;
       now?: () => Date;
+      pinnedProjectIds?: readonly string[];
     }): Promise<SpeechCacheSweepResult> {
       if (
         !Number.isSafeInteger(optionsInput.sizeCapBytes) ||
@@ -197,13 +210,15 @@ export function createSpeechCacheSweeper(options: {
         }
         const selected = new Map<string, SpeechCacheEntry>();
         const now = (optionsInput.now ?? (() => new Date()))();
+        const pinnedProjectIds = new Set(optionsInput.pinnedProjectIds);
         const entries = await listEntries(rootDirectory);
         for (const entry of entries) {
           if (
             entry.metadata.status === "unreadable" ||
             (entry.metadata.status === "ok" &&
               entry.metadata.metadata.key !== entry.key) ||
-            isExpired(entry, optionsInput.ttl, now)
+            (!isPinned(entry, pinnedProjectIds) &&
+              isExpired(entry, optionsInput.ttl, now))
           )
             selected.set(entry.key, entry);
         }
@@ -214,15 +229,17 @@ export function createSpeechCacheSweeper(options: {
           (total, entry) => total + entry.byteLength,
           0,
         );
-        for (const entry of retained.sort((left, right) => {
-          if (left.metadata.status !== "ok" || right.metadata.status !== "ok")
-            return 0;
-          return (
-            Date.parse(left.metadata.metadata.lastUsedAt) -
-              Date.parse(right.metadata.metadata.lastUsedAt) ||
-            left.key.localeCompare(right.key)
-          );
-        })) {
+        for (const entry of retained
+          .filter((entry) => !isPinned(entry, pinnedProjectIds))
+          .sort((left, right) => {
+            if (left.metadata.status !== "ok" || right.metadata.status !== "ok")
+              return 0;
+            return (
+              Date.parse(left.metadata.metadata.lastUsedAt) -
+                Date.parse(right.metadata.metadata.lastUsedAt) ||
+              left.key.localeCompare(right.key)
+            );
+          })) {
           if (totalBytes <= optionsInput.sizeCapBytes) break;
           selected.set(entry.key, entry);
           totalBytes -= entry.byteLength;

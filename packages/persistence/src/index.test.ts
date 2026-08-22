@@ -69,9 +69,10 @@ describe("database baseline", () => {
       { version: 4, name: "neutral-speech-backend-naming" },
       { version: 5, name: "voice-timing-calibration" },
       { version: 6, name: "retention-settings" },
+      { version: 7, name: "render-pinning" },
     ]);
-    expect(first.appliedVersions).toEqual([1, 2, 3, 4, 5, 6]);
-    expect(first.databaseSchemaVersion).toBe(6);
+    expect(first.appliedVersions).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(first.databaseSchemaVersion).toBe(7);
     expect(first.backupPath).toBeNull();
     expect(
       first.database.prepare("SELECT version FROM schema_migrations").all(),
@@ -82,6 +83,7 @@ describe("database baseline", () => {
       { version: 4 },
       { version: 5 },
       { version: 6 },
+      { version: 7 },
     ]);
     expect(
       first.database
@@ -265,6 +267,68 @@ describe("database baseline", () => {
         .get(),
     ).toEqual({ count: 1 });
     migrated.database.close();
+  });
+
+  it("adds a constrained pinned default to existing render jobs", async () => {
+    const databasePath = await temporaryDatabase(
+      "studynarrator-render-pinning-",
+    );
+    const v6 = await migrateDatabase({
+      Database: DatabaseAdapter,
+      databasePath,
+      migrations: STUDYNARRATOR_MIGRATIONS.slice(0, 6),
+    });
+    const timestamp = "2026-08-21T00:00:00.000Z";
+    v6.database
+      .prepare(
+        `
+        INSERT INTO projects (
+          id, name, description, script_source, script_hash, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `,
+      )
+      .run(
+        projectId,
+        "Pinned render project",
+        "",
+        "",
+        "a".repeat(64),
+        timestamp,
+        timestamp,
+      );
+    v6.database
+      .prepare(
+        `
+        INSERT INTO render_jobs (
+          id, project_id, plan_id, retry_of_render_id, state, progress_json, error_json,
+          created_at, started_at, finished_at
+        ) VALUES (?, ?, ?, NULL, 'queued', '{}', NULL, ?, NULL, NULL)
+      `,
+      )
+      .run(
+        "render-before-pinning",
+        projectId,
+        "plan-before-pinning",
+        timestamp,
+      );
+    v6.database.close();
+
+    const upgraded = await migrateDatabase({
+      Database: DatabaseAdapter,
+      databasePath,
+    });
+    const database = upgraded.database as Database.Database;
+    expect(
+      database
+        .prepare("SELECT pinned FROM render_jobs WHERE id = ?")
+        .get("render-before-pinning"),
+    ).toEqual({ pinned: 0 });
+    expect(() =>
+      database
+        .prepare("UPDATE render_jobs SET pinned = ? WHERE id = ?")
+        .run(2, "render-before-pinning"),
+    ).toThrow(/CHECK constraint failed/u);
+    database.close();
   });
 
   it("seeds the same global lexicon rows a pre-change database contains", async () => {
@@ -647,9 +711,9 @@ describe("database baseline", () => {
       databasePath,
       logger,
     });
-    expect(upgraded.appliedVersions).toEqual([3, 4, 5, 6]);
-    expect(upgraded.databaseSchemaVersion).toBe(6);
-    expect(upgraded.backupPath).toContain("-v0002-to-v0006-");
+    expect(upgraded.appliedVersions).toEqual([3, 4, 5, 6, 7]);
+    expect(upgraded.databaseSchemaVersion).toBe(7);
+    expect(upgraded.backupPath).toContain("-v0002-to-v0007-");
     if (upgraded.backupPath === null)
       throw new Error("Expected the migration backup path.");
     expect(logger.info).toHaveBeenNthCalledWith(
@@ -658,7 +722,7 @@ describe("database baseline", () => {
         event: "database-migration-backup-created",
         backupPath: upgraded.backupPath,
         fromDatabaseSchemaVersion: 2,
-        toDatabaseSchemaVersion: 6,
+        toDatabaseSchemaVersion: 7,
       },
       "Database migration backup created",
     );
@@ -700,6 +764,15 @@ describe("database baseline", () => {
     );
     expect(logger.info).toHaveBeenNthCalledWith(
       6,
+      {
+        event: "database-migration-applied",
+        migrationVersion: 7,
+        migrationName: "render-pinning",
+      },
+      "Database migration applied",
+    );
+    expect(logger.info).toHaveBeenNthCalledWith(
+      7,
       {
         event: "database-backups-pruned",
         removedCount: 0,
@@ -799,8 +872,8 @@ describe("database baseline", () => {
       Database: DatabaseAdapter,
       databasePath,
     });
-    expect(upgraded.appliedVersions).toEqual([4, 5, 6]);
-    expect(upgraded.databaseSchemaVersion).toBe(6);
+    expect(upgraded.appliedVersions).toEqual([4, 5, 6, 7]);
+    expect(upgraded.databaseSchemaVersion).toBe(7);
     expect(
       upgraded.database
         .prepare(
@@ -904,7 +977,7 @@ describe("database baseline", () => {
         .run("keep-me");
       old.close();
 
-      if (version > 6) {
+      if (version > 7) {
         await expect(
           migrateDatabase({ Database: DatabaseAdapter, databasePath }),
         ).rejects.toBeInstanceOf(SchemaTooNewError);
@@ -942,7 +1015,7 @@ describe("database baseline", () => {
       .run();
     baseline.database.close();
     const failing: Migration = {
-      version: 7,
+      version: 8,
       name: "intentional-test-failure",
       up(database) {
         database.exec(
@@ -962,7 +1035,7 @@ describe("database baseline", () => {
       failure = error as MigrationFailureError;
     }
     expect(failure).toBeInstanceOf(MigrationFailureError);
-    expect(failure?.backupPath).toContain("-v0006-to-v0007-");
+    expect(failure?.backupPath).toContain("-v0007-to-v0008-");
     expect((await stat(failure!.backupPath!)).mode & 0o777).toBe(0o600);
     expect((await readFile(failure!.backupPath!)).byteLength).toBeGreaterThan(
       0,
@@ -1098,7 +1171,7 @@ describe("StudyNarratorRepository", () => {
     });
     expect(first.status()).toMatchObject({
       contractVersion: 1,
-      databaseSchemaVersion: 6,
+      databaseSchemaVersion: 7,
     });
     const created = first.createProject({
       name: "Persistence restart proof",
@@ -1427,7 +1500,7 @@ describe("StudyNarratorRepository", () => {
     });
     expect(repository.runMarker()).toMatchObject({
       markerKey: "runtime.storage-self-test",
-      migrationVersion: 6,
+      migrationVersion: 7,
     });
     const project = repository.createProject({ name: "Rendered" });
     repository.replaceProject(project.id, {
@@ -1470,6 +1543,7 @@ describe("StudyNarratorRepository", () => {
         projectId: project.id,
         planId,
         retryOfRenderId: null,
+        pinned: false,
         state: "queued",
         progress,
         error: null,
@@ -1492,6 +1566,7 @@ describe("StudyNarratorRepository", () => {
         },
       ],
     );
+    expect(job.pinned).toBe(false);
     repository.updateRenderSegment(
       {
         renderId,
@@ -1509,11 +1584,13 @@ describe("StudyNarratorRepository", () => {
     );
     const complete = repository.updateRenderJob({
       ...job,
+      pinned: true,
       state: "complete",
       progress: { ...progress, phase: "complete", completedChunks: 1 },
       startedAt: timestamp,
       finishedAt: timestamp,
     });
+    expect(repository.listPinnedRenderProjectIds()).toEqual([project.id]);
     repository.replaceRenderArtifacts(renderId, [
       {
         contractVersion: 1,
@@ -1536,6 +1613,7 @@ describe("StudyNarratorRepository", () => {
         projectId: project.id,
         planId: "00000000-0000-4000-8000-000000000024",
         retryOfRenderId: null,
+        pinned: false,
         state: "failed",
         progress: { ...progress, phase: "failed" },
         error: null,
@@ -1553,6 +1631,7 @@ describe("StudyNarratorRepository", () => {
         projectId: project.id,
         planId: "00000000-0000-4000-8000-000000000026",
         retryOfRenderId: null,
+        pinned: false,
         state: "complete",
         progress: { ...progress, phase: "complete", completedChunks: 1 },
         error: null,

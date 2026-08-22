@@ -389,6 +389,7 @@ async function fixture(logger?: {
     projectId: renderFixture.projectId,
     planId: renderFixture.planId,
     retryOfRenderId: null,
+    pinned: false,
     state: "complete" as const,
     progress: {
       phase: "complete" as const,
@@ -882,8 +883,8 @@ describe("Express persistence API", () => {
     const persistence = createUnavailablePersistenceService({
       contractVersion: 1,
       state: "unavailable",
-      databaseSchemaVersion: 6,
-      targetDatabaseSchemaVersion: 6,
+      databaseSchemaVersion: 7,
+      targetDatabaseSchemaVersion: 7,
       databasePath: "/tmp/studynarrator.sqlite",
       latestBackupPath: "/tmp/backups/recovery.sqlite",
       code: "MIGRATION_FAILED",

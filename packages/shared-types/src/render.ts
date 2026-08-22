@@ -148,6 +148,7 @@ export const RenderJobSchema = z
     projectId: ProjectIdSchema,
     planId: RenderPlanIdSchema,
     retryOfRenderId: RenderIdSchema.nullable(),
+    pinned: z.boolean().default(false),
     state: RenderStateSchema,
     progress: RenderProgressSchema,
     error: RenderErrorSchema.nullable(),

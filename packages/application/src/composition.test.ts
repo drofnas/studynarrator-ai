@@ -37,6 +37,7 @@ const recorded = vi.hoisted(() => ({
   calls: [] as string[],
   renderLoggers: [] as unknown[],
   speechCacheStatusCalls: 0,
+  sweepInputs: [] as Array<{ pinnedProjectIds?: readonly string[] }>,
   restoreInputs: [] as {
     Database: unknown;
     databasePath: string;
@@ -61,6 +62,35 @@ vi.mock("@studynarrator/runtime", () => ({
     run: async () => ({ status: "pass", executable: "ffmpeg", version: "7.1" }),
   })),
 }));
+
+vi.mock("@studynarrator/rendering", async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  const createSpeechCacheSweeper = actual.createSpeechCacheSweeper as (
+    options: unknown,
+  ) => {
+    sweep(input: {
+      pinnedProjectIds?: readonly string[];
+      sizeCapBytes: number;
+      ttl: string;
+    }): Promise<unknown>;
+  };
+  return {
+    ...actual,
+    createSpeechCacheSweeper: (options: unknown) => {
+      const sweeper = createSpeechCacheSweeper(options);
+      return {
+        sweep: async (input: {
+          pinnedProjectIds?: readonly string[];
+          sizeCapBytes: number;
+          ttl: string;
+        }) => {
+          recorded.sweepInputs.push(input);
+          return sweeper.sweep(input);
+        },
+      };
+    },
+  };
+});
 
 vi.mock("./render.js", async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
@@ -174,6 +204,7 @@ function fakeRepository(closeLog: string[]): OpenedRepository {
       updatedAt: "2026-01-10T00:00:00.000Z",
     }),
     listRecoverableRenderJobs: () => [],
+    listPinnedRenderProjectIds: () => [],
     getRenderJob: () => renderJob,
     updateRenderJob: <T>(job: T) => {
       renderJob = job;
@@ -208,6 +239,7 @@ describe("createStudyNarratorServices", () => {
     recorded.calls.length = 0;
     recorded.renderLoggers.length = 0;
     recorded.speechCacheStatusCalls = 0;
+    recorded.sweepInputs.length = 0;
     recorded.restoreInputs.length = 0;
     closeLog = [];
     vi.resetAllMocks();
@@ -330,6 +362,29 @@ describe("createStudyNarratorServices", () => {
       });
       await services.dispose();
       expect(closeLog).toEqual(["close"]);
+    });
+  });
+
+  it("passes pinned render project IDs to the startup cache sweep", async () => {
+    await withDataDirectory(async (dataDirectory) => {
+      const pinnedProjectId = "00000000-0000-4000-8000-000000000001";
+      vi.mocked(openStudyNarratorRepository).mockImplementation(
+        async () =>
+          ({
+            ...fakeRepository(closeLog),
+            listPinnedRenderProjectIds: () => [pinnedProjectId],
+          }) as unknown as OpenedRepository,
+      );
+
+      const services = await servicesIn(dataDirectory);
+      await vi.waitFor(() =>
+        expect(recorded.sweepInputs).toContainEqual({
+          pinnedProjectIds: [pinnedProjectId],
+          sizeCapBytes: 1024,
+          ttl: "7d",
+        }),
+      );
+      await services.dispose();
     });
   });
 

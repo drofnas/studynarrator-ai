@@ -27,7 +27,7 @@ async function fixture() {
     now: () => clock,
     activityGate,
   });
-  const add = async (text: string, bytes: number) => {
+  const add = async (text: string, bytes: number, projectId?: string) => {
     const result = await cache.getOrCreate(
       {
         adapterId: "test",
@@ -39,7 +39,7 @@ async function fixture() {
         text,
         responseFormat: "wav",
       },
-      {},
+      projectId === undefined ? {} : { projectId },
       async () => new Uint8Array(bytes).fill(1),
     );
     return result.key;
@@ -78,6 +78,58 @@ describe("speech cache sweeper", () => {
     });
     await expect(cache.status()).resolves.toMatchObject({ entryCount: 0 });
     expect(key).toHaveLength(64);
+  });
+
+  it("retains expired entries owned by pinned projects", async () => {
+    const { add, rootDirectory, setClock, sweeper } = await fixture();
+    const pinnedProjectId = "00000000-0000-4000-8000-000000000001";
+    const pinned = await add("pinned", 10, pinnedProjectId);
+    const unpinned = await add(
+      "unpinned",
+      10,
+      "00000000-0000-4000-8000-000000000002",
+    );
+    setClock("2026-01-18T00:00:00.000Z");
+
+    await expect(
+      sweeper.sweep({
+        ttl: "7d",
+        sizeCapBytes: 100,
+        pinnedProjectIds: [pinnedProjectId],
+      }),
+    ).resolves.toMatchObject({ entriesRemoved: 1, bytesFreed: 10 });
+    await expect(
+      readFile(metadataPath(rootDirectory, pinned)),
+    ).resolves.toBeTruthy();
+    await expect(
+      readFile(metadataPath(rootDirectory, unpinned)),
+    ).rejects.toThrow();
+  });
+
+  it("retains entries owned by pinned projects during LRU eviction", async () => {
+    const { add, rootDirectory, setClock, sweeper } = await fixture();
+    const pinnedProjectId = "00000000-0000-4000-8000-000000000001";
+    const pinned = await add("pinned", 10, pinnedProjectId);
+    setClock("2026-01-10T01:00:00.000Z");
+    const unpinned = await add(
+      "unpinned",
+      20,
+      "00000000-0000-4000-8000-000000000002",
+    );
+
+    await expect(
+      sweeper.sweep({
+        ttl: "never",
+        sizeCapBytes: 20,
+        pinnedProjectIds: [pinnedProjectId],
+      }),
+    ).resolves.toMatchObject({ entriesRemoved: 1, bytesFreed: 20 });
+    await expect(
+      readFile(metadataPath(rootDirectory, pinned)),
+    ).resolves.toBeTruthy();
+    await expect(
+      readFile(metadataPath(rootDirectory, unpinned)),
+    ).rejects.toThrow();
   });
 
   it("evicts least-recently-used entries until the size cap is met", async () => {

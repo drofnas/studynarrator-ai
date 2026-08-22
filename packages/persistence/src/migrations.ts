@@ -429,6 +429,15 @@ export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
         );
     },
   },
+  {
+    version: 7,
+    name: "render-pinning",
+    up(database) {
+      database.exec(`
+        ALTER TABLE render_jobs ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1));
+      `);
+    },
+  },
 ]);
 
 interface VersionRow {
