@@ -29,6 +29,7 @@ import {
 import { createFfmpegProbe, type Logger } from "@studynarrator/runtime";
 import {
   createRenderPlanStore,
+  createSpeechCacheActivityGate,
   createSpeechCacheSweeper,
   readSpeechCacheMetadata,
   SPEECH_CACHE_SCHEMA_VERSION,
@@ -137,7 +138,11 @@ export async function createStudyNarratorServices(options: {
     descriptor.dataDirectory,
     "studynarrator.sqlite",
   );
-  const cache = createApplicationSpeechCache(descriptor.dataDirectory);
+  const cacheActivityGate = createSpeechCacheActivityGate();
+  const cache = createApplicationSpeechCache(
+    descriptor.dataDirectory,
+    cacheActivityGate,
+  );
   const speechCache = createSpeechCacheService(cache);
   let storageFailure: StorageCheck | undefined;
   let persistence: PersistenceClient;
@@ -165,6 +170,7 @@ export async function createStudyNarratorServices(options: {
     const speechCacheSweeper = createSpeechCacheSweeper({
       cache,
       rootDirectory: resolve(descriptor.dataDirectory, "cache/speech"),
+      activityGate: cacheActivityGate,
     });
     const runSpeechCacheSweep = async () => {
       try {
@@ -181,7 +187,6 @@ export async function createStudyNarratorServices(options: {
         );
       }
     };
-    void runSpeechCacheSweep();
     speechCacheSweepInterval = setInterval(
       () => void runSpeechCacheSweep(),
       SPEECH_CACHE_SWEEP_INTERVAL_MILLISECONDS,
@@ -242,10 +247,12 @@ export async function createStudyNarratorServices(options: {
       speech,
       dataDirectory: descriptor.dataDirectory,
       logger: options.logger,
+      activityGate: cacheActivityGate,
       ...(options.ffmpegPath === undefined
         ? {}
         : { ffmpegPath: options.ffmpegPath }),
     });
+    void runSpeechCacheSweep();
   } catch (error) {
     if (
       !(error instanceof MigrationFailureError) &&

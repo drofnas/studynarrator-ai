@@ -1,7 +1,10 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { DATABASE_SCHEMA_VERSION } from "@studynarrator/shared-types";
+import {
+  DATABASE_SCHEMA_VERSION,
+  RENDER_CONTRACT_VERSION,
+} from "@studynarrator/shared-types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DATA_DIRECTORY_LAYOUT_VERSION,
@@ -161,6 +164,7 @@ function storagePass(databasePath: string): StorageCheck {
 type OpenedRepository = Awaited<ReturnType<typeof openStudyNarratorRepository>>;
 
 function fakeRepository(closeLog: string[]): OpenedRepository {
+  let renderJob: unknown;
   return {
     getRetentionSettings: () => ({
       speechCacheTtl: "7d",
@@ -170,6 +174,11 @@ function fakeRepository(closeLog: string[]): OpenedRepository {
       updatedAt: "2026-01-10T00:00:00.000Z",
     }),
     listRecoverableRenderJobs: () => [],
+    getRenderJob: () => renderJob,
+    updateRenderJob: <T>(job: T) => {
+      renderJob = job;
+      return job;
+    },
     runMarker: () =>
       storagePass(resolve(process.cwd(), "studynarrator.sqlite")),
     close: () => {
@@ -332,7 +341,41 @@ describe("createStudyNarratorServices", () => {
           ({
             ...fakeRepository(closeLog),
             listRecoverableRenderJobs: () =>
-              recoverableCalls++ === 0 ? ([{}] as unknown as []) : [],
+              recoverableCalls++ === 0
+                ? [
+                    {
+                      contractVersion: RENDER_CONTRACT_VERSION,
+                      id: "00000000-0000-4000-8000-000000000001",
+                      projectId: "00000000-0000-4000-8000-000000000002",
+                      planId: "00000000-0000-4000-8000-000000000003",
+                      retryOfRenderId: null,
+                      state: "queued",
+                      progress: {
+                        phase: "queued",
+                        sectionTitle: null,
+                        sectionOrdinal: 0,
+                        sectionCount: 0,
+                        entryOrdinal: null,
+                        speechOrdinal: 0,
+                        speechCount: 0,
+                        chunkOrdinal: null,
+                        completedChunks: 0,
+                        totalChunks: 0,
+                        cacheHits: 0,
+                        cacheMisses: 0,
+                        ttsRequests: 0,
+                        speakerId: null,
+                        voiceId: null,
+                        excerpt: null,
+                        elapsedMs: 0,
+                      },
+                      error: null,
+                      createdAt: "2026-01-01T00:00:00.000Z",
+                      startedAt: null,
+                      finishedAt: null,
+                    },
+                  ]
+                : [],
           }) as unknown as OpenedRepository,
       );
       const services = await servicesIn(dataDirectory);

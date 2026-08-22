@@ -51,6 +51,8 @@ import {
   normalizeSpeechWav,
   probeAudioFile,
   type RenderPlanStore,
+  type SpeechCacheActivityGate,
+  type SpeechCacheActivityLease,
 } from "@studynarrator/rendering";
 import type { StudyNarratorRepository } from "@studynarrator/persistence";
 import type { CachedSpeechSynthesis } from "./cachedSpeech.js";
@@ -283,6 +285,7 @@ export async function createRenderService(options: {
   planComputer: RenderPlanComputer;
   logger: RenderLifecycleLogger;
   statfs?: RenderStatfs;
+  activityGate?: SpeechCacheActivityGate;
 }): Promise<RenderService> {
   const now = options.now ?? (() => new Date());
   const createId = options.createId ?? randomUUID;
@@ -310,6 +313,14 @@ export async function createRenderService(options: {
   const subscribers = new Map<string, Set<(job: RenderJob) => void>>();
   const userCanceled = new Set<string>();
   const startingProjects = new Map<string, Promise<RenderJob>>();
+  const activities = new Map<string, SpeechCacheActivityLease>();
+  const reserveActivity = async (): Promise<
+    SpeechCacheActivityLease | undefined
+  > => await options.activityGate?.beginActivity();
+  const releaseActivity = (renderId: string): void => {
+    activities.get(renderId)?.release();
+    activities.delete(renderId);
+  };
   const ffprobePath =
     options.ffprobePath ??
     (options.ffmpegPath
@@ -353,6 +364,7 @@ export async function createRenderService(options: {
       progress: { ...job.progress, ...patch, phase: state, elapsedMs },
     });
     const persisted = options.repository.updateRenderJob(next);
+    if (!NONTERMINAL.has(persisted.state)) releaseActivity(persisted.id);
     if (job.state !== persisted.state)
       options.logger.info(
         {
@@ -1201,6 +1213,7 @@ export async function createRenderService(options: {
   }
 
   for (const interrupted of options.repository.listRecoverableRenderJobs()) {
+    const activity = await reserveActivity();
     const recovered = RenderJobSchema.parse({
       ...interrupted,
       state: "queued",
@@ -1210,6 +1223,7 @@ export async function createRenderService(options: {
       progress: { ...interrupted.progress, phase: "queued", elapsedMs: 0 },
     });
     options.repository.updateRenderJob(recovered);
+    if (activity) activities.set(recovered.id, activity);
     enqueue(recovered.id);
   }
 
@@ -1291,6 +1305,7 @@ export async function createRenderService(options: {
 
   const createNewJob = async (
     computed: ComputedRenderPlan,
+    activity: SpeechCacheActivityLease | undefined,
   ): Promise<RenderJob> => {
     const id = RenderIdSchema.parse(createId());
     await options.plans.snapshotJob(
@@ -1299,20 +1314,24 @@ export async function createRenderService(options: {
       computed.plan,
       computed.silenceAssets,
     );
-    return publishJob(id, computed.plan, null);
+    return publishJob(id, computed.plan, null, activity);
   };
 
-  const createRetryJob = async (sourceRenderId: string): Promise<RenderJob> => {
+  const createRetryJob = async (
+    sourceRenderId: string,
+    activity: SpeechCacheActivityLease | undefined,
+  ): Promise<RenderJob> => {
     const id = RenderIdSchema.parse(createId());
     await options.plans.cloneJobSnapshot(id, sourceRenderId);
     const { plan } = await options.plans.loadJob(id);
-    return publishJob(id, plan, sourceRenderId);
+    return publishJob(id, plan, sourceRenderId, activity);
   };
 
   const publishJob = (
     id: string,
     plan: RenderPlan,
     retryOfRenderId: string | null,
+    activity: SpeechCacheActivityLease | undefined,
   ): RenderJob => {
     const job = RenderJobSchema.parse({
       contractVersion: RENDER_CONTRACT_VERSION,
@@ -1331,6 +1350,7 @@ export async function createRenderService(options: {
       job,
       plan.entries.map((entry) => segment(id, entry)),
     );
+    if (activity) activities.set(id, activity);
     enqueue(id);
     return job;
   };
@@ -1346,10 +1366,16 @@ export async function createRenderService(options: {
     const starting = startingProjects.get(projectId);
     if (starting) return await starting;
     const promise = (async () => {
-      const computed = await options.planComputer.compute(projectId);
-      if (startOptions.diskSpaceCheckEnabled)
-        await preflightDiskSpace(computed);
-      return createNewJob(computed);
+      const activity = await reserveActivity();
+      try {
+        const computed = await options.planComputer.compute(projectId);
+        if (startOptions.diskSpaceCheckEnabled)
+          await preflightDiskSpace(computed);
+        return await createNewJob(computed, activity);
+      } catch (error) {
+        activity?.release();
+        throw error;
+      }
     })().finally(() => startingProjects.delete(projectId));
     startingProjects.set(projectId, promise);
     return await promise;
@@ -1439,7 +1465,13 @@ export async function createRenderService(options: {
         .listRenderJobs(prior.projectId)
         .find((candidate) => NONTERMINAL.has(candidate.state));
       if (active) return active;
-      return await createRetryJob(prior.id);
+      const activity = await reserveActivity();
+      try {
+        return await createRetryJob(prior.id, activity);
+      } catch (error) {
+        activity?.release();
+        throw error;
+      }
     },
     async listArtifacts(renderId) {
       return await Promise.resolve(
@@ -1488,6 +1520,7 @@ export async function createRenderService(options: {
       try {
         await drainPromise;
       } finally {
+        for (const renderId of activities.keys()) releaseActivity(renderId);
         subscribers.clear();
       }
     },

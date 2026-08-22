@@ -3,7 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createSpeechCache } from "./index.js";
-import { createSpeechCacheSweeper } from "./speechCacheSweeper.js";
+import {
+  createSpeechCacheActivityGate,
+  createSpeechCacheSweeper,
+} from "./speechCacheSweeper.js";
 
 const paths: string[] = [];
 
@@ -17,10 +20,12 @@ async function fixture() {
   const rootDirectory = await mkdtemp(join(tmpdir(), "studynarrator-sweep-"));
   paths.push(rootDirectory);
   let clock = new Date("2026-01-10T00:00:00.000Z");
+  const activityGate = createSpeechCacheActivityGate();
   const cache = createSpeechCache({
     rootDirectory,
     validateAudio: async () => true,
     now: () => clock,
+    activityGate,
   });
   const add = async (text: string, bytes: number) => {
     const result = await cache.getOrCreate(
@@ -42,7 +47,12 @@ async function fixture() {
   return {
     rootDirectory,
     cache,
-    sweeper: createSpeechCacheSweeper({ cache, rootDirectory }),
+    sweeper: createSpeechCacheSweeper({
+      cache,
+      rootDirectory,
+      activityGate,
+    }),
+    activityGate,
     add,
     setClock: (value: string) => {
       clock = new Date(value);
@@ -89,6 +99,32 @@ describe("speech cache sweeper", () => {
     expect(oldest).not.toBe(newest);
   });
 
+  it("orders offset timestamps by their epoch for LRU eviction", async () => {
+    const { add, rootDirectory, sweeper } = await fixture();
+    const older = await add("older", 10);
+    const newer = await add("newer", 10);
+    const rewriteLastUsedAt = async (key: string, lastUsedAt: string) => {
+      const path = metadataPath(rootDirectory, key);
+      const metadata = JSON.parse(await readFile(path, "utf8")) as Record<
+        string,
+        unknown
+      >;
+      await writeFile(path, JSON.stringify({ ...metadata, lastUsedAt }));
+    };
+    await rewriteLastUsedAt(older, "2026-01-10T00:00:00+05:00");
+    await rewriteLastUsedAt(newer, "2026-01-09T23:00:00-05:00");
+
+    await expect(
+      sweeper.sweep({ ttl: "never", sizeCapBytes: 10 }),
+    ).resolves.toMatchObject({ entriesRemoved: 1, bytesFreed: 10 });
+    await expect(
+      readFile(metadataPath(rootDirectory, older)),
+    ).rejects.toThrow();
+    await expect(
+      readFile(metadataPath(rootDirectory, newer)),
+    ).resolves.toBeTruthy();
+  });
+
   it("collects entries whose metadata cannot be read", async () => {
     const { add, cache, rootDirectory, sweeper } = await fixture();
     const key = await add("broken", 12);
@@ -103,9 +139,41 @@ describe("speech cache sweeper", () => {
     await expect(cache.status()).resolves.toMatchObject({ entryCount: 0 });
   });
 
+  it("skips while an activity lease is active", async () => {
+    const { activityGate, sweeper } = await fixture();
+    const activity = await activityGate.beginActivity();
+
+    await expect(
+      sweeper.sweep({ ttl: "never", sizeCapBytes: 100 }),
+    ).resolves.toMatchObject({ skipped: true });
+    activity.release();
+  });
+
+  it("waits to begin cache activity until exclusive maintenance finishes", async () => {
+    const { activityGate } = await fixture();
+    const maintenance = activityGate.beginMaintenance();
+    expect(maintenance).not.toBeNull();
+    let started = false;
+    const pending = activityGate.beginActivity().then((activity) => {
+      started = true;
+      return activity;
+    });
+
+    await Promise.resolve();
+    expect(started).toBe(false);
+    maintenance?.release();
+    const activity = await pending;
+    expect(started).toBe(true);
+    activity.release();
+  });
+
   it("skips while a cache render is in flight", async () => {
     const { cache, sweeper } = await fixture();
     let finish: () => void = () => undefined;
+    let started: () => void = () => undefined;
+    const synthesizing = new Promise<void>((resolve) => {
+      started = resolve;
+    });
     const pending = cache.getOrCreate(
       {
         adapterId: "test",
@@ -118,11 +186,14 @@ describe("speech cache sweeper", () => {
         responseFormat: "wav",
       },
       {},
-      async () =>
-        await new Promise<Uint8Array>((resolve) => {
+      async () => {
+        started();
+        return await new Promise<Uint8Array>((resolve) => {
           finish = () => resolve(new Uint8Array([1]));
-        }),
+        });
+      },
     );
+    await synthesizing;
     await expect(
       sweeper.sweep({ ttl: "never", sizeCapBytes: 100 }),
     ).resolves.toMatchObject({

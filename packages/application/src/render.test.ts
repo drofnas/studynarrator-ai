@@ -14,10 +14,12 @@ import type {
 } from "@studynarrator/shared-types";
 import {
   createPcmSilence,
+  createSpeechCacheActivityGate,
   probeAudioFile,
   withProjectSnapshotHash,
   withRenderPlanHash,
   type RenderPlanStore,
+  type SpeechCacheActivityGate,
 } from "@studynarrator/rendering";
 import type { CachedSpeechSynthesis } from "./cachedSpeech.js";
 import { createRenderService, type RenderRepository } from "./render.js";
@@ -152,6 +154,7 @@ async function fixture(
     readableText?: string;
     normalizedText?: string;
     statfs?: (path: string) => Promise<{ bavail: bigint; bsize: bigint }>;
+    activityGate?: SpeechCacheActivityGate;
   } = {},
 ) {
   const dataDirectory = await mkdtemp(join(tmpdir(), "studynarrator-render-"));
@@ -339,6 +342,7 @@ async function fixture(
       `00000000-0000-4000-8000-${String(nextId++).padStart(12, "0")}`,
     now: () => new Date(timestamp),
     logger,
+    ...(options.activityGate ? { activityGate: options.activityGate } : {}),
     ...(options.statfs ? { statfs: options.statfs } : {}),
   });
   return {
@@ -372,6 +376,24 @@ describe("render coordinator", () => {
     expect(APPLICATION_SERVICE_MANIFEST).toContain(
       "renders.getEstimateContext",
     );
+  });
+
+  it("waits for exclusive cache maintenance before starting a render", async () => {
+    const activityGate = createSpeechCacheActivityGate();
+    const maintenance = activityGate.beginMaintenance();
+    expect(maintenance).not.toBeNull();
+    const { service, projectId, computePlan } = await fixture({ activityGate });
+    const pending = service.startProject(projectId, {
+      diskSpaceCheckEnabled: false,
+    });
+
+    await Promise.resolve();
+    expect(computePlan).not.toHaveBeenCalled();
+    maintenance?.release();
+    const job = await pending;
+    expect(computePlan).toHaveBeenCalledWith(projectId);
+    await service.cancel(job.id);
+    await service.close();
   });
 
   it("reads free bytes from the exact data volume and returns only requested calibrations", async () => {
