@@ -1,14 +1,19 @@
 import { z } from "zod";
-import { ProjectIdSchema } from "./persistence.js";
+import {
+  ProjectIdSchema,
+  VoiceTimingCalibrationSchema,
+} from "./persistence.js";
 import { RenderPlanIdSchema } from "./renderPlan.js";
 
 export const RENDER_CONTRACT_VERSION = 1;
 export const RENDER_CHANNELS = Object.freeze({
   startProject: "renders.startProject",
+  getEstimateContext: "renders.getEstimateContext",
   list: "renders.list",
   get: "renders.get",
   cancel: "renders.cancel",
   retry: "renders.retry",
+  setPinned: "renders.setPinned",
   artifacts: "renders.artifacts",
   exportArtifact: "renders.exportArtifact",
   exportAudio: "renders.exportAudio",
@@ -20,6 +25,56 @@ export const RENDER_CHANNELS = Object.freeze({
 
 export const RenderIdSchema = z.uuid();
 export const RenderArtifactIdSchema = z.uuid();
+
+export const RENDER_DISK_HARD_RESERVE_PERCENT = 10;
+/** A render warns when its peak estimate enters the final 25% of free space. */
+export const RENDER_DISK_SOFT_RESERVE_PERCENT = 25;
+export const DEFAULT_RENDER_START_OPTIONS = Object.freeze({
+  diskSpaceCheckEnabled: true,
+});
+
+export const RenderStartOptionsSchema = z
+  .object({ diskSpaceCheckEnabled: z.boolean().default(true) })
+  .strict()
+  .default(DEFAULT_RENDER_START_OPTIONS);
+export type RenderStartOptions = z.infer<typeof RenderStartOptionsSchema>;
+
+function checkedByteCount(value: number | bigint, name: string): bigint {
+  if (typeof value === "bigint") {
+    if (value < 0n) throw new RangeError(`${name} must be nonnegative.`);
+    return value;
+  }
+  if (!Number.isSafeInteger(value) || value < 0)
+    throw new RangeError(`${name} must be a nonnegative safe integer.`);
+  return BigInt(value);
+}
+
+export function renderDiskSpaceUsableBytes(
+  freeSpaceBytes: number,
+  reservePercent:
+    | typeof RENDER_DISK_HARD_RESERVE_PERCENT
+    | typeof RENDER_DISK_SOFT_RESERVE_PERCENT,
+): number {
+  const freeBytes = checkedByteCount(freeSpaceBytes, "freeSpaceBytes");
+  return Number((freeBytes * BigInt(100 - reservePercent)) / 100n);
+}
+
+export function renderDiskSpaceBlockMessage(
+  estimatedPeakBytes: number | bigint,
+  freeSpaceBytes: number | bigint,
+  usableBytes: number | bigint,
+): string {
+  return `Render blocked: estimated peak disk use is ${checkedByteCount(estimatedPeakBytes, "estimatedPeakBytes").toString()} bytes, but the data volume has ${checkedByteCount(freeSpaceBytes, "freeSpaceBytes").toString()} free bytes and ${checkedByteCount(usableBytes, "usableBytes").toString()} usable bytes after the required 10% reserve.`;
+}
+
+export function renderDiskSpaceWarningMessage(
+  estimatedPeakBytes: number | bigint,
+  freeSpaceBytes: number | bigint,
+  usableBytes: number | bigint,
+): string {
+  return `Disk space warning: estimated peak disk use is ${checkedByteCount(estimatedPeakBytes, "estimatedPeakBytes").toString()} bytes; the data volume has ${checkedByteCount(freeSpaceBytes, "freeSpaceBytes").toString()} free bytes and ${checkedByteCount(usableBytes, "usableBytes").toString()} usable bytes after the recommended 25% reserve. Rendering will continue.`;
+}
+
 const RenderStateSchema = z.enum([
   "queued",
   "validating",
@@ -94,6 +149,7 @@ export const RenderJobSchema = z
     projectId: ProjectIdSchema,
     planId: RenderPlanIdSchema,
     retryOfRenderId: RenderIdSchema.nullable(),
+    pinned: z.boolean().default(false),
     state: RenderStateSchema,
     progress: RenderProgressSchema,
     error: RenderErrorSchema.nullable(),
@@ -259,11 +315,69 @@ export const RenderArtifactSchema = z
 export type RenderArtifact = z.infer<typeof RenderArtifactSchema>;
 export const RenderArtifactCollectionSchema = z.array(RenderArtifactSchema);
 
+const RenderEstimateVoiceIdCollectionSchema = z
+  .array(z.string().min(1).max(500))
+  .max(100)
+  .superRefine((voiceIds, context) => {
+    const seen = new Set<string>();
+    voiceIds.forEach((voiceId, index) => {
+      if (seen.has(voiceId))
+        context.addIssue({
+          code: "custom",
+          message: "Estimate voice IDs must be unique.",
+          path: [index],
+        });
+      seen.add(voiceId);
+    });
+  });
+
+export const RenderEstimateContextInputSchema = z
+  .object({
+    modelId: z.string().min(1).max(500).nullable(),
+    voiceIds: RenderEstimateVoiceIdCollectionSchema,
+  })
+  .strict();
+export type RenderEstimateContextInput = z.infer<
+  typeof RenderEstimateContextInputSchema
+>;
+
+export const RenderEstimateContextResultSchema = z
+  .object({
+    freeSpaceBytes: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    calibrations: z.array(VoiceTimingCalibrationSchema).max(100),
+  })
+  .strict()
+  .superRefine((result, context) => {
+    const seen = new Set<string>();
+    result.calibrations.forEach((calibration, index) => {
+      const key = `${calibration.modelId}\u0000${calibration.voiceId}`;
+      if (seen.has(key))
+        context.addIssue({
+          code: "custom",
+          message: "Estimate calibrations must be unique by model and voice.",
+          path: ["calibrations", index],
+        });
+      seen.add(key);
+    });
+  });
+export type RenderEstimateContextResult = z.infer<
+  typeof RenderEstimateContextResultSchema
+>;
+
 export const RenderProjectInputSchema = z
   .object({ projectId: ProjectIdSchema })
   .strict();
+export const RenderProjectStartInputSchema = z
+  .object({
+    projectId: ProjectIdSchema,
+    options: RenderStartOptionsSchema,
+  })
+  .strict();
 export const RenderIdInputSchema = z
   .object({ renderId: RenderIdSchema })
+  .strict();
+export const RenderPinInputSchema = z
+  .object({ renderId: RenderIdSchema, pinned: z.boolean() })
   .strict();
 export const RenderSegmentInputSchema = z
   .object({
@@ -285,11 +399,18 @@ type RenderArtifactExportResult = z.infer<
 >;
 
 export interface RenderClient {
-  startProject(projectId: string): Promise<RenderJob>;
+  startProject(
+    projectId: string,
+    options?: RenderStartOptions,
+  ): Promise<RenderJob>;
+  getEstimateContext(
+    input: RenderEstimateContextInput,
+  ): Promise<RenderEstimateContextResult>;
   list(projectId: string): Promise<RenderJob[]>;
   get(renderId: string): Promise<RenderJob>;
   cancel(renderId: string): Promise<RenderJob>;
   retry(renderId: string): Promise<RenderJob>;
+  setPinned(renderId: string, pinned: boolean): Promise<RenderJob>;
   listArtifacts(renderId: string): Promise<RenderArtifact[]>;
   exportArtifact(artifactId: string): Promise<RenderArtifactExportResult>;
   exportAudio(renderId: string): Promise<RenderArtifactExportResult>;

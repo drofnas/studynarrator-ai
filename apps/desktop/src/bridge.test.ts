@@ -63,8 +63,8 @@ const diagnostics = {
 const persistenceStatus = {
   contractVersion: 1 as const,
   state: "ready" as const,
-  databaseSchemaVersion: 4 as const,
-  targetDatabaseSchemaVersion: 4 as const,
+  databaseSchemaVersion: 7 as const,
+  targetDatabaseSchemaVersion: 7 as const,
   databasePath: "/tmp/studynarrator.sqlite",
   latestBackupPath: null,
 };
@@ -98,6 +98,37 @@ const persistence = {
   settings: {
     getPacing: vi.fn(async () => DEFAULT_SYSTEM_TIMING),
     updatePacing: vi.fn(),
+  },
+  retention: {
+    get: vi.fn(async () => ({
+      speechCacheTtl: "7d" as const,
+      jobSnapshotTtl: "never" as const,
+      renderArtifactTtl: "never" as const,
+      speechCacheSizeCapBytes: 1_024,
+      updatedAt: "2026-08-12T12:00:00.000Z",
+    })),
+    update: vi.fn(),
+    usage: vi.fn(async () => ({
+      speechCache: { entries: 0, bytes: 0 },
+      jobSnapshots: { entries: 0, bytes: 0 },
+      renderArtifacts: { entries: 0, bytes: 0 },
+    })),
+    previewReclaim: vi.fn(async () => ({
+      reclaimable: {
+        speechCache: { entries: 0, bytes: 0 },
+        jobSnapshots: { entries: 0, bytes: 0 },
+        renderArtifacts: { entries: 0, bytes: 0 },
+      },
+      skipped: false,
+    })),
+    reclaim: vi.fn(async () => ({
+      reclaimed: {
+        speechCache: { entries: 0, bytes: 0 },
+        jobSnapshots: { entries: 0, bytes: 0 },
+        renderArtifacts: { entries: 0, bytes: 0 },
+      },
+      skipped: false,
+    })),
   },
   preferences: {
     getIgnoredDiagnostics: vi.fn(async () => []),
@@ -190,6 +221,7 @@ const renderJob = {
   projectId: "00000000-0000-4000-8000-000000000001",
   planId: "00000000-0000-4000-8000-000000000011",
   retryOfRenderId: null,
+  pinned: false,
   state: "complete" as const,
   progress: {
     phase: "complete" as const,
@@ -226,13 +258,27 @@ const renderArtifact = {
   durationMs: 1,
   createdAt: "2026-08-12T12:00:00.000Z",
 };
+const renderEstimateContext = {
+  freeSpaceBytes: 5_000_000,
+  calibrations: [
+    {
+      modelId: "model",
+      voiceId: "voice",
+      millisecondsPerNormalizedCharacter: 72,
+      sampleCount: 3,
+      updatedAt: "2026-08-12T12:00:00.000Z",
+    },
+  ],
+};
 const renders = {
   start: vi.fn(async () => renderJob),
   startProject: vi.fn(async () => renderJob),
+  getEstimateContext: vi.fn(async () => renderEstimateContext),
   list: vi.fn(async () => [renderJob]),
   get: vi.fn(async () => renderJob),
   cancel: vi.fn(async () => renderJob),
   retry: vi.fn(async () => renderJob),
+  setPinned: vi.fn(async () => renderJob),
   listArtifacts: vi.fn(async () => []),
   exportArtifact: vi.fn(async () => ({
     disposition: "download" as const,
@@ -315,6 +361,8 @@ describe("Electron boundary", () => {
     };
     const invoke = vi.fn(async (channel: string) => {
       if (channel === RENDER_CHANNELS.startProject) return renderJob;
+      if (channel === RENDER_CHANNELS.getEstimateContext)
+        return renderEstimateContext;
       if (channel === SYSTEM_DIAGNOSTICS_CHANNEL) return diagnostics;
       if (channel === PERSISTENCE_CHANNELS.projectsList) return [];
       if (channel === PERSISTENCE_CHANNELS.globalLexiconReplace)
@@ -392,6 +440,32 @@ describe("Electron boundary", () => {
     );
     expect(() => bridge.renders.renderAudioSource("../outside")).toThrow();
     await expect(
+      bridge.renders.startProject(renderJob.projectId),
+    ).resolves.toEqual(renderJob);
+    expect(invoke).toHaveBeenCalledWith(RENDER_CHANNELS.startProject, {
+      projectId: renderJob.projectId,
+      options: { diskSpaceCheckEnabled: true },
+    });
+    await expect(
+      bridge.renders.startProject(renderJob.projectId, {
+        diskSpaceCheckEnabled: false,
+      }),
+    ).resolves.toEqual(renderJob);
+    expect(invoke).toHaveBeenCalledWith(RENDER_CHANNELS.startProject, {
+      projectId: renderJob.projectId,
+      options: { diskSpaceCheckEnabled: false },
+    });
+    await expect(
+      bridge.renders.getEstimateContext({
+        modelId: "model",
+        voiceIds: ["voice"],
+      }),
+    ).resolves.toEqual(renderEstimateContext);
+    expect(invoke).toHaveBeenCalledWith(RENDER_CHANNELS.getEstimateContext, {
+      modelId: "model",
+      voiceIds: ["voice"],
+    });
+    await expect(
       bridge.scriptGeneration.exportPrompt(null, "update", "Edited prompt"),
     ).resolves.toEqual({ disposition: "saved", fileName: "prompt.md" });
     expect(invoke).toHaveBeenCalledWith(
@@ -460,6 +534,22 @@ describe("Electron boundary", () => {
         apiKey: "test-secret-must-not-appear",
       }),
     ).rejects.toThrow("The request does not match the connection contract.");
+    renders.startProject.mockRejectedValueOnce(
+      Object.assign(
+        new Error(
+          "Render blocked: estimated peak disk use is 96000 bytes, but the data volume has 100000 free bytes and 90000 usable bytes after the required 10% reserve.",
+        ),
+        { code: "RENDER_DISK_SPACE_INSUFFICIENT" },
+      ),
+    );
+    await expect(
+      handlers.get(RENDER_CHANNELS.startProject)?.(undefined, {
+        projectId: renderJob.projectId,
+        options: { diskSpaceCheckEnabled: true },
+      }),
+    ).rejects.toThrow(
+      "Render blocked: estimated peak disk use is 96000 bytes, but the data volume has 100000 free bytes and 90000 usable bytes after the required 10% reserve.",
+    );
   });
 
   it("invokes every public IPC contract with schema-valid input and output", async () => {
@@ -574,6 +664,13 @@ describe("Electron boundary", () => {
     persistence.projects.duplicate.mockResolvedValue(project);
     persistence.projects.delete.mockResolvedValue(undefined);
     persistence.settings.updatePacing.mockResolvedValue(DEFAULT_SYSTEM_TIMING);
+    persistence.retention.update.mockResolvedValue({
+      speechCacheTtl: "7d",
+      jobSnapshotTtl: "never",
+      renderArtifactTtl: "never",
+      speechCacheSizeCapBytes: 1_024,
+      updatedAt: timestamp,
+    });
     persistence.preferences.replaceIgnoredDiagnostics.mockResolvedValue([]);
     persistence.globalLexicon.replace.mockResolvedValue(namedSenseOutput);
     connection.get.mockResolvedValue(storedConnection as never);
@@ -653,6 +750,13 @@ describe("Electron boundary", () => {
         backupPath: persistenceBackup.path,
       },
       [PERSISTENCE_CHANNELS.pacingUpdate]: DEFAULT_SYSTEM_TIMING,
+      [PERSISTENCE_CHANNELS.retentionUpdate]: {
+        speechCacheTtl: "7d",
+        jobSnapshotTtl: "never",
+        renderArtifactTtl: "never",
+        speechCacheSizeCapBytes: 1_024,
+      },
+      [PERSISTENCE_CHANNELS.retentionReclaim]: { confirm: true },
       [PERSISTENCE_CHANNELS.ignoredReplace]: [],
       [PERSISTENCE_CHANNELS.globalLexiconReplace]: namedSenseInput,
       [CONNECTION_CHANNELS.update]: connectionInput,
@@ -674,11 +778,19 @@ describe("Electron boundary", () => {
       },
       [SPEECH_CACHE_CHANNELS.clearProject]: { projectId: project.id },
       [SPEECH_CACHE_CHANNELS.clearEntry]: { cacheKey: "a".repeat(64) },
-      [RENDER_CHANNELS.startProject]: { projectId: project.id },
+      [RENDER_CHANNELS.startProject]: {
+        projectId: project.id,
+        options: { diskSpaceCheckEnabled: false },
+      },
+      [RENDER_CHANNELS.getEstimateContext]: {
+        modelId: "model",
+        voiceIds: ["voice"],
+      },
       [RENDER_CHANNELS.list]: { projectId: project.id },
       [RENDER_CHANNELS.get]: { renderId: renderJob.id },
       [RENDER_CHANNELS.cancel]: { renderId: renderJob.id },
       [RENDER_CHANNELS.retry]: { renderId: renderJob.id },
+      [RENDER_CHANNELS.setPinned]: { renderId: renderJob.id, pinned: true },
       [RENDER_CHANNELS.artifacts]: { renderId: renderJob.id },
       [RENDER_CHANNELS.exportArtifact]: { artifactId: renderArtifact.id },
       [RENDER_CHANNELS.exportAudio]: { renderId: renderJob.id },
@@ -728,6 +840,9 @@ describe("Electron boundary", () => {
         notes: "",
       },
     ]);
+    expect(renders.startProject).toHaveBeenCalledWith(project.id, {
+      diskSpaceCheckEnabled: false,
+    });
     expect(scriptGeneration.resolvePromptExport).toHaveBeenCalledWith(
       null,
       "update",

@@ -6,6 +6,7 @@
 graphify-out/
 node_modules/
 dist/
+/apps/desktop/release/
 coverage/
 playwright-report/
 test-results/

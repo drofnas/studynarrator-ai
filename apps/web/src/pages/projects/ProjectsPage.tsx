@@ -9,8 +9,13 @@ import {
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import {
   buildAuthoringDryRun,
+  estimateCacheBytes,
+  estimateMp3Bytes,
+  estimatePeakDiskBytes,
+  estimatePlanDurationMs,
   reconcileDiscoveredConfiguration,
   type AuthoringDryRunResult,
+  type EstimablePlan,
   type AuthoringPauseRow,
   type AuthoringSpeakerRow,
   type IgnoredDiagnostic,
@@ -19,11 +24,16 @@ import {
 import {
   ProjectReplaceInputSchema,
   DEFAULT_SYSTEM_TIMING,
+  RENDER_DISK_HARD_RESERVE_PERCENT,
+  RENDER_DISK_SOFT_RESERVE_PERCENT,
+  renderDiskSpaceBlockMessage,
+  renderDiskSpaceUsableBytes,
+  renderDiskSpaceWarningMessage,
   type IgnoredDiagnosticCollection,
   type PersistenceClient,
   type ProjectDetail,
   type ProjectPreviewClient,
-  type RenderClient,
+  type RenderEstimateContextResult,
   type RenderJob,
   type RenderWaveform,
   type ProjectSummary,
@@ -60,13 +70,44 @@ import {
   ScriptSourceEditor,
   type ScriptSourceEditorHandle,
 } from "@/features/projects/ScriptSourceEditor.js";
+import { EstimateStrip } from "@/features/projects/estimateStrip.js";
+import type { RenderProgressClient } from "@/services/renders/renderClient.js";
 
 type SaveState = "saved" | "unsaved" | "saving" | "invalid" | "failed";
 type AnalysisState = "idle" | "parsing" | "ready" | "failed";
 type VoiceCatalogState = "idle" | "loading" | "ready" | "failed";
 type VoiceSelectionState =
   VoiceCatalogState | "modelUnavailable" | "noSupportedVoices";
+type EstimateContextState =
+  | { status: "loading" }
+  | { status: "ready"; value: RenderEstimateContextResult }
+  | { status: "unavailable" };
 type ProjectTab = "script" | "settings" | "details" | "render";
+
+const RENDER_DISK_SPACE_CHECK_STORAGE_KEY =
+  "studynarrator.render.disk-space-check.v1";
+
+function storedDiskSpaceCheckEnabled(): boolean {
+  try {
+    return (
+      window.localStorage.getItem(RENDER_DISK_SPACE_CHECK_STORAGE_KEY) !==
+      "false"
+    );
+  } catch {
+    return true;
+  }
+}
+
+function storeDiskSpaceCheckEnabled(enabled: boolean): void {
+  try {
+    window.localStorage.setItem(
+      RENDER_DISK_SPACE_CHECK_STORAGE_KEY,
+      String(enabled),
+    );
+  } catch {
+    // The in-memory preference still applies when browser storage is blocked.
+  }
+}
 
 const projectTabs: Array<{ id: ProjectTab; label: string }> = [
   { id: "script", label: "Script Editor" },
@@ -154,7 +195,7 @@ export function ProjectsPage({
   client: PersistenceClient;
   analyzer: ScriptAnalyzer;
   previewClient: ProjectPreviewClient;
-  renderClient?: RenderClient;
+  renderClient?: RenderProgressClient;
 }) {
   const connections = useConnections();
   const { projectId } = useParams();
@@ -213,8 +254,16 @@ export function ProjectsPage({
   const [selectedRenderJob, setSelectedRenderJob] = useState<RenderJob>();
   const [completedRenderJob, setCompletedRenderJob] = useState<RenderJob>();
   const [renderStarting, setRenderStarting] = useState(false);
+  const [diskSpaceCheckEnabled, setDiskSpaceCheckEnabled] = useState(
+    storedDiskSpaceCheckEnabled,
+  );
   const [renderWaveform, setRenderWaveform] = useState<RenderWaveform>();
   const [renderError, setRenderError] = useState("");
+  const [pinBusy, setPinBusy] = useState(false);
+  const [estimateContextState, setEstimateContextState] =
+    useState<EstimateContextState>(
+      renderClient ? { status: "loading" } : { status: "unavailable" },
+    );
   const editorRef = useRef<ScriptSourceEditorHandle>(null);
   const pendingFocusLineRef = useRef<number | undefined>(undefined);
   const tabRefs = useRef<Record<ProjectTab, HTMLButtonElement | null>>({
@@ -226,6 +275,9 @@ export function ProjectsPage({
   const revisionRef = useRef(0);
   const savedRevisionRef = useRef(0);
   const analysisRevisionRef = useRef(0);
+  const renderStartRevisionRef = useRef(0);
+  const renderStartOperationRef = useRef(0);
+  const currentRouteProjectIdRef = useRef(projectId);
   const saveQueueRef = useRef<Promise<boolean>>(Promise.resolve(true));
   const autosaveTimerRef = useRef<number | undefined>(undefined);
   const saveNowRef = useRef<() => Promise<boolean>>(() =>
@@ -233,6 +285,7 @@ export function ProjectsPage({
   );
 
   draftRef.current = draft;
+  currentRouteProjectIdRef.current = projectId;
   const isDirty =
     saveState === "unsaved" ||
     saveState === "saving" ||
@@ -249,6 +302,11 @@ export function ProjectsPage({
     Boolean(
       selectedRenderJob && !terminalRenderStates.has(selectedRenderJob.state),
     );
+
+  useEffect(() => {
+    renderStartOperationRef.current += 1;
+    setRenderStarting(false);
+  }, [projectId]);
 
   useEffect(() => {
     if (!selectedConnection?.baseUrl || speechCatalogState.status !== "idle")
@@ -420,11 +478,13 @@ export function ProjectsPage({
   useEffect(() => {
     if (!projectId || !renderClient) return;
     let active = true;
+    const renderStartRevision = renderStartRevisionRef.current;
     setRenderError("");
     void renderClient
       .list(projectId)
       .then((jobs) => {
-        if (!active) return;
+        if (!active || renderStartRevisionRef.current !== renderStartRevision)
+          return;
         setSelectedRenderJob(jobs[0]);
         setCompletedRenderJob(jobs.find(({ state }) => state === "complete"));
       })
@@ -436,21 +496,86 @@ export function ProjectsPage({
     };
   }, [projectId, renderClient]);
 
+  const activeRenderId =
+    selectedRenderJob &&
+    selectedRenderJob.projectId === projectId &&
+    !terminalRenderStates.has(selectedRenderJob.state)
+      ? selectedRenderJob.id
+      : undefined;
+
+  const toggleCompletedRenderPin = async () => {
+    if (!renderClient || !completedRenderJob) return;
+    setPinBusy(true);
+    setRenderError("");
+    try {
+      const updated = await renderClient.setPinned(
+        completedRenderJob.id,
+        !completedRenderJob.pinned,
+      );
+      setCompletedRenderJob(updated);
+      setSelectedRenderJob((current) =>
+        current?.id === updated.id ? updated : current,
+      );
+    } catch (error) {
+      setRenderError(message(error));
+    } finally {
+      setPinBusy(false);
+    }
+  };
+
   useEffect(() => {
-    if (
-      !renderClient ||
-      !selectedRenderJob ||
-      ["complete", "failed", "canceled"].includes(selectedRenderJob.state)
-    )
-      return;
+    if (!renderClient || !activeRenderId) return;
     let active = true;
-    const timer = window.setInterval(() => {
+    const applyJob = (job: RenderJob) => {
+      if (!active) return;
+      setSelectedRenderJob(job);
+      if (job.state === "complete") setCompletedRenderJob(job);
+    };
+
+    if (renderClient.subscribe) {
+      let reconciled = false;
+      let streamedUpdateRevision = 0;
+      const applyStreamedJob = (job: RenderJob) => {
+        streamedUpdateRevision += 1;
+        applyJob(job);
+      };
+      const unsubscribe = renderClient.subscribe(
+        activeRenderId,
+        applyStreamedJob,
+        () => {
+          if (!active || reconciled) return;
+          reconciled = true;
+          const reconciliationRevision = streamedUpdateRevision;
+          void renderClient
+            .get(activeRenderId)
+            .then((job) => {
+              if (streamedUpdateRevision === reconciliationRevision)
+                applyJob(job);
+            })
+            .catch((error: unknown) => {
+              if (active && streamedUpdateRevision === reconciliationRevision)
+                setRenderError(message(error));
+            });
+        },
+      );
+      return () => {
+        active = false;
+        unsubscribe();
+      };
+    }
+
+    let timer: number | undefined;
+    const stopPolling = () => {
+      if (timer === undefined) return;
+      window.clearInterval(timer);
+      timer = undefined;
+    };
+    timer = window.setInterval(() => {
       void renderClient
-        .get(selectedRenderJob.id)
+        .get(activeRenderId)
         .then((job) => {
-          if (!active) return;
-          setSelectedRenderJob(job);
-          if (job.state === "complete") setCompletedRenderJob(job);
+          applyJob(job);
+          if (terminalRenderStates.has(job.state)) stopPolling();
         })
         .catch((error: unknown) => {
           if (active) setRenderError(message(error));
@@ -458,9 +583,9 @@ export function ProjectsPage({
     }, 500);
     return () => {
       active = false;
-      window.clearInterval(timer);
+      stopPolling();
     };
-  }, [renderClient, selectedRenderJob]);
+  }, [activeRenderId, renderClient]);
 
   useEffect(() => {
     if (!renderClient || !completedRenderJob) {
@@ -730,6 +855,112 @@ export function ProjectsPage({
         : undefined,
     [analysis, configuration],
   );
+  const estimablePlan = useMemo<EstimablePlan | undefined>(() => {
+    if (!dryRun) return undefined;
+    const speedBySpeaker = new Map(
+      configuration.speakers.map(({ speakerId, speed }) => [speakerId, speed]),
+    );
+    const entries: EstimablePlan["entries"][number][] = [];
+    for (const row of dryRun.rows) {
+      if (row.type === "section") {
+        entries.push({ type: "section" });
+        continue;
+      }
+      if (row.type === "pause") {
+        if (row.durationMs === null) return undefined;
+        entries.push({ type: "pause", durationMs: row.durationMs });
+        continue;
+      }
+      const speed = speedBySpeaker.get(row.speakerId);
+      if (row.voiceId === null || speed === undefined) return undefined;
+      entries.push({
+        type: "speech",
+        voiceId: row.voiceId,
+        speed,
+        chunks: [{ text: row.ttsText }],
+      });
+    }
+    return { entries };
+  }, [configuration.speakers, dryRun]);
+  const estimateVoiceIds = useMemo(
+    () =>
+      estimablePlan
+        ? [
+            ...new Set(
+              estimablePlan.entries
+                .filter((entry) => entry.type === "speech")
+                .map(({ voiceId }) => voiceId),
+            ),
+          ].sort()
+        : [],
+    [estimablePlan],
+  );
+  const estimateVoiceIdsKey = JSON.stringify(estimateVoiceIds);
+
+  useEffect(() => {
+    let active = true;
+    if (!renderClient || !projectId) {
+      setEstimateContextState({ status: "unavailable" });
+      return;
+    }
+    setEstimateContextState({ status: "loading" });
+    void renderClient
+      .getEstimateContext({
+        modelId: effectiveModelId,
+        voiceIds: estimateVoiceIds,
+      })
+      .then((value) => {
+        if (active) setEstimateContextState({ status: "ready", value });
+      })
+      .catch(() => {
+        if (active) setEstimateContextState({ status: "unavailable" });
+      });
+    return () => {
+      active = false;
+    };
+  }, [effectiveModelId, estimateVoiceIdsKey, projectId, renderClient]);
+
+  const renderEstimates = useMemo(() => {
+    if (!estimablePlan) return undefined;
+    const calibratedByVoice = Object.create(null) as Record<string, number>;
+    if (estimateContextState.status === "ready")
+      for (const calibration of estimateContextState.value.calibrations)
+        if (
+          calibration.modelId === effectiveModelId &&
+          estimateVoiceIds.includes(calibration.voiceId)
+        )
+          calibratedByVoice[calibration.voiceId] =
+            calibration.millisecondsPerNormalizedCharacter;
+    const calibration = {
+      millisecondsPerNormalizedCharacterByVoice: calibratedByVoice,
+    };
+    const speechPlan: EstimablePlan = {
+      entries: estimablePlan.entries.filter((entry) => entry.type === "speech"),
+    };
+    const speechDurationMs = estimatePlanDurationMs(speechPlan, calibration);
+    const durationMs = estimatePlanDurationMs(estimablePlan, calibration);
+    const mp3Bytes = estimateMp3Bytes(durationMs, 192);
+    const cacheBytes = estimateCacheBytes(speechDurationMs, 24_000, 2, 1);
+    return {
+      durationMs,
+      mp3Bytes,
+      cacheBytes,
+      peakDiskBytes: estimatePeakDiskBytes({
+        speechCacheBytes: cacheBytes,
+        totalDurationMs: durationMs,
+        bitrateKbps: 192,
+        sampleRate: 24_000,
+        bytesPerSample: 2,
+        channels: 1,
+      }),
+      allVoicesCalibrated:
+        effectiveModelId !== null &&
+        estimateVoiceIds.length > 0 &&
+        estimateVoiceIds.every((voiceId) =>
+          Object.hasOwn(calibratedByVoice, voiceId),
+        ),
+    };
+  }, [effectiveModelId, estimablePlan, estimateContextState, estimateVoiceIds]);
 
   const cleanedFencedSource = useMemo(
     () =>
@@ -913,19 +1144,58 @@ export function ProjectsPage({
 
   const startRender = async () => {
     if (!renderClient || !project) return;
+    const renderProjectId = project.id;
+    const renderStartOperation = ++renderStartOperationRef.current;
+    const isCurrentRenderStart = () =>
+      renderStartOperationRef.current === renderStartOperation &&
+      currentRouteProjectIdRef.current === renderProjectId;
     setRenderStarting(true);
     setRenderError("");
+    let startNotice = "Rendering started.";
     try {
       if (isDirty && !(await saveNow()))
         throw new Error("Save valid project changes before rendering.");
-      const job = await renderClient.startProject(project.id);
+      if (
+        diskSpaceCheckEnabled &&
+        renderEstimates &&
+        estimateContextState.status === "ready"
+      ) {
+        const freeSpaceBytes = estimateContextState.value.freeSpaceBytes;
+        const hardUsableBytes = renderDiskSpaceUsableBytes(
+          freeSpaceBytes,
+          RENDER_DISK_HARD_RESERVE_PERCENT,
+        );
+        if (renderEstimates.peakDiskBytes > hardUsableBytes)
+          throw new Error(
+            renderDiskSpaceBlockMessage(
+              renderEstimates.peakDiskBytes,
+              freeSpaceBytes,
+              hardUsableBytes,
+            ),
+          );
+        const softUsableBytes = renderDiskSpaceUsableBytes(
+          freeSpaceBytes,
+          RENDER_DISK_SOFT_RESERVE_PERCENT,
+        );
+        if (renderEstimates.peakDiskBytes > softUsableBytes)
+          startNotice = renderDiskSpaceWarningMessage(
+            renderEstimates.peakDiskBytes,
+            freeSpaceBytes,
+            softUsableBytes,
+          );
+      }
+      const job = await renderClient.startProject(renderProjectId, {
+        diskSpaceCheckEnabled,
+      });
+      if (!isCurrentRenderStart()) return;
+      renderStartRevisionRef.current += 1;
       setSelectedRenderJob(job);
       if (job.state === "complete") setCompletedRenderJob(job);
-      setNotice("Rendering started.");
+      setNotice(startNotice);
     } catch (error) {
-      setRenderError(message(error));
+      if (isCurrentRenderStart()) setRenderError(message(error));
     } finally {
-      setRenderStarting(false);
+      if (isCurrentRenderStart()) setRenderStarting(false);
     }
   };
 
@@ -1216,6 +1486,28 @@ export function ProjectsPage({
                           label="Script statistics above editor"
                         />
                       </div>
+                      <EstimateStrip
+                        wordCount={countWords(draft.scriptSource)}
+                        allVoicesCalibrated={
+                          renderEstimates?.allVoicesCalibrated ?? false
+                        }
+                        {...(renderEstimates
+                          ? {
+                              durationMs: renderEstimates.durationMs,
+                              mp3Bytes: renderEstimates.mp3Bytes,
+                              cacheBytes: renderEstimates.cacheBytes,
+                              peakDiskBytes: renderEstimates.peakDiskBytes,
+                            }
+                          : {})}
+                        {...(estimateContextState.status === "ready"
+                          ? {
+                              freeSpaceBytes:
+                                estimateContextState.value.freeSpaceBytes,
+                            }
+                          : estimateContextState.status === "unavailable"
+                            ? { freeSpaceBytes: null }
+                            : {})}
+                      />
                       <div
                         className={styles.panelScrollBody}
                         role="region"
@@ -1514,6 +1806,18 @@ export function ProjectsPage({
                   render may take longer while voice segments are generated;
                   later edits are faster when unchanged segments can be reused.
                 </p>
+                <label className={styles.check}>
+                  <input
+                    type="checkbox"
+                    checked={diskSpaceCheckEnabled}
+                    onChange={(event) => {
+                      const enabled = event.target.checked;
+                      setDiskSpaceCheckEnabled(enabled);
+                      storeDiskSpaceCheckEnabled(enabled);
+                    }}
+                  />
+                  Block renders when disk space is insufficient
+                </label>
                 {renderError ? (
                   <p className={styles.fieldError} role="alert">
                     {renderError}
@@ -1580,6 +1884,17 @@ export function ProjectsPage({
                       {...(renderWaveform ? { waveform: renderWaveform } : {})}
                     />
                     <div className={styles.renderDownloads}>
+                      <button
+                        type="button"
+                        className={styles.textLinkButton}
+                        aria-pressed={completedRenderJob.pinned}
+                        disabled={renderActive || pinBusy}
+                        onClick={() => void toggleCompletedRenderPin()}
+                      >
+                        {completedRenderJob.pinned
+                          ? "Unpin completed output"
+                          : "Pin completed output"}
+                      </button>
                       <button
                         type="button"
                         className={styles.textLinkButton}

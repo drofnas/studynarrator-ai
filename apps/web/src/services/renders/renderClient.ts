@@ -1,12 +1,17 @@
 import {
   BoundaryErrorSchema,
   RenderArtifactCollectionSchema,
+  RenderEstimateContextInputSchema,
+  RenderEstimateContextResultSchema,
   RenderHistorySegmentCollectionSchema,
   RenderIdSchema,
   RenderJobCollectionSchema,
   RenderJobSchema,
+  RenderPinInputSchema,
+  RenderStartOptionsSchema,
   RenderWaveformSchema,
   type RenderClient,
+  type RenderJob,
   type StudyNarratorBridge,
 } from "@studynarrator/shared-types";
 
@@ -32,15 +37,42 @@ async function read<T>(
   return parse(body);
 }
 
+export interface RenderProgressClient extends RenderClient {
+  subscribe?: (
+    renderId: string,
+    onJob: (job: RenderJob) => void,
+    onDropped: () => void,
+  ) => () => void;
+}
+
+type RenderEventSourceFactory = (url: string) => EventSource;
+
 export function createRestRenderClient(
   fetchInput: typeof fetch = fetch,
-): RenderClient {
+  createEventSource: RenderEventSourceFactory = (url) => new EventSource(url),
+): RenderProgressClient {
   return {
-    async startProject(projectId) {
+    async getEstimateContext(input) {
+      const parsed = RenderEstimateContextInputSchema.parse(input);
+      return await read(
+        await fetchInput("/api/renders/estimate-context", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(parsed),
+        }),
+        (body) => RenderEstimateContextResultSchema.parse(body),
+      );
+    },
+    async startProject(projectId, options) {
+      const parsed = RenderStartOptionsSchema.parse(options);
       return await read(
         await fetchInput(
           `/api/projects/${encodeURIComponent(projectId)}/renders`,
-          { method: "POST" },
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(parsed),
+          },
         ),
         (body) => RenderJobSchema.parse(body),
       );
@@ -59,6 +91,54 @@ export function createRestRenderClient(
         (body) => RenderJobSchema.parse(body),
       );
     },
+    subscribe(renderId, onJob, onDropped) {
+      const source = createEventSource(
+        `/api/renders/${encodeURIComponent(RenderIdSchema.parse(renderId))}/events`,
+      );
+      let closed = false;
+      let dropped = false;
+
+      const close = () => {
+        if (closed) return;
+        closed = true;
+        source.close();
+      };
+      const reportDropped = () => {
+        if (closed || dropped) return;
+        dropped = true;
+        onDropped();
+      };
+      const parse = (event: MessageEvent<string>) => {
+        if (closed) return undefined;
+        try {
+          return RenderJobSchema.parse(JSON.parse(event.data) as unknown);
+        } catch {
+          close();
+          if (!dropped) {
+            dropped = true;
+            onDropped();
+          }
+          return undefined;
+        }
+      };
+
+      source.addEventListener("progress", (event) => {
+        const job = parse(event as MessageEvent<string>);
+        if (job) onJob(job);
+      });
+      source.addEventListener("terminal", (event) => {
+        const job = parse(event as MessageEvent<string>);
+        if (!job) return;
+        try {
+          onJob(job);
+        } finally {
+          close();
+        }
+      });
+      source.addEventListener("error", reportDropped);
+
+      return close;
+    },
     async cancel(renderId) {
       return await read(
         await fetchInput(
@@ -73,6 +153,20 @@ export function createRestRenderClient(
         await fetchInput(`/api/renders/${encodeURIComponent(renderId)}/retry`, {
           method: "POST",
         }),
+        (body) => RenderJobSchema.parse(body),
+      );
+    },
+    async setPinned(renderId, pinned) {
+      const input = RenderPinInputSchema.parse({ renderId, pinned });
+      return await read(
+        await fetchInput(
+          `/api/renders/${encodeURIComponent(input.renderId)}/pin`,
+          {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ pinned: input.pinned }),
+          },
+        ),
         (body) => RenderJobSchema.parse(body),
       );
     },
@@ -176,6 +270,6 @@ export function createRestRenderClient(
 
 export function resolveRenderClient(
   browserWindow: Window = window,
-): RenderClient {
+): RenderProgressClient {
   return browserWindow.studyNarrator?.renders ?? createRestRenderClient();
 }

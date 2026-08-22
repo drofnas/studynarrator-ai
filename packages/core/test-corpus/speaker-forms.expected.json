@@ -1,0 +1,325 @@
+{
+  "parse": {
+    "grammarVersion": 1,
+    "cirSchemaVersion": 1,
+    "source": "[speaker_teacher]\nStandalone directive speech.\nBefore an inline [speaker_student] directive speech.\n[speaker_teacher]\n[speaker_student]\nConsecutive directives leave this with the student.\n[speaker_1bad] Numeric-leading speaker speech.\nThis next line carries the numeric-leading speaker.\n",
+    "nodes": [
+      {
+        "ordinal": 1,
+        "range": {
+          "start": {
+            "line": 2,
+            "column": 1
+          },
+          "end": {
+            "line": 2,
+            "column": 29
+          }
+        },
+        "type": "speech",
+        "speakerId": "teacher",
+        "rawText": "Standalone directive speech.",
+        "readableText": "Standalone directive speech.",
+        "annotations": []
+      },
+      {
+        "ordinal": 2,
+        "range": {
+          "start": {
+            "line": 3,
+            "column": 1
+          },
+          "end": {
+            "line": 3,
+            "column": 17
+          }
+        },
+        "type": "speech",
+        "speakerId": "teacher",
+        "rawText": "Before an inline",
+        "readableText": "Before an inline",
+        "annotations": []
+      },
+      {
+        "ordinal": 3,
+        "range": {
+          "start": {
+            "line": 3,
+            "column": 36
+          },
+          "end": {
+            "line": 3,
+            "column": 53
+          }
+        },
+        "type": "speech",
+        "speakerId": "student",
+        "rawText": "directive speech.",
+        "readableText": "directive speech.",
+        "annotations": []
+      },
+      {
+        "ordinal": 4,
+        "range": {
+          "start": {
+            "line": 6,
+            "column": 1
+          },
+          "end": {
+            "line": 6,
+            "column": 52
+          }
+        },
+        "type": "speech",
+        "speakerId": "student",
+        "rawText": "Consecutive directives leave this with the student.",
+        "readableText": "Consecutive directives leave this with the student.",
+        "annotations": []
+      },
+      {
+        "ordinal": 5,
+        "range": {
+          "start": {
+            "line": 7,
+            "column": 16
+          },
+          "end": {
+            "line": 7,
+            "column": 47
+          }
+        },
+        "type": "speech",
+        "speakerId": "1bad",
+        "rawText": "Numeric-leading speaker speech.",
+        "readableText": "Numeric-leading speaker speech.",
+        "annotations": []
+      },
+      {
+        "ordinal": 6,
+        "range": {
+          "start": {
+            "line": 8,
+            "column": 1
+          },
+          "end": {
+            "line": 8,
+            "column": 52
+          }
+        },
+        "type": "speech",
+        "speakerId": "1bad",
+        "rawText": "This next line carries the numeric-leading speaker.",
+        "readableText": "This next line carries the numeric-leading speaker.",
+        "annotations": []
+      }
+    ],
+    "discoveries": {
+      "speakers": [
+        {
+          "id": "teacher",
+          "occurrences": [
+            {
+              "range": {
+                "start": {
+                  "line": 1,
+                  "column": 1
+                },
+                "end": {
+                  "line": 1,
+                  "column": 18
+                }
+              }
+            },
+            {
+              "range": {
+                "start": {
+                  "line": 4,
+                  "column": 1
+                },
+                "end": {
+                  "line": 4,
+                  "column": 18
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": "student",
+          "occurrences": [
+            {
+              "range": {
+                "start": {
+                  "line": 3,
+                  "column": 18
+                },
+                "end": {
+                  "line": 3,
+                  "column": 35
+                }
+              }
+            },
+            {
+              "range": {
+                "start": {
+                  "line": 5,
+                  "column": 1
+                },
+                "end": {
+                  "line": 5,
+                  "column": 18
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": "1bad",
+          "occurrences": [
+            {
+              "range": {
+                "start": {
+                  "line": 7,
+                  "column": 1
+                },
+                "end": {
+                  "line": 7,
+                  "column": 15
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "pauses": [],
+      "sections": [],
+      "pronunciations": []
+    },
+    "summary": {
+      "speakerCount": 3,
+      "pauseIdCount": 0,
+      "sectionCount": 0,
+      "speechSegmentCount": 6,
+      "explicitPauseSegmentCount": 0,
+      "pronunciationAnnotationCount": 0,
+      "paragraphBreakCount": 0,
+      "characterCount": 287
+    },
+    "errors": [],
+    "warnings": []
+  },
+  "transform": {
+    "transformVersion": 1,
+    "source": "[speaker_teacher]\nStandalone directive speech.\nBefore an inline [speaker_student] directive speech.\n[speaker_teacher]\n[speaker_student]\nConsecutive directives leave this with the student.\n[speaker_1bad] Numeric-leading speaker speech.\nThis next line carries the numeric-leading speaker.\n",
+    "segments": [
+      {
+        "nodeOrdinal": 1,
+        "speakerId": "teacher",
+        "sourceRange": {
+          "start": {
+            "line": 2,
+            "column": 1
+          },
+          "end": {
+            "line": 2,
+            "column": 29
+          }
+        },
+        "readableText": "Standalone directive speech.",
+        "ttsText": "Standalone directive speech.",
+        "matches": []
+      },
+      {
+        "nodeOrdinal": 2,
+        "speakerId": "teacher",
+        "sourceRange": {
+          "start": {
+            "line": 3,
+            "column": 1
+          },
+          "end": {
+            "line": 3,
+            "column": 17
+          }
+        },
+        "readableText": "Before an inline",
+        "ttsText": "Before an inline",
+        "matches": []
+      },
+      {
+        "nodeOrdinal": 3,
+        "speakerId": "student",
+        "sourceRange": {
+          "start": {
+            "line": 3,
+            "column": 36
+          },
+          "end": {
+            "line": 3,
+            "column": 53
+          }
+        },
+        "readableText": "directive speech.",
+        "ttsText": "directive speech.",
+        "matches": []
+      },
+      {
+        "nodeOrdinal": 4,
+        "speakerId": "student",
+        "sourceRange": {
+          "start": {
+            "line": 6,
+            "column": 1
+          },
+          "end": {
+            "line": 6,
+            "column": 52
+          }
+        },
+        "readableText": "Consecutive directives leave this with the student.",
+        "ttsText": "Consecutive directives leave this with the student.",
+        "matches": []
+      },
+      {
+        "nodeOrdinal": 5,
+        "speakerId": "1bad",
+        "sourceRange": {
+          "start": {
+            "line": 7,
+            "column": 16
+          },
+          "end": {
+            "line": 7,
+            "column": 47
+          }
+        },
+        "readableText": "Numeric-leading speaker speech.",
+        "ttsText": "Numeric-leading speaker speech.",
+        "matches": []
+      },
+      {
+        "nodeOrdinal": 6,
+        "speakerId": "1bad",
+        "sourceRange": {
+          "start": {
+            "line": 8,
+            "column": 1
+          },
+          "end": {
+            "line": 8,
+            "column": 52
+          }
+        },
+        "readableText": "This next line carries the numeric-leading speaker.",
+        "ttsText": "This next line carries the numeric-leading speaker.",
+        "matches": []
+      }
+    ],
+    "readableTranscript": "Standalone directive speech.\nBefore an inline\ndirective speech.\nConsecutive directives leave this with the student.\nNumeric-leading speaker speech.\nThis next line carries the numeric-leading speaker.",
+    "ttsTranscript": "Standalone directive speech.\nBefore an inline\ndirective speech.\nConsecutive directives leave this with the student.\nNumeric-leading speaker speech.\nThis next line carries the numeric-leading speaker.",
+    "matches": [],
+    "errors": [],
+    "warnings": [],
+    "synthesisReady": true
+  }
+}

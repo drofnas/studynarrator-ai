@@ -4,8 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
 import request from "supertest";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  RenderDiskSpaceError,
   createConnectionService,
   createPersistenceService,
   createScriptGenerationService,
@@ -13,6 +14,7 @@ import {
   createUnavailablePersistenceService,
   createVoiceCatalogService,
   type DiagnosticsContext,
+  type RenderService,
 } from "@studynarrator/application";
 import {
   BackupRestoreError,
@@ -26,14 +28,21 @@ import {
   HealthSchema,
   PersistenceBackupCollectionSchema,
   PersistenceBackupRestoreResultSchema,
+  RetentionReclaimPreviewSchema,
+  RetentionReclaimResultSchema,
+  RetentionSettingsSchema,
+  RetentionUsageSchema,
   ProjectDetailSchema,
   ProjectPreviewResultSchema,
   ProjectSummaryCollectionSchema,
+  RenderEstimateContextResultSchema,
+  RenderJobSchema,
   RuntimeSchema,
   SpeechCacheCleanupResultSchema,
   SpeechCacheStatusSchema,
   SpeechCatalogSchema,
   SystemDiagnosticsSchema,
+  type RenderJob,
 } from "@studynarrator/shared-types";
 import { attachStaticWebApplication, createExpressApp } from "./app.js";
 import { REST_API_MANIFEST } from "./apiManifest.js";
@@ -70,6 +79,120 @@ async function listen(
   return server;
 }
 
+function serverUrl(server: Server, path: string): string {
+  const address = server.address();
+  if (!address || typeof address === "string")
+    throw new Error("Expected the test server to listen on TCP.");
+  return `http://127.0.0.1:${String(address.port)}${path}`;
+}
+
+async function openEventStream(
+  server: Server,
+  path: string,
+  signal?: AbortSignal,
+) {
+  const response = await fetch(serverUrl(server, path), {
+    ...(signal ? { signal } : {}),
+    headers: { accept: "text/event-stream" },
+  });
+  if (!response.body) throw new Error("Expected an SSE response body.");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let text = "";
+  const readNext = async (): Promise<boolean> => {
+    const result = await reader.read();
+    if (result.done) {
+      text += decoder.decode();
+      return false;
+    }
+    text += decoder.decode(result.value, { stream: true });
+    return true;
+  };
+  return {
+    response,
+    async readUntil(fragment: string): Promise<string> {
+      while (!text.includes(fragment)) {
+        if (!(await readNext()))
+          throw new Error(`SSE stream ended before ${fragment}.`);
+      }
+      return text;
+    },
+    async readToEnd(): Promise<string> {
+      while (await readNext()) {
+        // Read until the server closes the terminal stream.
+      }
+      return text;
+    },
+  };
+}
+
+function renderJobInState(
+  job: RenderJob,
+  state: RenderJob["state"],
+): RenderJob {
+  const terminal =
+    state === "complete" || state === "failed" || state === "canceled";
+  return RenderJobSchema.parse({
+    ...job,
+    state,
+    progress: { ...job.progress, phase: state },
+    error:
+      state === "failed"
+        ? {
+            code: "RENDER_SYNTHESIS_FAILED",
+            message: "Speech generation failed for the current segment.",
+            retryable: true,
+            phase: "synthesizing",
+            entryOrdinal: null,
+            chunkOrdinal: null,
+            sourceRange: null,
+            speakerId: null,
+            voiceId: null,
+          }
+        : null,
+    startedAt: state === "queued" ? null : job.startedAt,
+    finishedAt: terminal ? job.finishedAt : null,
+  });
+}
+
+function observedRenderService(
+  base: RenderService,
+  initial: RenderJob,
+  reconcileAfterSubscribe?: RenderJob,
+) {
+  let current = initial;
+  let observer: ((job: RenderJob) => void) | undefined;
+  let resolveUnsubscribed: (() => void) | undefined;
+  const unsubscribed = new Promise<void>((resolve) => {
+    resolveUnsubscribed = resolve;
+  });
+  const unsubscribe = vi.fn(() => {
+    observer = undefined;
+    resolveUnsubscribed?.();
+  });
+  const get = vi.fn(async () => current);
+  const subscribe = vi.fn(
+    (_renderId: string, callback: (job: RenderJob) => void) => {
+      observer = callback;
+      if (reconcileAfterSubscribe) current = reconcileAfterSubscribe;
+      return unsubscribe;
+    },
+  );
+  const service: RenderService = { ...base, get, subscribe };
+  return {
+    service,
+    get,
+    subscribe,
+    unsubscribe,
+    unsubscribed,
+    publish(job: RenderJob) {
+      current = job;
+      if (!observer) throw new Error("Expected an active render observer.");
+      observer(job);
+    },
+  };
+}
+
 afterEach(async () => {
   await Promise.all(
     [...openServers].map(
@@ -87,7 +210,9 @@ afterEach(async () => {
   openServices.clear();
 });
 
-async function fixture() {
+async function fixture(logger?: {
+  error(bindings: Record<string, unknown>, message: string): void;
+}) {
   const databasePath = join(
     mkdtempSync(join(tmpdir(), "studynarrator-server-")),
     "app.sqlite",
@@ -113,6 +238,29 @@ async function fixture() {
         restoredFrom: input.backupPath,
         safetyCopyPath:
           "/tmp/backups/pre-restore-2026-08-12T12-00-00-000Z.sqlite",
+      }),
+    },
+    retention: {
+      usage: async () => ({
+        speechCache: { entries: 0, bytes: 0 },
+        jobSnapshots: { entries: 0, bytes: 0 },
+        renderArtifacts: { entries: 0, bytes: 0 },
+      }),
+      previewReclaim: async () => ({
+        reclaimable: {
+          speechCache: { entries: 0, bytes: 0 },
+          jobSnapshots: { entries: 0, bytes: 0 },
+          renderArtifacts: { entries: 0, bytes: 0 },
+        },
+        skipped: false,
+      }),
+      reclaim: async () => ({
+        reclaimed: {
+          speechCache: { entries: 0, bytes: 0 },
+          jobSnapshots: { entries: 0, bytes: 0 },
+          renderArtifacts: { entries: 0, bytes: 0 },
+        },
+        skipped: false,
       }),
     },
   });
@@ -268,6 +416,7 @@ async function fixture() {
     projectId: renderFixture.projectId,
     planId: renderFixture.planId,
     retryOfRenderId: null,
+    pinned: false,
     state: "complete" as const,
     progress: {
       phase: "complete" as const,
@@ -306,10 +455,19 @@ async function fixture() {
   };
   const renders = {
     startProject: async () => renderJob(),
+    getEstimateContext: async () => ({
+      freeSpaceBytes: 5_000_000,
+      calibrations: [],
+    }),
     list: async () => [renderJob()],
     get: async () => renderJob(),
+    subscribe: () => () => undefined,
     cancel: async () => renderJob(),
     retry: async () => renderJob(),
+    setPinned: async (_renderId: string, pinned: boolean) => ({
+      ...renderJob(),
+      pinned,
+    }),
     listArtifacts: async () => [artifact],
     exportArtifact: async () => ({
       disposition: "download" as const,
@@ -371,6 +529,7 @@ async function fixture() {
         renders,
         scriptGeneration,
         context,
+        ...(logger === undefined ? {} : { logger }),
       }),
     ),
   };
@@ -419,6 +578,152 @@ describe("Express diagnostics API", () => {
       },
     });
     expect(JSON.stringify(response.body)).not.toContain("must-not-leak");
+  });
+});
+
+describe("render start preflight boundary", () => {
+  it("defaults and transports strict options and preserves the safe 507 message", async () => {
+    const { app, renders } = await fixture();
+    const startProject = vi.spyOn(renders, "startProject");
+    const projectId = "00000000-0000-4000-8000-000000000001";
+
+    await request(app).post(`/api/projects/${projectId}/renders`).expect(202);
+    expect(startProject).toHaveBeenNthCalledWith(1, projectId, {
+      diskSpaceCheckEnabled: true,
+    });
+
+    await request(app)
+      .post(`/api/projects/${projectId}/renders`)
+      .send({ diskSpaceCheckEnabled: false })
+      .expect(202);
+    expect(startProject).toHaveBeenNthCalledWith(2, projectId, {
+      diskSpaceCheckEnabled: false,
+    });
+
+    await request(app)
+      .post(`/api/projects/${projectId}/renders`)
+      .send({ diskSpaceCheckEnabled: true, scriptLengthLimit: 1 })
+      .expect(400);
+    expect(startProject).toHaveBeenCalledTimes(2);
+
+    startProject.mockRejectedValueOnce(
+      new RenderDiskSpaceError(96_000, 100_000n, 90_000n),
+    );
+    const blocked = await request(app)
+      .post(`/api/projects/${projectId}/renders`)
+      .send({ diskSpaceCheckEnabled: true })
+      .expect(507);
+    expect(blocked.body).toEqual({
+      error: {
+        code: "RENDER_DISK_SPACE_INSUFFICIENT",
+        message:
+          "Render blocked: estimated peak disk use is 96000 bytes, but the data volume has 100000 free bytes and 90000 usable bytes after the required 10% reserve.",
+      },
+    });
+    expect(JSON.stringify(blocked.body)).not.toContain(projectId);
+  });
+});
+
+describe("Express boundary logging", () => {
+  it("correlates known, validation, and unknown errors without logging request data", async () => {
+    const logger = { error: vi.fn() };
+    const { app } = await fixture(logger);
+    const missingProjectId = "00000000-0000-4000-8000-000000000099";
+    const secret = "private-request-value-must-not-leak";
+    const sensitiveProjectPath = "PrivateProjectName";
+
+    const known = await request(app)
+      .get(`/api/projects/${missingProjectId}?secret=${secret}`)
+      .expect(404);
+    expect(known.body).toEqual({
+      error: {
+        code: "NOT_FOUND",
+        message: "The requested persistence record does not exist.",
+      },
+    });
+    const pathValidation = await request(app)
+      .get(`/api/projects/${sensitiveProjectPath}`)
+      .expect(400);
+    expect(BoundaryErrorSchema.parse(pathValidation.body).error.code).toBe(
+      "VALIDATION_ERROR",
+    );
+    const validation = await request(app)
+      .post("/api/projects")
+      .send({ name: "", password: secret })
+      .expect(400);
+    expect(BoundaryErrorSchema.parse(validation.body).error.code).toBe(
+      "VALIDATION_ERROR",
+    );
+    const unknown = await request(app)
+      .post("/api/projects")
+      .set("content-type", "application/json")
+      .send(`{"name":"${secret}`)
+      .expect(500);
+    expect(unknown.body).toEqual({
+      error: {
+        code: "PERSISTENCE_BOUNDARY_ERROR",
+        message: "StudyNarrator could not complete the persistence operation.",
+      },
+    });
+
+    const responses = [known, pathValidation, validation, unknown];
+    const requestIds = responses.map(
+      ({ headers }) => headers["x-request-id"] as string,
+    );
+    expect(requestIds).toEqual([
+      expect.stringMatching(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u,
+      ),
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+    ]);
+    expect(new Set(requestIds).size).toBe(4);
+    const boundaryLogs = logger.error.mock.calls.map(
+      ([bindings]) => bindings as Record<string, unknown>,
+    );
+    expect(boundaryLogs).toEqual([
+      expect.objectContaining({
+        event: "boundary-error",
+        requestId: requestIds[0],
+        method: "GET",
+        path: "/api/projects/:projectId",
+        status: 404,
+        code: "NOT_FOUND",
+        cause: { name: "Error", code: "PERSISTENCE_NOT_FOUND" },
+      }),
+      expect.objectContaining({
+        event: "boundary-error",
+        requestId: requestIds[1],
+        method: "GET",
+        path: "/api/projects/:projectId",
+        status: 400,
+        code: "VALIDATION_ERROR",
+        cause: { name: "ZodError" },
+      }),
+      expect.objectContaining({
+        event: "boundary-error",
+        requestId: requestIds[2],
+        method: "POST",
+        path: "/api/projects",
+        status: 400,
+        code: "VALIDATION_ERROR",
+        cause: { name: "ZodError" },
+      }),
+      expect.objectContaining({
+        event: "boundary-error",
+        requestId: requestIds[3],
+        method: "POST",
+        path: "[unmatched]",
+        status: 500,
+        code: "PERSISTENCE_BOUNDARY_ERROR",
+        cause: { name: "SyntaxError" },
+      }),
+    ]);
+    expect(JSON.stringify(boundaryLogs)).not.toContain(secret);
+    expect(JSON.stringify(boundaryLogs)).not.toContain(sensitiveProjectPath);
+    expect(JSON.stringify(boundaryLogs)).not.toContain("query");
+    expect(JSON.stringify(boundaryLogs)).not.toContain("body");
   });
 });
 
@@ -609,8 +914,8 @@ describe("Express persistence API", () => {
     const persistence = createUnavailablePersistenceService({
       contractVersion: 1,
       state: "unavailable",
-      databaseSchemaVersion: 4,
-      targetDatabaseSchemaVersion: 4,
+      databaseSchemaVersion: 7,
+      targetDatabaseSchemaVersion: 7,
       databasePath: "/tmp/studynarrator.sqlite",
       latestBackupPath: "/tmp/backups/recovery.sqlite",
       code: "MIGRATION_FAILED",
@@ -781,6 +1086,171 @@ describe("Express render review media", () => {
   });
 });
 
+describe("Express render progress events", () => {
+  const renderId = "00000000-0000-4000-8000-000000000003";
+
+  it("streams progress, heartbeats, and one terminal event before ending", async () => {
+    const base = await fixture();
+    const completed = RenderJobSchema.parse(await base.renders.get());
+    const queued = renderJobInState(completed, "queued");
+    const synthesizing = renderJobInState(completed, "synthesizing");
+    const observed = observedRenderService(base.renders, queued);
+    const intervalSpy = vi.spyOn(globalThis, "setInterval");
+    const clearIntervalSpy = vi.spyOn(globalThis, "clearInterval");
+    try {
+      const server = await listen(
+        createExpressApp({
+          service: base.service,
+          renders: observed.service,
+          context,
+        }),
+      );
+      const stream = await openEventStream(
+        server,
+        `/api/renders/${renderId}/events`,
+      );
+
+      expect(stream.response.status).toBe(200);
+      expect(stream.response.headers.get("content-type")).toBe(
+        "text/event-stream",
+      );
+      expect(stream.response.headers.get("cache-control")).toBe("no-cache");
+      expect(stream.response.headers.get("connection")).toBe("keep-alive");
+      expect(stream.response.headers.get("x-accel-buffering")).toBe("no");
+      await stream.readUntil('"state":"queued"');
+
+      const intervalCallIndex = intervalSpy.mock.calls.findIndex(
+        ([, delay]) => delay === 15_000,
+      );
+      expect(intervalCallIndex).toBeGreaterThanOrEqual(0);
+      const intervalCall = intervalSpy.mock.calls[intervalCallIndex]!;
+      const heartbeatTimer = intervalSpy.mock.results[intervalCallIndex]!
+        .value as ReturnType<typeof setInterval>;
+      expect(heartbeatTimer.hasRef()).toBe(false);
+      intervalCall[0]();
+      await stream.readUntil(": heartbeat\n\n");
+
+      observed.publish(synthesizing);
+      await stream.readUntil('"state":"synthesizing"');
+      observed.publish(completed);
+      const body = await stream.readToEnd();
+
+      expect(body.match(/^event: progress$/gmu)).toHaveLength(2);
+      expect(body.match(/^event: terminal$/gmu)).toHaveLength(1);
+      expect(body).toContain('"state":"complete"');
+      for (const frame of body.split("\n\n")) {
+        const data = frame
+          .split("\n")
+          .find((line) => line.startsWith("data: "));
+        if (data)
+          RenderJobSchema.parse(
+            JSON.parse(data.slice("data: ".length)) as unknown,
+          );
+      }
+      expect(observed.get).toHaveBeenCalledTimes(2);
+      expect(observed.subscribe).toHaveBeenCalledOnce();
+      expect(observed.unsubscribe).toHaveBeenCalledOnce();
+      expect(
+        clearIntervalSpy.mock.calls.filter(
+          ([timer]) => timer === heartbeatTimer,
+        ),
+      ).toHaveLength(1);
+    } finally {
+      clearIntervalSpy.mockRestore();
+      intervalSpy.mockRestore();
+    }
+  });
+
+  it("reconciles a terminal update that occurs before observer registration", async () => {
+    const base = await fixture();
+    const completed = RenderJobSchema.parse(await base.renders.get());
+    const queued = renderJobInState(completed, "queued");
+    const observed = observedRenderService(base.renders, queued, completed);
+    const server = await listen(
+      createExpressApp({
+        service: base.service,
+        renders: observed.service,
+        context,
+      }),
+    );
+
+    const stream = await openEventStream(
+      server,
+      `/api/renders/${renderId}/events`,
+    );
+    const body = await stream.readToEnd();
+
+    expect(body.match(/^event: progress$/gmu)).toHaveLength(1);
+    expect(body.match(/^event: terminal$/gmu)).toHaveLength(1);
+    expect(body).toContain('"state":"queued"');
+    expect(body).toContain('"state":"complete"');
+    expect(observed.get).toHaveBeenCalledTimes(2);
+    expect(observed.unsubscribe).toHaveBeenCalledOnce();
+  });
+
+  it("unsubscribes and clears the heartbeat when the client disconnects", async () => {
+    const base = await fixture();
+    const completed = RenderJobSchema.parse(await base.renders.get());
+    const queued = renderJobInState(completed, "queued");
+    const observed = observedRenderService(base.renders, queued);
+    const clearIntervalSpy = vi.spyOn(globalThis, "clearInterval");
+    const controller = new AbortController();
+    try {
+      const server = await listen(
+        createExpressApp({
+          service: base.service,
+          renders: observed.service,
+          context,
+        }),
+      );
+      const stream = await openEventStream(
+        server,
+        `/api/renders/${renderId}/events`,
+        controller.signal,
+      );
+      await stream.readUntil('"state":"queued"');
+
+      controller.abort();
+      await observed.unsubscribed;
+
+      expect(observed.unsubscribe).toHaveBeenCalledOnce();
+      expect(clearIntervalSpy).toHaveBeenCalledOnce();
+    } finally {
+      controller.abort();
+      clearIntervalSpy.mockRestore();
+    }
+  });
+
+  it.each(["failed", "canceled"] as const)(
+    "classifies an initial %s render as terminal without subscribing",
+    async (state) => {
+      const base = await fixture();
+      const completed = RenderJobSchema.parse(await base.renders.get());
+      const terminal = renderJobInState(completed, state);
+      const observed = observedRenderService(base.renders, terminal);
+      const server = await listen(
+        createExpressApp({
+          service: base.service,
+          renders: observed.service,
+          context,
+        }),
+      );
+
+      const stream = await openEventStream(
+        server,
+        `/api/renders/${renderId}/events`,
+      );
+      const body = await stream.readToEnd();
+
+      expect(body.match(/^event: progress$/gmu)).toBeNull();
+      expect(body.match(/^event: terminal$/gmu)).toHaveLength(1);
+      expect(body).toContain(`"state":"${state}"`);
+      expect(observed.get).toHaveBeenCalledOnce();
+      expect(observed.subscribe).not.toHaveBeenCalled();
+    },
+  );
+});
+
 interface ExpressRouteLayer {
   route?: {
     path: string;
@@ -827,10 +1297,10 @@ describe("REST API operation manifest", () => {
       ({ method, path }) => `${method} ${path}`,
     );
     expect(registered.sort()).toEqual([...declared].sort());
-    expect(new Set(declared).size).toBe(53);
+    expect(new Set(declared).size).toBe(61);
   });
 
-  it("exercises a successful schema-valid response for all 53 operations", async () => {
+  it("exercises a successful schema-valid response for all 61 operations", async () => {
     const { app } = await fixture();
     const covered = new Set<string>();
     const call = async (
@@ -905,6 +1375,33 @@ describe("REST API operation manifest", () => {
     );
     await call("GET", "/api/settings/pacing", 200);
     await call("PUT", "/api/settings/pacing", 200, DEFAULT_SYSTEM_TIMING);
+    const retention = RetentionSettingsSchema.parse(
+      (await call("GET", "/api/settings/retention", 200)).body as unknown,
+    );
+    RetentionSettingsSchema.parse(
+      (
+        await call("PUT", "/api/settings/retention", 200, {
+          speechCacheTtl: retention.speechCacheTtl,
+          jobSnapshotTtl: retention.jobSnapshotTtl,
+          renderArtifactTtl: retention.renderArtifactTtl,
+          speechCacheSizeCapBytes: retention.speechCacheSizeCapBytes,
+        })
+      ).body as unknown,
+    );
+    RetentionUsageSchema.parse(
+      (await call("GET", "/api/settings/retention/usage", 200)).body as unknown,
+    );
+    RetentionReclaimPreviewSchema.parse(
+      (await call("POST", "/api/settings/retention/reclaim-preview", 200))
+        .body as unknown,
+    );
+    RetentionReclaimResultSchema.parse(
+      (
+        await call("POST", "/api/settings/retention/reclaim", 200, {
+          confirm: true,
+        })
+      ).body as unknown,
+    );
     await call("GET", "/api/preferences/ignored-diagnostics", 200);
     await call("PUT", "/api/preferences/ignored-diagnostics", 200, []);
     GlobalLexiconEntryCollectionSchema.parse(
@@ -996,13 +1493,44 @@ describe("REST API operation manifest", () => {
       ).text,
     ).toBe("Edited project prompt");
     await call("POST", `/api/projects/${created.id}/skill-export`, 200, {});
+    RenderEstimateContextResultSchema.parse(
+      (
+        await call("POST", "/api/renders/estimate-context", 200, {
+          modelId: "model",
+          voiceIds: ["voice"],
+        })
+      ).body as unknown,
+    );
     const render = (
       await call("POST", `/api/projects/${created.id}/renders`, 202)
     ).body as { id: string };
     await call("GET", `/api/projects/${created.id}/renders`, 200);
     await call("GET", `/api/renders/${render.id}`, 200);
+    const renderEvents = await call(
+      "GET",
+      `/api/renders/${render.id}/events`,
+      200,
+    );
+    expect(renderEvents.headers["content-type"]).toMatch(
+      /^text\/event-stream/u,
+    );
+    expect(renderEvents.text).toContain("event: terminal\n");
+    const terminalData = renderEvents.text
+      .split("\n")
+      .find((line) => line.startsWith("data: "));
+    expect(terminalData).toBeDefined();
+    RenderJobSchema.parse(
+      JSON.parse(terminalData!.slice("data: ".length)) as unknown,
+    );
     await call("POST", `/api/renders/${render.id}/cancel`, 200);
     await call("POST", `/api/renders/${render.id}/retry`, 202);
+    RenderJobSchema.parse(
+      (
+        await call("PUT", `/api/renders/${render.id}/pin`, 200, {
+          pinned: true,
+        })
+      ).body as unknown,
+    );
     const artifacts = (
       await call("GET", `/api/renders/${render.id}/artifacts`, 200)
     ).body as Array<{ id: string }>;
@@ -1053,6 +1581,11 @@ describe("REST API operation manifest", () => {
       request(app)
         .put("/api/settings/pacing")
         .send({ durationMs: -1 })
+        .expect(400),
+      request(app).put("/api/settings/retention").send({}).expect(400),
+      request(app)
+        .post("/api/settings/retention/reclaim")
+        .send({ confirm: false })
         .expect(400),
       request(app)
         .put("/api/preferences/ignored-diagnostics")
@@ -1110,10 +1643,23 @@ describe("REST API operation manifest", () => {
         .post("/api/projects/00000000-0000-4000-8000-000000000001/skill-export")
         .send({ sourceMaterial: secret })
         .expect(400),
+      request(app)
+        .post("/api/renders/estimate-context")
+        .send({
+          modelId: "model",
+          voiceIds: ["voice", "voice"],
+          apiKey: secret,
+        })
+        .expect(400),
       request(app).get("/api/projects/not-a-uuid/renders").expect(400),
       request(app).get("/api/renders/not-a-uuid").expect(400),
+      request(app).get("/api/renders/not-a-uuid/events").expect(400),
       request(app).post("/api/renders/not-a-uuid/cancel").expect(400),
       request(app).post("/api/renders/not-a-uuid/retry").expect(400),
+      request(app)
+        .put("/api/renders/not-a-uuid/pin")
+        .send({ pinned: true })
+        .expect(400),
       request(app).get("/api/renders/not-a-uuid/artifacts").expect(400),
       request(app).get("/api/renders/not-a-uuid/audio").expect(400),
       request(app).get("/api/renders/not-a-uuid/waveform").expect(400),

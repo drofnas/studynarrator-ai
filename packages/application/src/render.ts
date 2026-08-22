@@ -6,26 +6,41 @@ import {
   readFile,
   rename,
   rm,
+  statfs,
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { zipSync } from "fflate";
 import {
+  estimateCacheBytes,
+  estimatePeakDiskBytes,
+  estimatePlanDurationMs,
+  type EstimablePlan,
+} from "@studynarrator/core";
+import {
   RENDER_CONTRACT_VERSION,
+  RENDER_DISK_HARD_RESERVE_PERCENT,
+  RENDER_DISK_SOFT_RESERVE_PERCENT,
   RenderArtifactIdSchema,
+  RenderEstimateContextInputSchema,
+  RenderEstimateContextResultSchema,
   RenderHistorySegmentCollectionSchema,
   RenderIdSchema,
   RenderJobSchema,
+  RenderStartOptionsSchema,
+  renderDiskSpaceBlockMessage,
   RenderWaveformSchema,
   type RenderArtifact,
   type RenderClient,
   type RenderError,
+  type RenderEstimateContextResult,
   type RenderHistorySegment,
   type RenderJob,
   type RenderPlan,
   type RenderPlanEntry,
   type RenderProgress,
   type RenderSegment,
+  type RenderStartOptions,
   type RenderWaveform,
 } from "@studynarrator/shared-types";
 import { ProjectIdSchema } from "@studynarrator/shared-types";
@@ -36,6 +51,8 @@ import {
   normalizeSpeechWav,
   probeAudioFile,
   type RenderPlanStore,
+  type SpeechCacheActivityGate,
+  type SpeechCacheActivityLease,
 } from "@studynarrator/rendering";
 import type { StudyNarratorRepository } from "@studynarrator/persistence";
 import type { CachedSpeechSynthesis } from "./cachedSpeech.js";
@@ -56,6 +73,44 @@ class RenderMediaUnavailableError extends Error {
   readonly code = "RENDER_MEDIA_UNAVAILABLE";
 }
 
+export class RenderDiskSpaceError extends Error {
+  readonly code = "RENDER_DISK_SPACE_INSUFFICIENT";
+  readonly estimatedPeakBytes: number;
+  readonly freeSpaceBytes: bigint;
+  readonly usableBytes: bigint;
+
+  constructor(
+    estimatedPeakBytes: number,
+    freeSpaceBytes: bigint,
+    usableBytes: bigint,
+  ) {
+    super(
+      renderDiskSpaceBlockMessage(
+        estimatedPeakBytes,
+        freeSpaceBytes,
+        usableBytes,
+      ),
+    );
+    this.name = "RenderDiskSpaceError";
+    this.estimatedPeakBytes = estimatedPeakBytes;
+    this.freeSpaceBytes = freeSpaceBytes;
+    this.usableBytes = usableBytes;
+  }
+}
+
+interface RenderLifecycleLogger {
+  info(bindings: Record<string, unknown>, message: string): void;
+  warn(bindings: Record<string, unknown>, message: string): void;
+  error(bindings: Record<string, unknown>, message: string): void;
+}
+
+interface RenderFileSystemStats {
+  bavail: bigint;
+  bsize: bigint;
+}
+
+type RenderStatfs = (path: string) => Promise<RenderFileSystemStats>;
+
 export type RenderRepository = Pick<
   StudyNarratorRepository,
   | "getSpeechBackendConnection"
@@ -70,6 +125,8 @@ export type RenderRepository = Pick<
   | "getRenderArtifactPath"
   | "listRenderSegments"
   | "getRenderSegmentPath"
+  | "getVoiceTimingCalibration"
+  | "upsertVoiceTimingCalibration"
 > &
   Partial<Pick<StudyNarratorRepository, "getProject">>;
 
@@ -93,6 +150,7 @@ export interface RenderService extends Omit<
     renderId: string,
     ordinal: number,
   ): Promise<ResolvedRenderMedia>;
+  subscribe(renderId: string, callback: (job: RenderJob) => void): () => void;
   resolveDetailsArchive?(renderId: string): Promise<{
     bytes: Uint8Array;
     fileName: string;
@@ -225,9 +283,17 @@ export async function createRenderService(options: {
   now?: () => Date;
   createId?: () => string;
   planComputer: RenderPlanComputer;
+  logger: RenderLifecycleLogger;
+  statfs?: RenderStatfs;
+  activityGate?: SpeechCacheActivityGate;
 }): Promise<RenderService> {
   const now = options.now ?? (() => new Date());
   const createId = options.createId ?? randomUUID;
+  const readFileSystemStats: RenderStatfs =
+    options.statfs ??
+    (async (path) => {
+      return await statfs(path, { bigint: true });
+    });
   const root = resolve(options.dataDirectory, "renders");
   const stagingRoot = join(root, ".staging");
   if (
@@ -244,8 +310,17 @@ export async function createRenderService(options: {
 
   const queue: string[] = [];
   const controllers = new Map<string, AbortController>();
+  const subscribers = new Map<string, Set<(job: RenderJob) => void>>();
   const userCanceled = new Set<string>();
   const startingProjects = new Map<string, Promise<RenderJob>>();
+  const activities = new Map<string, SpeechCacheActivityLease>();
+  const reserveActivity = async (): Promise<
+    SpeechCacheActivityLease | undefined
+  > => await options.activityGate?.beginActivity();
+  const releaseActivity = (renderId: string): void => {
+    activities.get(renderId)?.release();
+    activities.delete(renderId);
+  };
   const ffprobePath =
     options.ffprobePath ??
     (options.ffmpegPath
@@ -288,7 +363,107 @@ export async function createRenderService(options: {
       finishedAt,
       progress: { ...job.progress, ...patch, phase: state, elapsedMs },
     });
-    return options.repository.updateRenderJob(next);
+    const persisted = options.repository.updateRenderJob(next);
+    if (!NONTERMINAL.has(persisted.state)) releaseActivity(persisted.id);
+    if (job.state !== persisted.state)
+      options.logger.info(
+        {
+          event: "render-phase-transition",
+          renderId: persisted.id,
+          projectId: persisted.projectId,
+          fromPhase: job.state,
+          toPhase: persisted.state,
+        },
+        "Render phase transitioned",
+      );
+    for (const subscriber of [...(subscribers.get(persisted.id) ?? [])]) {
+      try {
+        subscriber(persisted);
+      } catch {
+        // Observer failures must not interrupt the render or other observers.
+      }
+    }
+    return persisted;
+  };
+
+  const recordVoiceTimingCalibration = (
+    completed: RenderJob,
+    plan: RenderPlan,
+    modelId: string,
+  ): void => {
+    try {
+      const speechEntries = new Map(
+        plan.entries
+          .filter((entry) => entry.type === "speech")
+          .map((entry) => [entry.ordinal, entry]),
+      );
+      const samplesByVoice = new Map<string, { sum: number; count: number }>();
+      for (const stored of options.repository.listRenderSegments(
+        completed.id,
+      )) {
+        if (
+          stored.type !== "speech" ||
+          stored.state !== "complete" ||
+          stored.audioDurationMs === null ||
+          !Number.isFinite(stored.audioDurationMs) ||
+          stored.audioDurationMs <= 0
+        )
+          continue;
+        const entry = speechEntries.get(stored.ordinal);
+        if (!entry) continue;
+        const normalizedCharacters = entry.chunks[0]?.text.length ?? 0;
+        if (normalizedCharacters === 0) continue;
+        const sample =
+          (stored.audioDurationMs * entry.speed) / normalizedCharacters;
+        if (!Number.isFinite(sample) || sample <= 0) continue;
+        const grouped = samplesByVoice.get(entry.voiceId) ?? {
+          sum: 0,
+          count: 0,
+        };
+        grouped.sum += sample;
+        grouped.count += 1;
+        samplesByVoice.set(entry.voiceId, grouped);
+      }
+      if (samplesByVoice.size === 0) return;
+      const updatedAt = now().toISOString();
+      for (const [voiceId, samples] of samplesByVoice) {
+        const existing = options.repository.getVoiceTimingCalibration(
+          modelId,
+          voiceId,
+        );
+        const existingCount = existing?.sampleCount ?? 0;
+        const sampleCount = existingCount + samples.count;
+        if (sampleCount <= 0) continue;
+        options.repository.upsertVoiceTimingCalibration({
+          modelId,
+          voiceId,
+          millisecondsPerNormalizedCharacter:
+            ((existing?.millisecondsPerNormalizedCharacter ?? 0) *
+              existingCount +
+              samples.sum) /
+            sampleCount,
+          sampleCount,
+          updatedAt,
+        });
+      }
+    } catch (error) {
+      try {
+        options.logger.error(
+          {
+            event: "render-calibration-failed",
+            renderId: completed.id,
+            projectId: completed.projectId,
+            cause: {
+              name: error instanceof Error ? "Error" : "UnknownError",
+              code: "RENDER_CALIBRATION_FAILED",
+            },
+          },
+          "Render calibration failed",
+        );
+      } catch {
+        // Calibration and its diagnostics must never change render completion.
+      }
+    }
   };
 
   async function execute(renderId: string): Promise<void> {
@@ -302,6 +477,14 @@ export async function createRenderService(options: {
       await mkdir(join(stage, "segments"), { mode: 0o700 });
       await mkdir(join(stage, "work"), { mode: 0o700 });
       job = update(job, "validating");
+      options.logger.info(
+        {
+          event: "render-start",
+          renderId: job.id,
+          projectId: job.projectId,
+        },
+        "Render starting",
+      );
       const jobBundle = await options.plans.loadJob(job.id);
       const { plan, snapshot, silenceAssets } = jobBundle;
       const connection = options.repository.getSpeechBackendConnection();
@@ -618,7 +801,24 @@ export async function createRenderService(options: {
         });
       }
       options.repository.replaceRenderArtifacts(renderId, artifacts);
-      update(job, "complete");
+      const completed = update(job, "complete");
+      options.logger.info(
+        {
+          event: "render-completed",
+          renderId: completed.id,
+          projectId: completed.projectId,
+          durationMs: completed.progress.elapsedMs,
+          cacheHits: completed.progress.cacheHits,
+          cacheMisses: completed.progress.cacheMisses,
+        },
+        "Render completed",
+      );
+      if (!closing)
+        recordVoiceTimingCalibration(
+          completed,
+          plan,
+          snapshot.connection.modelId,
+        );
     } catch (error) {
       await rm(stage, { recursive: true, force: true }).catch(() => undefined);
       const phase = job.state;
@@ -632,7 +832,20 @@ export async function createRenderService(options: {
             state: "failed",
             error: sanitized,
           });
-        update(job, "failed", {}, sanitized);
+        const failed = update(job, "failed", {}, sanitized);
+        options.logger.error(
+          {
+            event: "render-failed",
+            renderId: failed.id,
+            projectId: failed.projectId,
+            phase: sanitized.phase,
+            cause: {
+              code: sanitized.code,
+              message: sanitized.message,
+            },
+          },
+          "Render failed",
+        );
       }
     } finally {
       controllers.delete(renderId);
@@ -1000,6 +1213,7 @@ export async function createRenderService(options: {
   }
 
   for (const interrupted of options.repository.listRecoverableRenderJobs()) {
+    const activity = await reserveActivity();
     const recovered = RenderJobSchema.parse({
       ...interrupted,
       state: "queued",
@@ -1009,11 +1223,89 @@ export async function createRenderService(options: {
       progress: { ...interrupted.progress, phase: "queued", elapsedMs: 0 },
     });
     options.repository.updateRenderJob(recovered);
+    if (activity) activities.set(recovered.id, activity);
     enqueue(recovered.id);
   }
 
+  const estimateRenderPeakDiskBytes = (
+    computed: ComputedRenderPlan,
+  ): number => {
+    const modelId = computed.snapshot.connection.modelId;
+    const voiceIds = [
+      ...new Set(
+        computed.plan.entries
+          .filter((entry) => entry.type === "speech")
+          .map(({ voiceId }) => voiceId),
+      ),
+    ];
+    const millisecondsPerNormalizedCharacterByVoice = Object.create(
+      null,
+    ) as Record<string, number>;
+    for (const voiceId of voiceIds) {
+      try {
+        const calibration = options.repository.getVoiceTimingCalibration(
+          modelId,
+          voiceId,
+        );
+        if (calibration?.modelId === modelId && calibration.voiceId === voiceId)
+          millisecondsPerNormalizedCharacterByVoice[voiceId] =
+            calibration.millisecondsPerNormalizedCharacter;
+      } catch {
+        // Missing calibration must fall back to the bundled timing estimate.
+      }
+    }
+    const calibration = { millisecondsPerNormalizedCharacterByVoice };
+    const speechPlan: EstimablePlan = {
+      entries: computed.plan.entries.filter((entry) => entry.type === "speech"),
+    };
+    const speechDurationMs = estimatePlanDurationMs(speechPlan, calibration);
+    const totalDurationMs = estimatePlanDurationMs(computed.plan, calibration);
+    const speechCacheBytes = estimateCacheBytes(speechDurationMs, 24_000, 2, 1);
+    return estimatePeakDiskBytes({
+      speechCacheBytes,
+      totalDurationMs,
+      bitrateKbps: 192,
+      sampleRate: 24_000,
+      bytesPerSample: 2,
+      channels: 1,
+    });
+  };
+
+  const preflightDiskSpace = async (
+    computed: ComputedRenderPlan,
+  ): Promise<void> => {
+    const estimatedPeakBytes = estimateRenderPeakDiskBytes(computed);
+    const stats = await readFileSystemStats(options.dataDirectory);
+    if (stats.bavail < 0n || stats.bsize < 0n)
+      throw new Error("Data-volume free space could not be measured.");
+    const freeSpaceBytes = stats.bavail * stats.bsize;
+    const hardUsableBytes =
+      (freeSpaceBytes * BigInt(100 - RENDER_DISK_HARD_RESERVE_PERCENT)) / 100n;
+    if (BigInt(estimatedPeakBytes) > hardUsableBytes)
+      throw new RenderDiskSpaceError(
+        estimatedPeakBytes,
+        freeSpaceBytes,
+        hardUsableBytes,
+      );
+    const softUsableBytes =
+      (freeSpaceBytes * BigInt(100 - RENDER_DISK_SOFT_RESERVE_PERCENT)) / 100n;
+    if (BigInt(estimatedPeakBytes) > softUsableBytes)
+      options.logger.warn(
+        {
+          event: "render-disk-space-warning",
+          projectId: computed.plan.projectId,
+          estimatedPeakBytes: String(estimatedPeakBytes),
+          freeSpaceBytes: freeSpaceBytes.toString(),
+          usableBytes: softUsableBytes.toString(),
+          reservePercent: RENDER_DISK_SOFT_RESERVE_PERCENT,
+        },
+        "Render is approaching available disk space",
+      );
+  };
+
   const createNewJob = async (
     computed: ComputedRenderPlan,
+    activity: SpeechCacheActivityLease | undefined,
   ): Promise<RenderJob> => {
     const id = RenderIdSchema.parse(createId());
     await options.plans.snapshotJob(
@@ -1022,21 +1314,29 @@ export async function createRenderService(options: {
       computed.plan,
       computed.silenceAssets,
     );
-    return publishJob(id, computed.plan, null);
+    return publishJob(id, computed.plan, null, activity);
   };
 
-  const createRetryJob = async (sourceRenderId: string): Promise<RenderJob> => {
+  const createRetryJob = async (
+    sourceRenderId: string,
+    activity: SpeechCacheActivityLease | undefined,
+  ): Promise<RenderJob> => {
     const id = RenderIdSchema.parse(createId());
     await options.plans.cloneJobSnapshot(id, sourceRenderId);
     const { plan } = await options.plans.loadJob(id);
-    return publishJob(id, plan, sourceRenderId);
+    return publishJob(id, plan, sourceRenderId, activity);
   };
 
   const publishJob = (
     id: string,
     plan: RenderPlan,
     retryOfRenderId: string | null,
+    activity: SpeechCacheActivityLease | undefined,
   ): RenderJob => {
+    if (closing) {
+      activity?.release();
+      throw new Error("Render service is closing.");
+    }
     const job = RenderJobSchema.parse({
       contractVersion: RENDER_CONTRACT_VERSION,
       id,
@@ -1054,11 +1354,15 @@ export async function createRenderService(options: {
       job,
       plan.entries.map((entry) => segment(id, entry)),
     );
+    if (activity) activities.set(id, activity);
     enqueue(id);
     return job;
   };
 
-  const startFromProject = async (projectId: string): Promise<RenderJob> => {
+  const startFromProject = async (
+    projectId: string,
+    startOptions: RenderStartOptions,
+  ): Promise<RenderJob> => {
     const active = options.repository
       .listRenderJobs(projectId)
       .find((candidate) => NONTERMINAL.has(candidate.state));
@@ -1066,16 +1370,55 @@ export async function createRenderService(options: {
     const starting = startingProjects.get(projectId);
     if (starting) return await starting;
     const promise = (async () => {
-      const computed = await options.planComputer.compute(projectId);
-      return createNewJob(computed);
+      const activity = await reserveActivity();
+      try {
+        const computed = await options.planComputer.compute(projectId);
+        if (startOptions.diskSpaceCheckEnabled)
+          await preflightDiskSpace(computed);
+        return await createNewJob(computed, activity);
+      } catch (error) {
+        activity?.release();
+        throw error;
+      }
     })().finally(() => startingProjects.delete(projectId));
     startingProjects.set(projectId, promise);
     return await promise;
   };
 
   return {
-    startProject: (projectId) =>
-      startFromProject(ProjectIdSchema.parse(projectId)),
+    startProject: (projectId, startOptions) =>
+      startFromProject(
+        ProjectIdSchema.parse(projectId),
+        RenderStartOptionsSchema.parse(startOptions),
+      ),
+    async getEstimateContext(input) {
+      const parsed = RenderEstimateContextInputSchema.parse(input);
+      const stats = await readFileSystemStats(options.dataDirectory);
+      if (stats.bavail < 0n || stats.bsize < 0n)
+        throw new Error("Data-volume free space could not be measured.");
+      const availableBytes = stats.bavail * stats.bsize;
+      const maximumSafeBytes = BigInt(Number.MAX_SAFE_INTEGER);
+      const calibrations: RenderEstimateContextResult["calibrations"] = [];
+      if (parsed.modelId !== null) {
+        for (const voiceId of parsed.voiceIds) {
+          const calibration = options.repository.getVoiceTimingCalibration(
+            parsed.modelId,
+            voiceId,
+          );
+          if (
+            calibration?.modelId === parsed.modelId &&
+            calibration.voiceId === voiceId
+          )
+            calibrations.push(calibration);
+        }
+      }
+      return RenderEstimateContextResultSchema.parse({
+        freeSpaceBytes: Number(
+          availableBytes > maximumSafeBytes ? maximumSafeBytes : availableBytes,
+        ),
+        calibrations,
+      });
+    },
     async list(projectId) {
       return await Promise.resolve(
         options.repository.listRenderJobs(projectId),
@@ -1085,6 +1428,20 @@ export async function createRenderService(options: {
       return await Promise.resolve(
         options.repository.getRenderJob(RenderIdSchema.parse(renderId)),
       );
+    },
+    subscribe(renderIdInput, callback) {
+      const renderId = RenderIdSchema.parse(renderIdInput);
+      const listeners = subscribers.get(renderId) ?? new Set();
+      listeners.add(callback);
+      subscribers.set(renderId, listeners);
+      let subscribed = true;
+      return () => {
+        if (!subscribed) return;
+        subscribed = false;
+        listeners.delete(callback);
+        if (listeners.size === 0 && subscribers.get(renderId) === listeners)
+          subscribers.delete(renderId);
+      };
     },
     async cancel(renderIdInput) {
       const renderId = RenderIdSchema.parse(renderIdInput);
@@ -1112,7 +1469,23 @@ export async function createRenderService(options: {
         .listRenderJobs(prior.projectId)
         .find((candidate) => NONTERMINAL.has(candidate.state));
       if (active) return active;
-      return await createRetryJob(prior.id);
+      const activity = await reserveActivity();
+      try {
+        return await createRetryJob(prior.id, activity);
+      } catch (error) {
+        activity?.release();
+        throw error;
+      }
+    },
+    async setPinned(renderIdInput, pinned) {
+      const job = options.repository.getRenderJob(
+        RenderIdSchema.parse(renderIdInput),
+      );
+      return await Promise.resolve(
+        options.repository.updateRenderJob(
+          RenderJobSchema.parse({ ...job, pinned: Boolean(pinned) }),
+        ),
+      );
     },
     async listArtifacts(renderId) {
       return await Promise.resolve(
@@ -1158,7 +1531,12 @@ export async function createRenderService(options: {
         controller.abort(
           new DOMException("StudyNarrator is shutting down.", "AbortError"),
         );
-      await drainPromise;
+      try {
+        await drainPromise;
+      } finally {
+        for (const renderId of activities.keys()) releaseActivity(renderId);
+        subscribers.clear();
+      }
     },
   };
 }

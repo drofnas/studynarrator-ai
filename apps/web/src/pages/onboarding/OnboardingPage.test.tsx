@@ -249,7 +249,7 @@ function renderApp(
 describe("connection onboarding", () => {
   it("discovers a draft and preselects the first returned model and voice", async () => {
     const connection = client();
-    renderApp(connection);
+    renderApp(connection, "/onboarding");
     expect(
       await screen.findByRole("heading", {
         name: "Connect the voice workshop",
@@ -319,7 +319,7 @@ describe("connection onboarding", () => {
 
   it("persists Continue offline without configuring a server", async () => {
     const connection = client();
-    renderApp(connection);
+    renderApp(connection, "/onboarding");
     await userEvent.click(
       await screen.findByRole("button", { name: "Continue offline" }),
     );

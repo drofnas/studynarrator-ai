@@ -14,6 +14,7 @@ import { OnboardingPage } from "@/pages/onboarding/OnboardingPage.js";
 import { GeneralSettingsPage } from "@/pages/settings/GeneralSettingsPage.js";
 import { LexiconSettingsPage } from "@/pages/settings/LexiconSettingsPage.js";
 import { TimingsSettingsPage } from "@/pages/settings/TimingsSettingsPage.js";
+import { RetentionSettingsPage } from "@/pages/settings/RetentionSettingsPage.js";
 import { VoicesSettingsPage } from "@/pages/settings/VoicesSettingsPage.js";
 import { ScratchpadPage } from "@/pages/scratchpad/ScratchpadPage.js";
 import { ScriptGenerationPage } from "@/pages/scriptGeneration/ScriptGenerationPage.js";
@@ -28,6 +29,7 @@ export const APP_PATHS = {
   settingsVoices: "/settings/voices",
   settingsLexicon: "/settings/lexicon",
   settingsTimings: "/settings/timings",
+  settingsRetention: "/settings/retention",
   diagnostics: "/diagnostics",
   onboarding: "/onboarding",
   scratchpad: "/scratchpad",
@@ -128,6 +130,10 @@ export function AppRoutes({
         <Route
           path={APP_PATHS.settingsTimings}
           element={<TimingsSettingsPage client={persistence} />}
+        />
+        <Route
+          path={APP_PATHS.settingsRetention}
+          element={<RetentionSettingsPage client={persistence} />}
         />
         <Route
           path={APP_PATHS.scratchpad}

@@ -2,6 +2,10 @@
 
 This package runs StudyNarrator only. It does not install, start, update, or otherwise manage Speaches, model files, Python, or GPU drivers.
 
+## Distribution support
+
+Docker Web is a supported single-user distribution. Its supported Docker upgrade path retains the `studynarrator-data` named volume mounted at `/data`; application migrations run at startup.
+
 ## Start
 
 Requirements: Docker Engine or Docker Desktop with Docker Compose.
@@ -12,6 +16,17 @@ Requirements: Docker Engine or Docker Desktop with Docker Compose.
 4. Load the catalog, review the selected model and default voice, then choose **Save and Test**.
 
 The supplied Compose package binds to loopback by default. Change `STUDYNARRATOR_BIND_ADDRESS` only when browser access from another device is intentional and the surrounding network is trusted.
+
+StudyNarrator also validates every HTTP `Host` header. By default it accepts only `localhost`, `127.0.0.1`, and `[::1]` (with or without a port), plus its configured listen host. For intentional LAN or reverse-proxy exposure, use a custom Compose override to pass the additional comma-separated hosts into the container:
+
+```yaml
+services:
+  study-narrator:
+    environment:
+      STUDYNARRATOR_ALLOWED_HOSTS: study.example.test,192.168.1.50
+```
+
+Do not treat the Compose `.env` file as container environment configuration: the supplied Compose file uses it only for host binding, ports, and image metadata. Keep the allowlist narrow; this setting does not add authentication.
 
 ## Connect to Speaches
 
@@ -27,7 +42,7 @@ StudyNarrator starts and remains healthy while Speaches is offline. Project edit
 
 ## Data and upgrades
 
-The named `studynarrator-data` volume is mounted at `/data` and contains the SQLite database, cache, frozen plans, render artifacts, and generated exports. Recreating or upgrading the application container leaves this volume intact.
+The named `studynarrator-data` volume is mounted at `/data` and contains the SQLite database, cache, render artifacts, and generated exports. Recreating or upgrading the application container leaves this volume intact.
 
 Before an upgrade, stop StudyNarrator and back up the volume:
 

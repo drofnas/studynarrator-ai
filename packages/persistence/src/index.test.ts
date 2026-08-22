@@ -10,11 +10,12 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   listBackups,
   listPersistenceBackups,
   MigrationFailureError,
+  PersistenceNotFoundError,
   pruneBackups,
   STUDYNARRATOR_MIGRATIONS,
   migrateDatabase,
@@ -24,7 +25,10 @@ import {
   type DatabaseConstructor,
   type Migration,
 } from "./index.js";
-import { DATABASE_SCHEMA_VERSION } from "@studynarrator/shared-types";
+import {
+  DATABASE_SCHEMA_VERSION,
+  DEFAULT_RETENTION_SETTINGS,
+} from "@studynarrator/shared-types";
 
 const DatabaseAdapter = Database as unknown as DatabaseConstructor;
 const projectId = "00000000-0000-4000-8000-000000000001";
@@ -63,13 +67,24 @@ describe("database baseline", () => {
       { version: 2, name: "project-speech-cache-lifecycle" },
       { version: 3, name: "global-named-sense-defaults" },
       { version: 4, name: "neutral-speech-backend-naming" },
+      { version: 5, name: "voice-timing-calibration" },
+      { version: 6, name: "retention-settings" },
+      { version: 7, name: "render-pinning" },
     ]);
-    expect(first.appliedVersions).toEqual([1, 2, 3, 4]);
-    expect(first.databaseSchemaVersion).toBe(4);
+    expect(first.appliedVersions).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(first.databaseSchemaVersion).toBe(7);
     expect(first.backupPath).toBeNull();
     expect(
       first.database.prepare("SELECT version FROM schema_migrations").all(),
-    ).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }]);
+    ).toEqual([
+      { version: 1 },
+      { version: 2 },
+      { version: 3 },
+      { version: 4 },
+      { version: 5 },
+      { version: 6 },
+      { version: 7 },
+    ]);
     expect(
       first.database
         .prepare(
@@ -126,6 +141,194 @@ describe("database baseline", () => {
         .get(),
     ).toEqual({ count: 0 });
     second.database.close();
+  });
+
+  it("creates the constrained voice timing calibration table", async () => {
+    const databasePath = await temporaryDatabase(
+      "studynarrator-voice-timing-schema-",
+    );
+    const migrated = await migrateDatabase({
+      Database: DatabaseAdapter,
+      databasePath,
+    });
+    const database = migrated.database as Database.Database;
+
+    expect(columns(database, "voice_timing_calibration")).toEqual([
+      "model_id",
+      "voice_id",
+      "milliseconds_per_normalized_character",
+      "sample_count",
+      "updated_at",
+    ]);
+    expect(
+      (
+        database
+          .prepare("PRAGMA table_info(voice_timing_calibration)")
+          .all() as Array<{
+          name: string;
+          notnull: number;
+          pk: number;
+        }>
+      )
+        .filter(({ pk }) => pk > 0)
+        .map(({ name, notnull, pk }) => ({ name, notnull, pk })),
+    ).toEqual([
+      { name: "model_id", notnull: 1, pk: 1 },
+      { name: "voice_id", notnull: 1, pk: 2 },
+    ]);
+
+    const insert = database.prepare(`
+      INSERT INTO voice_timing_calibration (
+        model_id, voice_id, milliseconds_per_normalized_character, sample_count, updated_at
+      ) VALUES (?, ?, ?, ?, ?)
+    `);
+    expect(() =>
+      insert.run("model", "zero-average", 0, 1, "2026-08-21T00:00:00.000Z"),
+    ).toThrow(/CHECK constraint failed/u);
+    expect(() =>
+      insert.run("model", "zero-count", 1, 0, "2026-08-21T00:00:00.000Z"),
+    ).toThrow(/CHECK constraint failed/u);
+    migrated.database.close();
+  });
+
+  it("creates constrained singleton retention settings with conservative defaults", async () => {
+    const databasePath = await temporaryDatabase(
+      "studynarrator-retention-settings-schema-",
+    );
+    const migrated = await migrateDatabase({
+      Database: DatabaseAdapter,
+      databasePath,
+    });
+    const database = migrated.database as Database.Database;
+
+    expect(columns(database, "retention_settings")).toEqual([
+      "singleton_id",
+      "speech_cache_ttl",
+      "job_snapshot_ttl",
+      "render_artifact_ttl",
+      "speech_cache_size_cap_bytes",
+      "updated_at",
+    ]);
+    const seeded = database
+      .prepare("SELECT * FROM retention_settings")
+      .get() as Record<string, unknown>;
+    expect(seeded).toMatchObject({
+      singleton_id: 1,
+      speech_cache_ttl: DEFAULT_RETENTION_SETTINGS.speechCacheTtl,
+      job_snapshot_ttl: DEFAULT_RETENTION_SETTINGS.jobSnapshotTtl,
+      render_artifact_ttl: DEFAULT_RETENTION_SETTINGS.renderArtifactTtl,
+      speech_cache_size_cap_bytes:
+        DEFAULT_RETENTION_SETTINGS.speechCacheSizeCapBytes,
+    });
+    expect(new Date(String(seeded.updated_at)).toISOString()).toBe(
+      seeded.updated_at,
+    );
+
+    for (const column of [
+      "speech_cache_ttl",
+      "job_snapshot_ttl",
+      "render_artifact_ttl",
+    ]) {
+      expect(() =>
+        database
+          .prepare(`UPDATE retention_settings SET ${column} = ?`)
+          .run("30d"),
+      ).toThrow(/CHECK constraint failed/u);
+    }
+    expect(() =>
+      database
+        .prepare(
+          "UPDATE retention_settings SET speech_cache_size_cap_bytes = ?",
+        )
+        .run(0),
+    ).toThrow(/CHECK constraint failed/u);
+    expect(() =>
+      database
+        .prepare(
+          "UPDATE retention_settings SET speech_cache_size_cap_bytes = ?",
+        )
+        .run(1.5),
+    ).toThrow(/CHECK constraint failed/u);
+    expect(() =>
+      database
+        .prepare(
+          `
+          INSERT INTO retention_settings (
+            singleton_id, speech_cache_ttl, job_snapshot_ttl, render_artifact_ttl,
+            speech_cache_size_cap_bytes, updated_at
+          ) VALUES (2, '8h', '24h', '7d', 1, ?)
+        `,
+        )
+        .run("2026-08-21T00:00:00.000Z"),
+    ).toThrow(/CHECK constraint failed/u);
+    expect(
+      database
+        .prepare("SELECT count(*) AS count FROM retention_settings")
+        .get(),
+    ).toEqual({ count: 1 });
+    migrated.database.close();
+  });
+
+  it("adds a constrained pinned default to existing render jobs", async () => {
+    const databasePath = await temporaryDatabase(
+      "studynarrator-render-pinning-",
+    );
+    const v6 = await migrateDatabase({
+      Database: DatabaseAdapter,
+      databasePath,
+      migrations: STUDYNARRATOR_MIGRATIONS.slice(0, 6),
+    });
+    const timestamp = "2026-08-21T00:00:00.000Z";
+    v6.database
+      .prepare(
+        `
+        INSERT INTO projects (
+          id, name, description, script_source, script_hash, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `,
+      )
+      .run(
+        projectId,
+        "Pinned render project",
+        "",
+        "",
+        "a".repeat(64),
+        timestamp,
+        timestamp,
+      );
+    v6.database
+      .prepare(
+        `
+        INSERT INTO render_jobs (
+          id, project_id, plan_id, retry_of_render_id, state, progress_json, error_json,
+          created_at, started_at, finished_at
+        ) VALUES (?, ?, ?, NULL, 'queued', '{}', NULL, ?, NULL, NULL)
+      `,
+      )
+      .run(
+        "render-before-pinning",
+        projectId,
+        "plan-before-pinning",
+        timestamp,
+      );
+    v6.database.close();
+
+    const upgraded = await migrateDatabase({
+      Database: DatabaseAdapter,
+      databasePath,
+    });
+    const database = upgraded.database as Database.Database;
+    expect(
+      database
+        .prepare("SELECT pinned FROM render_jobs WHERE id = ?")
+        .get("render-before-pinning"),
+    ).toEqual({ pinned: 0 });
+    expect(() =>
+      database
+        .prepare("UPDATE render_jobs SET pinned = ? WHERE id = ?")
+        .run(2, "render-before-pinning"),
+    ).toThrow(/CHECK constraint failed/u);
+    database.close();
   });
 
   it("seeds the same global lexicon rows a pre-change database contains", async () => {
@@ -502,13 +705,84 @@ describe("database baseline", () => {
       );
     v2.database.close();
 
+    const logger = { info: vi.fn(), warn: vi.fn() };
     const upgraded = await migrateDatabase({
       Database: DatabaseAdapter,
       databasePath,
+      logger,
     });
-    expect(upgraded.appliedVersions).toEqual([3, 4]);
-    expect(upgraded.databaseSchemaVersion).toBe(4);
-    expect(upgraded.backupPath).toContain("-v0002-to-v0004-");
+    expect(upgraded.appliedVersions).toEqual([3, 4, 5, 6, 7]);
+    expect(upgraded.databaseSchemaVersion).toBe(7);
+    expect(upgraded.backupPath).toContain("-v0002-to-v0007-");
+    if (upgraded.backupPath === null)
+      throw new Error("Expected the migration backup path.");
+    expect(logger.info).toHaveBeenNthCalledWith(
+      1,
+      {
+        event: "database-migration-backup-created",
+        backupPath: upgraded.backupPath,
+        fromDatabaseSchemaVersion: 2,
+        toDatabaseSchemaVersion: 7,
+      },
+      "Database migration backup created",
+    );
+    expect(logger.info).toHaveBeenNthCalledWith(
+      2,
+      {
+        event: "database-migration-applied",
+        migrationVersion: 3,
+        migrationName: "global-named-sense-defaults",
+      },
+      "Database migration applied",
+    );
+    expect(logger.info).toHaveBeenNthCalledWith(
+      3,
+      {
+        event: "database-migration-applied",
+        migrationVersion: 4,
+        migrationName: "neutral-speech-backend-naming",
+      },
+      "Database migration applied",
+    );
+    expect(logger.info).toHaveBeenNthCalledWith(
+      4,
+      {
+        event: "database-migration-applied",
+        migrationVersion: 5,
+        migrationName: "voice-timing-calibration",
+      },
+      "Database migration applied",
+    );
+    expect(logger.info).toHaveBeenNthCalledWith(
+      5,
+      {
+        event: "database-migration-applied",
+        migrationVersion: 6,
+        migrationName: "retention-settings",
+      },
+      "Database migration applied",
+    );
+    expect(logger.info).toHaveBeenNthCalledWith(
+      6,
+      {
+        event: "database-migration-applied",
+        migrationVersion: 7,
+        migrationName: "render-pinning",
+      },
+      "Database migration applied",
+    );
+    expect(logger.info).toHaveBeenNthCalledWith(
+      7,
+      {
+        event: "database-backups-pruned",
+        removedCount: 0,
+        retainedCount: 1,
+        removedPaths: [],
+        retainedPaths: [upgraded.backupPath],
+      },
+      "Database backups pruned",
+    );
+    expect(logger.warn).not.toHaveBeenCalled();
     expect(
       upgraded.database
         .prepare(
@@ -598,8 +872,8 @@ describe("database baseline", () => {
       Database: DatabaseAdapter,
       databasePath,
     });
-    expect(upgraded.appliedVersions).toEqual([4]);
-    expect(upgraded.databaseSchemaVersion).toBe(4);
+    expect(upgraded.appliedVersions).toEqual([4, 5, 6, 7]);
+    expect(upgraded.databaseSchemaVersion).toBe(7);
     expect(
       upgraded.database
         .prepare(
@@ -692,12 +966,18 @@ describe("database baseline", () => {
       old.exec(`
       CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
       CREATE TABLE preserved_development_data (value TEXT NOT NULL);
-      INSERT INTO schema_migrations (version, applied_at) VALUES (${String(version)}, '2026-08-11T00:00:00.000Z');
-      INSERT INTO preserved_development_data (value) VALUES ('keep-me');
     `);
+      old
+        .prepare(
+          "INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+        )
+        .run(version, "2026-08-11T00:00:00.000Z");
+      old
+        .prepare("INSERT INTO preserved_development_data (value) VALUES (?)")
+        .run("keep-me");
       old.close();
 
-      if (version > 4) {
+      if (version > 7) {
         await expect(
           migrateDatabase({ Database: DatabaseAdapter, databasePath }),
         ).rejects.toBeInstanceOf(SchemaTooNewError);
@@ -735,7 +1015,7 @@ describe("database baseline", () => {
       .run();
     baseline.database.close();
     const failing: Migration = {
-      version: 5,
+      version: 8,
       name: "intentional-test-failure",
       up(database) {
         database.exec(
@@ -755,7 +1035,7 @@ describe("database baseline", () => {
       failure = error as MigrationFailureError;
     }
     expect(failure).toBeInstanceOf(MigrationFailureError);
-    expect(failure?.backupPath).toContain("-v0004-to-v0005-");
+    expect(failure?.backupPath).toContain("-v0007-to-v0008-");
     expect((await stat(failure!.backupPath!)).mode & 0o777).toBe(0o600);
     expect((await readFile(failure!.backupPath!)).byteLength).toBeGreaterThan(
       0,
@@ -891,7 +1171,7 @@ describe("StudyNarratorRepository", () => {
     });
     expect(first.status()).toMatchObject({
       contractVersion: 1,
-      databaseSchemaVersion: 4,
+      databaseSchemaVersion: 7,
     });
     const created = first.createProject({
       name: "Persistence restart proof",
@@ -1067,6 +1347,150 @@ describe("StudyNarratorRepository", () => {
     reopened.close();
   });
 
+  it("upserts validated voice timing calibration and persists it across reopen", async () => {
+    const databasePath = await temporaryDatabase(
+      "studynarrator-voice-timing-calibration-",
+    );
+    const repository = await openStudyNarratorRepository({
+      Database: DatabaseAdapter,
+      databasePath,
+    });
+    const initial = {
+      modelId: "model-a",
+      voiceId: "voice-a",
+      millisecondsPerNormalizedCharacter: 61.25,
+      sampleCount: 2,
+      updatedAt: "2026-08-21T10:00:00.000Z",
+    };
+
+    expect(
+      repository.getVoiceTimingCalibration(initial.modelId, initial.voiceId),
+    ).toBeNull();
+    expect(repository.upsertVoiceTimingCalibration(initial)).toEqual(initial);
+    expect(
+      repository.getVoiceTimingCalibration(initial.modelId, initial.voiceId),
+    ).toEqual(initial);
+    expect(() =>
+      repository.upsertVoiceTimingCalibration({
+        ...initial,
+        millisecondsPerNormalizedCharacter: 0,
+      }),
+    ).toThrow();
+    expect(() =>
+      repository.upsertVoiceTimingCalibration({ ...initial, sampleCount: 0 }),
+    ).toThrow();
+    expect(() =>
+      repository.upsertVoiceTimingCalibration({
+        ...initial,
+        updatedAt: "not-a-timestamp",
+      }),
+    ).toThrow();
+
+    const replacement = {
+      ...initial,
+      millisecondsPerNormalizedCharacter: 54.5,
+      sampleCount: 7,
+      updatedAt: "2026-08-21T11:00:00.000Z",
+    };
+    expect(repository.upsertVoiceTimingCalibration(replacement)).toEqual(
+      replacement,
+    );
+    repository.close();
+
+    const inspected = new Database(databasePath, { readonly: true });
+    expect(
+      inspected
+        .prepare(
+          "SELECT count(*) AS count FROM voice_timing_calibration WHERE model_id = ? AND voice_id = ?",
+        )
+        .get(initial.modelId, initial.voiceId),
+    ).toEqual({ count: 1 });
+    inspected.close();
+
+    const reopened = await openStudyNarratorRepository({
+      Database: DatabaseAdapter,
+      databasePath,
+    });
+    expect(
+      reopened.getVoiceTimingCalibration(initial.modelId, initial.voiceId),
+    ).toEqual(replacement);
+    reopened.close();
+  });
+
+  it("updates validated retention settings and persists them across reopen", async () => {
+    const databasePath = await temporaryDatabase(
+      "studynarrator-retention-settings-repository-",
+    );
+    const repository = await openStudyNarratorRepository({
+      Database: DatabaseAdapter,
+      databasePath,
+      now: () => new Date("2026-08-21T12:00:00.000Z"),
+    });
+    expect(repository.getRetentionSettings()).toMatchObject(
+      DEFAULT_RETENTION_SETTINGS,
+    );
+
+    const authored = {
+      speechCacheTtl: "8h" as const,
+      jobSnapshotTtl: "24h" as const,
+      renderArtifactTtl: "7d" as const,
+      speechCacheSizeCapBytes: 1_024,
+    };
+    const expected = {
+      ...authored,
+      updatedAt: "2026-08-21T12:00:00.000Z",
+    };
+    expect(repository.updateRetentionSettings(authored)).toEqual(expected);
+    expect(repository.getRetentionSettings()).toEqual(expected);
+    expect(() =>
+      repository.updateRetentionSettings({
+        ...authored,
+        speechCacheTtl: "30d",
+      } as unknown as typeof authored),
+    ).toThrow();
+    expect(() =>
+      repository.updateRetentionSettings({
+        ...authored,
+        speechCacheSizeCapBytes: 0,
+      }),
+    ).toThrow();
+    repository.close();
+
+    const reopened = await openStudyNarratorRepository({
+      Database: DatabaseAdapter,
+      databasePath,
+    });
+    expect(reopened.getRetentionSettings()).toEqual(expected);
+    reopened.close();
+  });
+
+  it("throws when the retention settings singleton is missing", async () => {
+    const databasePath = await temporaryDatabase(
+      "studynarrator-retention-settings-missing-",
+    );
+    const repository = await openStudyNarratorRepository({
+      Database: DatabaseAdapter,
+      databasePath,
+    });
+    repository.close();
+
+    const database = new Database(databasePath);
+    database.prepare("DELETE FROM retention_settings").run();
+    database.close();
+
+    const reopened = await openStudyNarratorRepository({
+      Database: DatabaseAdapter,
+      databasePath,
+    });
+    expect(() => reopened.getRetentionSettings()).toThrow(
+      PersistenceNotFoundError,
+    );
+    expect(() =>
+      reopened.updateRetentionSettings(DEFAULT_RETENTION_SETTINGS),
+    ).toThrow(PersistenceNotFoundError);
+    reopened.close();
+  });
+
   it("persists marker evidence and durable render state", async () => {
     const databasePath = await temporaryDatabase("studynarrator-render-state-");
     const repository = await openStudyNarratorRepository({
@@ -1076,7 +1500,7 @@ describe("StudyNarratorRepository", () => {
     });
     expect(repository.runMarker()).toMatchObject({
       markerKey: "runtime.storage-self-test",
-      migrationVersion: 4,
+      migrationVersion: 7,
     });
     const project = repository.createProject({ name: "Rendered" });
     repository.replaceProject(project.id, {
@@ -1119,6 +1543,7 @@ describe("StudyNarratorRepository", () => {
         projectId: project.id,
         planId,
         retryOfRenderId: null,
+        pinned: false,
         state: "queued",
         progress,
         error: null,
@@ -1141,6 +1566,7 @@ describe("StudyNarratorRepository", () => {
         },
       ],
     );
+    expect(job.pinned).toBe(false);
     repository.updateRenderSegment(
       {
         renderId,
@@ -1158,11 +1584,13 @@ describe("StudyNarratorRepository", () => {
     );
     const complete = repository.updateRenderJob({
       ...job,
+      pinned: true,
       state: "complete",
       progress: { ...progress, phase: "complete", completedChunks: 1 },
       startedAt: timestamp,
       finishedAt: timestamp,
     });
+    expect(repository.listPinnedRenderProjectIds()).toEqual([project.id]);
     repository.replaceRenderArtifacts(renderId, [
       {
         contractVersion: 1,
@@ -1185,6 +1613,7 @@ describe("StudyNarratorRepository", () => {
         projectId: project.id,
         planId: "00000000-0000-4000-8000-000000000024",
         retryOfRenderId: null,
+        pinned: false,
         state: "failed",
         progress: { ...progress, phase: "failed" },
         error: null,
@@ -1202,6 +1631,7 @@ describe("StudyNarratorRepository", () => {
         projectId: project.id,
         planId: "00000000-0000-4000-8000-000000000026",
         retryOfRenderId: null,
+        pinned: false,
         state: "complete",
         progress: { ...progress, phase: "complete", completedChunks: 1 },
         error: null,

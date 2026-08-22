@@ -40,6 +40,7 @@ const ENTRYPOINT_BASENAMES = new Set([
 const SCRIPT_BINARIES = new Map([
   ["concurrently", "concurrently"],
   ["electron", "electron"],
+  ["electron-builder", "electron-builder"],
   ["eslint", "eslint"],
   ["playwright", "@playwright/test"],
   ["prettier", "prettier"],
@@ -486,6 +487,7 @@ function usedPackages(files) {
       if (dependency) used.add(dependency);
     }
     if (text.includes("@vitest-environment jsdom")) used.add("jsdom");
+    if (text.includes(`provider: "v8"`)) used.add("@vitest/coverage-v8");
   }
   return used;
 }

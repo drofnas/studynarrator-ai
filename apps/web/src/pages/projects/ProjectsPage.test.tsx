@@ -29,6 +29,8 @@ import type {
   ProjectPreviewClient,
   ProjectSummary,
   RenderClient,
+  RenderEstimateContextInput,
+  RenderEstimateContextResult,
   RenderJob,
   RenderPlan,
   SpeechBackendConnection,
@@ -38,6 +40,7 @@ import type {
 import type { ScriptAnalyzer } from "@/workers/parser/parserClient.js";
 import type { ScriptAnalysisInput } from "@/workers/parser/parserWorkerProtocol.js";
 import { GLOBAL_VOICE_CATALOG_MODEL_ID } from "@/features/projects/projectAuthoring.js";
+import type { RenderProgressClient } from "@/services/renders/renderClient.js";
 import { ProjectsPage } from "./ProjectsPage.js";
 import { ConnectionProvider } from "@/features/connections/ConnectionProvider.js";
 
@@ -106,6 +109,53 @@ const globalCatalog: VoiceCatalog = {
       category: null,
       style: null,
       sampleText: null,
+    },
+  ],
+};
+
+const estimateConnection: SpeechBackendConnection = {
+  backendId: "speaches",
+  baseUrl: "http://127.0.0.1:8000",
+  suppliedUrlForm: "root",
+  configured: true,
+  defaultModelId: "model",
+  defaultVoiceId: "voice_teacher",
+  timeoutSeconds: 120,
+  retryCount: 0,
+  responseFormat: "wav",
+  lastTestedAt: null,
+  lastSuccessfulTestAt: null,
+  lastTestSummary: null,
+  createdAt: project.createdAt,
+  updatedAt: project.updatedAt,
+};
+const estimateCatalog: VoiceCatalog = {
+  schemaVersion: 1,
+  modelId: "model",
+  entries: ["voice_teacher", "voice_other"].map((voiceId) => ({
+    voiceId,
+    label: voiceId === "voice_teacher" ? "Teacher Voice" : "Other Voice",
+    enabled: true,
+    favorite: false,
+    language: null,
+    locale: null,
+    accent: null,
+    category: null,
+    style: null,
+    sampleText: null,
+  })),
+};
+const estimateSpeechCatalog: SpeechCatalog = {
+  schemaVersion: 1,
+  models: [
+    {
+      modelId: "model",
+      voices: estimateCatalog.entries.map(({ voiceId, label }) => ({
+        voiceId,
+        name: label,
+        language: null,
+        gender: null,
+      })),
     },
   ],
 };
@@ -211,6 +261,95 @@ function frozenPlan(
   };
 }
 
+function renderJobFixture(
+  id: string,
+  state: RenderJob["state"],
+  completedChunks = state === "complete" ? 4 : 1,
+): RenderJob {
+  const terminal = ["complete", "failed", "canceled"].includes(state);
+  return {
+    contractVersion: 1,
+    id,
+    projectId: project.id,
+    planId: "00000000-0000-4000-8000-000000000090",
+    retryOfRenderId: null,
+    pinned: false,
+    state,
+    progress: {
+      phase: state,
+      sectionTitle: "Opening",
+      sectionOrdinal: 1,
+      sectionCount: 1,
+      entryOrdinal: 1,
+      speechOrdinal: 1,
+      speechCount: 1,
+      chunkOrdinal: terminal ? null : 1,
+      completedChunks,
+      totalChunks: 4,
+      cacheHits: 0,
+      cacheMisses: 4,
+      ttsRequests: completedChunks,
+      speakerId: terminal ? null : "teacher",
+      voiceId: terminal ? null : "voice_teacher",
+      excerpt: terminal ? null : "Study this.",
+      elapsedMs: completedChunks * 500,
+    },
+    error:
+      state === "failed"
+        ? {
+            code: "RENDER_SYNTHESIS_FAILED",
+            message: "Speech generation failed.",
+            retryable: true,
+            phase: "synthesizing",
+            entryOrdinal: 1,
+            chunkOrdinal: 1,
+            sourceRange: null,
+            speakerId: "teacher",
+            voiceId: "voice_teacher",
+          }
+        : null,
+    createdAt: "2026-08-12T14:00:00.000Z",
+    startedAt: "2026-08-12T14:00:00.100Z",
+    finishedAt: terminal ? "2026-08-12T14:00:02.000Z" : null,
+  };
+}
+
+function renderClientFixture(
+  jobs: RenderJob[],
+  get: RenderClient["get"],
+  subscribe?: NonNullable<RenderProgressClient["subscribe"]>,
+): RenderProgressClient {
+  const fallbackJob =
+    jobs[0] ??
+    renderJobFixture("00000000-0000-4000-8000-000000000091", "complete");
+  return {
+    startProject: vi.fn(async () => fallbackJob),
+    getEstimateContext: vi.fn(async () => ({
+      freeSpaceBytes: 1_073_741_824,
+      calibrations: [],
+    })),
+    list: vi.fn(async () => jobs),
+    get,
+    cancel: vi.fn(async () => fallbackJob),
+    retry: vi.fn(async () => fallbackJob),
+    setPinned: vi.fn(async () => fallbackJob),
+    listArtifacts: vi.fn(async () => []),
+    exportArtifact: vi.fn(),
+    exportAudio: vi.fn(),
+    exportDetails: vi.fn(),
+    listSegments: vi.fn(async () => []),
+    getWaveform: vi.fn(async () => ({
+      status: "unavailable" as const,
+      renderId: fallbackJob.id,
+      reason: "audioMissing" as const,
+    })),
+    renderAudioSource: vi.fn((renderId: string) => `/renders/${renderId}.mp3`),
+    segmentAudioSource: vi.fn(),
+    exportSegment: vi.fn(),
+    ...(subscribe ? { subscribe } : {}),
+  };
+}
+
 function fixture(
   sourceProject = project,
   summaryOverrides: Partial<
@@ -277,6 +416,7 @@ function fixture(
       getPacing: vi.fn(async () => DEFAULT_SYSTEM_TIMING),
       updatePacing: vi.fn(),
     },
+    retention: {} as PersistenceClient["retention"],
     preferences: {
       getIgnoredDiagnostics: vi.fn(async () =>
         structuredClone(ignoredDiagnostics),
@@ -412,12 +552,53 @@ function renderPage(
   };
 }
 
+function installMemoryLocalStorage(initial: Record<string, string> = {}) {
+  const values = new Map(Object.entries(initial));
+  const setItem = vi.fn((key: string, value: string) => {
+    values.set(key, value);
+  });
+  const storage: Storage = {
+    get length() {
+      return values.size;
+    },
+    clear: vi.fn(() => values.clear()),
+    getItem: vi.fn((key: string) => values.get(key) ?? null),
+    key: vi.fn((index: number) => [...values.keys()][index] ?? null),
+    removeItem: vi.fn((key: string) => {
+      values.delete(key);
+    }),
+    setItem,
+  };
+  vi.stubGlobal("localStorage", storage);
+  return { storage, setItem };
+}
+
+function renderClientWithEstimateContext(
+  getEstimateContext: RenderClient["getEstimateContext"],
+) {
+  const fallbackJob = renderJobFixture(
+    "00000000-0000-4000-8000-000000000091",
+    "complete",
+  );
+  const startProject = vi.fn(async () => fallbackJob);
+  return {
+    startProject,
+    renderClient: {
+      ...renderClientFixture([], vi.fn()),
+      startProject,
+      getEstimateContext,
+    },
+  };
+}
+
 function deferred<T>() {
   let resolvePromise: (value: T) => void = () => undefined;
-  const promise = new Promise<T>((resolve) => {
+  let rejectPromise: (reason: unknown) => void = () => undefined;
+  const promise = new Promise<T>((resolve, reject) => {
     resolvePromise = resolve;
+    rejectPromise = reject;
   });
-  return { promise, resolve: resolvePromise };
+  return { promise, resolve: resolvePromise, reject: rejectPromise };
 }
 
 function installAudioContext() {
@@ -468,7 +649,16 @@ function replaceScriptSource(value: string): void {
   });
 }
 
+function estimateValue(strip: HTMLElement, label: string): HTMLElement {
+  const term = within(strip).getByText(label, { exact: true });
+  const value = term.nextElementSibling;
+  if (!(value instanceof HTMLElement))
+    throw new Error(`Expected an estimate value for ${label}.`);
+  return value;
+}
+
 beforeEach(() => {
+  window.localStorage?.clear();
   vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(
     () => undefined,
   );
@@ -625,6 +815,350 @@ describe("Projects workbench", () => {
         ),
       ).toBeInTheDocument();
     }
+  });
+
+  it("uses worker-derived speech and exact pauses with persisted voice calibration", async () => {
+    const { client, analyze } = fixture();
+    const calibration = {
+      modelId: "model",
+      voiceId: "voice_teacher",
+      millisecondsPerNormalizedCharacter: 200,
+      sampleCount: 3,
+      updatedAt: "2026-08-12T12:00:00.000Z",
+    };
+    const getEstimateContext = vi.fn(
+      async (
+        input: RenderEstimateContextInput,
+      ): Promise<RenderEstimateContextResult> => ({
+        freeSpaceBytes: 1_073_741_824,
+        calibrations: input.voiceIds.includes("voice_teacher")
+          ? [calibration]
+          : [],
+      }),
+    );
+    const renderClient = {
+      ...renderClientFixture([], vi.fn()),
+      getEstimateContext,
+    };
+    renderPage(client, analyze, {
+      connection: estimateConnection,
+      catalog: estimateCatalog,
+      speechCatalog: estimateSpeechCatalog,
+      renderClient,
+    });
+
+    const strip = await screen.findByRole("group", {
+      name: "Script estimates",
+    });
+    await waitFor(() =>
+      expect(
+        within(strip).getByRole("status", {
+          name: "Estimate calibration status",
+        }),
+      ).toHaveTextContent("Voice timing calibration applied"),
+    );
+    expect(estimateValue(strip, "Words")).toHaveTextContent("4");
+    expect(estimateValue(strip, "Duration")).toHaveTextContent("4s");
+    expect(estimateValue(strip, "MP3 size")).toHaveTextContent("83.2 KiB");
+    expect(estimateValue(strip, "Cache footprint")).toHaveTextContent(
+      "150.0 KiB",
+    );
+    expect(estimateValue(strip, "Peak disk")).toHaveTextContent("399.6 KiB");
+    expect(estimateValue(strip, "Free space")).toHaveTextContent("1.0 GiB");
+    expect(getEstimateContext).toHaveBeenCalledWith({
+      modelId: "model",
+      voiceIds: ["voice_teacher"],
+    });
+
+    await openProjectTab("Settings");
+    fireEvent.change(screen.getByLabelText("Speed for speaker teacher"), {
+      target: { value: "2" },
+    });
+    await openProjectTab("Script Editor");
+    const updatedStrip = await screen.findByRole("group", {
+      name: "Script estimates",
+    });
+    expect(estimateValue(updatedStrip, "Duration")).toHaveTextContent("2s");
+    expect(estimateValue(updatedStrip, "MP3 size")).toHaveTextContent(
+      "45.7 KiB",
+    );
+    expect(estimateValue(updatedStrip, "Cache footprint")).toHaveTextContent(
+      "75.0 KiB",
+    );
+    expect(estimateValue(updatedStrip, "Peak disk")).toHaveTextContent(
+      "212.1 KiB",
+    );
+  });
+
+  it("keeps default estimates available while free space loads and fails", async () => {
+    const { client, analyze } = fixture();
+    const pending = deferred<RenderEstimateContextResult>();
+    const getEstimateContext = vi.fn(
+      (
+        input: RenderEstimateContextInput,
+      ): Promise<RenderEstimateContextResult> =>
+        input.voiceIds.length === 0
+          ? Promise.resolve({
+              freeSpaceBytes: 1_073_741_824,
+              calibrations: [],
+            })
+          : pending.promise,
+    );
+    const renderClient = {
+      ...renderClientFixture([], vi.fn()),
+      getEstimateContext,
+    };
+    renderPage(client, analyze, {
+      connection: estimateConnection,
+      catalog: estimateCatalog,
+      speechCatalog: estimateSpeechCatalog,
+      renderClient,
+    });
+
+    const strip = await screen.findByRole("group", {
+      name: "Script estimates",
+    });
+    await waitFor(() =>
+      expect(getEstimateContext).toHaveBeenCalledWith({
+        modelId: "model",
+        voiceIds: ["voice_teacher"],
+      }),
+    );
+    expect(estimateValue(strip, "Estimated duration")).toHaveTextContent("2s");
+    expect(estimateValue(strip, "Estimated MP3 size")).toHaveTextContent(
+      "38.2 KiB",
+    );
+    expect(estimateValue(strip, "Estimated cache footprint")).toHaveTextContent(
+      "60.0 KiB",
+    );
+    expect(estimateValue(strip, "Estimated peak disk")).toHaveTextContent(
+      "174.6 KiB",
+    );
+    expect(estimateValue(strip, "Free space")).toHaveTextContent("Loading…");
+
+    pending.reject(new Error("statfs unavailable"));
+    await waitFor(() =>
+      expect(estimateValue(strip, "Free space")).toHaveTextContent(
+        "Unavailable",
+      ),
+    );
+    expect(within(strip).getByRole("status")).toHaveTextContent(
+      "default voice timing",
+    );
+  });
+
+  it("shows placeholders until worker analysis completes", async () => {
+    const loaded = fixture();
+    const analysis = deferred<Awaited<ReturnType<ScriptAnalyzer["analyze"]>>>();
+    const renderClient = renderClientFixture([], vi.fn());
+    renderPage(loaded.client, () => analysis.promise, { renderClient });
+
+    const strip = await screen.findByRole("group", {
+      name: "Script estimates",
+    });
+    await waitFor(() =>
+      expect(estimateValue(strip, "Free space")).toHaveTextContent("1.0 GiB"),
+    );
+    expect(estimateValue(strip, "Words")).toHaveTextContent("4");
+    expect(estimateValue(strip, "Estimated duration")).toHaveTextContent("—");
+    expect(estimateValue(strip, "Estimated MP3 size")).toHaveTextContent("—");
+    expect(estimateValue(strip, "Estimated cache footprint")).toHaveTextContent(
+      "—",
+    );
+    expect(estimateValue(strip, "Estimated peak disk")).toHaveTextContent("—");
+    expect(within(strip).getByRole("status")).toHaveTextContent(
+      "Waiting for script analysis",
+    );
+  });
+
+  it("ignores stale estimate context after the configured voice changes", async () => {
+    const { client, analyze } = fixture();
+    const stale = deferred<RenderEstimateContextResult>();
+    const getEstimateContext = vi.fn(
+      (
+        input: RenderEstimateContextInput,
+      ): Promise<RenderEstimateContextResult> => {
+        if (input.voiceIds.includes("voice_teacher")) return stale.promise;
+        return Promise.resolve({
+          freeSpaceBytes: input.voiceIds.includes("voice_other")
+            ? 2_147_483_648
+            : 1_073_741_824,
+          calibrations: [],
+        });
+      },
+    );
+    const renderClient = {
+      ...renderClientFixture([], vi.fn()),
+      getEstimateContext,
+    };
+    renderPage(client, analyze, {
+      connection: estimateConnection,
+      catalog: estimateCatalog,
+      speechCatalog: estimateSpeechCatalog,
+      renderClient,
+    });
+    await screen.findByRole("group", { name: "Script estimates" });
+    await waitFor(() =>
+      expect(getEstimateContext).toHaveBeenCalledWith({
+        modelId: "model",
+        voiceIds: ["voice_teacher"],
+      }),
+    );
+
+    await openProjectTab("Settings");
+    await userEvent.selectOptions(
+      await screen.findByLabelText("Voice for speaker teacher"),
+      "voice_other",
+    );
+    await waitFor(() =>
+      expect(getEstimateContext).toHaveBeenCalledWith({
+        modelId: "model",
+        voiceIds: ["voice_other"],
+      }),
+    );
+    await openProjectTab("Script Editor");
+    const currentStrip = await screen.findByRole("group", {
+      name: "Script estimates",
+    });
+    await waitFor(() =>
+      expect(estimateValue(currentStrip, "Free space")).toHaveTextContent(
+        "2.0 GiB",
+      ),
+    );
+
+    act(() => {
+      stale.resolve({ freeSpaceBytes: 536_870_912, calibrations: [] });
+    });
+    await waitFor(() =>
+      expect(estimateValue(currentStrip, "Free space")).toHaveTextContent(
+        "2.0 GiB",
+      ),
+    );
+  });
+
+  it("defaults the disk-space block on and persists only its boolean client preference", async () => {
+    const { setItem } = installMemoryLocalStorage();
+    const first = fixture();
+    renderPage(first.client, first.analyze, {
+      renderClient: renderClientFixture([], vi.fn()),
+    });
+    await openProjectTab("Render");
+
+    const checkbox = await screen.findByRole("checkbox", {
+      name: "Block renders when disk space is insufficient",
+    });
+    expect(checkbox).toBeChecked();
+    await userEvent.click(checkbox);
+    expect(checkbox).not.toBeChecked();
+    expect(setItem).toHaveBeenCalledWith(
+      "studynarrator.render.disk-space-check.v1",
+      "false",
+    );
+
+    cleanup();
+    const second = fixture();
+    renderPage(second.client, second.analyze, {
+      renderClient: renderClientFixture([], vi.fn()),
+    });
+    await openProjectTab("Render");
+    const restored = await screen.findByRole("checkbox", {
+      name: "Block renders when disk space is insufficient",
+    });
+    expect(restored).not.toBeChecked();
+
+    setItem.mockImplementation(() => {
+      throw new Error("browser storage unavailable");
+    });
+    await userEvent.click(restored);
+    expect(restored).toBeChecked();
+  });
+
+  it("blocks a known insufficient render locally with the same byte-only message", async () => {
+    const { client, analyze } = fixture();
+    const { renderClient, startProject } = renderClientWithEstimateContext(
+      vi.fn(async () => ({ freeSpaceBytes: 1, calibrations: [] })),
+    );
+    renderPage(client, analyze, { renderClient });
+    await openProjectTab("Render");
+    const renderButton = await screen.findByRole("button", { name: "Render" });
+    await waitFor(() => expect(renderButton).toBeEnabled());
+
+    await userEvent.click(renderButton);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Render blocked: estimated peak disk use is 178800 bytes, but the data volume has 1 free bytes and 0 usable bytes after the required 10% reserve.",
+    );
+    expect(startProject).not.toHaveBeenCalled();
+  });
+
+  it("shows the soft disk warning and continues with the enabled option", async () => {
+    const { client, analyze } = fixture();
+    const { renderClient, startProject } = renderClientWithEstimateContext(
+      vi.fn(async () => ({ freeSpaceBytes: 220_000, calibrations: [] })),
+    );
+    renderPage(client, analyze, { renderClient });
+    await openProjectTab("Render");
+    const renderButton = await screen.findByRole("button", { name: "Render" });
+    await waitFor(() => expect(renderButton).toBeEnabled());
+
+    await userEvent.click(renderButton);
+
+    await waitFor(() =>
+      expect(startProject).toHaveBeenCalledWith(project.id, {
+        diskSpaceCheckEnabled: true,
+      }),
+    );
+    expect(
+      await screen.findByText(
+        "Disk space warning: estimated peak disk use is 178800 bytes; the data volume has 220000 free bytes and 165000 usable bytes after the recommended 25% reserve. Rendering will continue.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("allows known insufficient space when disabled and transports false", async () => {
+    const { client, analyze } = fixture();
+    const { renderClient, startProject } = renderClientWithEstimateContext(
+      vi.fn(async () => ({ freeSpaceBytes: 1, calibrations: [] })),
+    );
+    renderPage(client, analyze, { renderClient });
+    await openProjectTab("Render");
+    await userEvent.click(
+      await screen.findByRole("checkbox", {
+        name: "Block renders when disk space is insufficient",
+      }),
+    );
+    const renderButton = await screen.findByRole("button", { name: "Render" });
+    await waitFor(() => expect(renderButton).toBeEnabled());
+
+    await userEvent.click(renderButton);
+
+    await waitFor(() =>
+      expect(startProject).toHaveBeenCalledWith(project.id, {
+        diskSpaceCheckEnabled: false,
+      }),
+    );
+    expect(screen.queryByText(/Disk space warning:/u)).not.toBeInTheDocument();
+  });
+
+  it("never blocks from script estimates when measured free space is unavailable", async () => {
+    const { client, analyze } = fixture();
+    const { renderClient, startProject } = renderClientWithEstimateContext(
+      vi.fn(async () => {
+        throw new Error("statfs unavailable");
+      }),
+    );
+    renderPage(client, analyze, { renderClient });
+    await openProjectTab("Render");
+    const renderButton = await screen.findByRole("button", { name: "Render" });
+    await waitFor(() => expect(renderButton).toBeEnabled());
+
+    await userEvent.click(renderButton);
+
+    await waitFor(() =>
+      expect(startProject).toHaveBeenCalledWith(project.id, {
+        diskSpaceCheckEnabled: true,
+      }),
+    );
   });
 
   it("keeps project lexicon changes isolated from global entries", async () => {
@@ -1453,7 +1987,7 @@ describe("Projects workbench", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("starts rendering immediately, reports chunk progress, and restores prior audio after failure", async () => {
+  it("streams render progress and restores prior audio after a terminal failure", async () => {
     const { client, analyze } = fixture();
     const priorJob: RenderJob = {
       contractVersion: 1,
@@ -1461,6 +1995,7 @@ describe("Projects workbench", () => {
       projectId: project.id,
       planId: "00000000-0000-4000-8000-000000000011",
       retryOfRenderId: null,
+      pinned: false,
       state: "complete",
       progress: {
         phase: "complete",
@@ -1524,11 +2059,30 @@ describe("Projects workbench", () => {
     };
     const startRequest = deferred<RenderJob>();
     const getRender = vi.fn(async () => failedJob);
+    let publish: ((job: RenderJob) => void) | undefined;
+    let reportDropped: (() => void) | undefined;
+    const unsubscribe = vi.fn();
+    const subscribe = vi.fn(
+      (
+        _renderId: string,
+        onJob: (job: RenderJob) => void,
+        onDropped: () => void,
+      ) => {
+        publish = onJob;
+        reportDropped = onDropped;
+        return unsubscribe;
+      },
+    );
     const renderClient = {
       start: vi.fn(() => startRequest.promise),
       startProject: vi.fn(() => startRequest.promise),
+      getEstimateContext: vi.fn(async () => ({
+        freeSpaceBytes: 1_073_741_824,
+        calibrations: [],
+      })),
       list: vi.fn(async () => [priorJob]),
       get: getRender,
+      subscribe,
       cancel: vi.fn(),
       retry: vi.fn(),
       listArtifacts: vi.fn(async () => []),
@@ -1546,7 +2100,7 @@ describe("Projects workbench", () => {
       ),
       segmentAudioSource: vi.fn(),
       exportSegment: vi.fn(),
-    } as unknown as RenderClient;
+    } as unknown as RenderProgressClient;
     renderPage(client, analyze, { renderClient });
     await openProjectTab("Render");
     const player = await screen.findByLabelText(
@@ -1584,18 +2138,361 @@ describe("Projects workbench", () => {
       "11",
     );
 
-    await waitFor(
-      () => expect(getRender).toHaveBeenCalledWith(renderingJob.id),
-      { timeout: 1_500 },
+    await waitFor(() =>
+      expect(subscribe).toHaveBeenCalledWith(
+        renderingJob.id,
+        expect.any(Function),
+        expect.any(Function),
+      ),
     );
+    expect(reportDropped).toEqual(expect.any(Function));
+    expect(getRender).not.toHaveBeenCalled();
+
+    const streamedJob: RenderJob = {
+      ...renderingJob,
+      progress: {
+        ...renderingJob.progress,
+        completedChunks: 12,
+        elapsedMs: 750,
+      },
+    };
+    act(() => publish!(streamedJob));
+    expect(
+      await screen.findByText("Processing chunk 13 of 300"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("12 of 300 chunks complete")).toBeInTheDocument();
+
+    act(() => publish!(failedJob));
     expect(
       await screen.findByRole("button", { name: "Try again" }),
     ).toBeEnabled();
+    await waitFor(() => expect(unsubscribe).toHaveBeenCalledOnce());
+    expect(getRender).not.toHaveBeenCalled();
     expect(player).toHaveAttribute("aria-disabled", "false");
     expect(screen.getByRole("button", { name: "Download" })).toBeEnabled();
     expect(
       screen.getByRole("button", { name: "Download Details" }),
     ).toBeEnabled();
+  });
+
+  it("ignores stale reconciliation after recovered stream progress and unsubscribes on unmount", async () => {
+    const { client, analyze } = fixture();
+    const activeJob = renderJobFixture(
+      "00000000-0000-4000-8000-000000000092",
+      "synthesizing",
+    );
+    const reconciledJob = renderJobFixture(activeJob.id, "synthesizing", 2);
+    const recoveredJob = renderJobFixture(activeJob.id, "synthesizing", 3);
+    const getRequest = deferred<RenderJob>();
+    const getRender = vi.fn(() => getRequest.promise);
+    let publish: ((job: RenderJob) => void) | undefined;
+    let reportDropped: (() => void) | undefined;
+    const unsubscribe = vi.fn();
+    const subscribe = vi.fn(
+      (
+        _renderId: string,
+        onJob: (job: RenderJob) => void,
+        onDropped: () => void,
+      ) => {
+        publish = onJob;
+        reportDropped = onDropped;
+        return unsubscribe;
+      },
+    );
+    const renderClient = renderClientFixture([activeJob], getRender, subscribe);
+    const page = renderPage(client, analyze, { renderClient });
+    await openProjectTab("Render");
+    await waitFor(() => expect(subscribe).toHaveBeenCalledOnce());
+
+    act(() => {
+      reportDropped!();
+      reportDropped!();
+      reportDropped!();
+    });
+    await waitFor(() => expect(getRender).toHaveBeenCalledWith(activeJob.id));
+    expect(getRender).toHaveBeenCalledOnce();
+    act(() => publish!(recoveredJob));
+    expect(
+      await screen.findByText("3 of 4 chunks complete"),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      getRequest.resolve(reconciledJob);
+      await getRequest.promise;
+    });
+    expect(screen.getByText("3 of 4 chunks complete")).toBeInTheDocument();
+    expect(
+      screen.queryByText("2 of 4 chunks complete"),
+    ).not.toBeInTheDocument();
+    expect(subscribe).toHaveBeenCalledOnce();
+
+    page.unmount();
+    expect(unsubscribe).toHaveBeenCalledOnce();
+    act(() => reportDropped!());
+    expect(getRender).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a locally started render when the initial render list resolves late", async () => {
+    const { client, analyze } = fixture();
+    const activeJob = renderJobFixture(
+      "00000000-0000-4000-8000-000000000094",
+      "synthesizing",
+    );
+    const listRequest = deferred<RenderJob[]>();
+    const unsubscribe = vi.fn();
+    const subscribe = vi.fn(() => unsubscribe);
+    const renderClient: RenderProgressClient = {
+      ...renderClientFixture([], vi.fn(), subscribe),
+      startProject: vi.fn(async () => activeJob),
+      list: vi.fn(() => listRequest.promise),
+    };
+    renderPage(client, analyze, { renderClient });
+    await openProjectTab("Render");
+    const renderButton = await screen.findByRole("button", { name: "Render" });
+    await waitFor(() => expect(renderButton).toBeEnabled());
+    fireEvent.click(renderButton);
+    await waitFor(() => expect(subscribe).toHaveBeenCalledOnce());
+    expect(screen.getByText("1 of 4 chunks complete")).toBeInTheDocument();
+
+    await act(async () => {
+      listRequest.resolve([]);
+      await listRequest.promise;
+    });
+    expect(screen.getByText("1 of 4 chunks complete")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Rendering…" })).toBeDisabled();
+    expect(subscribe).toHaveBeenCalledOnce();
+    expect(unsubscribe).not.toHaveBeenCalled();
+  });
+
+  it("discards a delayed render start after navigating to another project", async () => {
+    const { client, analyze } = fixture();
+    const nextProject: ProjectDetail = {
+      ...project,
+      id: "00000000-0000-4000-8000-000000000002",
+      name: "Navigation target",
+    };
+    client.projects.list = vi.fn(async () =>
+      [project, nextProject].map((item): ProjectSummary => ({
+        id: item.id,
+        name: item.name,
+        description: item.description,
+        scriptHash: item.scriptHash,
+        scriptLineCount: item.scriptSource.split("\n").length,
+        audioDurationMs: null,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+      })),
+    );
+    client.projects.get = vi.fn(async (id: string) =>
+      structuredClone(id === project.id ? project : nextProject),
+    );
+
+    const staleProjectJob = renderJobFixture(
+      "00000000-0000-4000-8000-000000000095",
+      "synthesizing",
+    );
+    const activeProjectJob: RenderJob = {
+      ...renderJobFixture(
+        "00000000-0000-4000-8000-000000000096",
+        "synthesizing",
+        2,
+      ),
+      projectId: nextProject.id,
+    };
+    const startRequest = deferred<RenderJob>();
+    const listRequest = deferred<RenderJob[]>();
+    const unsubscribe = vi.fn();
+    const subscribe = vi.fn(() => unsubscribe);
+    const startProject = vi.fn(() => startRequest.promise);
+    const listRenders = vi.fn((id: string) =>
+      id === nextProject.id ? listRequest.promise : Promise.resolve([]),
+    );
+    const renderClient: RenderProgressClient = {
+      ...renderClientFixture([], vi.fn(), subscribe),
+      startProject,
+      list: listRenders,
+    };
+
+    renderPage(client, analyze, { renderClient });
+    await openProjectTab("Render");
+    const renderButton = await screen.findByRole("button", { name: "Render" });
+    await waitFor(() => expect(renderButton).toBeEnabled());
+    fireEvent.click(renderButton);
+    await waitFor(() =>
+      expect(startProject).toHaveBeenCalledWith(project.id, {
+        diskSpaceCheckEnabled: true,
+      }),
+    );
+
+    await userEvent.click(
+      screen.getByRole("link", { name: /Back to Projects/u }),
+    );
+    await userEvent.click(
+      await screen.findByRole("link", { name: nextProject.name }),
+    );
+    expect(
+      await screen.findByDisplayValue(nextProject.name),
+    ).toBeInTheDocument();
+    await openProjectTab("Render");
+    await waitFor(() =>
+      expect(listRenders).toHaveBeenCalledWith(nextProject.id),
+    );
+
+    await act(async () => {
+      startRequest.resolve(staleProjectJob);
+      await startRequest.promise;
+    });
+    expect(
+      screen.queryByText("1 of 4 chunks complete"),
+    ).not.toBeInTheDocument();
+    expect(subscribe).not.toHaveBeenCalledWith(
+      staleProjectJob.id,
+      expect.any(Function),
+      expect.any(Function),
+    );
+
+    await act(async () => {
+      listRequest.resolve([activeProjectJob]);
+      await listRequest.promise;
+    });
+    expect(
+      await screen.findByText("2 of 4 chunks complete"),
+    ).toBeInTheDocument();
+    expect(subscribe).toHaveBeenCalledOnce();
+    expect(subscribe).toHaveBeenCalledWith(
+      activeProjectJob.id,
+      expect.any(Function),
+      expect.any(Function),
+    );
+    expect(unsubscribe).not.toHaveBeenCalled();
+  });
+
+  it("keeps the current project render pending when a stale start rejects", async () => {
+    const { client, analyze } = fixture();
+    const nextProject: ProjectDetail = {
+      ...project,
+      id: "00000000-0000-4000-8000-000000000002",
+      name: "Navigation target",
+    };
+    client.projects.list = vi.fn(async () =>
+      [project, nextProject].map((item): ProjectSummary => ({
+        id: item.id,
+        name: item.name,
+        description: item.description,
+        scriptHash: item.scriptHash,
+        scriptLineCount: item.scriptSource.split("\n").length,
+        audioDurationMs: null,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+      })),
+    );
+    client.projects.get = vi.fn(async (id: string) =>
+      structuredClone(id === project.id ? project : nextProject),
+    );
+
+    const staleStartRequest = deferred<RenderJob>();
+    const activeStartRequest = deferred<RenderJob>();
+    const activeProjectJob: RenderJob = {
+      ...renderJobFixture(
+        "00000000-0000-4000-8000-000000000097",
+        "synthesizing",
+        2,
+      ),
+      projectId: nextProject.id,
+    };
+    const unsubscribe = vi.fn();
+    const subscribe = vi.fn(() => unsubscribe);
+    const startProject = vi.fn((id: string) =>
+      id === project.id
+        ? staleStartRequest.promise
+        : activeStartRequest.promise,
+    );
+    const renderClient: RenderProgressClient = {
+      ...renderClientFixture([], vi.fn(), subscribe),
+      startProject,
+      list: vi.fn(async () => []),
+    };
+
+    renderPage(client, analyze, { renderClient });
+    await openProjectTab("Render");
+    const firstRenderButton = await screen.findByRole("button", {
+      name: "Render",
+    });
+    await waitFor(() => expect(firstRenderButton).toBeEnabled());
+    fireEvent.click(firstRenderButton);
+    await waitFor(() =>
+      expect(startProject).toHaveBeenCalledWith(project.id, {
+        diskSpaceCheckEnabled: true,
+      }),
+    );
+
+    await userEvent.click(
+      screen.getByRole("link", { name: /Back to Projects/u }),
+    );
+    await userEvent.click(
+      await screen.findByRole("link", { name: nextProject.name }),
+    );
+    expect(
+      await screen.findByDisplayValue(nextProject.name),
+    ).toBeInTheDocument();
+    await openProjectTab("Render");
+    const activeRenderButton = await screen.findByRole("button", {
+      name: "Render",
+    });
+    await waitFor(() => expect(activeRenderButton).toBeEnabled());
+    fireEvent.click(activeRenderButton);
+    await waitFor(() =>
+      expect(startProject).toHaveBeenCalledWith(nextProject.id, {
+        diskSpaceCheckEnabled: true,
+      }),
+    );
+    expect(screen.getByRole("button", { name: "Rendering…" })).toBeDisabled();
+
+    await act(async () => {
+      staleStartRequest.reject(new Error("Project A render start failed."));
+      await staleStartRequest.promise.catch(() => undefined);
+    });
+    expect(
+      screen.queryByText("Project A render start failed."),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Rendering…" })).toBeDisabled();
+    expect(screen.getByText("Preparing render…")).toBeInTheDocument();
+
+    await act(async () => {
+      activeStartRequest.resolve(activeProjectJob);
+      await activeStartRequest.promise;
+    });
+    expect(
+      await screen.findByText("2 of 4 chunks complete"),
+    ).toBeInTheDocument();
+    expect(subscribe).toHaveBeenCalledWith(
+      activeProjectJob.id,
+      expect.any(Function),
+      expect.any(Function),
+    );
+  });
+
+  it("retains polling for an Electron render client without subscriptions and stops on terminal state", async () => {
+    const { client, analyze } = fixture();
+    const activeJob = renderJobFixture(
+      "00000000-0000-4000-8000-000000000093",
+      "synthesizing",
+    );
+    const failedJob = renderJobFixture(activeJob.id, "failed");
+    const getRender = vi.fn(async () => failedJob);
+    const clearInterval = vi.spyOn(window, "clearInterval");
+    const renderClient = renderClientFixture([activeJob], getRender);
+
+    renderPage(client, analyze, { renderClient });
+    await openProjectTab("Render");
+    await waitFor(() => expect(getRender).toHaveBeenCalledWith(activeJob.id), {
+      timeout: 1_500,
+    });
+    expect(
+      await screen.findByRole("button", { name: "Try again" }),
+    ).toBeEnabled();
+    await waitFor(() => expect(clearInterval).toHaveBeenCalled());
+    expect(getRender).toHaveBeenCalledOnce();
   });
 
   it("starts the project render and exposes only completed playback and downloads", async () => {
@@ -1611,6 +2508,7 @@ describe("Projects workbench", () => {
       projectId: project.id,
       planId: plan.id,
       retryOfRenderId: null,
+      pinned: false,
       state: "complete" as const,
       progress: {
         phase: "complete" as const,
@@ -1658,10 +2556,15 @@ describe("Projects workbench", () => {
     }));
     const renderClient: RenderClient = {
       startProject: start,
+      getEstimateContext: vi.fn(async () => ({
+        freeSpaceBytes: 1_073_741_824,
+        calibrations: [],
+      })),
       list: vi.fn(async () => []),
       get: vi.fn(async () => job),
       cancel: vi.fn(async () => job),
       retry: vi.fn(async () => job),
+      setPinned: vi.fn(async () => job),
       listArtifacts: vi.fn(async () => [artifact]),
       exportArtifact,
       exportAudio: exportArtifact,
@@ -1691,7 +2594,11 @@ describe("Projects workbench", () => {
     });
     await waitFor(() => expect(renderButton).toBeEnabled());
     fireEvent.click(renderButton);
-    await waitFor(() => expect(start).toHaveBeenCalledWith(project.id));
+    await waitFor(() =>
+      expect(start).toHaveBeenCalledWith(project.id, {
+        diskSpaceCheckEnabled: true,
+      }),
+    );
     expect(
       await screen.findByLabelText(
         /Audio player for Completed project render/u,
@@ -1703,6 +2610,38 @@ describe("Projects workbench", () => {
       screen.getByRole("button", { name: "Download Details" }),
     );
     expect(exportDetails).toHaveBeenCalledWith(job.id);
+  });
+
+  it("pins and unpins the completed render from the render result", async () => {
+    const { client, analyze } = fixture();
+    const completed = renderJobFixture(
+      "00000000-0000-4000-8000-000000000094",
+      "complete",
+    );
+    const renderClient = renderClientFixture(
+      [completed],
+      async () => completed,
+    );
+    const setPinned = vi.fn(async (_renderId: string, pinned: boolean) => ({
+      ...completed,
+      pinned,
+    }));
+    renderClient.setPinned = setPinned;
+    renderPage(client, analyze, { renderClient });
+    await openProjectTab("Render");
+
+    const pin = await screen.findByRole("button", {
+      name: "Pin completed output",
+    });
+    await userEvent.click(pin);
+    expect(setPinned).toHaveBeenCalledWith(completed.id, true);
+    expect(
+      await screen.findByRole("button", { name: "Unpin completed output" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Unpin completed output" }),
+    );
+    expect(setPinned).toHaveBeenLastCalledWith(completed.id, false);
   });
 
   it("shows failed saves and guards unload and route navigation", async () => {

@@ -1,4 +1,8 @@
 import { resolve } from "node:path";
+import {
+  DEFAULT_HOST_ALLOWLIST,
+  normalizeAllowedHost,
+} from "./hostAllowlist.js";
 
 const DEFAULT_PORT = 4310;
 const DEFAULT_HOST = "127.0.0.1";
@@ -60,6 +64,45 @@ function parseSourceRevision(value: string | undefined): string {
     );
   }
   return sourceRevision;
+}
+
+function normalizeConfiguredHost(value: string, message: string): string {
+  const host = normalizeAllowedHost(value);
+  if (host === undefined) throw new Error(message);
+  return host;
+}
+
+function parseAllowedHosts(value: string | undefined): string[] {
+  if (value === undefined || value.trim() === "") return [];
+  return value
+    .split(",")
+    .map((entry) =>
+      normalizeConfiguredHost(
+        entry.trim(),
+        "STUDYNARRATOR_ALLOWED_HOSTS must be a comma-separated list of hostnames or IP addresses.",
+      ),
+    );
+}
+
+export function resolveServerHostAllowlist(
+  environment: NodeJS.ProcessEnv = process.env,
+): readonly string[] {
+  const listenHost = normalizeConfiguredHost(
+    resolveServerRuntimeConfiguration(environment).host,
+    "STUDYNARRATOR_LISTEN_HOST must be a hostname or IP address.",
+  );
+  return [
+    ...new Set([
+      ...DEFAULT_HOST_ALLOWLIST.map((host) =>
+        normalizeConfiguredHost(
+          host,
+          "The default host allowlist contains an invalid host.",
+        ),
+      ),
+      listenHost,
+      ...parseAllowedHosts(environment.STUDYNARRATOR_ALLOWED_HOSTS),
+    ]),
+  ];
 }
 
 export function resolveServerRuntimeConfiguration(

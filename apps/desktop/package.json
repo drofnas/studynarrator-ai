@@ -8,13 +8,13 @@
   "scripts": {
     "build": "node build.mjs",
     "rebuild:native": "node rebuild-native.mjs",
+    "package": "npm run build --workspace @studynarrator/web && npm run build --workspace @studynarrator/desktop && npm exec --workspace @studynarrator/desktop electron-builder -- --config electron-builder.yml",
     "smoke": "electron dist/smoke.cjs",
     "start": "electron ."
   },
   "dependencies": {
     "@studynarrator/application": "0.1.0",
     "@studynarrator/persistence": "0.1.0",
-    "@studynarrator/rendering": "0.1.0",
     "@studynarrator/runtime": "0.1.0",
     "@studynarrator/shared-types": "0.1.0",
     "better-sqlite3": "13.0.3"
@@ -23,6 +23,7 @@
     "@electron/rebuild": "4.2.0",
     "@types/better-sqlite3": "9.6.0",
     "electron": "43.3.0",
+    "electron-builder": "26.15.3",
     "esbuild": "0.28.2"
   }
 }

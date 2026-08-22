@@ -14,7 +14,10 @@ import {
   APPLICATION_VERSION,
   DATABASE_SCHEMA_VERSION,
 } from "@studynarrator/shared-types";
-import { openStudyNarratorRepository } from "@studynarrator/persistence";
+import {
+  DATA_DIRECTORY_LAYOUT_VERSION,
+  openStudyNarratorRepository,
+} from "@studynarrator/persistence";
 import {
   createDesktopServices,
   resolveDesktopDataDirectory,
@@ -82,6 +85,46 @@ describe("desktop storage recovery", () => {
           await runtime.dispose();
         }
       }
+    } finally {
+      await rm(dataDirectory, {
+        recursive: true,
+        force: true,
+        maxRetries: 5,
+        retryDelay: 100,
+      });
+    }
+  });
+
+  it("writes one structured startup event to the data directory log", async () => {
+    const dataDirectory = await mkdtemp(
+      join(tmpdir(), "studynarrator-desktop-log-"),
+    );
+    try {
+      const runtime = await createDesktopServices({
+        defaultDataDirectory: dataDirectory,
+        environment: {},
+      });
+      await runtime.dispose();
+
+      const entries = (
+        await readFile(join(dataDirectory, "logs", "studynarrator.log"), "utf8")
+      )
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line) as Record<string, unknown>);
+      expect(
+        entries.filter(({ event }) => event === "application-start"),
+      ).toEqual([
+        expect.objectContaining({
+          event: "application-start",
+          appVersion: APPLICATION_VERSION,
+          databaseSchemaVersion: DATABASE_SCHEMA_VERSION,
+          dataDirectoryLayoutVersion: DATA_DIRECTORY_LAYOUT_VERSION,
+          dataDirectory,
+          distribution: "electron",
+          msg: "Application starting",
+        }),
+      ]);
     } finally {
       await rm(dataDirectory, {
         recursive: true,

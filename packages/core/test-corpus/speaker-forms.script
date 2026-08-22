@@ -1,0 +1,8 @@
+[speaker_teacher]
+Standalone directive speech.
+Before an inline [speaker_student] directive speech.
+[speaker_teacher]
+[speaker_student]
+Consecutive directives leave this with the student.
+[speaker_1bad] Numeric-leading speaker speech.
+This next line carries the numeric-leading speaker.

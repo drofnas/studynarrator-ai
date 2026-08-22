@@ -8,7 +8,7 @@ import {
 } from "@studynarrator/core";
 import { z } from "zod";
 
-export const DATABASE_SCHEMA_VERSION = 4;
+export const DATABASE_SCHEMA_VERSION = 7;
 export const PERSISTENCE_CONTRACT_VERSION = 1;
 export const PERSISTENCE_CHANNELS = Object.freeze({
   status: "persistence.status",
@@ -20,6 +20,11 @@ export const PERSISTENCE_CHANNELS = Object.freeze({
   projectsDelete: "projects.delete",
   pacingGet: "settings.pacing.get",
   pacingUpdate: "settings.pacing.update",
+  retentionGet: "settings.retention.get",
+  retentionUpdate: "settings.retention.update",
+  retentionUsage: "settings.retention.usage",
+  retentionPreviewReclaim: "settings.retention.previewReclaim",
+  retentionReclaim: "settings.retention.reclaim",
   ignoredGet: "preferences.ignored.get",
   ignoredReplace: "preferences.ignored.replace",
   globalLexiconList: "lexicon.global.list",
@@ -30,6 +35,85 @@ export const PERSISTENCE_CHANNELS = Object.freeze({
 
 export const ProjectIdSchema = z.uuid();
 const TimestampSchema = z.iso.datetime({ offset: true });
+
+const RetentionTtlSchema = z.enum(["8h", "24h", "7d", "never"]);
+
+export const RetentionSettingsAuthoringSchema = z
+  .object({
+    speechCacheTtl: RetentionTtlSchema,
+    jobSnapshotTtl: RetentionTtlSchema,
+    renderArtifactTtl: RetentionTtlSchema,
+    speechCacheSizeCapBytes: z
+      .number()
+      .int()
+      .positive()
+      .max(Number.MAX_SAFE_INTEGER),
+  })
+  .strict();
+export type RetentionSettingsAuthoring = z.infer<
+  typeof RetentionSettingsAuthoringSchema
+>;
+
+export const RetentionSettingsSchema = RetentionSettingsAuthoringSchema.extend({
+  updatedAt: TimestampSchema,
+}).strict();
+export type RetentionSettings = z.infer<typeof RetentionSettingsSchema>;
+
+const RetentionUsageItemSchema = z
+  .object({
+    entries: z.number().int().nonnegative(),
+    bytes: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  })
+  .strict();
+export const RetentionUsageSchema = z
+  .object({
+    speechCache: RetentionUsageItemSchema,
+    jobSnapshots: RetentionUsageItemSchema,
+    renderArtifacts: RetentionUsageItemSchema,
+  })
+  .strict();
+export type RetentionUsage = z.infer<typeof RetentionUsageSchema>;
+
+export const RetentionReclaimPreviewSchema = z
+  .object({
+    reclaimable: RetentionUsageSchema,
+    skipped: z.boolean(),
+  })
+  .strict();
+export type RetentionReclaimPreview = z.infer<
+  typeof RetentionReclaimPreviewSchema
+>;
+
+export const RetentionReclaimInputSchema = z
+  .object({ confirm: z.literal(true) })
+  .strict();
+export const RetentionReclaimResultSchema = z
+  .object({ reclaimed: RetentionUsageSchema, skipped: z.boolean() })
+  .strict();
+export type RetentionReclaimResult = z.infer<
+  typeof RetentionReclaimResultSchema
+>;
+
+// Start conservatively at 5 GiB while keeping user-owned render artifacts.
+export const DEFAULT_RETENTION_SETTINGS = Object.freeze({
+  speechCacheTtl: "7d",
+  jobSnapshotTtl: "never",
+  renderArtifactTtl: "never",
+  speechCacheSizeCapBytes: 5 * 1_024 ** 3,
+}) satisfies Readonly<RetentionSettingsAuthoring>;
+
+export const VoiceTimingCalibrationSchema = z
+  .object({
+    modelId: z.string().min(1),
+    voiceId: z.string().min(1),
+    millisecondsPerNormalizedCharacter: z.number().positive().finite(),
+    sampleCount: z.number().int().positive(),
+    updatedAt: TimestampSchema,
+  })
+  .strict();
+export type VoiceTimingCalibration = z.infer<
+  typeof VoiceTimingCalibrationSchema
+>;
 
 const SpeakerMappingSchema = z
   .object({
@@ -649,6 +733,16 @@ interface PersistenceSettingsClient {
   ): Promise<SystemTimingConfiguration>;
 }
 
+interface RetentionMaintenanceClient {
+  get(): Promise<RetentionSettings>;
+  update(input: RetentionSettingsAuthoring): Promise<RetentionSettings>;
+  usage(): Promise<RetentionUsage>;
+  previewReclaim(): Promise<RetentionReclaimPreview>;
+  reclaim(
+    input: z.infer<typeof RetentionReclaimInputSchema>,
+  ): Promise<RetentionReclaimResult>;
+}
+
 interface PreferencesClient {
   getIgnoredDiagnostics(): Promise<IgnoredDiagnosticCollection>;
   replaceIgnoredDiagnostics(
@@ -668,6 +762,7 @@ export interface PersistenceClient {
   backups?: PersistenceBackupsClient;
   projects: ProjectsClient;
   settings: PersistenceSettingsClient;
+  retention: RetentionMaintenanceClient;
   preferences: PreferencesClient;
   globalLexicon: GlobalLexiconClient;
 }

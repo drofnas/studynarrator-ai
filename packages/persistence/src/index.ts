@@ -29,6 +29,7 @@ export {
   type DatabaseConstructor,
   type DatabaseLike,
   type Migration,
+  type PersistenceLogger,
 } from "./migrations.js";
 export { restoreDatabaseFromBackup } from "./restore.js";
 export {

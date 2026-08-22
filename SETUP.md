@@ -2,6 +2,15 @@
 
 This guide covers the Speaches installation, the speech model download, the first StudyNarrator start, and connecting the two. StudyNarrator itself does not bundle a speech engine.
 
+## Unsigned desktop installers: verify before opening
+
+If a future desktop installer is published in an [official StudyNarrator GitHub Release](https://github.com/drofnas/studynarrator-ai/releases), it will be unsigned until code signing and notarization are available. Download it only from that published release, never a draft, then verify the installer against the published SHA-256 checksum in `SHA256SUMS.txt` before bypassing any warning. Do not continue if the checksum does not match.
+
+After the checksum matches, use only the warning-specific path below; do not disable Gatekeeper or SmartScreen globally.
+
+- **macOS Gatekeeper:** Move the app from the verified DMG to Applications. In Finder, Control-click the app, choose **Open**, then confirm **Open**. If macOS instead reports that the app was blocked, open **System Settings** > **Privacy & Security**, select **Open Anyway** for that app, then confirm **Open**.
+- **Windows SmartScreen:** Start the verified installer. In the **Windows protected your PC** dialog, select **More info**, then **Run anyway**. If an organization policy prevents this option, do not change that policy; contact the organization administrator.
+
 ## 1. Set up Speaches
 
 Install Docker Engine with the Compose plugin, or Docker Desktop. Speaches recommends Docker Compose and publishes separate CPU and NVIDIA CUDA configurations in its [official installation guide](https://speaches.ai/installation/).
@@ -83,6 +92,8 @@ See the upstream [Speaches text-to-speech guide](https://speaches.ai/usage/text-
 
 ## 3. Start StudyNarrator
 
+> **Distribution support:** Docker Web is a supported single-user distribution. Its supported Docker upgrade path retains the `studynarrator-data` named volume mounted at `/data`; application migrations run at startup.
+
 Clone this repository in a different directory, then create its local environment file:
 
 ```sh
@@ -119,7 +130,7 @@ git pull --ff-only
 docker compose up --build --detach
 ```
 
-The `studynarrator-data` named volume persists the SQLite database, speech cache, frozen plans, and render artifacts. Do not run `docker compose down --volumes` unless you intend to delete that data. See the [Docker operations guide](deploy/docker/README.md) for backup, restore, LAN access, and bind-mount permissions.
+The `studynarrator-data` named volume persists the SQLite database, speech cache, and render artifacts. Do not run `docker compose down --volumes` unless you intend to delete that data. See the [Docker operations guide](deploy/docker/README.md) for backup, restore, LAN access, and bind-mount permissions.
 
 ## Connecting to Speaches from each runtime
 

@@ -65,6 +65,7 @@ function fixture() {
       delete: vi.fn(),
     },
     settings: { getPacing: vi.fn(), updatePacing: vi.fn() },
+    retention: {} as PersistenceClient["retention"],
     preferences: {
       getIgnoredDiagnostics: vi.fn(),
       replaceIgnoredDiagnostics: vi.fn(),
@@ -154,8 +155,8 @@ function renderPage(
   );
 }
 
-function editorView(name: string): EditorView {
-  const content = screen.getByRole("textbox", { name });
+async function editorView(name: string): Promise<EditorView> {
+  const content = await screen.findByRole("textbox", { name });
   const view = EditorView.findFromDOM(
     content.closest(".cm-editor") as HTMLElement,
   );
@@ -163,8 +164,8 @@ function editorView(name: string): EditorView {
   return view;
 }
 
-function replaceEditorContent(name: string, content: string) {
-  const view = editorView(name);
+async function replaceEditorContent(name: string, content: string) {
+  const view = await editorView(name);
   act(() =>
     view.dispatch({
       changes: { from: 0, to: view.state.doc.length, insert: content },
@@ -189,10 +190,10 @@ describe("script prompt kit", () => {
     expect(createTab).toHaveAttribute("aria-selected", "true");
     expect(updateTab).toHaveAttribute("aria-selected", "false");
     expect(
-      editorView("Create a script prompt editor").state.doc.toString(),
+      (await editorView("Create a script prompt editor")).state.doc.toString(),
     ).toContain("# StudyNarrator Script Creation Instructions");
     expect(
-      editorView("Create a script prompt editor").state.doc.toString(),
+      (await editorView("Create a script prompt editor")).state.doc.toString(),
     ).toContain("[WHAT SHOULD THE SCRIPT TEACH?]");
     expect(
       screen.getByText(
@@ -202,17 +203,17 @@ describe("script prompt kit", () => {
     expect(screen.queryByText(project.scriptSource)).not.toBeInTheDocument();
     await userEvent.click(updateTab);
     expect(
-      editorView("Update a script prompt editor").state.doc.toString(),
+      (await editorView("Update a script prompt editor")).state.doc.toString(),
     ).toContain(
       "[DESCRIBE WHAT SHOULD BE ADDED, REMOVED, CORRECTED, EXPANDED, OR REORGANIZED.]",
     );
     expect(
-      editorView("Update a script prompt editor").state.doc.toString(),
+      (await editorView("Update a script prompt editor")).state.doc.toString(),
     ).toContain(
       "[PASTE THE CURRENT SCRIPT HERE AND/OR ATTACH IT TO THE CONVERSATION.]",
     );
     expect(
-      editorView("Update a script prompt editor").state.doc.toString(),
+      (await editorView("Update a script prompt editor")).state.doc.toString(),
     ).not.toContain("SQL → sequel");
     expect(
       screen.getByText(
@@ -257,17 +258,17 @@ describe("script prompt kit", () => {
     renderPage(persistence, generation);
     await screen.findByRole("heading", { name: "Script prompt kit" });
     const editedCreation = `${creation.content}\nCREATE EDIT`;
-    replaceEditorContent("Create a script prompt editor", editedCreation);
+    await replaceEditorContent("Create a script prompt editor", editedCreation);
     await userEvent.click(screen.getByRole("tab", { name: "Update Prompt" }));
     const editedUpdate = `${update.content}\nUPDATE EDIT`;
-    replaceEditorContent("Update a script prompt editor", editedUpdate);
+    await replaceEditorContent("Update a script prompt editor", editedUpdate);
     await userEvent.click(screen.getByRole("tab", { name: "Create Prompt" }));
     expect(
-      editorView("Create a script prompt editor").state.doc.toString(),
+      (await editorView("Create a script prompt editor")).state.doc.toString(),
     ).toBe(editedCreation);
     await userEvent.click(screen.getByRole("tab", { name: "Update Prompt" }));
     expect(
-      editorView("Update a script prompt editor").state.doc.toString(),
+      (await editorView("Update a script prompt editor")).state.doc.toString(),
     ).toBe(editedUpdate);
     await userEvent.click(
       screen.getByRole("button", { name: "Copy update prompt" }),
@@ -285,7 +286,7 @@ describe("script prompt kit", () => {
     const { persistence, generation } = fixture();
     renderPage(persistence, generation);
     await screen.findByRole("heading", { name: "Script prompt kit" });
-    replaceEditorContent("Create a script prompt editor", "");
+    await replaceEditorContent("Create a script prompt editor", "");
     expect(
       screen.getByRole("button", { name: "Copy creation prompt" }),
     ).toBeDisabled();
@@ -326,7 +327,9 @@ describe("script prompt kit", () => {
       "Clipboard access was denied",
     );
     expect(
-      screen.getByRole("textbox", { name: "Create a script prompt editor" }),
+      await screen.findByRole("textbox", {
+        name: "Create a script prompt editor",
+      }),
     ).toBeInTheDocument();
   });
 

@@ -1,0 +1,248 @@
+{
+  "parse": {
+    "grammarVersion": 1,
+    "cirSchemaVersion": 1,
+    "source": "[speaker_teacher] Compare {{resume|cv}} with {{resume|continue}} and {{C++|cpp-language}}.\n",
+    "nodes": [
+      {
+        "ordinal": 1,
+        "range": {
+          "start": {
+            "line": 1,
+            "column": 19
+          },
+          "end": {
+            "line": 1,
+            "column": 91
+          }
+        },
+        "type": "speech",
+        "speakerId": "teacher",
+        "rawText": "Compare {{resume|cv}} with {{resume|continue}} and {{C++|cpp-language}}.",
+        "readableText": "Compare resume with resume and C++.",
+        "annotations": [
+          {
+            "displayText": "resume",
+            "senseId": "cv",
+            "rawText": "{{resume|cv}}",
+            "range": {
+              "start": {
+                "line": 1,
+                "column": 27
+              },
+              "end": {
+                "line": 1,
+                "column": 40
+              }
+            }
+          },
+          {
+            "displayText": "resume",
+            "senseId": "continue",
+            "rawText": "{{resume|continue}}",
+            "range": {
+              "start": {
+                "line": 1,
+                "column": 46
+              },
+              "end": {
+                "line": 1,
+                "column": 65
+              }
+            }
+          },
+          {
+            "displayText": "C++",
+            "senseId": "cpp-language",
+            "rawText": "{{C++|cpp-language}}",
+            "range": {
+              "start": {
+                "line": 1,
+                "column": 70
+              },
+              "end": {
+                "line": 1,
+                "column": 90
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "discoveries": {
+      "speakers": [
+        {
+          "id": "teacher",
+          "occurrences": [
+            {
+              "range": {
+                "start": {
+                  "line": 1,
+                  "column": 1
+                },
+                "end": {
+                  "line": 1,
+                  "column": 18
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "pauses": [],
+      "sections": [],
+      "pronunciations": [
+        {
+          "displayText": "resume",
+          "senseId": "cv",
+          "rawText": "{{resume|cv}}",
+          "range": {
+            "start": {
+              "line": 1,
+              "column": 27
+            },
+            "end": {
+              "line": 1,
+              "column": 40
+            }
+          },
+          "nodeOrdinal": 1
+        },
+        {
+          "displayText": "resume",
+          "senseId": "continue",
+          "rawText": "{{resume|continue}}",
+          "range": {
+            "start": {
+              "line": 1,
+              "column": 46
+            },
+            "end": {
+              "line": 1,
+              "column": 65
+            }
+          },
+          "nodeOrdinal": 1
+        },
+        {
+          "displayText": "C++",
+          "senseId": "cpp-language",
+          "rawText": "{{C++|cpp-language}}",
+          "range": {
+            "start": {
+              "line": 1,
+              "column": 70
+            },
+            "end": {
+              "line": 1,
+              "column": 90
+            }
+          },
+          "nodeOrdinal": 1
+        }
+      ]
+    },
+    "summary": {
+      "speakerCount": 1,
+      "pauseIdCount": 0,
+      "sectionCount": 0,
+      "speechSegmentCount": 1,
+      "explicitPauseSegmentCount": 0,
+      "pronunciationAnnotationCount": 3,
+      "paragraphBreakCount": 0,
+      "characterCount": 91
+    },
+    "errors": [],
+    "warnings": []
+  },
+  "transform": {
+    "transformVersion": 1,
+    "source": "[speaker_teacher] Compare {{resume|cv}} with {{resume|continue}} and {{C++|cpp-language}}.\n",
+    "segments": [
+      {
+        "nodeOrdinal": 1,
+        "speakerId": "teacher",
+        "sourceRange": {
+          "start": {
+            "line": 1,
+            "column": 19
+          },
+          "end": {
+            "line": 1,
+            "column": 91
+          }
+        },
+        "readableText": "Compare {{resume|cv}} with {{resume|continue}} and {{C++|cpp-language}}.",
+        "ttsText": "Compare {{resume|cv}} with {{resume|continue}} and {{C++|cpp-language}}.",
+        "matches": []
+      }
+    ],
+    "readableTranscript": "Compare {{resume|cv}} with {{resume|continue}} and {{C++|cpp-language}}.",
+    "ttsTranscript": "Compare {{resume|cv}} with {{resume|continue}} and {{C++|cpp-language}}.",
+    "matches": [],
+    "errors": [],
+    "warnings": [
+      {
+        "code": "UNRESOLVED_NAMED_SENSE",
+        "message": "No enabled lexicon entry resolves resume|cv.",
+        "nodeOrdinal": 1,
+        "range": {
+          "start": {
+            "line": 1,
+            "column": 27
+          },
+          "end": {
+            "line": 1,
+            "column": 40
+          }
+        },
+        "sourceStartOffset": 26,
+        "sourceEndOffset": 39,
+        "offendingText": "{{resume|cv}}",
+        "ignorePattern": "{{resume|cv}}",
+        "suggestion": "Add a named-sense entry for resume + cv, or leave the annotation literal."
+      },
+      {
+        "code": "UNRESOLVED_NAMED_SENSE",
+        "message": "No enabled lexicon entry resolves resume|continue.",
+        "nodeOrdinal": 1,
+        "range": {
+          "start": {
+            "line": 1,
+            "column": 46
+          },
+          "end": {
+            "line": 1,
+            "column": 65
+          }
+        },
+        "sourceStartOffset": 45,
+        "sourceEndOffset": 64,
+        "offendingText": "{{resume|continue}}",
+        "ignorePattern": "{{resume|continue}}",
+        "suggestion": "Add a named-sense entry for resume + continue, or leave the annotation literal."
+      },
+      {
+        "code": "UNRESOLVED_NAMED_SENSE",
+        "message": "No enabled lexicon entry resolves C++|cpp-language.",
+        "nodeOrdinal": 1,
+        "range": {
+          "start": {
+            "line": 1,
+            "column": 70
+          },
+          "end": {
+            "line": 1,
+            "column": 90
+          }
+        },
+        "sourceStartOffset": 69,
+        "sourceEndOffset": 89,
+        "offendingText": "{{C++|cpp-language}}",
+        "ignorePattern": "{{C++|cpp-language}}",
+        "suggestion": "Add a named-sense entry for C++ + cpp-language, or leave the annotation literal."
+      }
+    ],
+    "synthesisReady": true
+  }
+}

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  DEFAULT_RETENTION_SETTINGS,
   DEFAULT_SYSTEM_TIMING,
   type IgnoredDiagnosticCollection,
   type PersistenceClient,
@@ -49,13 +50,44 @@ function requireBackups(client: PersistenceClient) {
   return client.backups;
 }
 
+const retentionSettings = {
+  ...DEFAULT_RETENTION_SETTINGS,
+  updatedAt: "2026-08-12T12:00:00.000Z",
+};
+
+function retentionProvider() {
+  return {
+    usage: vi.fn(async () => ({
+      speechCache: { entries: 1, bytes: 2 },
+      jobSnapshots: { entries: 3, bytes: 4 },
+      renderArtifacts: { entries: 5, bytes: 6 },
+    })),
+    previewReclaim: vi.fn(async () => ({
+      reclaimable: {
+        speechCache: { entries: 1, bytes: 2 },
+        jobSnapshots: { entries: 0, bytes: 0 },
+        renderArtifacts: { entries: 0, bytes: 0 },
+      },
+      skipped: false,
+    })),
+    reclaim: vi.fn(async () => ({
+      reclaimed: {
+        speechCache: { entries: 1, bytes: 2 },
+        jobSnapshots: { entries: 0, bytes: 0 },
+        renderArtifacts: { entries: 0, bytes: 0 },
+      },
+      skipped: false,
+    })),
+  };
+}
+
 function repository() {
   return {
     status: vi.fn(() => ({
       contractVersion: 1 as const,
       state: "ready" as const,
-      databaseSchemaVersion: 4 as const,
-      targetDatabaseSchemaVersion: 4 as const,
+      databaseSchemaVersion: 7 as const,
+      targetDatabaseSchemaVersion: 7 as const,
       databasePath: "/tmp/studynarrator.sqlite",
       latestBackupPath: null,
     })),
@@ -73,6 +105,13 @@ function repository() {
     ),
     listGlobalLexicon: vi.fn(() => []),
     replaceGlobalLexicon: vi.fn(() => []),
+    getRetentionSettings: vi.fn(() => retentionSettings),
+    updateRetentionSettings: vi.fn(
+      (input: Parameters<PersistenceClient["retention"]["update"]>[0]) => ({
+        ...input,
+        updatedAt: retentionSettings.updatedAt,
+      }),
+    ),
   };
 }
 
@@ -86,7 +125,11 @@ describe("persistence application service", () => {
       sizeBytes: 4096,
       kind: "migration",
     });
-    const service = createPersistenceService(source, { backups: provider });
+    const retention = retentionProvider();
+    const service = createPersistenceService(source, {
+      backups: provider,
+      retention,
+    });
     const backups = requireBackups(service);
     const liveMethods = [
       ...Object.keys(service)
@@ -98,6 +141,9 @@ describe("persistence application service", () => {
       ),
       ...Object.keys(service.settings).map(
         (key) => `persistence.settings.${key}`,
+      ),
+      ...Object.keys(service.retention).map(
+        (key) => `persistence.retention.${key}`,
       ),
       ...Object.keys(service.preferences).map(
         (key) => `persistence.preferences.${key}`,
@@ -132,6 +178,11 @@ describe("persistence application service", () => {
     await service.projects.delete(project.id);
     await service.settings.getPacing();
     await service.settings.updatePacing(DEFAULT_SYSTEM_TIMING);
+    await service.retention.get();
+    await service.retention.update(DEFAULT_RETENTION_SETTINGS);
+    await service.retention.usage();
+    await service.retention.previewReclaim();
+    await service.retention.reclaim({ confirm: true });
     await service.preferences.getIgnoredDiagnostics();
     await service.preferences.replaceIgnoredDiagnostics([]);
     await service.globalLexicon.list();
@@ -157,6 +208,11 @@ describe("persistence application service", () => {
     expect(source.getIgnoredDiagnostics).toHaveBeenCalledOnce();
     expect(source.replaceIgnoredDiagnostics).toHaveBeenCalledOnce();
     expect(source.listGlobalLexicon).toHaveBeenCalledOnce();
+    expect(source.getRetentionSettings).toHaveBeenCalledOnce();
+    expect(source.updateRetentionSettings).toHaveBeenCalledWith(
+      DEFAULT_RETENTION_SETTINGS,
+    );
+    expect(retention.reclaim).toHaveBeenCalledWith({ confirm: true });
     expect(source.replaceGlobalLexicon).toHaveBeenCalledWith([
       {
         scope: "global",
@@ -171,7 +227,7 @@ describe("persistence application service", () => {
         notes: "",
       },
     ]);
-    expect(liveMethods).toHaveLength(15);
+    expect(liveMethods).toHaveLength(20);
     expect(provider.list).toHaveBeenCalledOnce();
     expect(provider.restore).toHaveBeenCalledWith({
       backupPath:

@@ -12,6 +12,12 @@ import {
   PersistenceBackupRestoreInputSchema,
   PersistenceBackupRestoreResultSchema,
   PersistenceStatusSchema,
+  RetentionReclaimInputSchema,
+  RetentionReclaimPreviewSchema,
+  RetentionReclaimResultSchema,
+  RetentionSettingsAuthoringSchema,
+  RetentionSettingsSchema,
+  RetentionUsageSchema,
   ProjectCreateInputSchema,
   ProjectDetailSchema,
   ProjectDuplicateRequestSchema,
@@ -25,11 +31,15 @@ import {
   RenderArtifactCollectionSchema,
   RenderArtifactExportResultSchema,
   RenderArtifactInputSchema,
+  RenderEstimateContextInputSchema,
+  RenderEstimateContextResultSchema,
   RenderHistorySegmentCollectionSchema,
   RenderIdInputSchema,
   RenderJobCollectionSchema,
   RenderJobSchema,
+  RenderPinInputSchema,
   RenderProjectInputSchema,
+  RenderProjectStartInputSchema,
   RenderSegmentInputSchema,
   RenderWaveformSchema,
   SYSTEM_DIAGNOSTICS_CHANNEL,
@@ -168,6 +178,31 @@ export function registerPersistenceHandlers(
     SystemTimingConfigurationSchema.parse(
       await persistence.settings.updatePacing(
         SystemTimingConfigurationSchema.parse(input),
+      ),
+    ),
+  );
+  handle(PERSISTENCE_CHANNELS.retentionGet, async () =>
+    RetentionSettingsSchema.parse(await persistence.retention.get()),
+  );
+  handle(PERSISTENCE_CHANNELS.retentionUpdate, async (input) =>
+    RetentionSettingsSchema.parse(
+      await persistence.retention.update(
+        RetentionSettingsAuthoringSchema.parse(input),
+      ),
+    ),
+  );
+  handle(PERSISTENCE_CHANNELS.retentionUsage, async () =>
+    RetentionUsageSchema.parse(await persistence.retention.usage()),
+  );
+  handle(PERSISTENCE_CHANNELS.retentionPreviewReclaim, async () =>
+    RetentionReclaimPreviewSchema.parse(
+      await persistence.retention.previewReclaim(),
+    ),
+  );
+  handle(PERSISTENCE_CHANNELS.retentionReclaim, async (input) =>
+    RetentionReclaimResultSchema.parse(
+      await persistence.retention.reclaim(
+        RetentionReclaimInputSchema.parse(input),
       ),
     ),
   );
@@ -457,6 +492,11 @@ export function registerRenderHandlers(
         /* eslint-disable preserve-caught-error */
         if (record && Array.isArray(record.issues))
           throw new Error("The request does not match the render contract.");
+        if (
+          record?.code === "RENDER_DISK_SPACE_INSUFFICIENT" &&
+          typeof record.message === "string"
+        )
+          throw new Error(record.message);
         throw new Error(
           "StudyNarrator could not complete the render operation.",
         );
@@ -465,8 +505,16 @@ export function registerRenderHandlers(
     });
   };
   handle(RENDER_CHANNELS.startProject, async (input) => {
-    const { projectId } = RenderProjectInputSchema.parse(input);
-    return RenderJobSchema.parse(await renders.startProject(projectId));
+    const { projectId, options } = RenderProjectStartInputSchema.parse(input);
+    return RenderJobSchema.parse(
+      await renders.startProject(projectId, options),
+    );
+  });
+  handle(RENDER_CHANNELS.getEstimateContext, async (input) => {
+    const parsed = RenderEstimateContextInputSchema.parse(input);
+    return RenderEstimateContextResultSchema.parse(
+      await renders.getEstimateContext(parsed),
+    );
   });
   handle(RENDER_CHANNELS.list, async (input) => {
     const { projectId } = RenderProjectInputSchema.parse(input);
@@ -483,6 +531,10 @@ export function registerRenderHandlers(
   handle(RENDER_CHANNELS.retry, async (input) => {
     const { renderId } = RenderIdInputSchema.parse(input);
     return RenderJobSchema.parse(await renders.retry(renderId));
+  });
+  handle(RENDER_CHANNELS.setPinned, async (input) => {
+    const { renderId, pinned } = RenderPinInputSchema.parse(input);
+    return RenderJobSchema.parse(await renders.setPinned(renderId, pinned));
   });
   handle(RENDER_CHANNELS.artifacts, async (input) => {
     const { renderId } = RenderIdInputSchema.parse(input);

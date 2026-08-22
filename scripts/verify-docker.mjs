@@ -280,9 +280,9 @@ async function stopFakeSpeaches() {
 }
 
 if (process.argv.length !== 2) fail("usage: npm run verify:docker");
-if (Number(process.versions.node.split(".")[0]) !== 26)
+if (Number(process.versions.node.split(".")[0]) < 24)
   fail(
-    `verification requires Node 26; current runtime is ${process.versions.node}`,
+    `verification requires Node 24 or later; current runtime is ${process.versions.node}`,
   );
 invariant(
   /^studynarrator-verify-\d+-\d+$/u.test(projectName),

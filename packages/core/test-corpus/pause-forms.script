@@ -1,0 +1,5 @@
+[pause_short]
+[pause_medium] Leading pause before speech.
+Inline before [pause_long] inline after.
+[pause_short][pause_medium]
+Trailing pause follows speech [pause_long]

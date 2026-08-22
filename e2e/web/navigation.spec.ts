@@ -86,6 +86,7 @@ test.describe("shell, onboarding, and runtime routes", () => {
       "Voices",
       "Lexicon",
       "Timings",
+      "Retention",
       "System diagnostics",
     ]);
     await navigation.getByRole("link", { name: "Prompt Kit" }).click();
@@ -106,7 +107,13 @@ test.describe("shell, onboarding, and runtime routes", () => {
     await expect(
       navigation.getByRole("link", { name: "General" }),
     ).toHaveAttribute("aria-current", "page");
-    for (const child of ["General", "Voices", "Lexicon", "Timings"])
+    for (const child of [
+      "General",
+      "Voices",
+      "Lexicon",
+      "Timings",
+      "Retention",
+    ])
       await expect(navigation.getByRole("link", { name: child })).toBeVisible();
     await expect(navigation.getByText("Review tools")).toHaveCount(0);
     await navigation.getByRole("link", { name: "System diagnostics" }).click();

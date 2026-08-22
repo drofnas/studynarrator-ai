@@ -2,6 +2,7 @@ import { chmod, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import {
   DATABASE_SCHEMA_VERSION,
+  DEFAULT_RETENTION_SETTINGS,
   type PersistenceBackup,
 } from "@studynarrator/shared-types";
 import { MigrationFailureError, SchemaTooNewError } from "./errors.js";
@@ -11,16 +12,23 @@ import {
   V3_GLOBAL_NAMED_SENSE_LEXICON,
 } from "./migrationSeeds.js";
 
-interface StatementLike {
-  run(...parameters: unknown[]): { changes?: number | bigint };
-  get(...parameters: unknown[]): unknown;
-  all(...parameters: unknown[]): unknown[];
+interface StatementLike<BindParameters extends unknown[], Result> {
+  run(...parameters: BindParameters): { changes?: number | bigint };
+  get(...parameters: BindParameters): Result | undefined;
+  all(...parameters: BindParameters): Result[];
 }
 
 export interface DatabaseLike {
-  exec(sql: string): unknown;
-  pragma(source: string, options?: { simple?: boolean }): unknown;
-  prepare(sql: string): StatementLike;
+  exec(sql: string): void;
+  pragma(source: string, options?: { simple?: boolean }): void;
+  prepare<
+    BindParameters extends unknown[] | object = unknown[],
+    Result = unknown,
+  >(
+    sql: string,
+  ): BindParameters extends unknown[]
+    ? StatementLike<BindParameters, Result>
+    : StatementLike<[BindParameters], Result>;
   backup(destinationFile: string): Promise<unknown>;
   close(): void;
 }
@@ -36,6 +44,11 @@ export interface Migration {
   version: number;
   name: string;
   up(database: DatabaseLike): void;
+}
+
+export interface PersistenceLogger {
+  info(fields: Record<string, unknown>, message: string): void;
+  warn(fields: Record<string, unknown>, message: string): void;
 }
 
 const BASELINE_SCHEMA_SQL = `
@@ -368,6 +381,63 @@ export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
       `);
     },
   },
+  {
+    version: 5,
+    name: "voice-timing-calibration",
+    up(database) {
+      database.exec(`
+        CREATE TABLE voice_timing_calibration (
+          model_id TEXT NOT NULL,
+          voice_id TEXT NOT NULL,
+          milliseconds_per_normalized_character REAL NOT NULL CHECK (milliseconds_per_normalized_character > 0),
+          sample_count INTEGER NOT NULL CHECK (sample_count > 0),
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (model_id, voice_id)
+        );
+      `);
+    },
+  },
+  {
+    version: 6,
+    name: "retention-settings",
+    up(database) {
+      database.exec(`
+        CREATE TABLE retention_settings (
+          singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
+          speech_cache_ttl TEXT NOT NULL CHECK (speech_cache_ttl IN ('8h', '24h', '7d', 'never')),
+          job_snapshot_ttl TEXT NOT NULL CHECK (job_snapshot_ttl IN ('8h', '24h', '7d', 'never')),
+          render_artifact_ttl TEXT NOT NULL CHECK (render_artifact_ttl IN ('8h', '24h', '7d', 'never')),
+          speech_cache_size_cap_bytes INTEGER NOT NULL CHECK (typeof(speech_cache_size_cap_bytes) = 'integer' AND speech_cache_size_cap_bytes > 0),
+          updated_at TEXT NOT NULL
+        );
+      `);
+      database
+        .prepare(
+          `
+          INSERT INTO retention_settings (
+            singleton_id, speech_cache_ttl, job_snapshot_ttl, render_artifact_ttl,
+            speech_cache_size_cap_bytes, updated_at
+          ) VALUES (1, ?, ?, ?, ?, ?)
+        `,
+        )
+        .run(
+          DEFAULT_RETENTION_SETTINGS.speechCacheTtl,
+          DEFAULT_RETENTION_SETTINGS.jobSnapshotTtl,
+          DEFAULT_RETENTION_SETTINGS.renderArtifactTtl,
+          DEFAULT_RETENTION_SETTINGS.speechCacheSizeCapBytes,
+          new Date().toISOString(),
+        );
+    },
+  },
+  {
+    version: 7,
+    name: "render-pinning",
+    up(database) {
+      database.exec(`
+        ALTER TABLE render_jobs ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1));
+      `);
+    },
+  },
 ]);
 
 interface VersionRow {
@@ -594,6 +664,7 @@ export async function migrateDatabase(options: {
   databasePath: string;
   now?: () => Date;
   migrations?: readonly Migration[];
+  logger?: PersistenceLogger;
 }): Promise<MigrationResult> {
   const migrations = options.migrations ?? STUDYNARRATOR_MIGRATIONS;
   validateMigrations(migrations);
@@ -656,6 +727,15 @@ export async function migrateDatabase(options: {
       );
       await database.backup(backupPath);
       await chmod(backupPath, 0o600);
+      options.logger?.info(
+        {
+          event: "database-migration-backup-created",
+          backupPath,
+          fromDatabaseSchemaVersion: currentVersion,
+          toDatabaseSchemaVersion: targetVersion,
+        },
+        "Database migration backup created",
+      );
     }
 
     for (const migration of migrations) {
@@ -684,12 +764,40 @@ export async function migrateDatabase(options: {
         failedMigration = { version: migration.version, name: migration.name };
         throw error;
       }
+      options.logger?.info(
+        {
+          event: "database-migration-applied",
+          migrationVersion: migration.version,
+          migrationName: migration.name,
+        },
+        "Database migration applied",
+      );
     }
     await chmod(options.databasePath, 0o600);
     try {
-      await pruneBackups(options.databasePath, { protectPath: backupPath });
-    } catch {
+      const pruneResult = await pruneBackups(options.databasePath, {
+        protectPath: backupPath,
+      });
+      options.logger?.info(
+        {
+          event: "database-backups-pruned",
+          removedCount: pruneResult.removed.length,
+          retainedCount: pruneResult.retained.length,
+          removedPaths: pruneResult.removed,
+          retainedPaths: pruneResult.retained,
+        },
+        "Database backups pruned",
+      );
+    } catch (error) {
       // Pruning is best effort and must never prevent the application from opening.
+      options.logger?.warn(
+        {
+          event: "database-backup-prune-failed",
+          err: error,
+          protectedBackupPath: backupPath,
+        },
+        "Database backup pruning failed",
+      );
     }
     backupPath ??= await latestBackup(options.databasePath);
     return {

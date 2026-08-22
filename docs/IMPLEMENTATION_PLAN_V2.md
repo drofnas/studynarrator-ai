@@ -88,39 +88,39 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 12.1 | Correct the README                                 | P0       | S    | complete    |
 | 12.2 | Write UPGRADE.md                                   | P0       | S    | complete    |
 | 12.3 | Split setup into SETUP.md                          | P0       | S    | complete    |
-| 13   | Lower the Node requirement to 24                   | P1       | S    | todo        |
-| 14   | Make the Vitest configs disjoint                   | P1       | XS   | todo        |
-| 15   | Add coverage thresholds                            | P1       | S    | todo        |
-| 16.1 | Extract the runtime descriptor type                | P1       | S    | todo        |
-| 16.2 | Extract the shared service factory                 | P1       | M    | todo        |
-| 16.3 | Reduce both bootstraps to the factory              | P1       | S    | todo        |
-| 17.1 | Add the async handler and error middleware         | P1       | S    | todo        |
-| 17.2 | Extract the system and persistence routers         | P1       | S    | todo        |
-| 17.3 | Extract the connection and catalog routers         | P1       | S    | todo        |
-| 17.4 | Extract the render and cache routers               | P1       | M    | todo        |
-| 18.1 | Add the logger module                              | P1       | S    | todo        |
-| 18.2 | Log startup and migration events                   | P1       | S    | todo        |
-| 18.3 | Log render lifecycle and boundary errors           | P1       | S    | todo        |
-| 19.1 | Add a render progress observer                     | P1       | S    | todo        |
-| 19.2 | Add the SSE endpoint                               | P1       | S    | todo        |
-| 19.3 | Consume SSE in the web client                      | P1       | M    | todo        |
-| 20.1 | Add the voice timing calibration table             | P1       | S    | todo        |
-| 20.2 | Record calibration after each render               | P1       | S    | todo        |
-| 20.3 | Add the estimation functions                       | P1       | S    | todo        |
-| 20.4 | Show estimates in the script editor                | P1       | M    | todo        |
-| 20.5 | Add the preflight disk space check                 | P1       | S    | todo        |
-| 21.1 | Add the retention settings table and service       | P1       | S    | todo        |
-| 21.2 | Add the cache sweeper                              | P1       | M    | todo        |
-| 21.3 | Add render pinning                                 | P1       | S    | todo        |
-| 21.4 | Add the retention settings screen                  | P1       | M    | todo        |
-| 22   | Host header allowlist                              | P1       | S    | todo        |
-| 23.1 | Add electron-builder configuration                 | P1       | M    | todo        |
-| 23.2 | Verify the native rebuild per target               | P1       | S    | todo        |
-| 23.3 | Add the release workflow, unsigned                 | P1       | S    | todo        |
-| 23.4 | Add signing and notarization                       | P1       | M    | todo        |
-| 23.5 | Decide and document the Docker support level       | P1       | S    | todo        |
-| 24.1 | Build the golden corpus fixtures                   | P1       | M    | todo        |
-| 24.2 | Add the golden corpus test and regeneration script | P1       | S    | todo        |
+| 13   | Lower the Node requirement to 24                   | P1       | S    | complete    |
+| 14   | Make the Vitest configs disjoint                   | P1       | XS   | complete    |
+| 15   | Add coverage thresholds                            | P1       | S    | complete    |
+| 16.1 | Extract the runtime descriptor type                | P1       | S    | complete    |
+| 16.2 | Extract the shared service factory                 | P1       | M    | complete    |
+| 16.3 | Reduce both bootstraps to the factory              | P1       | S    | complete    |
+| 17.1 | Add the async handler and error middleware         | P1       | S    | complete    |
+| 17.2 | Extract the system and persistence routers         | P1       | S    | complete    |
+| 17.3 | Extract the connection and catalog routers         | P1       | S    | complete    |
+| 17.4 | Extract the render and cache routers               | P1       | M    | complete    |
+| 18.1 | Add the logger module                              | P1       | S    | complete    |
+| 18.2 | Log startup and migration events                   | P1       | S    | complete    |
+| 18.3 | Log render lifecycle and boundary errors           | P1       | S    | complete    |
+| 19.1 | Add a render progress observer                     | P1       | S    | complete    |
+| 19.2 | Add the SSE endpoint                               | P1       | S    | complete    |
+| 19.3 | Consume SSE in the web client                      | P1       | M    | complete    |
+| 20.1 | Add the voice timing calibration table             | P1       | S    | complete    |
+| 20.2 | Record calibration after each render               | P1       | S    | complete    |
+| 20.3 | Add the estimation functions                       | P1       | S    | complete    |
+| 20.4 | Show estimates in the script editor                | P1       | M    | complete    |
+| 20.5 | Add the preflight disk space check                 | P1       | S    | complete    |
+| 21.1 | Add the retention settings table and service       | P1       | S    | complete    |
+| 21.2 | Add the cache sweeper                              | P1       | M    | complete    |
+| 21.3 | Add render pinning                                 | P1       | S    | complete    |
+| 21.4 | Add the retention settings screen                  | P1       | M    | complete    |
+| 22   | Host header allowlist                              | P1       | S    | complete    |
+| 23.1 | Add electron-builder configuration                 | P1       | M    | complete    |
+| 23.2 | Verify the native rebuild per target               | P1       | S    | deferred    |
+| 23.3 | Add the release workflow, unsigned                 | P1       | S    | complete    |
+| 23.4 | Add signing and notarization                       | P1       | M    | complete    |
+| 23.5 | Decide and document the Docker support level       | P1       | S    | complete    |
+| 24.1 | Build the golden corpus fixtures                   | P1       | M    | complete    |
+| 24.2 | Add the golden corpus test and regeneration script | P1       | S    | complete    |
 | 25.1 | Split the rendering package                        | P2       | M    | todo        |
 | 25.2 | Split the persistence repository                   | P2       | M    | todo        |
 | 25.3 | Split the speaches adapter                         | P2       | M    | todo        |
@@ -914,7 +914,7 @@ test -f SETUP.md && grep -o "](\./[^)]*)" README.md SETUP.md
 
 # 13 — LOWER THE NODE REQUIREMENT TO 24
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 
@@ -967,7 +967,7 @@ node -e "const e=require('./package.json').engines.node; const n=require('fs').r
 
 # 14 — MAKE THE VITEST CONFIGS DISJOINT
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** XS
 
@@ -1009,7 +1009,7 @@ The `comm` output must be empty, and the final count must equal the count from b
 
 # 15 — ADD COVERAGE THRESHOLDS
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 
@@ -1058,7 +1058,7 @@ Must pass on the first run.
 
 ## TASK 16.1 — Extract the runtime descriptor type
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 
@@ -1103,7 +1103,7 @@ Standard, plus `npm run test:e2e`.
 
 ## TASK 16.2 — Extract the shared service factory
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** M
 
@@ -1148,7 +1148,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 
 ## TASK 16.3 — Reduce both bootstraps to the factory
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 
@@ -1194,7 +1194,7 @@ wc -l apps/server/src/bootstrap.ts apps/desktop/src/bootstrap.ts
 
 ## TASK 17.1 — Add the async handler and error middleware
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 
@@ -1224,7 +1224,7 @@ Standard, plus `npm run test:e2e:web`.
 
 ## TASK 17.2 — Extract the system and persistence routers
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 
@@ -1250,7 +1250,7 @@ Standard, plus `npm run test:e2e:web`.
 
 ## TASK 17.3 — Extract the connection and catalog routers
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 
@@ -1275,7 +1275,7 @@ Standard, plus `npm run test:e2e:web`.
 
 ## TASK 17.4 — Extract the render and cache routers
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** M
 
@@ -1310,7 +1310,7 @@ Standard, plus `npm run test:e2e:web` and `wc -l apps/server/src/app.ts` — it 
 
 ## TASK 18.1 — Add the logger module
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 
@@ -1340,7 +1340,7 @@ Standard.
 
 ## TASK 18.2 — Log startup and migration events
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 
@@ -1366,7 +1366,7 @@ Standard, plus start the server and confirm the log file contains the start line
 
 ## TASK 18.3 — Log render lifecycle and boundary errors
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 
@@ -1396,7 +1396,7 @@ Standard, plus run a render against the fake Speaches server and inspect the log
 
 ## TASK 19.1 — Add a render progress observer
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 
@@ -1427,7 +1427,7 @@ Standard, plus a test asserting a subscriber sees the terminal event exactly onc
 
 ## TASK 19.2 — Add the SSE endpoint
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 
@@ -1455,7 +1455,7 @@ Standard, plus a test asserting the stream ends after a terminal event.
 
 ## TASK 19.3 — Consume SSE in the web client
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** M
 
@@ -1494,7 +1494,7 @@ A 15,000-word script produces roughly two hours of audio, a ~115 MB MP3, and rou
 
 ## TASK 20.1 — Add the voice timing calibration table
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 
@@ -1523,7 +1523,7 @@ Standard, plus a fresh-database migration check.
 
 ## TASK 20.2 — Record calibration after each render
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 
@@ -1553,7 +1553,7 @@ Standard.
 
 ## TASK 20.3 — Add the estimation functions
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 
@@ -1587,7 +1587,7 @@ Standard, plus a test asserting estimated duration is within 15% of actual for a
 
 ## TASK 20.4 — Show estimates in the script editor
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** M
 
@@ -1619,7 +1619,7 @@ Standard, plus `npm run test:e2e:web`.
 
 ## TASK 20.5 — Add the preflight disk space check
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 
@@ -1662,7 +1662,7 @@ Three classes, treated separately. One global TTL would delete the wrong thing.
 
 ## TASK 21.1 — Add the retention settings table and service
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 
@@ -1689,7 +1689,7 @@ Standard.
 
 ## TASK 21.2 — Add the cache sweeper
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** M
 
@@ -1724,7 +1724,7 @@ Standard, plus tests for TTL eviction, LRU eviction, and unreadable-entry collec
 
 ## TASK 21.3 — Add render pinning
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 
@@ -1752,25 +1752,42 @@ Standard, plus a test that a pinned render survives a sweep whose TTL has elapse
 
 ## TASK 21.4 — Add the retention settings screen
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** M
 
-### FILES YOU MAY TOUCH
+### Corrected decomposition
 
-```
-apps/web/src/pages/settings/RetentionSettingsPage.tsx   (new)
-apps/web/src/pages/settings/RetentionSettingsPage.module.css   (new)
-apps/web/src/pages/settings/RetentionSettingsPage.test.tsx   (new)
-apps/web/src/app/routes.tsx
-apps/web/src/services/persistence/persistenceClient.ts
-```
+The original UI-only file allowance was incomplete: the retention table was
+private to persistence and the cache sweeper was private to composition, so a
+truthful screen first needed a typed maintenance surface. The approved
+correction includes the narrow supporting transport work below; it does not
+restore the removed standalone RenderHistory feature.
 
-Per-class TTL selection, the size cap, current usage by class, a pin toggle surfaced on render history, and a manual "reclaim N MB" action showing a preview of what would be removed before confirmation.
+1. Expose typed retention settings, usage, preview reclaim, and explicit
+   confirmed reclaim operations through the persistence service, REST, and
+   Electron IPC. Keep their schemas, API/IPC/application manifests, and
+   manifest-driven contract tests in lockstep.
+2. Apply each saved non-`never` TTL to its managed class: speech cache
+   segments, `render-plans/.jobs` snapshots, and render artifact directories.
+   Scan only these managed roots, skip symlinks and missing roots, preserve
+   cache activity and pinned-project guarantees, and keep pinned render
+   snapshots, artifacts, and cache dependencies.
+3. Add the minimal `renders.setPinned` mutation to both transports and place
+   an accessible pin/unpin control in the completed-render area of
+   `ProjectsPage`.
+4. Add the Retention Settings route and navigation entry. The page loads and
+   saves all retention controls, reports all three usage classes, previews
+   before explicit confirmation, surfaces errors and success, and persists on
+   reload.
 
-### VERIFY
+### Verification
 
-Standard, plus `npm run test:e2e:web`.
+Focused service, transport, client, component, pin-control, and Playwright
+coverage covers configured TTLs for every class, preview non-destructiveness,
+pin protection, missing managed roots, payload validation, loading/saving,
+preview cancel/confirm, errors, and reload persistence. `npm run verify` and
+`npm run test:e2e:web` passed before this task was marked complete.
 
 ### COMMIT
 
@@ -1780,7 +1797,7 @@ Standard, plus `npm run test:e2e:web`.
 
 # 22 — HOST HEADER ALLOWLIST
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 
@@ -1821,7 +1838,7 @@ Standard, plus tests asserting `Host: evil.example.com` gets 403 and `Host: 127.
 
 ## TASK 23.1 — Add electron-builder configuration
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** M
 
@@ -1833,6 +1850,7 @@ apps/desktop/electron-builder.yml   (new)
 apps/desktop/build/   (new, icons and entitlements)
 .gitignore
 package-lock.json
+scripts/audit-dead-code.mjs
 ```
 
 Add `electron-builder` as a dev dependency in `apps/desktop`. Targets: macOS `dmg` arm64 and x64, Windows `nsis` x64, Linux `AppImage` and `deb` x64. Configure `asarUnpack` for the `better-sqlite3` native binding. Ignore build output.
@@ -1846,8 +1864,9 @@ Add `electron-builder` as a dev dependency in `apps/desktop`. Targets: macOS `dm
 ### VERIFY
 
 ```sh
+npm run build --workspace @studynarrator/web
 npm run build --workspace @studynarrator/desktop
-npx electron-builder --dir --config apps/desktop/electron-builder.yml
+npm exec --workspace @studynarrator/desktop electron-builder -- --dir --config electron-builder.yml
 ```
 
 Launch the unpacked application and confirm it opens.
@@ -1860,7 +1879,7 @@ Launch the unpacked application and confirm it opens.
 
 ## TASK 23.2 — Verify the native rebuild per target
 
-**Status:** todo
+**Status:** deferred (human-led; future verification)
 
 **Priority:** P1 · **Size:** S · **Human-led**
 
@@ -1874,7 +1893,7 @@ Record results per platform. No commit unless configuration changes are needed.
 
 ## TASK 23.3 — Add the release workflow, unsigned
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 
@@ -1903,7 +1922,7 @@ Push a `v0.0.0-test` tag on a branch and confirm three artifact sets and a check
 
 ## TASK 23.4 — Add signing and notarization
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** M · **Human-led**
 
@@ -1911,13 +1930,15 @@ macOS needs a Developer ID certificate plus notarization; Windows needs an Authe
 
 If certificates are not yet available: ship unsigned, and add prominent install instructions to `SETUP.md` covering the Gatekeeper and SmartScreen warnings users will see. An unsigned `.dmg` produces a block most users read as a broken application.
 
-**COMMIT:** `ci: sign and notarize desktop installers`
+**COMMIT (when signed):** `ci: sign and notarize desktop installers`
+
+**COMMIT (unsigned fallback):** `docs: explain unsigned desktop installer warnings`
 
 ---
 
 ## TASK 23.5 — Decide and document the Docker support level
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 
@@ -1942,7 +1963,7 @@ Supporting both Electron and Docker means testing every data migration against t
 
 ## TASK 24.1 — Build the golden corpus fixtures
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** M
 
@@ -1973,7 +1994,7 @@ ls packages/core/test-corpus | wc -l
 
 ## TASK 24.2 — Add the golden corpus test and regeneration script
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 

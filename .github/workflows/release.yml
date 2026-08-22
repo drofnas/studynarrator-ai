@@ -1,0 +1,119 @@
+name: Release unsigned desktop installers
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: Package ${{ matrix.name }} installers
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+            platform: mac
+            installer_paths: apps/desktop/release/*.dmg
+          - name: Windows
+            os: windows-latest
+            platform: win
+            installer_paths: apps/desktop/release/*.exe
+          - name: Linux
+            os: ubuntu-latest
+            platform: linux
+            installer_paths: |
+              apps/desktop/release/*.AppImage
+              apps/desktop/release/*.deb
+    steps:
+      - name: Check out the source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Rebuild better-sqlite3 for Electron
+        run: npm run rebuild:native --workspace @studynarrator/desktop
+      # Electron Builder must not publish independently; the draft release is
+      # updated only after every native platform package has completed.
+      - name: Package unsigned native installers
+        env:
+          ELECTRON_BUILDER_PLATFORM: ${{ matrix.platform }}
+        run: >
+          node -e "const { spawnSync } = require('node:child_process'); const
+          result = spawnSync('npm', ['run', 'package', '--workspace',
+          '@studynarrator/desktop', '--', '--' + process.env.ELECTRON_BUILDER_PLATFORM,
+          '--' + process.arch, '--publish', 'never'], { stdio: 'inherit', shell:
+          process.platform === 'win32' }); process.exit(result.status ?? 1);"
+      - name: Upload unsigned installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-installers-${{ matrix.platform }}
+          path: ${{ matrix.installer_paths }}
+          if-no-files-found: error
+
+  release:
+    name: Create draft release
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download unsigned installers
+        uses: actions/download-artifact@v4
+        with:
+          pattern: unsigned-installers-*
+          path: release
+          merge-multiple: true
+      - name: Generate SHA-256 checksums
+        run: |
+          node --input-type=module <<'NODE'
+          import { createHash } from "node:crypto";
+          import { readFile, readdir, writeFile } from "node:fs/promises";
+          import { extname, join } from "node:path";
+
+          const installerExtensions = new Set([".AppImage", ".deb", ".dmg", ".exe"]);
+          const installers = (await readdir("release", { withFileTypes: true }))
+            .filter(
+              (entry) =>
+                entry.isFile() && installerExtensions.has(extname(entry.name)),
+            )
+            .map((entry) => entry.name)
+            .sort((left, right) =>
+              Buffer.compare(Buffer.from(left), Buffer.from(right)),
+            );
+
+          if (installers.length === 0) {
+            throw new Error("No desktop installers were downloaded.");
+          }
+
+          const checksums = await Promise.all(
+            installers.map(async (installer) => {
+              const hash = createHash("sha256")
+                .update(await readFile(join("release", installer)))
+                .digest("hex");
+              return `${hash}  ${installer}`;
+            }),
+          );
+
+          await writeFile("release/SHA256SUMS.txt", `${checksums.join("\n")}\n`);
+          NODE
+      - name: Attach installers to the draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          draft: true
+          fail_on_unmatched_files: true
+          files: |
+            release/*.AppImage
+            release/*.deb
+            release/*.dmg
+            release/*.exe
+            release/SHA256SUMS.txt

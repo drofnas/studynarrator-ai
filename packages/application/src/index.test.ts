@@ -1,3 +1,4 @@
+import { DATABASE_SCHEMA_VERSION } from "@studynarrator/shared-types";
 import { describe, expect, it, vi } from "vitest";
 import {
   APPLICATION_SERVICE_MANIFEST,
@@ -22,7 +23,7 @@ const storagePass = {
   status: "pass",
   driver: "better-sqlite3",
   sqliteVersion: "3.50.0",
-  migrationVersion: 3,
+  migrationVersion: DATABASE_SCHEMA_VERSION,
   databasePath: "/tmp/studynarrator/studynarrator.sqlite",
   latestBackupPath: null,
   markerKey: "runtime.storage-self-test",

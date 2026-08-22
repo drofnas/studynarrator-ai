@@ -20,12 +20,16 @@ import {
   ProjectIdSchema,
   ProjectReplaceInputSchema,
   ProjectSummaryCollectionSchema,
+  RetentionSettingsAuthoringSchema,
+  RetentionSettingsSchema,
   SystemTimingConfigurationSchema,
   SpeechBackendConnectionAuthoringSchema,
   SpeechBackendConnectionSchema,
   VoiceCatalogSchema,
+  VoiceTimingCalibrationSchema,
   RenderArtifactCollectionSchema,
   RenderArtifactSchema,
+  RenderIdSchema,
   RenderJobCollectionSchema,
   RenderJobSchema,
   RenderSegmentSchema,
@@ -38,6 +42,8 @@ import {
   type ProjectDuplicateInput,
   type ProjectReplaceInput,
   type ProjectSummary,
+  type RetentionSettings,
+  type RetentionSettingsAuthoring,
   type SystemTimingConfiguration,
   type SystemTransitionPauseConfiguration,
   type SystemTransitionPauseSetting,
@@ -45,6 +51,7 @@ import {
   type SpeechBackendConnectionAuthoring,
   type VoiceCatalog,
   type VoiceCatalogAuthoring,
+  type VoiceTimingCalibration,
   type RenderArtifact,
   type RenderJob,
   type RenderSegment,
@@ -58,11 +65,16 @@ import {
   type DatabaseConstructor,
   type DatabaseLike,
   type Migration,
+  type PersistenceLogger,
 } from "./migrations.js";
 
 const STORAGE_SELF_TEST_KEY = "runtime.storage-self-test";
 const STORAGE_SELF_TEST_VALUE = "study-narrator-storage-ok";
 const CURRENT_MIGRATION_VERSION = DATABASE_SCHEMA_VERSION;
+const VoiceTimingCalibrationKeySchema = VoiceTimingCalibrationSchema.pick({
+  modelId: true,
+  voiceId: true,
+});
 
 interface ProjectRow {
   id: string;
@@ -142,6 +154,22 @@ interface ConnectionRow {
   updated_at: string;
 }
 
+interface VoiceTimingCalibrationRow {
+  model_id: string;
+  voice_id: string;
+  milliseconds_per_normalized_character: number;
+  sample_count: number;
+  updated_at: string;
+}
+
+interface RetentionSettingsRow {
+  speech_cache_ttl: RetentionSettings["speechCacheTtl"];
+  job_snapshot_ttl: RetentionSettings["jobSnapshotTtl"];
+  render_artifact_ttl: RetentionSettings["renderArtifactTtl"];
+  speech_cache_size_cap_bytes: number;
+  updated_at: string;
+}
+
 interface MarkerRow {
   key: string;
   value: string;
@@ -205,10 +233,24 @@ export interface StudyNarratorRepository {
   completeConnectionOnboarding(): ConnectionSetupRecord;
   getVoiceCatalogOverrides(modelId: string): VoiceCatalog;
   replaceVoiceCatalogOverrides(input: VoiceCatalogAuthoring): VoiceCatalog;
+  getVoiceTimingCalibration(
+    modelId: string,
+    voiceId: string,
+  ): VoiceTimingCalibration | null;
+  upsertVoiceTimingCalibration(
+    calibration: VoiceTimingCalibration,
+  ): VoiceTimingCalibration;
+  getRetentionSettings(): RetentionSettings;
+  updateRetentionSettings(
+    settings: RetentionSettingsAuthoring,
+  ): RetentionSettings;
   createRenderJob(job: RenderJob, segments: RenderSegment[]): RenderJob;
   getRenderJob(renderId: string): RenderJob;
   listRenderJobs(projectId: string): RenderJob[];
   listRecoverableRenderJobs(): RenderJob[];
+  listRetentionRenderJobs(): RenderJob[];
+  listPinnedRenderProjectIds(): string[];
+  clearRenderMedia(renderId: string): void;
   updateRenderJob(job: RenderJob): RenderJob;
   updateRenderSegment(
     segment: RenderSegment,
@@ -239,6 +281,7 @@ interface RenderJobRow {
   // Scheduled for removal; see docs/technical-debt.md.
   plan_id: string;
   retry_of_render_id: string | null;
+  pinned: number;
   state: RenderJob["state"];
   progress_json: string;
   error_json: string | null;
@@ -280,6 +323,7 @@ function renderJobFromRow(row: RenderJobRow): RenderJob {
     projectId: row.project_id,
     planId: row.plan_id,
     retryOfRenderId: row.retry_of_render_id,
+    pinned: booleanFromSql(row.pinned),
     state: row.state,
     progress: JSON.parse(row.progress_json) as unknown,
     error:
@@ -417,6 +461,31 @@ function connectionFromRow(row: ConnectionRow): SpeechBackendConnection {
         ? null
         : (JSON.parse(row.last_test_summary_json) as unknown),
     createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  });
+}
+
+function voiceTimingCalibrationFromRow(
+  row: VoiceTimingCalibrationRow,
+): VoiceTimingCalibration {
+  return VoiceTimingCalibrationSchema.parse({
+    modelId: row.model_id,
+    voiceId: row.voice_id,
+    millisecondsPerNormalizedCharacter:
+      row.milliseconds_per_normalized_character,
+    sampleCount: row.sample_count,
+    updatedAt: row.updated_at,
+  });
+}
+
+function retentionSettingsFromRow(
+  row: RetentionSettingsRow,
+): RetentionSettings {
+  return RetentionSettingsSchema.parse({
+    speechCacheTtl: row.speech_cache_ttl,
+    jobSnapshotTtl: row.job_snapshot_ttl,
+    renderArtifactTtl: row.render_artifact_ttl,
+    speechCacheSizeCapBytes: row.speech_cache_size_cap_bytes,
     updatedAt: row.updated_at,
   });
 }
@@ -669,6 +738,35 @@ function createRepository(options: {
         sampleText: row.sample_text,
       })),
     });
+  };
+
+  const getVoiceTimingCalibration = (
+    modelIdInput: string,
+    voiceIdInput: string,
+  ): VoiceTimingCalibration | null => {
+    assertOpen();
+    const { modelId, voiceId } = VoiceTimingCalibrationKeySchema.parse({
+      modelId: modelIdInput,
+      voiceId: voiceIdInput,
+    });
+    const row = database
+      .prepare(
+        "SELECT * FROM voice_timing_calibration WHERE model_id = ? AND voice_id = ?",
+      )
+      .get(modelId, voiceId) as VoiceTimingCalibrationRow | undefined;
+    return row === undefined ? null : voiceTimingCalibrationFromRow(row);
+  };
+
+  const getRetentionSettings = (): RetentionSettings => {
+    assertOpen();
+    const row = database
+      .prepare("SELECT * FROM retention_settings WHERE singleton_id = 1")
+      .get() as RetentionSettingsRow | undefined;
+    if (!row)
+      throw new PersistenceNotFoundError(
+        "The retention settings were not found.",
+      );
+    return retentionSettingsFromRow(row);
   };
 
   return {
@@ -1165,6 +1263,67 @@ function createRepository(options: {
       });
       return getVoiceCatalogOverrides(input.modelId);
     },
+    getVoiceTimingCalibration,
+    upsertVoiceTimingCalibration(calibrationValue) {
+      assertOpen();
+      const calibration = VoiceTimingCalibrationSchema.parse(calibrationValue);
+      return transaction(() => {
+        database
+          .prepare(
+            `
+          INSERT INTO voice_timing_calibration (
+            model_id, voice_id, milliseconds_per_normalized_character, sample_count, updated_at
+          ) VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT(model_id, voice_id) DO UPDATE SET
+            milliseconds_per_normalized_character = excluded.milliseconds_per_normalized_character,
+            sample_count = excluded.sample_count,
+            updated_at = excluded.updated_at
+        `,
+          )
+          .run(
+            calibration.modelId,
+            calibration.voiceId,
+            calibration.millisecondsPerNormalizedCharacter,
+            calibration.sampleCount,
+            calibration.updatedAt,
+          );
+        const persisted = getVoiceTimingCalibration(
+          calibration.modelId,
+          calibration.voiceId,
+        );
+        if (persisted === null)
+          throw new Error(
+            "Stored voice timing calibration was not found after upsert.",
+          );
+        return persisted;
+      });
+    },
+    getRetentionSettings,
+    updateRetentionSettings(settingsValue) {
+      assertOpen();
+      const settings = RetentionSettingsAuthoringSchema.parse(settingsValue);
+      const result = database
+        .prepare(
+          `
+          UPDATE retention_settings SET
+            speech_cache_ttl = ?, job_snapshot_ttl = ?, render_artifact_ttl = ?,
+            speech_cache_size_cap_bytes = ?, updated_at = ?
+          WHERE singleton_id = 1
+        `,
+        )
+        .run(
+          settings.speechCacheTtl,
+          settings.jobSnapshotTtl,
+          settings.renderArtifactTtl,
+          settings.speechCacheSizeCapBytes,
+          options.now().toISOString(),
+        );
+      if (Number(result.changes ?? 0) !== 1)
+        throw new PersistenceNotFoundError(
+          "The retention settings were not found.",
+        );
+      return getRetentionSettings();
+    },
     createRenderJob(jobValue, segmentValues) {
       assertOpen();
       const job = RenderJobSchema.parse(jobValue);
@@ -1180,9 +1339,9 @@ function createRepository(options: {
           .prepare(
             `
           INSERT INTO render_jobs (
-            id, project_id, plan_id, retry_of_render_id, state, progress_json, error_json,
+            id, project_id, plan_id, retry_of_render_id, pinned, state, progress_json, error_json,
             created_at, started_at, finished_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
           )
           .run(
@@ -1190,6 +1349,7 @@ function createRepository(options: {
             job.projectId,
             job.planId,
             job.retryOfRenderId,
+            booleanToSql(job.pinned),
             job.state,
             JSON.stringify(job.progress),
             job.error === null ? null : JSON.stringify(job.error),
@@ -1255,16 +1415,50 @@ function createRepository(options: {
         ).map(renderJobFromRow),
       );
     },
+    listRetentionRenderJobs() {
+      assertOpen();
+      return RenderJobCollectionSchema.parse(
+        (
+          database
+            .prepare(
+              "SELECT * FROM render_jobs ORDER BY created_at ASC, id ASC",
+            )
+            .all() as RenderJobRow[]
+        ).map(renderJobFromRow),
+      );
+    },
+    listPinnedRenderProjectIds() {
+      assertOpen();
+      return (
+        database
+          .prepare(
+            "SELECT DISTINCT project_id FROM render_jobs WHERE pinned = 1 ORDER BY project_id ASC",
+          )
+          .all() as Array<{ project_id: string }>
+      ).map(({ project_id: projectId }) => ProjectIdSchema.parse(projectId));
+    },
+    clearRenderMedia(renderId) {
+      assertOpen();
+      database
+        .prepare("DELETE FROM render_artifacts WHERE render_id = ?")
+        .run(RenderIdSchema.parse(renderId));
+      database
+        .prepare(
+          "UPDATE render_segments SET audio_path = NULL, audio_file_name = NULL, audio_size_bytes = NULL, audio_checksum = NULL WHERE render_id = ?",
+        )
+        .run(renderId);
+    },
     updateRenderJob(jobValue) {
       assertOpen();
       const job = RenderJobSchema.parse(jobValue);
       const result = database
         .prepare(
           `
-        UPDATE render_jobs SET state = ?, progress_json = ?, error_json = ?, started_at = ?, finished_at = ? WHERE id = ?
+        UPDATE render_jobs SET pinned = ?, state = ?, progress_json = ?, error_json = ?, started_at = ?, finished_at = ? WHERE id = ?
       `,
         )
         .run(
+          booleanToSql(job.pinned),
           job.state,
           JSON.stringify(job.progress),
           job.error === null ? null : JSON.stringify(job.error),
@@ -1395,12 +1589,14 @@ export async function openStudyNarratorRepository(options: {
   now?: () => Date;
   idFactory?: () => string;
   migrations?: readonly Migration[];
+  logger?: PersistenceLogger;
 }): Promise<StudyNarratorRepository> {
   const now = options.now ?? (() => new Date());
   const migrated = await migrateDatabase({
     Database: options.Database,
     databasePath: options.databasePath,
     now,
+    ...(options.logger === undefined ? {} : { logger: options.logger }),
     ...(options.migrations === undefined
       ? {}
       : { migrations: options.migrations }),

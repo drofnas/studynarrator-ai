@@ -6,6 +6,10 @@ import {
   PersistenceBackupCollectionSchema,
   PersistenceBackupRestoreResultSchema,
   PersistenceStatusSchema,
+  RetentionReclaimPreviewSchema,
+  RetentionReclaimResultSchema,
+  RetentionSettingsSchema,
+  RetentionUsageSchema,
   ProjectDetailSchema,
   ProjectSummaryCollectionSchema,
   SystemTimingConfigurationSchema,
@@ -129,6 +133,29 @@ export function createRestPersistenceClient(
           method: "PUT",
           body: body(input),
         }),
+    },
+    retention: {
+      get: async () =>
+        await request("/api/settings/retention", RetentionSettingsSchema),
+      update: async (input) =>
+        await request("/api/settings/retention", RetentionSettingsSchema, {
+          method: "PUT",
+          body: body(input),
+        }),
+      usage: async () =>
+        await request("/api/settings/retention/usage", RetentionUsageSchema),
+      previewReclaim: async () =>
+        await request(
+          "/api/settings/retention/reclaim-preview",
+          RetentionReclaimPreviewSchema,
+          { method: "POST" },
+        ),
+      reclaim: async (input) =>
+        await request(
+          "/api/settings/retention/reclaim",
+          RetentionReclaimResultSchema,
+          { method: "POST", body: body(input) },
+        ),
     },
     preferences: {
       getIgnoredDiagnostics: async () =>

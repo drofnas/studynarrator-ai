@@ -1,0 +1,266 @@
+{
+  "parse": {
+    "grammarVersion": 1,
+    "cirSchemaVersion": 1,
+    "source": "[speaker_teacher] Windows line.\r\n[pause_short]\n[speaker_student] Unix {{line|format}}.\r\nFinal line uses LF.\n",
+    "nodes": [
+      {
+        "ordinal": 1,
+        "range": {
+          "start": {
+            "line": 1,
+            "column": 19
+          },
+          "end": {
+            "line": 1,
+            "column": 32
+          }
+        },
+        "type": "speech",
+        "speakerId": "teacher",
+        "rawText": "Windows line.",
+        "readableText": "Windows line.",
+        "annotations": []
+      },
+      {
+        "ordinal": 2,
+        "range": {
+          "start": {
+            "line": 2,
+            "column": 1
+          },
+          "end": {
+            "line": 2,
+            "column": 14
+          }
+        },
+        "type": "pause",
+        "pauseId": "pause_short"
+      },
+      {
+        "ordinal": 3,
+        "range": {
+          "start": {
+            "line": 3,
+            "column": 19
+          },
+          "end": {
+            "line": 3,
+            "column": 40
+          }
+        },
+        "type": "speech",
+        "speakerId": "student",
+        "rawText": "Unix {{line|format}}.",
+        "readableText": "Unix line.",
+        "annotations": [
+          {
+            "displayText": "line",
+            "senseId": "format",
+            "rawText": "{{line|format}}",
+            "range": {
+              "start": {
+                "line": 3,
+                "column": 24
+              },
+              "end": {
+                "line": 3,
+                "column": 39
+              }
+            }
+          }
+        ]
+      },
+      {
+        "ordinal": 4,
+        "range": {
+          "start": {
+            "line": 4,
+            "column": 1
+          },
+          "end": {
+            "line": 4,
+            "column": 20
+          }
+        },
+        "type": "speech",
+        "speakerId": "student",
+        "rawText": "Final line uses LF.",
+        "readableText": "Final line uses LF.",
+        "annotations": []
+      }
+    ],
+    "discoveries": {
+      "speakers": [
+        {
+          "id": "teacher",
+          "occurrences": [
+            {
+              "range": {
+                "start": {
+                  "line": 1,
+                  "column": 1
+                },
+                "end": {
+                  "line": 1,
+                  "column": 18
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": "student",
+          "occurrences": [
+            {
+              "range": {
+                "start": {
+                  "line": 3,
+                  "column": 1
+                },
+                "end": {
+                  "line": 3,
+                  "column": 18
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "pauses": [
+        {
+          "id": "pause_short",
+          "occurrences": [
+            {
+              "range": {
+                "start": {
+                  "line": 2,
+                  "column": 1
+                },
+                "end": {
+                  "line": 2,
+                  "column": 14
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "sections": [],
+      "pronunciations": [
+        {
+          "displayText": "line",
+          "senseId": "format",
+          "rawText": "{{line|format}}",
+          "range": {
+            "start": {
+              "line": 3,
+              "column": 24
+            },
+            "end": {
+              "line": 3,
+              "column": 39
+            }
+          },
+          "nodeOrdinal": 3
+        }
+      ]
+    },
+    "summary": {
+      "speakerCount": 2,
+      "pauseIdCount": 1,
+      "sectionCount": 0,
+      "speechSegmentCount": 3,
+      "explicitPauseSegmentCount": 1,
+      "pronunciationAnnotationCount": 1,
+      "paragraphBreakCount": 0,
+      "characterCount": 108
+    },
+    "errors": [],
+    "warnings": []
+  },
+  "transform": {
+    "transformVersion": 1,
+    "source": "[speaker_teacher] Windows line.\r\n[pause_short]\n[speaker_student] Unix {{line|format}}.\r\nFinal line uses LF.\n",
+    "segments": [
+      {
+        "nodeOrdinal": 1,
+        "speakerId": "teacher",
+        "sourceRange": {
+          "start": {
+            "line": 1,
+            "column": 19
+          },
+          "end": {
+            "line": 1,
+            "column": 32
+          }
+        },
+        "readableText": "Windows line.",
+        "ttsText": "Windows line.",
+        "matches": []
+      },
+      {
+        "nodeOrdinal": 3,
+        "speakerId": "student",
+        "sourceRange": {
+          "start": {
+            "line": 3,
+            "column": 19
+          },
+          "end": {
+            "line": 3,
+            "column": 40
+          }
+        },
+        "readableText": "Unix {{line|format}}.",
+        "ttsText": "Unix {{line|format}}.",
+        "matches": []
+      },
+      {
+        "nodeOrdinal": 4,
+        "speakerId": "student",
+        "sourceRange": {
+          "start": {
+            "line": 4,
+            "column": 1
+          },
+          "end": {
+            "line": 4,
+            "column": 20
+          }
+        },
+        "readableText": "Final line uses LF.",
+        "ttsText": "Final line uses LF.",
+        "matches": []
+      }
+    ],
+    "readableTranscript": "Windows line.\nUnix {{line|format}}.\nFinal line uses LF.",
+    "ttsTranscript": "Windows line.\nUnix {{line|format}}.\nFinal line uses LF.",
+    "matches": [],
+    "errors": [],
+    "warnings": [
+      {
+        "code": "UNRESOLVED_NAMED_SENSE",
+        "message": "No enabled lexicon entry resolves line|format.",
+        "nodeOrdinal": 3,
+        "range": {
+          "start": {
+            "line": 3,
+            "column": 24
+          },
+          "end": {
+            "line": 3,
+            "column": 39
+          }
+        },
+        "sourceStartOffset": 70,
+        "sourceEndOffset": 85,
+        "offendingText": "{{line|format}}",
+        "ignorePattern": "{{line|format}}",
+        "suggestion": "Add a named-sense entry for line + format, or leave the annotation literal."
+      }
+    ],
+    "synthesisReady": true
+  }
+}

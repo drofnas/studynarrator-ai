@@ -1,0 +1,146 @@
+{
+  "parse": {
+    "grammarVersion": 1,
+    "cirSchemaVersion": 1,
+    "source": "[speaker_teacher] Καλημέρα 世界 😀 — résumé, naïve, and {{東京|tokyo-place}}.\n",
+    "nodes": [
+      {
+        "ordinal": 1,
+        "range": {
+          "start": {
+            "line": 1,
+            "column": 19
+          },
+          "end": {
+            "line": 1,
+            "column": 74
+          }
+        },
+        "type": "speech",
+        "speakerId": "teacher",
+        "rawText": "Καλημέρα 世界 😀 — résumé, naïve, and {{東京|tokyo-place}}.",
+        "readableText": "Καλημέρα 世界 😀 — résumé, naïve, and 東京.",
+        "annotations": [
+          {
+            "displayText": "東京",
+            "senseId": "tokyo-place",
+            "rawText": "{{東京|tokyo-place}}",
+            "range": {
+              "start": {
+                "line": 1,
+                "column": 55
+              },
+              "end": {
+                "line": 1,
+                "column": 73
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "discoveries": {
+      "speakers": [
+        {
+          "id": "teacher",
+          "occurrences": [
+            {
+              "range": {
+                "start": {
+                  "line": 1,
+                  "column": 1
+                },
+                "end": {
+                  "line": 1,
+                  "column": 18
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "pauses": [],
+      "sections": [],
+      "pronunciations": [
+        {
+          "displayText": "東京",
+          "senseId": "tokyo-place",
+          "rawText": "{{東京|tokyo-place}}",
+          "range": {
+            "start": {
+              "line": 1,
+              "column": 55
+            },
+            "end": {
+              "line": 1,
+              "column": 73
+            }
+          },
+          "nodeOrdinal": 1
+        }
+      ]
+    },
+    "summary": {
+      "speakerCount": 1,
+      "pauseIdCount": 0,
+      "sectionCount": 0,
+      "speechSegmentCount": 1,
+      "explicitPauseSegmentCount": 0,
+      "pronunciationAnnotationCount": 1,
+      "paragraphBreakCount": 0,
+      "characterCount": 74
+    },
+    "errors": [],
+    "warnings": []
+  },
+  "transform": {
+    "transformVersion": 1,
+    "source": "[speaker_teacher] Καλημέρα 世界 😀 — résumé, naïve, and {{東京|tokyo-place}}.\n",
+    "segments": [
+      {
+        "nodeOrdinal": 1,
+        "speakerId": "teacher",
+        "sourceRange": {
+          "start": {
+            "line": 1,
+            "column": 19
+          },
+          "end": {
+            "line": 1,
+            "column": 74
+          }
+        },
+        "readableText": "Καλημέρα 世界 😀 — résumé, naïve, and {{東京|tokyo-place}}.",
+        "ttsText": "Καλημέρα 世界 😀 — résumé, naïve, and {{東京|tokyo-place}}.",
+        "matches": []
+      }
+    ],
+    "readableTranscript": "Καλημέρα 世界 😀 — résumé, naïve, and {{東京|tokyo-place}}.",
+    "ttsTranscript": "Καλημέρα 世界 😀 — résumé, naïve, and {{東京|tokyo-place}}.",
+    "matches": [],
+    "errors": [],
+    "warnings": [
+      {
+        "code": "UNRESOLVED_NAMED_SENSE",
+        "message": "No enabled lexicon entry resolves 東京|tokyo-place.",
+        "nodeOrdinal": 1,
+        "range": {
+          "start": {
+            "line": 1,
+            "column": 55
+          },
+          "end": {
+            "line": 1,
+            "column": 73
+          }
+        },
+        "sourceStartOffset": 54,
+        "sourceEndOffset": 72,
+        "offendingText": "{{東京|tokyo-place}}",
+        "ignorePattern": "{{東京|tokyo-place}}",
+        "suggestion": "Add a named-sense entry for 東京 + tokyo-place, or leave the annotation literal."
+      }
+    ],
+    "synthesisReady": true
+  }
+}

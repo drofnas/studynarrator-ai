@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-ARG NODE_IMAGE=node:26.7.0-trixie-slim
+ARG NODE_IMAGE=node:24-trixie-slim
 
 FROM ${NODE_IMAGE} AS build
 WORKDIR /workspace

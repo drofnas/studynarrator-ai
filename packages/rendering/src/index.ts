@@ -22,6 +22,14 @@ import {
   type SilenceAsset,
 } from "@studynarrator/shared-types";
 import { z } from "zod";
+import type { SpeechCacheActivityGate } from "./speechCacheSweeper.js";
+
+export {
+  createSpeechCacheActivityGate,
+  createSpeechCacheSweeper,
+  type SpeechCacheActivityGate,
+  type SpeechCacheActivityLease,
+} from "./speechCacheSweeper.js";
 
 export const SPEECH_CACHE_SCHEMA_VERSION = 1;
 export const SPEECH_NORMALIZATION_VERSION = 1;
@@ -373,6 +381,7 @@ export function createSpeechCache(options: {
   validateAudio: CachedAudioValidator;
   now?: () => Date;
   createId?: () => string;
+  activityGate?: SpeechCacheActivityGate;
 }): SpeechCache {
   if (!options.rootDirectory.trim())
     throw new Error("Speech cache root is required.");
@@ -626,35 +635,40 @@ export function createSpeechCache(options: {
 
   const cache: SpeechCache = {
     async getOrCreate(input, usage, synthesize, signal) {
-      const normalized = normalizeSpeechCacheInput(input);
-      const key = createSpeechCacheKey(input);
-      const cleanup = cleanups.get(key);
-      if (cleanup) await cleanup;
-      const existing = flights.get(key);
-      if (existing) {
-        existing.usages.push(usage);
-        return await waitForFlight(existing, signal);
+      const activity = await options.activityGate?.beginActivity();
+      try {
+        const normalized = normalizeSpeechCacheInput(input);
+        const key = createSpeechCacheKey(input);
+        const cleanup = cleanups.get(key);
+        if (cleanup) await cleanup;
+        const existing = flights.get(key);
+        if (existing) {
+          existing.usages.push(usage);
+          return await waitForFlight(existing, signal);
+        }
+        const controller = new AbortController();
+        const flight: Flight = {
+          controller,
+          waiters: 0,
+          usages: [usage],
+          settled: false,
+          promise: Promise.resolve(undefined as never),
+        };
+        flight.promise = produce(
+          key,
+          normalized,
+          flight.usages,
+          synthesize,
+          controller.signal,
+        ).finally(() => {
+          flight.settled = true;
+          flights.delete(key);
+        });
+        flights.set(key, flight);
+        return await waitForFlight(flight, signal);
+      } finally {
+        activity?.release();
       }
-      const controller = new AbortController();
-      const flight: Flight = {
-        controller,
-        waiters: 0,
-        usages: [usage],
-        settled: false,
-        promise: Promise.resolve(undefined as never),
-      };
-      flight.promise = produce(
-        key,
-        normalized,
-        flight.usages,
-        synthesize,
-        controller.signal,
-      ).finally(() => {
-        flight.settled = true;
-        flights.delete(key);
-      });
-      flights.set(key, flight);
-      return await waitForFlight(flight, signal);
     },
     async inspect(input, signal) {
       const normalized = normalizeSpeechCacheInput(input);

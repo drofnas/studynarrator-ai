@@ -49,8 +49,24 @@ test.describe("render execution", () => {
     studyNarrator.fakeSpeaches.setScenario("slow");
 
     await openRoute(page, studyNarrator, `/projects/${created.id}?tab=render`);
+    const diskSpaceCheck = page.getByRole("checkbox", {
+      name: "Block renders when disk space is insufficient",
+    });
+    await expect(diskSpaceCheck).toBeChecked();
+    await diskSpaceCheck.uncheck();
+    await page.reload();
+    await expect(diskSpaceCheck).not.toBeChecked();
+    await diskSpaceCheck.check();
+    await page.reload();
+    await expect(diskSpaceCheck).toBeChecked();
     await expect(page.getByRole("button", { name: "Render" })).toBeEnabled();
+    const renderEventsRequest = page.waitForRequest(
+      (renderRequest) =>
+        renderRequest.method() === "GET" &&
+        /\/api\/renders\/[^/]+\/events$/u.test(renderRequest.url()),
+    );
     await page.getByRole("button", { name: "Render" }).click();
+    await renderEventsRequest;
     await expect(
       page.getByRole("button", { name: "Rendering…" }),
     ).toBeDisabled();

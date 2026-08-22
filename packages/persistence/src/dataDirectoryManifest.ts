@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
+import type { PersistenceLogger } from "./migrations.js";
 
 /**
  * Format tag of the manifest file itself.
@@ -192,6 +193,7 @@ export async function readDataDirectoryManifest(
 export async function runLayoutSteps(
   dataDirectory: string,
   steps: readonly LayoutStep[],
+  options: { logger?: PersistenceLogger } = {},
 ): Promise<{
   completed: string[];
   failed: { id: string; error: unknown }[];
@@ -201,11 +203,30 @@ export async function runLayoutSteps(
   const completed: string[] = [];
   const failed: { id: string; error: unknown }[] = [];
   for (const step of steps) {
-    if (completedSteps.includes(step.id)) continue;
+    if (completedSteps.includes(step.id)) {
+      options.logger?.info(
+        {
+          event: "data-directory-layout-step",
+          layoutStepId: step.id,
+          outcome: "skipped",
+        },
+        "Data directory layout step skipped",
+      );
+      continue;
+    }
     try {
       await step.run(dataDirectory);
     } catch (error) {
       failed.push({ id: step.id, error });
+      options.logger?.warn(
+        {
+          event: "data-directory-layout-step",
+          layoutStepId: step.id,
+          outcome: "failed",
+          err: error,
+        },
+        "Data directory layout step failed",
+      );
       continue;
     }
     completedSteps.push(step.id);
@@ -221,6 +242,14 @@ export async function runLayoutSteps(
       completedSteps,
     });
     completed.push(step.id);
+    options.logger?.info(
+      {
+        event: "data-directory-layout-step",
+        layoutStepId: step.id,
+        outcome: "completed",
+      },
+      "Data directory layout step completed",
+    );
   }
   return { completed, failed };
 }

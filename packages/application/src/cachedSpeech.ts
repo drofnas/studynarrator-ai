@@ -12,6 +12,7 @@ import {
   createSpeechCacheKey,
   type CachedSpeechResult,
   type SpeechCache,
+  type SpeechCacheActivityGate,
   type SpeechCacheUsage,
 } from "@studynarrator/rendering";
 import {
@@ -107,15 +108,17 @@ export interface CachedSpeechSynthesis {
   synthesize(input: CachedSpeechSynthesisInput): Promise<CachedSpeechResult>;
 }
 
-export interface CachedSpeechSynthesisRunner {
-  (input: SpeachesSynthesisInput): Promise<SpeachesSynthesisResult>;
-}
+export type CachedSpeechSynthesisRunner = (
+  input: SpeachesSynthesisInput,
+) => Promise<SpeachesSynthesisResult>;
 
 export function createApplicationSpeechCache(
   dataDirectory: string,
+  activityGate?: SpeechCacheActivityGate,
 ): SpeechCache {
   return createSpeechCache({
     rootDirectory: resolve(dataDirectory, "cache/speech"),
+    ...(activityGate ? { activityGate } : {}),
     validateAudio: async (bytes, signal) => {
       const result = await probeAudioWithFfprobe(bytes, signal);
       return result.decodable && result.formatName?.includes("wav") === true;

@@ -32,6 +32,7 @@ const unusedPersistence: PersistenceClient = {
     getPacing: vi.fn(async () => DEFAULT_SYSTEM_TIMING),
     updatePacing: vi.fn(),
   },
+  retention: {} as PersistenceClient["retention"],
   preferences: {
     getIgnoredDiagnostics: vi.fn(async () => []),
     replaceIgnoredDiagnostics: vi.fn(),
@@ -163,6 +164,7 @@ describe("application routing", () => {
       "Voices",
       "Lexicon",
       "Timings",
+      "Retention",
       "System diagnostics",
     ]);
     expect(navigation.getByRole("link", { name: "Projects" })).toHaveAttribute(

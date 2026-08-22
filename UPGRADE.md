@@ -10,6 +10,10 @@ One row per released version.
 | ------------------- | ----------------------- | ----------------------------- |
 | 0.1.0               | 4                       | 1                             |
 
+## Distribution support decision
+
+Docker Web is a supported single-user distribution. Its `/data` named-volume layout is the supported Docker upgrade path: the `studynarrator-data` volume is retained and application migrations run at startup. Electron is available from source only; unsigned desktop installers are not published, and cross-target native verification remains deferred.
+
 ## Upgrading
 
 Upgrading is automatic. StudyNarrator migrates the database forward when it starts:

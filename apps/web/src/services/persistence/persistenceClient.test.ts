@@ -53,6 +53,75 @@ describe("persistence client", () => {
     });
   });
 
+  it("uses the typed retention maintenance endpoints", async () => {
+    const fetchInput = vi.fn(
+      async (input: RequestInfo | URL, _init?: RequestInit) => {
+        const path =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : input.url;
+        const body =
+          path === "/api/settings/retention/usage"
+            ? {
+                speechCache: { entries: 1, bytes: 2 },
+                jobSnapshots: { entries: 3, bytes: 4 },
+                renderArtifacts: { entries: 5, bytes: 6 },
+              }
+            : path === "/api/settings/retention/reclaim-preview"
+              ? {
+                  reclaimable: {
+                    speechCache: { entries: 1, bytes: 2 },
+                    jobSnapshots: { entries: 0, bytes: 0 },
+                    renderArtifacts: { entries: 0, bytes: 0 },
+                  },
+                  skipped: false,
+                }
+              : path === "/api/settings/retention/reclaim"
+                ? {
+                    reclaimed: {
+                      speechCache: { entries: 1, bytes: 2 },
+                      jobSnapshots: { entries: 0, bytes: 0 },
+                      renderArtifacts: { entries: 0, bytes: 0 },
+                    },
+                    skipped: false,
+                  }
+                : {
+                    speechCacheTtl: "7d",
+                    jobSnapshotTtl: "never",
+                    renderArtifactTtl: "never",
+                    speechCacheSizeCapBytes: 1024,
+                    updatedAt: "2026-08-22T00:00:00.000Z",
+                  };
+        return new Response(JSON.stringify(body), { status: 200 });
+      },
+    );
+    const client = createRestPersistenceClient(fetchInput as never);
+    await client.retention.get();
+    await client.retention.update({
+      speechCacheTtl: "7d",
+      jobSnapshotTtl: "never",
+      renderArtifactTtl: "never",
+      speechCacheSizeCapBytes: 1024,
+    });
+    await client.retention.usage();
+    await client.retention.previewReclaim();
+    await client.retention.reclaim({ confirm: true });
+    expect(fetchInput.mock.calls.map(([path]) => path)).toEqual([
+      "/api/settings/retention",
+      "/api/settings/retention",
+      "/api/settings/retention/usage",
+      "/api/settings/retention/reclaim-preview",
+      "/api/settings/retention/reclaim",
+    ]);
+    expect(fetchInput.mock.calls[1]?.[1]).toMatchObject({ method: "PUT" });
+    expect(fetchInput.mock.calls[4]?.[1]).toMatchObject({
+      method: "POST",
+      body: JSON.stringify({ confirm: true }),
+    });
+  });
+
   it("surfaces safe path-specific boundary issues", async () => {
     const fetchInput = vi.fn(
       async () =>

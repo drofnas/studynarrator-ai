@@ -27,9 +27,9 @@ function run(command, args, environment = {}) {
 }
 
 if (process.argv.length !== 2) fail("usage: npm run verify");
-if (Number(process.versions.node.split(".")[0]) !== 26) {
+if (Number(process.versions.node.split(".")[0]) < 24) {
   fail(
-    `verification requires Node 26; current runtime is ${process.versions.node}`,
+    `verification requires Node 24 or later; current runtime is ${process.versions.node}`,
   );
 }
 
@@ -39,6 +39,7 @@ run("npm", ["run", "lint"]);
 run("npm", ["run", "typecheck"]);
 run("npm", ["test"]);
 run("npm", ["run", "test:api"]);
+run("npm", ["run", "test:coverage"]);
 run("npm", ["run", "build"]);
 run("npm", ["run", "rebuild:native", "--workspace", "@studynarrator/desktop"]);
 run("playwright", ["test"]);
