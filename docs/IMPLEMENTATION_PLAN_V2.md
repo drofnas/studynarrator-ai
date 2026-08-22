@@ -1797,7 +1797,7 @@ preview cancel/confirm, errors, and reload persistence. `npm run verify` and
 
 # 22 — HOST HEADER ALLOWLIST
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 
