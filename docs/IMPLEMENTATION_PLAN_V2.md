@@ -98,7 +98,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 17.2 | Extract the system and persistence routers         | P1       | S    | complete    |
 | 17.3 | Extract the connection and catalog routers         | P1       | S    | complete    |
 | 17.4 | Extract the render and cache routers               | P1       | M    | complete    |
-| 18.1 | Add the logger module                              | P1       | S    | todo        |
+| 18.1 | Add the logger module                              | P1       | S    | complete    |
 | 18.2 | Log startup and migration events                   | P1       | S    | todo        |
 | 18.3 | Log render lifecycle and boundary errors           | P1       | S    | todo        |
 | 19.1 | Add a render progress observer                     | P1       | S    | todo        |
@@ -1310,7 +1310,7 @@ Standard, plus `npm run test:e2e:web` and `wc -l apps/server/src/app.ts` — it 
 
 ## TASK 18.1 — Add the logger module
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** S
 
