@@ -46,6 +46,18 @@ export { normalizeLexiconEntries } from "./lexicon.js";
 export { transformScript } from "./transformer.js";
 export { resolveParagraphPauses } from "./pacing.js";
 export {
+  DEFAULT_MILLISECONDS_PER_NORMALIZED_CHARACTER,
+  estimateCacheBytes,
+  estimateMp3Bytes,
+  estimatePeakDiskBytes,
+  estimatePlanDurationMs,
+  estimateSpeechMs,
+  type EstimablePlan,
+  type EstimablePlanEntry,
+  type EstimationCalibration,
+  type PeakDiskEstimateInput,
+} from "./estimation.js";
+export {
   ScratchpadPassageError,
   transformScratchpadPassage,
 } from "./scratchpad.js";
