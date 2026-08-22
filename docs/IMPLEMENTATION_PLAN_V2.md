@@ -119,7 +119,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 23.3 | Add the release workflow, unsigned                 | P1       | S    | complete    |
 | 23.4 | Add signing and notarization                       | P1       | M    | complete    |
 | 23.5 | Decide and document the Docker support level       | P1       | S    | complete    |
-| 24.1 | Build the golden corpus fixtures                   | P1       | M    | todo        |
+| 24.1 | Build the golden corpus fixtures                   | P1       | M    | complete    |
 | 24.2 | Add the golden corpus test and regeneration script | P1       | S    | todo        |
 | 25.1 | Split the rendering package                        | P2       | M    | todo        |
 | 25.2 | Split the persistence repository                   | P2       | M    | todo        |
@@ -1963,7 +1963,7 @@ Supporting both Electron and Docker means testing every data migration against t
 
 ## TASK 24.1 — Build the golden corpus fixtures
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P1 · **Size:** M
 
