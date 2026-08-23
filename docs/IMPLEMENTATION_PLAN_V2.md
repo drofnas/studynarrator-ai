@@ -131,7 +131,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 27.2a | Migrate connection-backed readers                  | P2       | M    | complete    |
 | 27.2b | Migrate persistence settings readers               | P2       | M    | complete    |
 | 27.2c | Migrate diagnostics readers                        | P2       | S    | complete    |
-| 27.3  | Migrate the mutating pages                         | P2       | M    | todo        |
+| 27.3  | Migrate the mutating pages                         | P2       | M    | complete    |
 | 28    | Route code splitting                               | P2       | S    | todo        |
 | 29    | Enforce package dependency direction               | P2       | S    | todo        |
 | 30    | Replace the dead-code script with knip             | P2       | S    | todo        |
