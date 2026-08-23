@@ -1,0 +1,44 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "include": ["files", "dependencies", "devDependencies", "exports", "types"],
+  "includeEntryExports": true,
+  "ignoreIssues": {
+    "**/*.config.ts": ["exports"]
+  },
+  "treatConfigHintsAsErrors": true,
+  "workspaces": {
+    ".": {
+      "entry": ["scripts/**/*.mjs", "*.config.ts", "e2e/**/*.spec.ts"],
+      "project": ["scripts/**/*.mjs", "*.config.ts", "e2e/**/*.spec.ts"]
+    },
+    "apps/desktop": {
+      "entry": [
+        "src/main.ts",
+        "src/preload.ts",
+        "src/smoke.ts",
+        "src/**/*.test.ts"
+      ],
+      "project": ["src/**/*.ts"],
+      "ignoreDependencies": ["electron-builder"]
+    },
+    "apps/fake-speaches": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "apps/server": {
+      "entry": ["src/migrate.ts", "src/smoke.ts", "src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "apps/web": {
+      "entry": ["src/**/*.test.{ts,tsx}"],
+      "project": ["src/**/*.{ts,tsx}"]
+    },
+    "packages/*": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"],
+      "ignoreIssues": {
+        "src/index.ts": ["exports", "types"]
+      }
+    }
+  }
+}
