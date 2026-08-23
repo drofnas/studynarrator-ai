@@ -137,8 +137,8 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 29.0b | Remove the shared-types core package dependency    | P2       | XS   | complete    |
 | 29.0c | Remove the shared-types core build reference       | P2       | XS   | complete    |
 | 29.0d | Remove unused private transport type exports       | P2       | XS   | complete    |
-| 29    | Enforce package dependency direction               | P2       | S    | in progress |
-| 30    | Replace the dead-code script with knip             | P2       | S    | todo        |
+| 29    | Enforce package dependency direction               | P2       | S    | complete    |
+| 30    | Replace the dead-code script with knip             | P2       | S    | in progress |
 | 26    | Single typed contract map                          | P2       | —    | deferred    |
 
 Execute in the listed order. Tasks 9.1 through 12.3 are P0 and should be finished before any packaged release.
@@ -2221,7 +2221,7 @@ The audit must no longer report any `packages/shared-types/src/contracts.ts` exp
 
 # 29 — ENFORCE PACKAGE DEPENDENCY DIRECTION
 
-**Status:** in progress
+**Status:** complete
 
 **Priority:** P2 · **Size:** S
 
@@ -2245,7 +2245,7 @@ If the rule reports existing violations, **STOP** and report them rather than fi
 
 # 30 — REPLACE THE DEAD-CODE SCRIPT WITH KNIP
 
-**Status:** todo
+**Status:** in progress
 
 **Priority:** P2 · **Size:** S
 
