@@ -132,7 +132,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 27.2b | Migrate persistence settings readers               | P2       | M    | complete    |
 | 27.2c | Migrate diagnostics readers                        | P2       | S    | complete    |
 | 27.3  | Migrate the mutating pages                         | P2       | M    | complete    |
-| 28    | Route code splitting                               | P2       | S    | todo        |
+| 28    | Route code splitting                               | P2       | S    | complete    |
 | 29    | Enforce package dependency direction               | P2       | S    | todo        |
 | 30    | Replace the dead-code script with knip             | P2       | S    | todo        |
 | 26    | Single typed contract map                          | P2       | —    | deferred    |
@@ -2072,7 +2072,7 @@ Do task 19 first. SSE changes how render state arrives and would otherwise be mi
 
 # 28 — ROUTE CODE SPLITTING
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P2 · **Size:** S
 
@@ -2081,6 +2081,7 @@ Do task 19 first. SSE changes how render state arrives and would otherwise be mi
 ```
 apps/web/src/app/routes.tsx
 apps/web/src/app/AppShell.tsx
+apps/web/src/app/App.test.tsx
 ```
 
 Convert to `React.lazy` with a `Suspense` boundary in `AppShell`. Keep the onboarding page eager — it is the first screen a new user sees. Keep the database recovery screen eager; it must render when things are broken.
