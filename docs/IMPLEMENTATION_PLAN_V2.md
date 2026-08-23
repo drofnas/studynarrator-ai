@@ -2202,9 +2202,10 @@ The grep must return nothing.
 
 ```
 packages/shared-types/src/contracts.ts
+packages/shared-types/src/scriptGeneration.ts
 ```
 
-`contracts.ts` is private to shared-types and is not exported from its public barrel. Change every unconsumed inferred type export to a local type, preserving every schema and runtime export consumed by the shared contract modules. This removes the task-caused dead-code audit findings introduced when the Core primitives were decoupled.
+`contracts.ts` is private to shared-types and is not exported from its public barrel. Change every unconsumed inferred type export to a local type, preserving every schema and runtime export consumed by the shared contract modules. Preserve the public `ScriptPromptKind` export by declaring it in `scriptGeneration.ts` from its local schema rather than re-exporting the private contracts type. This removes the task-caused dead-code audit findings introduced when the Core primitives were decoupled.
 
 ### VERIFY
 
