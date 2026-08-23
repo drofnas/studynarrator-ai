@@ -153,7 +153,12 @@ describe("Lexicon settings", () => {
     const user = userEvent.setup();
     renderPage(<LexiconSettingsPage client={client} />);
 
+    const customSection = sectionFor("Custom lexicon");
     const globalSection = sectionFor("Global lexicon");
+    expect(
+      customSection.compareDocumentPosition(globalSection) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     const globalRow = await within(globalSection).findByRole("article", {
       name: "Lexicon entry resume/cv",
     });
@@ -176,7 +181,6 @@ describe("Lexicon settings", () => {
       }),
     );
 
-    const customSection = sectionFor("Custom lexicon");
     const [alias] = within(customSection).getAllByLabelText("Alias");
     const [spokenText] = within(customSection).getAllByLabelText("Spoken Text");
     fireEvent.change(alias!, { target: { value: "resume/profile" } });

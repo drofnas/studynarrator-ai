@@ -364,40 +364,6 @@ export function LexiconSettingsPage({ client }: { client: PersistenceClient }) {
 
       <section
         className={styles.globalLexicon}
-        aria-labelledby="global-lexicon-heading"
-      >
-        <div className={styles.sectionHeading}>
-          <div>
-            <p>Built in</p>
-            <h3 id="global-lexicon-heading">Global lexicon</h3>
-          </div>
-          <span>{builtInLexicon.length} entries</span>
-        </div>
-        <p>
-          Built-in aliases such as <code>resume/cv</code> are fixed. You may
-          enable or disable them, but only the bundled catalog can change their
-          spelling or pronunciation.
-        </p>
-        <LexiconEditor
-          value={builtInLexicon.map(({ id, alias, spokenText, enabled }) => ({
-            ...(id ? { id } : {}),
-            displayText: alias,
-            spokenText,
-            enabled,
-          }))}
-          onChange={changeBuiltInLexicon}
-          searchLabel="Search global lexicon"
-          emptyMessage="No matching global lexicon entries."
-          displayTextLabel="Alias"
-          allowAdd={false}
-          allowEdit={false}
-          allowDelete={false}
-          disabled={builtInBusy || reimporting}
-        />
-      </section>
-
-      <section
-        className={styles.globalLexicon}
         aria-labelledby="custom-lexicon-heading"
       >
         <div className={styles.sectionHeading}>
@@ -428,6 +394,40 @@ export function LexiconSettingsPage({ client }: { client: PersistenceClient }) {
               .filter(([, state]) => state === "error")
               .map(([id]) => [id, "Not saved — edit or blur to retry"]),
           )}
+        />
+      </section>
+
+      <section
+        className={styles.globalLexicon}
+        aria-labelledby="global-lexicon-heading"
+      >
+        <div className={styles.sectionHeading}>
+          <div>
+            <p>Built in</p>
+            <h3 id="global-lexicon-heading">Global lexicon</h3>
+          </div>
+          <span>{builtInLexicon.length} entries</span>
+        </div>
+        <p>
+          Built-in aliases such as <code>resume/cv</code> are fixed. You may
+          enable or disable them, but only the bundled catalog can change their
+          spelling or pronunciation.
+        </p>
+        <LexiconEditor
+          value={builtInLexicon.map(({ id, alias, spokenText, enabled }) => ({
+            ...(id ? { id } : {}),
+            displayText: alias,
+            spokenText,
+            enabled,
+          }))}
+          onChange={changeBuiltInLexicon}
+          searchLabel="Search global lexicon"
+          emptyMessage="No matching global lexicon entries."
+          displayTextLabel="Alias"
+          allowAdd={false}
+          allowEdit={false}
+          allowDelete={false}
+          disabled={builtInBusy || reimporting}
         />
       </section>
 
