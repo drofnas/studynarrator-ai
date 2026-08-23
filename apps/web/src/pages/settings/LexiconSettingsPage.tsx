@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type LexiconEntryAuthoring } from "@studynarrator/core";
 import { type PersistenceClient } from "@studynarrator/shared-types";
@@ -6,6 +7,7 @@ import {
   type LexiconEditorChange,
   type LexiconEditorValue,
 } from "@/features/lexicon/LexiconEditor.js";
+import { queryKeys } from "@/app/queryKeys.js";
 import { authoringLexicon } from "@/features/projects/projectAuthoring.js";
 import styles from "./SettingsPage.module.css";
 
@@ -102,6 +104,11 @@ function entryFromRow(row: GlobalLexiconRow): SimplifiedGlobalEntry {
 }
 
 export function LexiconSettingsPage({ client }: { client: PersistenceClient }) {
+  const globalLexiconQuery = useQuery({
+    queryKey: queryKeys.persistence.globalLexicon(),
+    queryFn: () => client.globalLexicon.list(),
+    retry: false,
+  });
   const [globalLexicon, setGlobalLexicon] = useState<GlobalLexiconRow[]>([]);
   const [lexiconRowState, setLexiconRowState] = useState<
     Record<string, LexiconRowState>
@@ -109,6 +116,7 @@ export function LexiconSettingsPage({ client }: { client: PersistenceClient }) {
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const globalLexiconRef = useRef(globalLexicon);
+  const globalLexiconDirtyRef = useRef(false);
   const lexiconRevisionRef = useRef(0);
   const lexiconQueueRef = useRef<Promise<void>>(Promise.resolve());
   const lexiconTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
@@ -117,29 +125,19 @@ export function LexiconSettingsPage({ client }: { client: PersistenceClient }) {
   const pendingLexiconRowsRef = useRef(new Set<string>());
 
   useEffect(() => {
-    let active = true;
-    void client.globalLexicon
-      .list()
-      .then((entries) => {
-        if (!active) return;
-        const loaded = authoringLexicon(entries)
-          .map(fixedGlobalEntry)
-          .map(rowFromEntry);
-        globalLexiconRef.current = loaded;
-        setGlobalLexicon(loaded);
-      })
-      .catch((reason: unknown) => {
-        if (active)
-          setError(
-            reason instanceof Error
-              ? reason.message
-              : "The global lexicon could not be loaded.",
-          );
-      });
-    return () => {
-      active = false;
-    };
-  }, [client]);
+    if (!globalLexiconQuery.data || globalLexiconDirtyRef.current) return;
+    const loaded = authoringLexicon(globalLexiconQuery.data)
+      .map(fixedGlobalEntry)
+      .map(rowFromEntry);
+    globalLexiconRef.current = loaded;
+    setGlobalLexicon(loaded);
+  }, [globalLexiconQuery.data]);
+
+  const loadError = globalLexiconQuery.isError
+    ? globalLexiconQuery.error instanceof Error
+      ? globalLexiconQuery.error.message
+      : "The global lexicon could not be loaded."
+    : "";
 
   useEffect(
     () => () => {
@@ -206,6 +204,7 @@ export function LexiconSettingsPage({ client }: { client: PersistenceClient }) {
                 affectedIds.map((id) => [id, "saved" as const]),
               ),
             }));
+            globalLexiconDirtyRef.current = false;
             if (success) setStatus(success);
             setError("");
           }
@@ -260,6 +259,7 @@ export function LexiconSettingsPage({ client }: { client: PersistenceClient }) {
       enabled: entry.enabled,
     }));
     if (change.kind === "add" || change.kind === "delete") {
+      globalLexiconDirtyRef.current = true;
       flushGlobalLexicon();
       lexiconRevisionRef.current += 1;
       return persistGlobalLexicon(
@@ -275,6 +275,7 @@ export function LexiconSettingsPage({ client }: { client: PersistenceClient }) {
       flushGlobalLexicon();
       return;
     }
+    globalLexiconDirtyRef.current = true;
     lexiconRevisionRef.current += 1;
     globalLexiconRef.current = next;
     setGlobalLexicon(next);
@@ -296,9 +297,9 @@ export function LexiconSettingsPage({ client }: { client: PersistenceClient }) {
           Manage pronunciation rules that apply to every project and preview.
         </span>
       </header>
-      {error ? (
+      {error || loadError ? (
         <p className={styles.error} role="alert">
-          {error}
+          {error || loadError}
         </p>
       ) : null}
       {status ? (

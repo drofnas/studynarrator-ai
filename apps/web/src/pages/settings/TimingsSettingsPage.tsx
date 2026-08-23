@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 import {
   parsePauseDuration,
   SUPPORTED_PAUSE_IDS,
@@ -10,6 +11,7 @@ import {
   type SystemTimingConfiguration,
   type SystemTransitionPauseSetting,
 } from "@studynarrator/shared-types";
+import { queryKeys } from "@/app/queryKeys.js";
 import styles from "./SettingsPage.module.css";
 
 function nearestNamedTransition(
@@ -43,6 +45,12 @@ function timingWithNamedTransitions(
       section: nearestNamedTransition(timing.transitionPauses.section, timing),
     },
   };
+}
+
+function queryErrorMessage(error: unknown): string {
+  return error instanceof Error
+    ? error.message
+    : "Settings could not be loaded.";
 }
 
 function TimingTransitionEditor({
@@ -83,6 +91,11 @@ function TimingTransitionEditor({
 }
 
 export function TimingsSettingsPage({ client }: { client: PersistenceClient }) {
+  const timingQuery = useQuery({
+    queryKey: queryKeys.persistence.timing(),
+    queryFn: () => client.settings.getPacing(),
+    retry: false,
+  });
   const [timing, setTiming] = useState<SystemTimingConfiguration>(
     DEFAULT_SYSTEM_TIMING,
   );
@@ -96,36 +109,25 @@ export function TimingsSettingsPage({ client }: { client: PersistenceClient }) {
   );
   const [status, setStatus] = useState("Loading timing settings…");
   const [error, setError] = useState("");
+  const timingDirtyRef = useRef(false);
 
   useEffect(() => {
-    let active = true;
-    void client.settings
-      .getPacing()
-      .then((loaded) => {
-        if (!active) return;
-        setTiming(timingWithNamedTransitions(loaded));
-        setPauseInputs(
-          Object.fromEntries(
-            loaded.pausePresets.map((preset) => [
-              preset.pauseId,
-              `${String(preset.durationMs)} ms`,
-            ]),
-          ),
-        );
-        setStatus("Timing settings apply to every editable project.");
-      })
-      .catch((reason: unknown) => {
-        if (active)
-          setError(
-            reason instanceof Error
-              ? reason.message
-              : "Settings could not be loaded.",
-          );
-      });
-    return () => {
-      active = false;
-    };
-  }, [client]);
+    if (!timingQuery.data || timingDirtyRef.current) return;
+    setTiming(timingWithNamedTransitions(timingQuery.data));
+    setPauseInputs(
+      Object.fromEntries(
+        timingQuery.data.pausePresets.map((preset) => [
+          preset.pauseId,
+          `${String(preset.durationMs)} ms`,
+        ]),
+      ),
+    );
+    setStatus("Timing settings apply to every editable project.");
+  }, [timingQuery.data]);
+
+  const loadError = timingQuery.isError
+    ? queryErrorMessage(timingQuery.error)
+    : "";
 
   const saveTiming = async () => {
     const parsedPresets = timing.pausePresets.map((preset) => ({
@@ -148,6 +150,7 @@ export function TimingsSettingsPage({ client }: { client: PersistenceClient }) {
         transitionPauses: timing.transitionPauses,
       });
       setTiming(timingWithNamedTransitions(saved));
+      timingDirtyRef.current = false;
       setPauseInputs(
         Object.fromEntries(
           saved.pausePresets.map((preset) => [
@@ -177,9 +180,9 @@ export function TimingsSettingsPage({ client }: { client: PersistenceClient }) {
           future render plans.
         </span>
       </header>
-      {error ? (
+      {error || loadError ? (
         <p className={styles.error} role="alert">
-          {error}
+          {error || loadError}
         </p>
       ) : null}
       <p className={styles.status} aria-live="polite">
@@ -218,6 +221,7 @@ export function TimingsSettingsPage({ client }: { client: PersistenceClient }) {
                       <input
                         value={pauseInputs[preset.pauseId] ?? ""}
                         onChange={(event) => {
+                          timingDirtyRef.current = true;
                           setPauseInputs((current) => ({
                             ...current,
                             [preset.pauseId]: event.target.value,
@@ -234,7 +238,8 @@ export function TimingsSettingsPage({ client }: { client: PersistenceClient }) {
                       </span>
                       <input
                         value={preset.description}
-                        onChange={(event) =>
+                        onChange={(event) => {
+                          timingDirtyRef.current = true;
                           setTiming((current) => ({
                             ...current,
                             pausePresets: current.pausePresets.map(
@@ -243,8 +248,8 @@ export function TimingsSettingsPage({ client }: { client: PersistenceClient }) {
                                   ? { ...item, description: event.target.value }
                                   : item,
                             ) as SystemTimingConfiguration["pausePresets"],
-                          }))
-                        }
+                          }));
+                        }}
                       />
                     </label>
                   </td>
@@ -263,15 +268,16 @@ export function TimingsSettingsPage({ client }: { client: PersistenceClient }) {
                   : key[0]!.toUpperCase() + key.slice(1)
               }
               setting={timing.transitionPauses[key]}
-              onSettingChange={(setting) =>
+              onSettingChange={(setting) => {
+                timingDirtyRef.current = true;
                 setTiming((current) => ({
                   ...current,
                   transitionPauses: {
                     ...current.transitionPauses,
                     [key]: setting,
                   },
-                }))
-              }
+                }));
+              }}
             />
           ))}
         </div>

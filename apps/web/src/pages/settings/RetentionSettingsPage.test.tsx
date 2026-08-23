@@ -1,13 +1,16 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ReactNode } from "react";
 import {
   DEFAULT_RETENTION_SETTINGS,
   type PersistenceClient,
   type RetentionSettings,
 } from "@studynarrator/shared-types";
+import { queryKeys } from "@/app/queryKeys.js";
 import { RetentionSettingsPage } from "./RetentionSettingsPage.js";
 
 const loaded: RetentionSettings = {
@@ -58,10 +61,24 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+function renderPage(children: ReactNode) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return {
+    queryClient,
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        {children}
+      </QueryClientProvider>,
+    ),
+  };
+}
+
 describe("Retention settings", () => {
   it("loads, saves, and reloads the persisted policy", async () => {
     const { client, retention } = clientFixture();
-    const view = render(<RetentionSettingsPage client={client} />);
+    const view = renderPage(<RetentionSettingsPage client={client} />);
 
     expect(screen.getByText("Loading retention settings…")).toBeInTheDocument();
     expect(await screen.findByLabelText("Speech cache retention")).toHaveValue(
@@ -90,16 +107,56 @@ describe("Retention settings", () => {
       speechCacheTtl: "24h",
       speechCacheSizeCapBytes: 2 * 1_024 ** 3,
     });
-    render(<RetentionSettingsPage client={client} />);
+    renderPage(<RetentionSettingsPage client={client} />);
     expect(await screen.findByLabelText("Speech cache retention")).toHaveValue(
       "24h",
     );
     expect(screen.getByLabelText("Speech cache cap (GiB)")).toHaveValue(2);
   });
 
+  it("loads, reports query errors, and preserves active policy edits during refetch", async () => {
+    let resolveInitial!: (settings: RetentionSettings) => void;
+    const initial = new Promise<RetentionSettings>((resolve) => {
+      resolveInitial = resolve;
+    });
+    const get = vi
+      .fn()
+      .mockImplementationOnce(async () => await initial)
+      .mockRejectedValueOnce(new Error("Retention storage unavailable"))
+      .mockResolvedValueOnce({ ...loaded, speechCacheTtl: "8h" });
+    const { client } = clientFixture({ get });
+    const { queryClient } = renderPage(
+      <RetentionSettingsPage client={client} />,
+    );
+
+    expect(screen.getByText("Loading retention settings…")).toBeInTheDocument();
+    await waitFor(() => expect(get).toHaveBeenCalledOnce());
+    resolveInitial(loaded);
+    expect(await screen.findByLabelText("Speech cache retention")).toHaveValue(
+      "7d",
+    );
+
+    await userEvent.selectOptions(
+      screen.getByLabelText("Speech cache retention"),
+      "24h",
+    );
+    await queryClient.invalidateQueries({
+      queryKey: queryKeys.persistence.retention(),
+    });
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Retention storage unavailable",
+    );
+
+    await queryClient.invalidateQueries({
+      queryKey: queryKeys.persistence.retention(),
+    });
+    expect(screen.getByLabelText("Speech cache retention")).toHaveValue("24h");
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  });
+
   it("shows a preview, permits cancel, and reclaims only after confirmation", async () => {
     const { client, retention } = clientFixture();
-    render(<RetentionSettingsPage client={client} />);
+    renderPage(<RetentionSettingsPage client={client} />);
     await screen.findByText("Retention settings are loaded.");
 
     await userEvent.click(
@@ -136,7 +193,7 @@ describe("Retention settings", () => {
         .mockResolvedValueOnce(usage)
         .mockRejectedValueOnce(new Error("Usage unavailable")),
     });
-    render(<RetentionSettingsPage client={client} />);
+    renderPage(<RetentionSettingsPage client={client} />);
     await screen.findByText("Retention settings are loaded.");
 
     await userEvent.click(
@@ -155,7 +212,7 @@ describe("Retention settings", () => {
         throw new Error("Maintenance offline");
       }),
     });
-    render(<RetentionSettingsPage client={client} />);
+    renderPage(<RetentionSettingsPage client={client} />);
     await screen.findByText("Retention settings are loaded.");
     await userEvent.click(
       screen.getByRole("button", { name: "Preview reclaim" }),

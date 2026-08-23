@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 import {
   DEFAULT_RETENTION_SETTINGS,
   type PersistenceClient,
@@ -6,6 +7,7 @@ import {
   type RetentionSettings,
   type RetentionUsage,
 } from "@studynarrator/shared-types";
+import { queryKeys } from "@/app/queryKeys.js";
 import styles from "./SettingsPage.module.css";
 
 const GIB = 1_024 ** 3;
@@ -36,6 +38,16 @@ export function RetentionSettingsPage({
 }: {
   client: PersistenceClient;
 }) {
+  const settingsQuery = useQuery({
+    queryKey: queryKeys.persistence.retention(),
+    queryFn: () => client.retention.get(),
+    retry: false,
+  });
+  const usageQuery = useQuery({
+    queryKey: queryKeys.persistence.retentionUsage(),
+    queryFn: () => client.retention.usage(),
+    retry: false,
+  });
   const [settings, setSettings] = useState<RetentionSettings>();
   const [usage, setUsage] = useState<RetentionUsage>();
   const [capGiB, setCapGiB] = useState(
@@ -46,36 +58,47 @@ export function RetentionSettingsPage({
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [reclaiming, setReclaiming] = useState(false);
+  const settingsDirtyRef = useRef(false);
+  const initialDataLoadedRef = useRef(false);
+  const settingsDataRef = useRef<RetentionSettings | undefined>(undefined);
+  const usageDataRef = useRef<RetentionUsage | undefined>(undefined);
 
   const refreshUsage = async () => {
     setError("");
-    try {
-      setUsage(await client.retention.usage());
-    } catch (reason) {
+    const result = await usageQuery.refetch();
+    if (result.isError) {
       setError(
-        message(reason, "Managed storage usage could not be refreshed."),
+        message(result.error, "Managed storage usage could not be refreshed."),
       );
     }
   };
 
   useEffect(() => {
-    let active = true;
-    void Promise.all([client.retention.get(), client.retention.usage()])
-      .then(([loaded, loadedUsage]) => {
-        if (!active) return;
-        setSettings(loaded);
-        setCapGiB(String(loaded.speechCacheSizeCapBytes / GIB));
-        setUsage(loadedUsage);
-        setStatus("Retention settings are loaded.");
-      })
-      .catch((reason: unknown) => {
-        if (active)
-          setError(message(reason, "Retention settings could not be loaded."));
-      });
-    return () => {
-      active = false;
-    };
-  }, [client]);
+    if (!settingsQuery.data || !usageQuery.data) return;
+    if (settingsDataRef.current !== settingsQuery.data) {
+      settingsDataRef.current = settingsQuery.data;
+      if (!settingsDirtyRef.current) {
+        setSettings(settingsQuery.data);
+        setCapGiB(String(settingsQuery.data.speechCacheSizeCapBytes / GIB));
+      }
+    }
+    if (usageDataRef.current !== usageQuery.data) {
+      usageDataRef.current = usageQuery.data;
+      setUsage(usageQuery.data);
+    }
+    if (!initialDataLoadedRef.current) {
+      initialDataLoadedRef.current = true;
+      setStatus("Retention settings are loaded.");
+    }
+  }, [settingsQuery.data, usageQuery.data]);
+
+  const loadError =
+    settingsQuery.isError || usageQuery.isError
+      ? message(
+          settingsQuery.error ?? usageQuery.error,
+          "Retention settings could not be loaded.",
+        )
+      : "";
 
   const save = async () => {
     if (!settings) return;
@@ -94,6 +117,7 @@ export function RetentionSettingsPage({
         speechCacheSizeCapBytes: cap,
       });
       setSettings(saved);
+      settingsDirtyRef.current = false;
       setCapGiB(String(saved.speechCacheSizeCapBytes / GIB));
       setStatus("Retention settings saved.");
     } catch (reason) {
@@ -150,9 +174,9 @@ export function RetentionSettingsPage({
           output stay on this device. Pinned renders are never reclaimed.
         </span>
       </header>
-      {error ? (
+      {error || loadError ? (
         <p className={styles.error} role="alert">
-          {error}
+          {error || loadError}
         </p>
       ) : null}
       <p className={styles.status} aria-live="polite">
@@ -173,13 +197,14 @@ export function RetentionSettingsPage({
               Speech cache retention
               <select
                 value={settings.speechCacheTtl}
-                onChange={(event) =>
+                onChange={(event) => {
+                  settingsDirtyRef.current = true;
                   setSettings({
                     ...settings,
                     speechCacheTtl: event.target
                       .value as RetentionSettings["speechCacheTtl"],
-                  })
-                }
+                  });
+                }}
               >
                 {ttlOptions.map(([value, label]) => (
                   <option key={value} value={value}>
@@ -192,13 +217,14 @@ export function RetentionSettingsPage({
               Job snapshot retention
               <select
                 value={settings.jobSnapshotTtl}
-                onChange={(event) =>
+                onChange={(event) => {
+                  settingsDirtyRef.current = true;
                   setSettings({
                     ...settings,
                     jobSnapshotTtl: event.target
                       .value as RetentionSettings["jobSnapshotTtl"],
-                  })
-                }
+                  });
+                }}
               >
                 {ttlOptions.map(([value, label]) => (
                   <option key={value} value={value}>
@@ -211,13 +237,14 @@ export function RetentionSettingsPage({
               Render artifact retention
               <select
                 value={settings.renderArtifactTtl}
-                onChange={(event) =>
+                onChange={(event) => {
+                  settingsDirtyRef.current = true;
                   setSettings({
                     ...settings,
                     renderArtifactTtl: event.target
                       .value as RetentionSettings["renderArtifactTtl"],
-                  })
-                }
+                  });
+                }}
               >
                 {ttlOptions.map(([value, label]) => (
                   <option key={value} value={value}>
@@ -233,7 +260,10 @@ export function RetentionSettingsPage({
                 min="0.001"
                 step="0.1"
                 value={capGiB}
-                onChange={(event) => setCapGiB(event.target.value)}
+                onChange={(event) => {
+                  settingsDirtyRef.current = true;
+                  setCapGiB(event.target.value);
+                }}
               />
             </label>
             <div className={styles.actions}>
