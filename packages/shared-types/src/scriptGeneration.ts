@@ -70,4 +70,4 @@ export interface ScriptGenerationClient {
 }
 
 export { ScriptPromptKindSchema };
-export type { ScriptPromptKind } from "./contracts.js";
+export type ScriptPromptKind = z.infer<typeof ScriptPromptKindSchema>;

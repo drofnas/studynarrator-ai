@@ -82,4 +82,3 @@ export const LexiconEntrySchema = z
   });
 
 export const ScriptPromptKindSchema = z.enum(["creation", "update"]);
-export type ScriptPromptKind = z.infer<typeof ScriptPromptKindSchema>;
