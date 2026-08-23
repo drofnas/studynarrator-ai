@@ -177,9 +177,9 @@ describe("General settings", () => {
     expect(
       await screen.findByDisplayValue(savedConnection.baseUrl),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("Model")).toHaveValue(
-      savedConnection.defaultModelId,
-    );
+    expect(
+      await screen.findByDisplayValue(savedConnection.defaultModelId),
+    ).toHaveValue(savedConnection.defaultModelId);
     expect(screen.getByLabelText("Default Voice")).toHaveValue(
       savedConnection.defaultVoiceId,
     );
