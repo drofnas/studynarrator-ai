@@ -2254,12 +2254,13 @@ If the rule reports existing violations, **STOP** and report them rather than fi
 ```
 knip.json   (new)
 package.json
+package-lock.json
 scripts/verify.mjs
 scripts/audit-dead-code.mjs   (delete)
-scripts/audit-dead-code.test.mjs   (delete)
+scripts/audit-dead-code.test.ts   (delete)
 ```
 
-Add `knip`, tune the configuration until it reports at least what the existing script reports, then delete the script, its test, and the `audit:dead-code` npm script, updating `scripts/verify.mjs`.
+Add `knip`, tune the configuration until it reports at least what the existing script reports, then delete the script, its actual TypeScript test, and the `audit:dead-code` npm script, updating `scripts/verify.mjs`. Regenerate only the lockfile changes required to add Knip.
 
 ### Constraints
 
