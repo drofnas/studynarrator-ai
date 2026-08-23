@@ -141,7 +141,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 30.1  | Cover the disjoint Vitest suites together          | P2       | S    | complete    |
 | 30.2  | Stabilize recovered-connection assertions          | P2       | XS   | complete    |
 | 30.3  | Stabilize recovery and voice E2E assertions        | P2       | XS   | complete    |
-| 30    | Replace the dead-code script with knip             | P2       | S    | in progress |
+| 30    | Replace the dead-code script with knip             | P2       | S    | complete    |
 | 26    | Single typed contract map                          | P2       | —    | deferred    |
 
 Execute in the listed order. Tasks 9.1 through 12.3 are P0 and should be finished before any packaged release.
@@ -2335,7 +2335,7 @@ npm run test:e2e:web
 
 # 30 — REPLACE THE DEAD-CODE SCRIPT WITH KNIP
 
-**Status:** in progress
+**Status:** complete
 
 **Priority:** P2 · **Size:** S
 
