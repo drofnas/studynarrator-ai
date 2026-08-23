@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ScriptPromptKindSchema } from "@studynarrator/core";
+import { ScriptPromptKindSchema } from "./contracts.js";
 import { ProjectIdSchema } from "./persistence.js";
 
 export const SCRIPT_GENERATION_CHANNELS = Object.freeze({
@@ -70,4 +70,4 @@ export interface ScriptGenerationClient {
 }
 
 export { ScriptPromptKindSchema };
-export type { ScriptPromptKind } from "@studynarrator/core";
+export type { ScriptPromptKind } from "./contracts.js";

@@ -1,5 +1,5 @@
-import { SourceRangeSchema, SpeakerIdSchema } from "@studynarrator/core";
 import { z } from "zod";
+import { SourceRangeSchema, SpeakerIdSchema } from "./contracts.js";
 import { ProjectIdSchema } from "./persistence.js";
 
 export const PROJECT_PREVIEW_SCHEMA_VERSION = 1;
