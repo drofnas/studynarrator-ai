@@ -1,3 +1,5 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useState } from "react";
 import type {
   SpeechBackendConnectionClient,
   PersistenceClient,
@@ -40,23 +42,27 @@ export function App({
   renders,
   scriptGeneration,
 }: AppProps) {
+  const [queryClient] = useState(() => new QueryClient());
+
   return (
-    <PersistenceGate persistence={persistence}>
-      <ConnectionProvider
-        connectionClient={connection}
-        voiceCatalog={voiceCatalog}
-      >
-        <AppRoutes
-          analyzer={analyzer}
-          client={client}
-          persistence={persistence}
-          scratchpad={scratchpad}
-          projectPreview={projectPreview}
-          speechCache={speechCache}
-          scriptGeneration={scriptGeneration}
-          {...(renders ? { renders } : {})}
-        />
-      </ConnectionProvider>
-    </PersistenceGate>
+    <QueryClientProvider client={queryClient}>
+      <PersistenceGate persistence={persistence}>
+        <ConnectionProvider
+          connectionClient={connection}
+          voiceCatalog={voiceCatalog}
+        >
+          <AppRoutes
+            analyzer={analyzer}
+            client={client}
+            persistence={persistence}
+            scratchpad={scratchpad}
+            projectPreview={projectPreview}
+            speechCache={speechCache}
+            scriptGeneration={scriptGeneration}
+            {...(renders ? { renders } : {})}
+          />
+        </ConnectionProvider>
+      </PersistenceGate>
+    </QueryClientProvider>
   );
 }
