@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import type { VoiceCatalog } from "@studynarrator/shared-types";
+import { queryKeys } from "@/app/queryKeys.js";
 import { useConnections } from "@/features/connections/ConnectionProvider.js";
 import { VoiceSelect } from "@/features/connections/VoiceSelect.js";
 import { presentVoices } from "@/features/connections/voicePresentation.js";
@@ -13,7 +14,13 @@ export function OnboardingPage() {
   const [modelId, setModelId] = useState("");
   const [voiceId, setVoiceId] = useState("");
   const [catalogAddress, setCatalogAddress] = useState("");
-  const [localCatalog, setLocalCatalog] = useState<VoiceCatalog | null>(null);
+  const localCatalogQuery = useQuery({
+    queryKey: queryKeys.connection.voiceCatalog(modelId),
+    queryFn: () => workspace.getCatalog(modelId),
+    enabled: Boolean(modelId),
+    retry: false,
+  });
+  const localCatalog = localCatalogQuery.data ?? null;
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const catalog =
@@ -33,31 +40,11 @@ export function OnboardingPage() {
     [localCatalog, modelId, selectedModel],
   );
 
-  useEffect(() => {
-    if (!modelId) {
-      setLocalCatalog(null);
-      return;
-    }
-    let active = true;
-    void workspace
-      .getCatalog(modelId)
-      .then((loaded) => {
-        if (active) setLocalCatalog(loaded);
-      })
-      .catch(() => {
-        if (active) setLocalCatalog(null);
-      });
-    return () => {
-      active = false;
-    };
-  }, [modelId, workspace]);
-
   const addressChanged = (value: string) => {
     setBaseUrl(value);
     setModelId("");
     setVoiceId("");
     setCatalogAddress("");
-    setLocalCatalog(null);
     setError("");
   };
 

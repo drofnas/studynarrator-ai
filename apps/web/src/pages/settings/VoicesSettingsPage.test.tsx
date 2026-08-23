@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   act,
   cleanup,
@@ -11,7 +12,12 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ScratchpadClient } from "@studynarrator/shared-types";
+import type {
+  ScratchpadClient,
+  VoiceCatalog,
+} from "@studynarrator/shared-types";
+import type { ReactNode } from "react";
+import { queryKeys } from "@/app/queryKeys.js";
 import { ConnectionProvider } from "@/features/connections/ConnectionProvider.js";
 import { VoicesSettingsPage } from "./VoicesSettingsPage.js";
 import {
@@ -66,6 +72,20 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
+
+function renderPage(children: ReactNode) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return {
+    queryClient,
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        {children}
+      </QueryClientProvider>,
+    ),
+  };
+}
 
 describe("Voices settings", () => {
   it("uses the saved model, preserves server ordering, and auditions disabled voices without a player", async () => {
@@ -144,7 +164,7 @@ describe("Voices settings", () => {
         ],
       })),
     });
-    render(
+    renderPage(
       <ConnectionProvider
         connectionClient={idNamedConnection}
         voiceCatalog={localVoiceCatalog}
@@ -207,6 +227,67 @@ describe("Voices settings", () => {
     expect(audioContext.close).toHaveBeenCalled();
   });
 
+  it("loads, refetches, and recovers the local catalog query", async () => {
+    let resolveInitial!: (value: VoiceCatalog) => void;
+    const catalog = (label: string): VoiceCatalog => ({
+      schemaVersion: 1 as const,
+      modelId: "model-b",
+      entries: [
+        {
+          voiceId: "voice-local",
+          label: `${label} — English — voice-local`,
+          enabled: true,
+          favorite: false,
+          language: "English",
+          locale: "en-GB",
+          accent: null,
+          category: null,
+          style: null,
+          sampleText: null,
+        },
+      ],
+    });
+    const initial = new Promise<VoiceCatalog>((resolve) => {
+      resolveInitial = resolve;
+    });
+    const get = vi
+      .fn()
+      .mockImplementationOnce(async () => await initial)
+      .mockResolvedValueOnce(catalog("Refreshed local"))
+      .mockRejectedValueOnce(new Error("Catalog storage unavailable"))
+      .mockResolvedValueOnce(catalog("Recovered local"));
+    const { queryClient } = renderPage(
+      <ConnectionProvider
+        connectionClient={connectionClient()}
+        voiceCatalog={{ get, replace: vi.fn() }}
+      >
+        <VoicesSettingsPage scratchpadClient={scratchpadClient} />
+      </ConnectionProvider>,
+    );
+
+    await waitFor(() => expect(get).toHaveBeenCalledOnce());
+    expect(screen.queryByText("Saved local")).not.toBeInTheDocument();
+    resolveInitial(catalog("Saved local"));
+    expect(await screen.findByText("Saved local")).toBeInTheDocument();
+
+    await queryClient.invalidateQueries({
+      queryKey: queryKeys.connection.voiceCatalog("model-b"),
+    });
+    expect(await screen.findByText("Refreshed local")).toBeInTheDocument();
+
+    await queryClient.invalidateQueries({
+      queryKey: queryKeys.connection.voiceCatalog("model-b"),
+    });
+    await waitFor(() =>
+      expect(screen.queryByText("Refreshed local")).not.toBeInTheDocument(),
+    );
+
+    await queryClient.invalidateQueries({
+      queryKey: queryKeys.connection.voiceCatalog("model-b"),
+    });
+    expect(await screen.findByText("Recovered local")).toBeInTheDocument();
+  });
+
   it("searches locales and persists favorites with rollback on failure", async () => {
     let stored = {
       schemaVersion: 1 as const,
@@ -258,7 +339,7 @@ describe("Voices settings", () => {
       get: vi.fn(async () => structuredClone(stored)),
       replace,
     };
-    render(
+    renderPage(
       <ConnectionProvider
         connectionClient={connectionClient()}
         voiceCatalog={localVoiceCatalog}
@@ -342,7 +423,7 @@ describe("Voices settings", () => {
       })),
       replace: vi.fn(),
     };
-    render(
+    renderPage(
       <ConnectionProvider
         connectionClient={connectionClient()}
         voiceCatalog={localVoiceCatalog}
@@ -392,7 +473,7 @@ describe("Voices settings", () => {
       })),
       replace: vi.fn(),
     };
-    const view = render(
+    const view = renderPage(
       <ConnectionProvider
         connectionClient={connectionClient()}
         voiceCatalog={localVoiceCatalog}

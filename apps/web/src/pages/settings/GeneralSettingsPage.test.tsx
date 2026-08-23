@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConnectionProvider } from "@/features/connections/ConnectionProvider.js";
@@ -18,9 +20,18 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+function renderPage(children: ReactNode) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>,
+  );
+}
+
 describe("General settings", () => {
   it("shows the Signal path only for an actual connection error", async () => {
-    const connected = render(
+    const connected = renderPage(
       <ConnectionProvider
         connectionClient={connectionClient({
           get: vi.fn(async () => connectionWithTest("connected")),
@@ -40,7 +51,7 @@ describe("General settings", () => {
     ).not.toBeInTheDocument();
     connected.unmount();
 
-    const failed = render(
+    const failed = renderPage(
       <ConnectionProvider
         connectionClient={connectionClient({
           get: vi.fn(async () => connectionWithTest("disconnected")),
@@ -59,7 +70,7 @@ describe("General settings", () => {
     ).toBeInTheDocument();
     failed.unmount();
 
-    render(
+    renderPage(
       <ConnectionProvider
         connectionClient={connectionClient({
           get: vi.fn(async () =>
@@ -108,7 +119,7 @@ describe("General settings", () => {
       bytesFreed: 2048,
     }));
     vi.spyOn(window, "confirm").mockReturnValue(true);
-    render(
+    renderPage(
       <ConnectionProvider
         connectionClient={connectionClient()}
         voiceCatalog={voiceCatalog}
@@ -146,7 +157,7 @@ describe("General settings", () => {
       .fn()
       .mockRejectedValueOnce(new Error("Connection service restarted."))
       .mockImplementationOnce(async () => await recovered);
-    render(
+    renderPage(
       <ConnectionProvider
         connectionClient={connectionClient({ get })}
         voiceCatalog={voiceCatalog}
