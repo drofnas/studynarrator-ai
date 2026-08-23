@@ -128,7 +128,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 25.5  | Split ProjectsPage                                 | P2       | M    | complete    |
 | 27.1  | Add TanStack Query and the provider                | P2       | S    | complete    |
 | 27.2  | Migrate the read-only pages                        | P2       | M    | in progress |
-| 27.2a | Migrate connection-backed readers                  | P2       | M    | in progress |
+| 27.2a | Migrate connection-backed readers                  | P2       | M    | complete    |
 | 27.2b | Migrate persistence settings readers               | P2       | M    | todo        |
 | 27.2c | Migrate diagnostics readers                        | P2       | S    | todo        |
 | 27.3  | Migrate the mutating pages                         | P2       | M    | todo        |
