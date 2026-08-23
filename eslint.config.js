@@ -21,7 +21,7 @@ function restrictInternalDependencies(pattern, message) {
         message,
       },
       {
-        selector: `ImportExpression > TemplateLiteral[expressions.length=0] > TemplateElement[value.raw=/${pattern}/]`,
+        selector: `ImportExpression > TemplateLiteral[expressions.length=0] > TemplateElement[value.cooked=/${pattern}/]`,
         message,
       },
     ],
