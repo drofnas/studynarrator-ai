@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { type LexiconEntryAuthoring } from "@studynarrator/core";
-import { type PersistenceClient } from "@studynarrator/shared-types";
+import type { LexiconEntryAuthoring } from "@studynarrator/core";
+import type { PersistenceClient } from "@studynarrator/shared-types";
 import {
   LexiconEditor,
   type LexiconEditorChange,
