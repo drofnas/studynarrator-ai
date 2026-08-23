@@ -122,7 +122,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 24.1 | Build the golden corpus fixtures                   | P1       | M    | complete    |
 | 24.2 | Add the golden corpus test and regeneration script | P1       | S    | complete    |
 | 25.1 | Split the rendering package                        | P2       | M    | complete    |
-| 25.2 | Split the persistence repository                   | P2       | M    | todo        |
+| 25.2 | Split the persistence repository                   | P2       | M    | complete    |
 | 25.3 | Split the speaches adapter                         | P2       | M    | todo        |
 | 25.4 | Split the render service                           | P2       | M    | todo        |
 | 25.5 | Split ProjectsPage                                 | P2       | M    | todo        |
