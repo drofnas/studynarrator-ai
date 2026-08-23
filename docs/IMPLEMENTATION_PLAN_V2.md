@@ -126,13 +126,13 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 25.3 | Split the speaches adapter                         | P2       | M    | todo        |
 | 25.4 | Split the render service                           | P2       | M    | todo        |
 | 25.5 | Split ProjectsPage                                 | P2       | M    | todo        |
-| 26   | Single typed contract map                          | P2       | —    | todo        |
 | 27.1 | Add TanStack Query and the provider                | P2       | S    |
 | 27.2 | Migrate the read-only pages                        | P2       | M    |
 | 27.3 | Migrate the mutating pages                         | P2       | M    |
 | 28   | Route code splitting                               | P2       | S    |
 | 29   | Enforce package dependency direction               | P2       | S    |
 | 30   | Replace the dead-code script with knip             | P2       | S    |
+| 26   | Single typed contract map                          | P2       | —    | deferred    |
 
 Execute in the listed order. Tasks 9.1 through 12.3 are P0 and should be finished before any packaged release.
 
@@ -2042,7 +2042,7 @@ Re-measure before starting each: tasks 8, 17, and 19 have already changed severa
 
 # 26 — SINGLE TYPED CONTRACT MAP
 
-**Status:** todo
+**Status:** deferred (human-led; do not delegate)
 
 **Priority:** P2 · **Human-led. Do not delegate.**
 
