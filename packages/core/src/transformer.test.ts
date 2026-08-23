@@ -176,6 +176,42 @@ describe("lexicon transformation", () => {
     expect(insensitive.ttsTranscript).toBe("sequel sequel sequel");
   });
 
+  it("resolves literal named-sense aliases before shorter ordinary terms", () => {
+    const namedSense = entry({
+      id: "global-resume-cv",
+      entryType: "namedSense",
+      displayText: "resume",
+      senseId: "cv",
+      spokenText: "rez oo may",
+      caseSensitive: false,
+    });
+    const result = transform("Review RESUME/CV.", [
+      namedSense,
+      entry({
+        id: "project-resume",
+        scope: "project",
+        displayText: "resume",
+        spokenText: "ordinary resume",
+        caseSensitive: false,
+      }),
+    ]);
+
+    expect(result.readableTranscript).toBe("Review resume.");
+    expect(result.ttsTranscript).toBe("Review rez oo may.");
+    expect(result.matches).toMatchObject([
+      {
+        entryId: "global-resume-cv",
+        originalText: "RESUME/CV",
+        replacement: "rez oo may",
+      },
+    ]);
+    expect(result.warnings).toEqual([]);
+
+    const suffix = transform("resume/cvsummary", [namedSense]);
+    expect(suffix.ttsTranscript).toBe("resume/cvsummary");
+    expect(suffix.matches).toEqual([]);
+  });
+
   it("uses the required scope and entry-type precedence", () => {
     const sameTerm = transform("SQL", [
       entry({ id: "global", displayText: "SQL", spokenText: "global" }),

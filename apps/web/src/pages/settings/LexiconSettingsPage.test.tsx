@@ -86,6 +86,9 @@ describe("Lexicon settings", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("resume/cv")).toBeInTheDocument();
     expect(screen.getByText("{{resume|cv}}")).toBeInTheDocument();
+    expect(
+      screen.getByText(/directly in a script to select its pronunciation/u),
+    ).toBeInTheDocument();
     expect(screen.queryByText("Type")).not.toBeInTheDocument();
     expect(screen.queryByText("Case sensitive")).not.toBeInTheDocument();
 

@@ -321,8 +321,9 @@ export function LexiconSettingsPage({ client }: { client: PersistenceClient }) {
         </div>
         <p>
           Aliases match regardless of capitalization. Use <code>resume/cv</code>{" "}
-          to resolve the script annotation <code>{"{{resume|cv}}"}</code>. These
-          rules apply to every project and pronunciation preview.
+          directly in a script to select its pronunciation. The annotation{" "}
+          <code>{"{{resume|cv}}"}</code> remains supported. These rules apply to
+          every project and pronunciation preview.
         </p>
         <LexiconEditor
           value={globalLexicon.map(({ id, alias, spokenText, enabled }) => ({
