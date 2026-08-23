@@ -353,8 +353,11 @@ test.describe("Settings and connection diagnostics", () => {
         response.request().method() === "PATCH" &&
         response.ok(),
     );
-    await seeded.getByRole("checkbox", { name: "Enabled" }).uncheck();
+    await seeded.getByRole("checkbox", { name: "Enabled" }).click();
     await seedDisable;
+    await expect(
+      seeded.getByRole("checkbox", { name: "Enabled" }),
+    ).not.toBeChecked();
     await page.reload();
     await expect(
       seeded.getByRole("checkbox", { name: "Enabled" }),
