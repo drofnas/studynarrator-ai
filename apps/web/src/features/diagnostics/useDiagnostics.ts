@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import type {
   SystemClient,
   SystemDiagnostics,
 } from "@studynarrator/shared-types";
+import { queryKeys } from "@/app/queryKeys.js";
 
 type DiagnosticsState =
   | { phase: "idle" }
@@ -11,24 +12,32 @@ type DiagnosticsState =
   | { phase: "error"; message: string };
 
 export function useDiagnostics(client: SystemClient) {
-  const [state, setState] = useState<DiagnosticsState>({ phase: "idle" });
+  const diagnosticsQuery = useQuery({
+    queryKey: queryKeys.system.diagnostics(),
+    queryFn: () => client.diagnostics(),
+    enabled: false,
+    retry: false,
+  });
+  const loading = diagnosticsQuery.isFetching;
+  const state: DiagnosticsState = loading
+    ? { phase: "loading" }
+    : diagnosticsQuery.isError
+      ? {
+          phase: "error",
+          message:
+            diagnosticsQuery.error instanceof Error
+              ? diagnosticsQuery.error.message
+              : "Diagnostics could not be completed.",
+        }
+      : diagnosticsQuery.data
+        ? { phase: "loaded", diagnostics: diagnosticsQuery.data }
+        : { phase: "idle" };
   const diagnostics = state.phase === "loaded" ? state.diagnostics : undefined;
-  const loading = state.phase === "loading";
 
-  async function runDiagnostics() {
-    setState({ phase: "loading" });
-    try {
-      setState({ phase: "loaded", diagnostics: await client.diagnostics() });
-    } catch (error) {
-      setState({
-        phase: "error",
-        message:
-          error instanceof Error
-            ? error.message
-            : "Diagnostics could not be completed.",
-      });
-    }
-  }
-
-  return { diagnostics, loading, runDiagnostics, state };
+  return {
+    diagnostics,
+    loading,
+    runDiagnostics: diagnosticsQuery.refetch,
+    state,
+  };
 }
