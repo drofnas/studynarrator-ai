@@ -70,9 +70,10 @@ describe("database baseline", () => {
       { version: 5, name: "voice-timing-calibration" },
       { version: 6, name: "retention-settings" },
       { version: 7, name: "render-pinning" },
+      { version: 8, name: "global-lexicon-entry-kinds" },
     ]);
-    expect(first.appliedVersions).toEqual([1, 2, 3, 4, 5, 6, 7]);
-    expect(first.databaseSchemaVersion).toBe(7);
+    expect(first.appliedVersions).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(first.databaseSchemaVersion).toBe(8);
     expect(first.backupPath).toBeNull();
     expect(
       first.database.prepare("SELECT version FROM schema_migrations").all(),
@@ -84,6 +85,7 @@ describe("database baseline", () => {
       { version: 5 },
       { version: 6 },
       { version: 7 },
+      { version: 8 },
     ]);
     expect(
       first.database
@@ -115,13 +117,14 @@ describe("database baseline", () => {
     expect(
       first.database
         .prepare(
-          "SELECT display_text, sense_id, spoken_text FROM lexicon_entries WHERE id = ?",
+          "SELECT display_text, sense_id, spoken_text, entry_kind FROM lexicon_entries WHERE id = ?",
         )
         .get("10000000-0000-4000-8000-000000000009"),
     ).toEqual({
       display_text: "resume",
       sense_id: "cv",
       spoken_text: "rez oo may",
+      entry_kind: "builtIn",
     });
     first.database
       .prepare("DELETE FROM lexicon_entries WHERE scope = 'global'")
@@ -141,6 +144,72 @@ describe("database baseline", () => {
         .get(),
     ).toEqual({ count: 0 });
     second.database.close();
+  });
+
+  it("classifies catalog rows as built-ins and preserves existing custom globals", async () => {
+    const databasePath = await temporaryDatabase(
+      "studynarrator-global-lexicon-kinds-",
+    );
+    const v7 = await migrateDatabase({
+      Database: DatabaseAdapter,
+      databasePath,
+      migrations: STUDYNARRATOR_MIGRATIONS.slice(0, 7),
+    });
+    const timestamp = "2026-08-23T00:00:00.000Z";
+    v7.database
+      .prepare("UPDATE lexicon_entries SET enabled = 0 WHERE id = ?")
+      .run("10000000-0000-4000-8000-000000000009");
+    v7.database
+      .prepare(
+        `
+          INSERT INTO lexicon_entries (
+            id, scope, project_id, ordinal, entry_type, display_text, sense_id, spoken_text,
+            case_sensitive, whole_word, priority, enabled, notes, created_at, updated_at
+          ) VALUES (?, 'global', NULL, ?, 'exactTerm', ?, NULL, ?, 0, 1, 0, 1, '', ?, ?)
+        `,
+      )
+      .run(
+        "20000000-0000-4000-8000-000000000001",
+        44,
+        "CLI",
+        "C L I",
+        timestamp,
+        timestamp,
+      );
+    v7.database.close();
+
+    const upgraded = await migrateDatabase({
+      Database: DatabaseAdapter,
+      databasePath,
+    });
+    expect(upgraded.appliedVersions).toEqual([8]);
+    expect(
+      upgraded.database
+        .prepare(
+          "SELECT id, entry_kind, enabled FROM lexicon_entries WHERE id IN (?, ?) ORDER BY id",
+        )
+        .all(
+          "10000000-0000-4000-8000-000000000009",
+          "20000000-0000-4000-8000-000000000001",
+        ),
+    ).toEqual([
+      {
+        id: "10000000-0000-4000-8000-000000000009",
+        entry_kind: "builtIn",
+        enabled: 0,
+      },
+      {
+        id: "20000000-0000-4000-8000-000000000001",
+        entry_kind: "custom",
+        enabled: 1,
+      },
+    ]);
+    expect(() =>
+      upgraded.database
+        .prepare("UPDATE lexicon_entries SET entry_kind = ? WHERE id = ?")
+        .run("invalid", "20000000-0000-4000-8000-000000000001"),
+    ).toThrow(/CHECK constraint failed/u);
+    upgraded.database.close();
   });
 
   it("creates the constrained voice timing calibration table", async () => {
@@ -711,9 +780,9 @@ describe("database baseline", () => {
       databasePath,
       logger,
     });
-    expect(upgraded.appliedVersions).toEqual([3, 4, 5, 6, 7]);
-    expect(upgraded.databaseSchemaVersion).toBe(7);
-    expect(upgraded.backupPath).toContain("-v0002-to-v0007-");
+    expect(upgraded.appliedVersions).toEqual([3, 4, 5, 6, 7, 8]);
+    expect(upgraded.databaseSchemaVersion).toBe(8);
+    expect(upgraded.backupPath).toContain("-v0002-to-v0008-");
     if (upgraded.backupPath === null)
       throw new Error("Expected the migration backup path.");
     expect(logger.info).toHaveBeenNthCalledWith(
@@ -722,7 +791,7 @@ describe("database baseline", () => {
         event: "database-migration-backup-created",
         backupPath: upgraded.backupPath,
         fromDatabaseSchemaVersion: 2,
-        toDatabaseSchemaVersion: 7,
+        toDatabaseSchemaVersion: 8,
       },
       "Database migration backup created",
     );
@@ -773,6 +842,15 @@ describe("database baseline", () => {
     );
     expect(logger.info).toHaveBeenNthCalledWith(
       7,
+      {
+        event: "database-migration-applied",
+        migrationVersion: 8,
+        migrationName: "global-lexicon-entry-kinds",
+      },
+      "Database migration applied",
+    );
+    expect(logger.info).toHaveBeenNthCalledWith(
+      8,
       {
         event: "database-backups-pruned",
         removedCount: 0,
@@ -872,8 +950,8 @@ describe("database baseline", () => {
       Database: DatabaseAdapter,
       databasePath,
     });
-    expect(upgraded.appliedVersions).toEqual([4, 5, 6, 7]);
-    expect(upgraded.databaseSchemaVersion).toBe(7);
+    expect(upgraded.appliedVersions).toEqual([4, 5, 6, 7, 8]);
+    expect(upgraded.databaseSchemaVersion).toBe(8);
     expect(
       upgraded.database
         .prepare(
@@ -977,7 +1055,7 @@ describe("database baseline", () => {
         .run("keep-me");
       old.close();
 
-      if (version > 7) {
+      if (version > 8) {
         await expect(
           migrateDatabase({ Database: DatabaseAdapter, databasePath }),
         ).rejects.toBeInstanceOf(SchemaTooNewError);
@@ -1015,7 +1093,7 @@ describe("database baseline", () => {
       .run();
     baseline.database.close();
     const failing: Migration = {
-      version: 8,
+      version: 9,
       name: "intentional-test-failure",
       up(database) {
         database.exec(
@@ -1035,7 +1113,7 @@ describe("database baseline", () => {
       failure = error as MigrationFailureError;
     }
     expect(failure).toBeInstanceOf(MigrationFailureError);
-    expect(failure?.backupPath).toContain("-v0007-to-v0008-");
+    expect(failure?.backupPath).toContain("-v0008-to-v0009-");
     expect((await stat(failure!.backupPath!)).mode & 0o777).toBe(0o600);
     expect((await readFile(failure!.backupPath!)).byteLength).toBeGreaterThan(
       0,
@@ -1171,7 +1249,7 @@ describe("StudyNarratorRepository", () => {
     });
     expect(first.status()).toMatchObject({
       contractVersion: 1,
-      databaseSchemaVersion: 7,
+      databaseSchemaVersion: 8,
     });
     const created = first.createProject({
       name: "Persistence restart proof",
@@ -1500,7 +1578,7 @@ describe("StudyNarratorRepository", () => {
     });
     expect(repository.runMarker()).toMatchObject({
       markerKey: "runtime.storage-self-test",
-      migrationVersion: 7,
+      migrationVersion: 8,
     });
     const project = repository.createProject({ name: "Rendered" });
     repository.replaceProject(project.id, {

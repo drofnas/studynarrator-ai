@@ -3,6 +3,7 @@ import { basename, dirname, extname, join, resolve } from "node:path";
 import {
   DATABASE_SCHEMA_VERSION,
   DEFAULT_RETENTION_SETTINGS,
+  GLOBAL_LEXICON_BUILT_INS,
   type PersistenceBackup,
 } from "@studynarrator/shared-types";
 import { MigrationFailureError, SchemaTooNewError } from "./errors.js";
@@ -436,6 +437,25 @@ export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
       database.exec(`
         ALTER TABLE render_jobs ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1));
       `);
+    },
+  },
+  {
+    version: 8,
+    name: "global-lexicon-entry-kinds",
+    up(database) {
+      database.exec(`
+        ALTER TABLE lexicon_entries
+        ADD COLUMN entry_kind TEXT NOT NULL DEFAULT 'custom'
+        CHECK (entry_kind IN ('builtIn', 'custom'));
+      `);
+      const builtInIds = GLOBAL_LEXICON_BUILT_INS.map(({ id }) => id);
+      database
+        .prepare(
+          `UPDATE lexicon_entries
+           SET entry_kind = 'builtIn'
+           WHERE scope = 'global' AND id IN (${builtInIds.map(() => "?").join(", ")})`,
+        )
+        .run(...builtInIds);
     },
   },
 ]);

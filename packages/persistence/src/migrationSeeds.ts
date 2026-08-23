@@ -4,7 +4,7 @@
 // migration inserted at the time it shipped. Changing them changes history and
 // makes freshly created databases diverge from migrated ones.
 //
-// To change application defaults, edit packages/shared-types/src/persistence.ts
+// To change application defaults, edit packages/shared-types/src/globalLexicon.json
 // and add a NEW migration that reconciles existing rows.
 
 export const V1_SYSTEM_TIMING = {

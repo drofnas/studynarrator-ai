@@ -9,7 +9,7 @@ import {
   SupportedPauseIdSchema,
 } from "./contracts.js";
 
-export const DATABASE_SCHEMA_VERSION = 7;
+export const DATABASE_SCHEMA_VERSION = 8;
 export const PERSISTENCE_CONTRACT_VERSION = 1;
 export const PERSISTENCE_CHANNELS = Object.freeze({
   status: "persistence.status",
