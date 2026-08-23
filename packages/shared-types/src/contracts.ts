@@ -15,7 +15,6 @@ export const SUPPORTED_PAUSE_IDS = [
 export const SpeakerIdSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/u);
 export const PauseIdSchema = z.string().regex(/^pause_[A-Za-z0-9_-]*$/u);
 export const SupportedPauseIdSchema = z.enum(SUPPORTED_PAUSE_IDS);
-export type SupportedPauseId = z.infer<typeof SupportedPauseIdSchema>;
 
 export const IgnoredDiagnosticSchema = z
   .object({
@@ -23,7 +22,6 @@ export const IgnoredDiagnosticSchema = z
     pattern: z.string().min(1),
   })
   .strict();
-export type IgnoredDiagnostic = z.infer<typeof IgnoredDiagnosticSchema>;
 
 const SourcePositionSchema = z
   .object({
@@ -38,7 +36,6 @@ export const SourceRangeSchema = z
     end: SourcePositionSchema,
   })
   .strict();
-export type SourceRange = z.infer<typeof SourceRangeSchema>;
 
 const LexiconScopeSchema = z.enum(["global", "project"]);
 const LexiconEntryTypeSchema = z.enum([
@@ -83,7 +80,6 @@ export const LexiconEntrySchema = z
       });
     }
   });
-export type LexiconEntry = z.infer<typeof LexiconEntrySchema>;
 
 export const ScriptPromptKindSchema = z.enum(["creation", "update"]);
 export type ScriptPromptKind = z.infer<typeof ScriptPromptKindSchema>;
