@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  DEFAULT_GLOBAL_LEXICON,
-  DEFAULT_GLOBAL_NAMED_SENSE_LEXICON,
+  GLOBAL_LEXICON_BUILT_INS,
   GlobalLexiconEntryCollectionSchema,
   GlobalLexiconReplaceInputSchema,
   IgnoredDiagnosticCollectionSchema,
@@ -21,6 +20,9 @@ const validProject = {
   speakerMappings: [],
   lexiconEntries: [],
 };
+const globalNamedSenseBuiltIns = GLOBAL_LEXICON_BUILT_INS.filter(
+  (entry) => entry.entryType === "namedSense",
+);
 
 describe("persistence contracts", () => {
   it("accepts strict project summaries with derived index metadata", () => {
@@ -155,28 +157,26 @@ describe("persistence contracts", () => {
     ).toThrow();
   });
 
-  it("defines the complete stable Global Lexicon defaults", () => {
-    expect(DEFAULT_GLOBAL_LEXICON).toHaveLength(44);
-    expect(DEFAULT_GLOBAL_NAMED_SENSE_LEXICON).toHaveLength(36);
-    expect(DEFAULT_GLOBAL_NAMED_SENSE_LEXICON[0]).toMatchObject({
+  it("loads the complete stable Global Lexicon catalog", () => {
+    expect(GLOBAL_LEXICON_BUILT_INS).toHaveLength(44);
+    expect(globalNamedSenseBuiltIns).toHaveLength(36);
+    expect(globalNamedSenseBuiltIns[0]).toMatchObject({
       id: "10000000-0000-4000-8000-000000000009",
       displayText: "resume",
       senseId: "cv",
       spokenText: "rez oo may",
     });
-    expect(DEFAULT_GLOBAL_NAMED_SENSE_LEXICON.at(-1)).toMatchObject({
+    expect(globalNamedSenseBuiltIns.at(-1)).toMatchObject({
       id: "10000000-0000-4000-8000-000000000044",
       displayText: "axes",
       senseId: "tools",
       spokenText: "ak siz",
     });
     expect(
-      DEFAULT_GLOBAL_NAMED_SENSE_LEXICON.map(
-        ({ displayText, senseId, spokenText }) => [
-          `${displayText}/${senseId}`,
-          spokenText,
-        ],
-      ),
+      globalNamedSenseBuiltIns.map(({ displayText, senseId, spokenText }) => [
+        `${displayText}/${senseId}`,
+        spokenText,
+      ]),
     ).toEqual([
       ["resume/cv", "rez oo may"],
       ["resume/continue", "ree zoom"],
@@ -215,14 +215,13 @@ describe("persistence contracts", () => {
       ["axes/math", "ak seez"],
       ["axes/tools", "ak siz"],
     ]);
-    expect(new Set(DEFAULT_GLOBAL_LEXICON.map(({ id }) => id))).toHaveProperty(
-      "size",
-      44,
-    );
+    expect(
+      new Set(GLOBAL_LEXICON_BUILT_INS.map(({ id }) => id)),
+    ).toHaveProperty("size", 44);
     const timestamp = "2026-08-16T12:00:00.000Z";
     expect(
       GlobalLexiconEntryCollectionSchema.parse(
-        DEFAULT_GLOBAL_LEXICON.map((entry) => ({
+        GLOBAL_LEXICON_BUILT_INS.map((entry) => ({
           ...entry,
           createdAt: timestamp,
           updatedAt: timestamp,

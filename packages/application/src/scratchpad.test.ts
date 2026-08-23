@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { SpeachesSynthesisError } from "@studynarrator/speaches-adapter";
 import type { SpeechCache } from "@studynarrator/rendering";
-import { DEFAULT_GLOBAL_NAMED_SENSE_LEXICON } from "@studynarrator/shared-types";
+import { GLOBAL_LEXICON_BUILT_INS } from "@studynarrator/shared-types";
 import {
   createScratchpadService,
   type ScratchpadRepository,
@@ -24,7 +24,9 @@ const connection = {
   createdAt: timestamp,
   updatedAt: timestamp,
 };
-const namedSenseDefaults = DEFAULT_GLOBAL_NAMED_SENSE_LEXICON.map((entry) => ({
+const namedSenseDefaults = GLOBAL_LEXICON_BUILT_INS.filter(
+  (entry) => entry.entryType === "namedSense",
+).map((entry) => ({
   ...entry,
   createdAt: timestamp,
   updatedAt: timestamp,
