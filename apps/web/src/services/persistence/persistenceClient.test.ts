@@ -122,6 +122,48 @@ describe("persistence client", () => {
     });
   });
 
+  it("uses separate built-in and custom global lexicon operations", async () => {
+    const fetchInput = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(JSON.stringify({ builtIns: [], custom: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    const client = createRestPersistenceClient(fetchInput as never);
+    await client.globalLexicon.list();
+    await client.globalLexicon.setBuiltInEnabled({
+      id: "global-resume-cv",
+      enabled: false,
+    });
+    await client.globalLexicon.replaceCustom([
+      {
+        scope: "global",
+        entryType: "namedSense",
+        displayText: "resume",
+        senseId: "profile",
+        spokenText: "rez oo may",
+      },
+    ]);
+    await client.globalLexicon.reimportBuiltIns();
+
+    expect(fetchInput.mock.calls.map(([path]) => path)).toEqual([
+      "/api/lexicon/global",
+      "/api/lexicon/global/built-ins/global-resume-cv/enabled",
+      "/api/lexicon/custom",
+      "/api/lexicon/global/built-ins/reimport",
+    ]);
+    expect(fetchInput.mock.calls[1]?.[1]).toMatchObject({
+      method: "PATCH",
+      body: JSON.stringify({ enabled: false }),
+    });
+    expect(fetchInput.mock.calls[2]?.[1]).toMatchObject({ method: "PUT" });
+    expect(fetchInput.mock.calls[3]?.[1]).toMatchObject({
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+  });
+
   it("surfaces safe path-specific boundary issues", async () => {
     const fetchInput = vi.fn(
       async () =>

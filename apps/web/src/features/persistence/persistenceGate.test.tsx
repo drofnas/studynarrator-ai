@@ -79,7 +79,12 @@ function gateClient(
       getIgnoredDiagnostics: vi.fn(),
       replaceIgnoredDiagnostics: vi.fn(),
     },
-    globalLexicon: { list: vi.fn(), replace: vi.fn() },
+    globalLexicon: {
+      list: vi.fn(),
+      setBuiltInEnabled: vi.fn(),
+      replaceCustom: vi.fn(),
+      reimportBuiltIns: vi.fn(),
+    },
   } as unknown as PersistenceClient;
 }
 

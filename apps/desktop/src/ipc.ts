@@ -3,9 +3,10 @@ import {
   CONNECTION_CHANNELS,
   ConnectionSetupStateSchema,
   ConnectionTestSummarySchema,
+  CustomGlobalLexiconReplaceInputSchema,
   EmptyResponseSchema,
-  GlobalLexiconEntryCollectionSchema,
-  GlobalLexiconReplaceInputSchema,
+  GlobalLexiconBuiltInEnabledInputSchema,
+  GlobalLexiconStateSchema,
   IgnoredDiagnosticCollectionSchema,
   PERSISTENCE_CHANNELS,
   PersistenceBackupCollectionSchema,
@@ -219,17 +220,28 @@ export function registerPersistenceHandlers(
     ),
   );
   handle(PERSISTENCE_CHANNELS.globalLexiconList, async () =>
-    GlobalLexiconEntryCollectionSchema.parse(
-      await persistence.globalLexicon.list(),
-    ),
+    GlobalLexiconStateSchema.parse(await persistence.globalLexicon.list()),
   );
-  handle(PERSISTENCE_CHANNELS.globalLexiconReplace, async (input) =>
-    GlobalLexiconEntryCollectionSchema.parse(
-      await persistence.globalLexicon.replace(
-        GlobalLexiconReplaceInputSchema.parse(input),
+  handle(PERSISTENCE_CHANNELS.globalLexiconBuiltInEnabled, async (input) =>
+    GlobalLexiconStateSchema.parse(
+      await persistence.globalLexicon.setBuiltInEnabled(
+        GlobalLexiconBuiltInEnabledInputSchema.parse(input),
       ),
     ),
   );
+  handle(PERSISTENCE_CHANNELS.globalLexiconCustomReplace, async (input) =>
+    GlobalLexiconStateSchema.parse(
+      await persistence.globalLexicon.replaceCustom(
+        CustomGlobalLexiconReplaceInputSchema.parse(input),
+      ),
+    ),
+  );
+  handle(PERSISTENCE_CHANNELS.globalLexiconBuiltInReimport, async (input) => {
+    EmptyResponseSchema.parse(input ?? {});
+    return GlobalLexiconStateSchema.parse(
+      await persistence.globalLexicon.reimportBuiltIns(),
+    );
+  });
   handle(PERSISTENCE_CHANNELS.backupsList, async () =>
     PersistenceBackupCollectionSchema.parse(
       await requireBackupClient(persistence).list(),

@@ -74,7 +74,18 @@ const persistence = {
     getIgnoredDiagnostics: vi.fn(),
     replaceIgnoredDiagnostics: vi.fn(),
   },
-  globalLexicon: { list: vi.fn(async () => globalLexicon), replace: vi.fn() },
+  globalLexicon: {
+    list: vi.fn(async () => ({
+      builtIns: globalLexicon.map((entry) => ({
+        ...entry,
+        entryKind: "builtIn" as const,
+      })),
+      custom: [],
+    })),
+    setBuiltInEnabled: vi.fn(),
+    replaceCustom: vi.fn(),
+    reimportBuiltIns: vi.fn(),
+  },
 } as unknown as PersistenceClient;
 const connections = {
   get: vi.fn(async () => connection),

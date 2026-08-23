@@ -221,7 +221,11 @@ export function useProjectsPageController({
   });
   const projects = projectsQuery.data ?? [];
   const globalLexicon = useMemo(
-    () => authoringLexicon(globalLexiconQuery.data ?? []),
+    () =>
+      authoringLexicon([
+        ...(globalLexiconQuery.data?.builtIns ?? []),
+        ...(globalLexiconQuery.data?.custom ?? []),
+      ]),
     [globalLexiconQuery.data],
   );
   const timing = timingQuery.data ?? DEFAULT_SYSTEM_TIMING;

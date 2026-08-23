@@ -84,7 +84,7 @@ Electron opens its own window and uses the operating system's application-data d
 
 The primary navigation is **Prompt Kit**, **Projects**, **Quick Scratchpad**, and **Settings**, with **General**, **Voices**, **Lexicon**, **Timings**, and **System diagnostics** beneath Settings. Web requests use the manifest-backed `/api` surface for runtime diagnostics, projects, prompt export, previews, render plans and renders, pacing, preferences, the global lexicon, the singleton connection, setup, voice catalogs, Scratchpad, and speech-cache controls. Electron exposes the same operations through its validated public IPC manifest; operation names are contract-tested in both transports.
 
-New installations include editable Global Lexicon defaults for common acronyms and ambiguous pronunciations. Named-sense aliases use `word/sense` in Settings and resolve explicit script annotations such as `{{resume|cv}}`; users may edit, disable, or delete any default without the application restoring it on restart.
+New installations include built-in Global Lexicon defaults for common acronyms and ambiguous pronunciations. Named-sense aliases use `word/sense` directly in scripts, such as `resume/cv`. Built-in entries can only be enabled or disabled. Add fully editable Custom Lexicon entries for personal rules; reimporting the bundled Global Lexicon catalog restores only built-ins and preserves every custom entry.
 
 ## Data upgrades and backups
 

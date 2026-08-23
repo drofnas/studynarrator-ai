@@ -321,102 +321,36 @@ test.describe("Settings and connection diagnostics", () => {
     ).toHaveAttribute("aria-pressed", "true");
   });
 
-  test("manages the fixed-scope global lexicon with validation and persistence", async ({
+  test("separates fixed global and editable custom lexicon entries", async ({
     page,
     studyNarrator,
   }) => {
     await openRoute(page, studyNarrator, "/settings/lexicon");
-    const lexicon = page.getByRole("region", { name: "Global lexicon" });
-    await expect(lexicon).toBeVisible();
-    await expect(lexicon.getByText("44 entries")).toBeVisible();
-    const seeded = lexicon.getByRole("article", {
+    const globals = page.getByRole("region", {
+      name: "Global lexicon",
+      exact: true,
+    });
+    const custom = page.getByRole("region", { name: "Custom lexicon" });
+    await expect(globals).toBeVisible();
+    await expect(custom).toBeVisible();
+    await expect(globals.getByText("44 entries")).toBeVisible();
+
+    const seeded = globals.getByRole("article", {
       name: "Lexicon entry resume/cv",
     });
     await expect(seeded.getByLabel("Alias")).toHaveValue("resume/cv");
-    await expect(seeded.getByLabel("Spoken Text")).toHaveValue("rez oo may");
-    await expect(lexicon.getByText("{{resume|cv}}")).toBeVisible();
-    await expect(
-      lexicon.getByText(/Case sensitive|Whole word|Sense ID|Notes/u),
-    ).toHaveCount(0);
-    await lexicon.getByRole("button", { name: "Add" }).click();
-    await expect(page.getByRole("alert")).toContainText(
-      "Alias and Spoken Text are required.",
+    await expect(seeded.getByLabel("Alias")).toBeDisabled();
+    await expect(seeded.getByLabel("Spoken Text")).toBeDisabled();
+    await expect(globals.getByRole("button", { name: "Add" })).toHaveCount(0);
+    await expect(globals.getByRole("button", { name: "Delete" })).toHaveCount(
+      0,
     );
-
-    await lexicon.getByLabel("Alias").first().fill("RESUME/CV");
-    await lexicon.getByLabel("Spoken Text").first().fill("duplicate");
-    await lexicon.getByRole("button", { name: "Add" }).click();
-    await expect(page.getByRole("alert")).toContainText(
-      "unique regardless of capitalization",
-    );
-    await lexicon.getByLabel("Alias").first().fill("demo/letter");
-    await lexicon.getByLabel("Spoken Text").first().fill("dee moh");
-    await lexicon.getByRole("button", { name: "Add" }).click();
-    await expect(page.getByText("Global pronunciation added.")).toBeVisible();
-    await page.reload();
-    await expect(
-      lexicon.getByRole("article", { name: "Lexicon entry demo/letter" }),
-    ).toBeVisible();
-
-    const entry = lexicon.getByRole("article", {
-      name: "Lexicon entry demo/letter",
-    });
-    const aliasAutosave = page.waitForResponse(
-      (response) =>
-        response.url().endsWith("/api/lexicon/global") &&
-        response.request().method() === "PUT" &&
-        response.ok(),
-    );
-    await entry.getByLabel("Alias").fill("demo/symbol");
-    await aliasAutosave;
-    const renamedEntry = lexicon.getByRole("article", {
-      name: "Lexicon entry demo/symbol",
-    });
-    const textAutosave = page.waitForResponse(
-      (response) =>
-        response.url().endsWith("/api/lexicon/global") &&
-        response.request().method() === "PUT" &&
-        response.ok(),
-    );
-    await renamedEntry.getByLabel("Spoken Text").fill("demonstration symbol");
-    await textAutosave;
-    await expect(renamedEntry.getByText(/Saving…|Saved/u)).toHaveCount(0);
-    const enablementAutosave = page.waitForResponse(
-      (response) =>
-        response.url().endsWith("/api/lexicon/global") &&
-        response.request().method() === "PUT" &&
-        response.ok(),
-    );
-    await renamedEntry.getByRole("checkbox", { name: "Enabled" }).uncheck();
-    await enablementAutosave;
-    await expect(renamedEntry.getByText(/Saving…|Saved/u)).toHaveCount(0);
-    await page.reload();
-    const persisted = lexicon.getByRole("article", {
-      name: "Lexicon entry demo/symbol",
-    });
-    await expect(persisted.getByLabel("Alias")).toHaveValue("demo/symbol");
-    await expect(persisted.getByLabel("Spoken Text")).toHaveValue(
-      "demonstration symbol",
-    );
-    await expect(
-      persisted.getByRole("checkbox", { name: "Enabled" }),
-    ).not.toBeChecked();
-    await lexicon.getByLabel("Search global lexicon").fill("not present");
-    await expect(
-      lexicon.getByText("No matching global lexicon entries."),
-    ).toBeVisible();
-    await lexicon.getByLabel("Search global lexicon").fill("");
-    await persisted.getByRole("button", { name: "Delete" }).click();
-    await expect(persisted).toHaveCount(0);
-    await page.reload();
-    await expect(
-      lexicon.getByRole("article", { name: "Lexicon entry demo/symbol" }),
-    ).toHaveCount(0);
 
     const seedDisable = page.waitForResponse(
       (response) =>
-        response.url().endsWith("/api/lexicon/global") &&
-        response.request().method() === "PUT" &&
+        response.url().includes("/api/lexicon/global/built-ins/") &&
+        response.url().endsWith("/enabled") &&
+        response.request().method() === "PATCH" &&
         response.ok(),
     );
     await seeded.getByRole("checkbox", { name: "Enabled" }).uncheck();
@@ -425,21 +359,51 @@ test.describe("Settings and connection diagnostics", () => {
     await expect(
       seeded.getByRole("checkbox", { name: "Enabled" }),
     ).not.toBeChecked();
-    await seeded.getByRole("button", { name: "Delete" }).click();
-    await page.reload();
-    await expect(
-      lexicon.getByRole("article", { name: "Lexicon entry resume/cv" }),
-    ).toHaveCount(0);
 
-    await page.route("**/api/lexicon/global", async (route) => {
-      if (route.request().method() === "PUT") await route.abort();
-      else await route.continue();
+    await custom.getByLabel("Alias").first().fill("demo/letter");
+    await custom.getByLabel("Spoken Text").first().fill("dee moh");
+    const customCreate = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/lexicon/custom") &&
+        response.request().method() === "PUT" &&
+        response.ok(),
+    );
+    await custom.getByRole("button", { name: "Add" }).click();
+    await customCreate;
+    await expect(page.getByText("Custom pronunciation added.")).toBeVisible();
+    const customEntry = custom.getByRole("article", {
+      name: "Lexicon entry demo/letter",
     });
-    await lexicon.getByLabel("Alias").first().fill("GraphQL");
-    await lexicon.getByLabel("Spoken Text").first().fill("graph Q L");
-    await lexicon.getByRole("button", { name: "Add" }).click();
-    await expect(page.getByRole("alert")).toBeVisible();
-    await expect(lexicon.getByLabel("Alias").first()).toHaveValue("GraphQL");
+    await expect(customEntry).toBeVisible();
+
+    page.once("dialog", (dialog) => dialog.accept());
+    const reimport = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/lexicon/global/built-ins/reimport") &&
+        response.request().method() === "POST" &&
+        response.ok(),
+    );
+    await page.getByRole("button", { name: "Reimport global lexicon" }).click();
+    await reimport;
+    await expect(
+      page.getByText(
+        "Global lexicon reimported. Custom entries were preserved.",
+      ),
+    ).toBeVisible();
+    await expect(customEntry).toBeVisible();
+    await expect(
+      seeded.getByRole("checkbox", { name: "Enabled" }),
+    ).toBeChecked();
+
+    const customDelete = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/lexicon/custom") &&
+        response.request().method() === "PUT" &&
+        response.ok(),
+    );
+    await customEntry.getByRole("button", { name: "Delete" }).click();
+    await customDelete;
+    await expect(customEntry).toHaveCount(0);
   });
 });
 

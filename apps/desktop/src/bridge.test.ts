@@ -134,7 +134,12 @@ const persistence = {
     getIgnoredDiagnostics: vi.fn(async () => []),
     replaceIgnoredDiagnostics: vi.fn(),
   },
-  globalLexicon: { list: vi.fn(async () => []), replace: vi.fn() },
+  globalLexicon: {
+    list: vi.fn(async () => ({ builtIns: [], custom: [] })),
+    setBuiltInEnabled: vi.fn(async () => ({ builtIns: [], custom: [] })),
+    replaceCustom: vi.fn(async () => ({ builtIns: [], custom: [] })),
+    reimportBuiltIns: vi.fn(async () => ({ builtIns: [], custom: [] })),
+  },
 };
 
 const connection = {
@@ -359,14 +364,23 @@ describe("Electron boundary", () => {
       createdAt: timestamp,
       updatedAt: timestamp,
     };
+    const globalLexicon = {
+      builtIns: [{ ...namedSense, entryKind: "builtIn" as const }],
+      custom: [],
+    };
     const invoke = vi.fn(async (channel: string) => {
       if (channel === RENDER_CHANNELS.startProject) return renderJob;
       if (channel === RENDER_CHANNELS.getEstimateContext)
         return renderEstimateContext;
       if (channel === SYSTEM_DIAGNOSTICS_CHANNEL) return diagnostics;
       if (channel === PERSISTENCE_CHANNELS.projectsList) return [];
-      if (channel === PERSISTENCE_CHANNELS.globalLexiconReplace)
-        return [namedSense];
+      if (
+        channel === PERSISTENCE_CHANNELS.globalLexiconList ||
+        channel === PERSISTENCE_CHANNELS.globalLexiconBuiltInEnabled ||
+        channel === PERSISTENCE_CHANNELS.globalLexiconCustomReplace ||
+        channel === PERSISTENCE_CHANNELS.globalLexiconBuiltInReimport
+      )
+        return globalLexicon;
       if (channel === SCRIPT_GENERATION_CHANNELS.exportPrompt)
         return { disposition: "saved", fileName: "prompt.md" };
       if (channel === CONNECTION_CHANNELS.get)
@@ -405,25 +419,37 @@ describe("Electron boundary", () => {
     expect(invoke).toHaveBeenCalledWith(SYSTEM_DIAGNOSTICS_CHANNEL);
     await expect(bridge.persistence.projects.list()).resolves.toEqual([]);
     expect(invoke).toHaveBeenCalledWith(PERSISTENCE_CHANNELS.projectsList);
+    await expect(bridge.persistence.globalLexicon.list()).resolves.toEqual(
+      globalLexicon,
+    );
     await expect(
-      bridge.persistence.globalLexicon.replace([
+      bridge.persistence.globalLexicon.setBuiltInEnabled({
+        id: namedSense.id,
+        enabled: false,
+      }),
+    ).resolves.toEqual(globalLexicon);
+    await expect(
+      bridge.persistence.globalLexicon.replaceCustom([
         {
           scope: "global",
           entryType: "namedSense",
           displayText: "resume",
-          senseId: "cv",
+          senseId: "profile",
           spokenText: "rez oo may",
         },
       ]),
-    ).resolves.toEqual([namedSense]);
+    ).resolves.toEqual(globalLexicon);
+    await expect(
+      bridge.persistence.globalLexicon.reimportBuiltIns(),
+    ).resolves.toEqual(globalLexicon);
     expect(invoke).toHaveBeenCalledWith(
-      PERSISTENCE_CHANNELS.globalLexiconReplace,
+      PERSISTENCE_CHANNELS.globalLexiconCustomReplace,
       [
         {
           scope: "global",
           entryType: "namedSense",
           displayText: "resume",
-          senseId: "cv",
+          senseId: "profile",
           spokenText: "rez oo may",
         },
       ],
@@ -672,7 +698,25 @@ describe("Electron boundary", () => {
       updatedAt: timestamp,
     });
     persistence.preferences.replaceIgnoredDiagnostics.mockResolvedValue([]);
-    persistence.globalLexicon.replace.mockResolvedValue(namedSenseOutput);
+    const globalLexiconState = {
+      builtIns: [],
+      custom: namedSenseOutput.map((entry) => ({
+        ...entry,
+        entryKind: "custom" as const,
+      })),
+    };
+    persistence.globalLexicon.list.mockResolvedValue(
+      globalLexiconState as never,
+    );
+    persistence.globalLexicon.setBuiltInEnabled.mockResolvedValue(
+      globalLexiconState as never,
+    );
+    persistence.globalLexicon.replaceCustom.mockResolvedValue(
+      globalLexiconState as never,
+    );
+    persistence.globalLexicon.reimportBuiltIns.mockResolvedValue(
+      globalLexiconState as never,
+    );
     connection.get.mockResolvedValue(storedConnection as never);
     connection.update.mockResolvedValue(storedConnection as never);
     connection.test.mockResolvedValue(summary as never);
@@ -758,7 +802,12 @@ describe("Electron boundary", () => {
       },
       [PERSISTENCE_CHANNELS.retentionReclaim]: { confirm: true },
       [PERSISTENCE_CHANNELS.ignoredReplace]: [],
-      [PERSISTENCE_CHANNELS.globalLexiconReplace]: namedSenseInput,
+      [PERSISTENCE_CHANNELS.globalLexiconBuiltInEnabled]: {
+        id: "global-resume-cv",
+        enabled: false,
+      },
+      [PERSISTENCE_CHANNELS.globalLexiconCustomReplace]: namedSenseInput,
+      [PERSISTENCE_CHANNELS.globalLexiconBuiltInReimport]: {},
       [CONNECTION_CHANNELS.update]: connectionInput,
       [CONNECTION_CHANNELS.speechCatalogDiscover]: {
         baseUrl: "http://127.0.0.1:8000",
@@ -826,7 +875,7 @@ describe("Electron boundary", () => {
       invoked.add(channel);
     }
     expect(invoked).toEqual(new Set(PUBLIC_IPC_CHANNEL_MANIFEST));
-    expect(persistence.globalLexicon.replace).toHaveBeenCalledWith([
+    expect(persistence.globalLexicon.replaceCustom).toHaveBeenCalledWith([
       {
         scope: "global",
         entryType: "namedSense",

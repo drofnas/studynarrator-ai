@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   GLOBAL_LEXICON_BUILT_INS,
+  CustomGlobalLexiconReplaceInputSchema,
   GlobalLexiconEntryCollectionSchema,
-  GlobalLexiconReplaceInputSchema,
   IgnoredDiagnosticCollectionSchema,
   ProjectLexiconAuthoringCollectionSchema,
   ProjectReplaceInputSchema,
@@ -58,7 +58,7 @@ describe("persistence contracts", () => {
     ).toThrow();
   });
 
-  it("enforces project and global lexicon ownership", () => {
+  it("enforces project and custom global lexicon ownership", () => {
     expect(() =>
       ProjectReplaceInputSchema.parse({
         ...validProject,
@@ -73,7 +73,7 @@ describe("persistence contracts", () => {
       }),
     ).toThrow();
     expect(() =>
-      GlobalLexiconReplaceInputSchema.parse([
+      CustomGlobalLexiconReplaceInputSchema.parse([
         {
           scope: "project",
           entryType: "exactTerm",
@@ -83,7 +83,7 @@ describe("persistence contracts", () => {
       ]),
     ).toThrow();
     expect(
-      GlobalLexiconReplaceInputSchema.parse([
+      CustomGlobalLexiconReplaceInputSchema.parse([
         { scope: "global", displayText: " SQL ", spokenText: " S Q L " },
       ]),
     ).toEqual([
@@ -100,7 +100,7 @@ describe("persistence contracts", () => {
       },
     ]);
     expect(
-      GlobalLexiconReplaceInputSchema.parse([
+      CustomGlobalLexiconReplaceInputSchema.parse([
         {
           scope: "global",
           entryType: "namedSense",
@@ -124,7 +124,7 @@ describe("persistence contracts", () => {
       },
     ]);
     expect(() =>
-      GlobalLexiconReplaceInputSchema.parse([
+      CustomGlobalLexiconReplaceInputSchema.parse([
         {
           scope: "global",
           entryType: "namedSense",
@@ -134,7 +134,7 @@ describe("persistence contracts", () => {
       ]),
     ).toThrow();
     expect(() =>
-      GlobalLexiconReplaceInputSchema.parse([
+      CustomGlobalLexiconReplaceInputSchema.parse([
         {
           scope: "global",
           entryType: "namedSense",
@@ -145,7 +145,7 @@ describe("persistence contracts", () => {
       ]),
     ).toThrow();
     expect(() =>
-      GlobalLexiconReplaceInputSchema.parse([
+      CustomGlobalLexiconReplaceInputSchema.parse([
         {
           scope: "global",
           entryType: "exactTerm",
@@ -310,7 +310,7 @@ describe("persistence contracts", () => {
       }),
     ).toBeDefined();
     expect(
-      GlobalLexiconReplaceInputSchema.parse([
+      CustomGlobalLexiconReplaceInputSchema.parse([
         {
           id: "global-sql",
           scope: "global",

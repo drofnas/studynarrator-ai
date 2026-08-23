@@ -1,6 +1,7 @@
 import {
-  GlobalLexiconEntryCollectionSchema,
-  GlobalLexiconReplaceInputSchema,
+  CustomGlobalLexiconReplaceInputSchema,
+  GlobalLexiconBuiltInEnabledInputSchema,
+  GlobalLexiconStateSchema,
   IgnoredDiagnosticCollectionSchema,
   PersistenceBackupCollectionSchema,
   PersistenceBackupRestoreInputSchema,
@@ -19,7 +20,9 @@ import {
   ProjectReplaceInputSchema,
   ProjectSummaryCollectionSchema,
   SystemTimingConfigurationSchema,
-  type GlobalLexiconReplaceInput,
+  type CustomGlobalLexiconReplaceInput,
+  type GlobalLexiconBuiltInEnabledInput,
+  type GlobalLexiconState,
   type IgnoredDiagnosticCollection,
   type PersistenceBackup,
   type PersistenceBackupRestoreInput,
@@ -61,7 +64,14 @@ export interface PersistenceRepository {
     input: IgnoredDiagnosticCollection,
   ): IgnoredDiagnosticCollection;
   listGlobalLexicon(): LexiconEntry[];
-  replaceGlobalLexicon(input: GlobalLexiconReplaceInput): LexiconEntry[];
+  getGlobalLexiconState(): GlobalLexiconState;
+  replaceCustomGlobalLexicon(
+    input: CustomGlobalLexiconReplaceInput,
+  ): GlobalLexiconState;
+  setBuiltInGlobalLexiconEnabled(
+    input: GlobalLexiconBuiltInEnabledInput,
+  ): GlobalLexiconState;
+  reimportBuiltInGlobalLexicon(): GlobalLexiconState;
   getRetentionSettings(): RetentionSettings;
   updateRetentionSettings(input: RetentionSettingsAuthoring): RetentionSettings;
 }
@@ -250,17 +260,31 @@ export function createPersistenceService(
     globalLexicon: {
       list() {
         return execute(() =>
-          GlobalLexiconEntryCollectionSchema.parse(
-            repository.listGlobalLexicon(),
+          GlobalLexiconStateSchema.parse(repository.getGlobalLexiconState()),
+        );
+      },
+      setBuiltInEnabled(input) {
+        return execute(() =>
+          GlobalLexiconStateSchema.parse(
+            repository.setBuiltInGlobalLexiconEnabled(
+              GlobalLexiconBuiltInEnabledInputSchema.parse(input),
+            ),
           ),
         );
       },
-      replace(input) {
+      replaceCustom(input) {
         return execute(() =>
-          GlobalLexiconEntryCollectionSchema.parse(
-            repository.replaceGlobalLexicon(
-              GlobalLexiconReplaceInputSchema.parse(input),
+          GlobalLexiconStateSchema.parse(
+            repository.replaceCustomGlobalLexicon(
+              CustomGlobalLexiconReplaceInputSchema.parse(input),
             ),
+          ),
+        );
+      },
+      reimportBuiltIns() {
+        return execute(() =>
+          GlobalLexiconStateSchema.parse(
+            repository.reimportBuiltInGlobalLexicon(),
           ),
         );
       },
@@ -317,6 +341,11 @@ export function createUnavailablePersistenceService(
       getIgnoredDiagnostics: unavailable,
       replaceIgnoredDiagnostics: unavailable,
     },
-    globalLexicon: { list: unavailable, replace: unavailable },
+    globalLexicon: {
+      list: unavailable,
+      setBuiltInEnabled: unavailable,
+      replaceCustom: unavailable,
+      reimportBuiltIns: unavailable,
+    },
   };
 }

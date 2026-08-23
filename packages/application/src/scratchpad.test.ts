@@ -205,8 +205,8 @@ describe("scratchpad service", () => {
     ).toHaveLength(0);
   });
 
-  it("applies built-in named senses and keeps disabled or deleted senses literal", async () => {
-    const source = "{{resume|cv}}, {{lead|metal}}, and {{axes|tools}}.";
+  it("applies literal built-in named-sense aliases and keeps disabled or missing aliases literal", async () => {
+    const source = "resume/cv, lead/metal, and axes/tools.";
     const synthesize = vi.fn(async () => ({
       bytes: new Uint8Array([1]),
       mimeType: "audio/wav" as const,
@@ -245,12 +245,12 @@ describe("scratchpad service", () => {
         modelId: "model",
         voiceId: "voice",
         speed: 1,
-        text: "Review {{resume|cv}}.",
+        text: "Review resume/cv.",
         applyGlobalLexicon: true,
       }),
     ).resolves.toMatchObject({
-      transformedText: "Review {{resume|cv}}.",
-      warnings: [expect.objectContaining({ code: "UNRESOLVED_NAMED_SENSE" })],
+      transformedText: "Review resume/cv.",
+      warnings: [],
     });
 
     const deleted = createScratchpadService({
@@ -263,12 +263,12 @@ describe("scratchpad service", () => {
         modelId: "model",
         voiceId: "voice",
         speed: 1,
-        text: "Review {{resume|cv}}.",
+        text: "Review resume/cv.",
         applyGlobalLexicon: true,
       }),
     ).resolves.toMatchObject({
-      transformedText: "Review {{resume|cv}}.",
-      warnings: [expect.objectContaining({ code: "UNRESOLVED_NAMED_SENSE" })],
+      transformedText: "Review resume/cv.",
+      warnings: [],
     });
   });
 

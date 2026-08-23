@@ -53,7 +53,12 @@ export function ScratchpadPage({
   const [speed, setSpeed] = useState(1);
   const [text, setText] = useState(readLastPassage);
   const [applyGlobalLexicon, setApplyGlobalLexicon] = useState(false);
-  const globalLexicon: LexiconEntry[] = globalLexiconQuery.data ?? [];
+  const globalLexicon: LexiconEntry[] = globalLexiconQuery.data
+    ? [
+        ...globalLexiconQuery.data.builtIns,
+        ...globalLexiconQuery.data.custom,
+      ].map(({ entryKind: _entryKind, ...entry }) => entry)
+    : [];
   const [catalog, setCatalog] = useState<VoiceCatalog | null>(null);
   const [catalogState, setCatalogState] = useState<
     "idle" | "loading" | "ready" | "failed"

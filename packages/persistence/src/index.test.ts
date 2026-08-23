@@ -1134,9 +1134,9 @@ describe("database baseline", () => {
 });
 
 describe("StudyNarratorRepository", () => {
-  it("round-trips editable, disabled, and deleted global named-sense entries", async () => {
+  it("keeps custom entries separate while reimporting built-in globals", async () => {
     const databasePath = await temporaryDatabase(
-      "studynarrator-global-named-sense-",
+      "studynarrator-global-lexicon-collections-",
     );
     const first = await openStudyNarratorRepository({
       Database: DatabaseAdapter,
@@ -1144,26 +1144,56 @@ describe("StudyNarratorRepository", () => {
       now: () => new Date("2026-08-12T12:00:00.000Z"),
       idFactory: ids(lexiconId),
     });
+    const custom = first.replaceCustomGlobalLexicon([
+      {
+        scope: "global",
+        entryType: "namedSense",
+        displayText: "resume",
+        senseId: "profile",
+        spokenText: "custom résumé",
+        enabled: false,
+      },
+    ]);
     expect(
-      first.replaceGlobalLexicon([
+      custom.builtIns.find(
+        ({ id }) => id === "10000000-0000-4000-8000-000000000009",
+      ),
+    ).toMatchObject({ entryKind: "builtIn" });
+    expect(custom.custom).toMatchObject([
+      {
+        id: lexiconId,
+        entryKind: "custom",
+        entryType: "namedSense",
+        displayText: "resume",
+        senseId: "profile",
+        spokenText: "custom résumé",
+        enabled: false,
+      },
+    ]);
+    expect(() =>
+      first.replaceCustomGlobalLexicon([
         {
+          id: "10000000-0000-4000-8000-000000000009",
           scope: "global",
           entryType: "namedSense",
           displayText: "resume",
           senseId: "cv",
-          spokenText: "custom résumé",
-          enabled: false,
+          spokenText: "not allowed",
         },
       ]),
-    ).toMatchObject([
-      {
-        id: lexiconId,
-        entryType: "namedSense",
-        displayText: "resume",
-        senseId: "cv",
-        spokenText: "custom résumé",
-        enabled: false,
-      },
+    ).toThrow(/another lexicon collection/u);
+    first.setBuiltInGlobalLexiconEnabled({
+      id: "10000000-0000-4000-8000-000000000009",
+      enabled: false,
+    });
+    const reimported = first.reimportBuiltInGlobalLexicon();
+    expect(
+      reimported.builtIns.find(
+        ({ id }) => id === "10000000-0000-4000-8000-000000000009",
+      ),
+    ).toMatchObject({ spokenText: "rez oo may", enabled: true });
+    expect(reimported.custom).toMatchObject([
+      { id: lexiconId, spokenText: "custom résumé", enabled: false },
     ]);
     first.close();
 
@@ -1171,23 +1201,17 @@ describe("StudyNarratorRepository", () => {
       Database: DatabaseAdapter,
       databasePath,
     });
-    expect(reopened.listGlobalLexicon()).toMatchObject([
+    expect(reopened.getGlobalLexiconState().custom).toMatchObject([
       {
         id: lexiconId,
-        entryType: "namedSense",
-        senseId: "cv",
+        entryKind: "custom",
+        senseId: "profile",
         enabled: false,
       },
     ]);
-    reopened.replaceGlobalLexicon([]);
+    expect(reopened.replaceCustomGlobalLexicon([]).custom).toEqual([]);
+    expect(reopened.listGlobalLexicon()).toHaveLength(44);
     reopened.close();
-
-    const empty = await openStudyNarratorRepository({
-      Database: DatabaseAdapter,
-      databasePath,
-    });
-    expect(empty.listGlobalLexicon()).toEqual([]);
-    empty.close();
   });
 
   it("reconciles project cache keys and reverses queued deletion when a prior key is restored", async () => {

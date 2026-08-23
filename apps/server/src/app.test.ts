@@ -24,7 +24,7 @@ import {
 import {
   BoundaryErrorSchema,
   DEFAULT_SYSTEM_TIMING,
-  GlobalLexiconEntryCollectionSchema,
+  GlobalLexiconStateSchema,
   HealthSchema,
   PersistenceBackupCollectionSchema,
   PersistenceBackupRestoreResultSchema,
@@ -1297,10 +1297,10 @@ describe("REST API operation manifest", () => {
       ({ method, path }) => `${method} ${path}`,
     );
     expect(registered.sort()).toEqual([...declared].sort());
-    expect(new Set(declared).size).toBe(61);
+    expect(new Set(declared).size).toBe(63);
   });
 
-  it("exercises a successful schema-valid response for all 61 operations", async () => {
+  it("exercises a successful schema-valid response for all 63 operations", async () => {
     const { app } = await fixture();
     const covered = new Set<string>();
     const call = async (
@@ -1318,6 +1318,10 @@ describe("REST API operation manifest", () => {
           .replace(
             /^\/api\/renders\/[0-9a-f-]{36}(?=\/|$)/u,
             "/api/renders/:renderId",
+          )
+          .replace(
+            /^\/api\/lexicon\/global\/built-ins\/[^/]+\/enabled$/u,
+            "/api/lexicon/global/built-ins/:entryId/enabled",
           )
           .replace(/\/segments\/\d+(?=\/|$)/u, "/segments/:ordinal")
           .replace(/\/[0-9a-f-]{36}(?=\/|$)/gu, "/:projectId")
@@ -1404,31 +1408,58 @@ describe("REST API operation manifest", () => {
     );
     await call("GET", "/api/preferences/ignored-diagnostics", 200);
     await call("PUT", "/api/preferences/ignored-diagnostics", 200, []);
-    GlobalLexiconEntryCollectionSchema.parse(
+    let globalLexicon = GlobalLexiconStateSchema.parse(
       (await call("GET", "/api/lexicon/global", 200)).body as unknown,
     );
-    const globalLexicon = GlobalLexiconEntryCollectionSchema.parse(
+    const builtIn = globalLexicon.builtIns[0];
+    if (!builtIn) throw new Error("Expected a built-in global lexicon entry.");
+    globalLexicon = GlobalLexiconStateSchema.parse(
       (
-        await call("PUT", "/api/lexicon/global", 200, [
+        await call("PUT", "/api/lexicon/custom", 200, [
           {
             scope: "global",
             entryType: "namedSense",
             displayText: "resume",
-            senseId: "cv",
+            senseId: "profile",
             spokenText: "rez oo may",
           },
         ])
       ).body as unknown,
     );
-    expect(globalLexicon).toMatchObject([
+    expect(globalLexicon.custom).toMatchObject([
       {
-        scope: "global",
+        entryKind: "custom",
         entryType: "namedSense",
         displayText: "resume",
-        senseId: "cv",
+        senseId: "profile",
         spokenText: "rez oo may",
       },
     ]);
+    globalLexicon = GlobalLexiconStateSchema.parse(
+      (
+        await call(
+          "PATCH",
+          `/api/lexicon/global/built-ins/${builtIn.id}/enabled`,
+          200,
+          { enabled: false },
+        )
+      ).body as unknown,
+    );
+    expect(
+      globalLexicon.builtIns.find(({ id }) => id === builtIn.id),
+    ).toMatchObject({
+      enabled: false,
+    });
+    globalLexicon = GlobalLexiconStateSchema.parse(
+      (await call("POST", "/api/lexicon/global/built-ins/reimport", 200, {}))
+        .body as unknown,
+    );
+    expect(
+      globalLexicon.builtIns.find(({ id }) => id === builtIn.id),
+    ).toMatchObject({
+      enabled: true,
+    });
+    expect(globalLexicon.custom).toHaveLength(1);
     await call("GET", "/api/connection", 200);
     await call("PUT", "/api/connection", 200, {
       baseUrl: "http://127.0.0.1:1/v1",
@@ -1591,7 +1622,15 @@ describe("REST API operation manifest", () => {
         .put("/api/preferences/ignored-diagnostics")
         .send({})
         .expect(400),
-      request(app).put("/api/lexicon/global").send({}).expect(400),
+      request(app)
+        .patch("/api/lexicon/global/built-ins/global-api/enabled")
+        .send({})
+        .expect(400),
+      request(app).put("/api/lexicon/custom").send({}).expect(400),
+      request(app)
+        .post("/api/lexicon/global/built-ins/reimport")
+        .send({ unexpected: true })
+        .expect(400),
       request(app)
         .put("/api/connection")
         .send({ baseUrl: "http://127.0.0.1:8000", apiKey: secret })

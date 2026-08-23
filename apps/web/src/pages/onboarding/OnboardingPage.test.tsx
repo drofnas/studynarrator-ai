@@ -66,7 +66,12 @@ const persistence = {
     getPacing: vi.fn(async () => DEFAULT_SYSTEM_TIMING),
     updatePacing: vi.fn(),
   },
-  globalLexicon: { list: vi.fn(async () => []), replace: vi.fn() },
+  globalLexicon: {
+    list: vi.fn(async () => ({ builtIns: [], custom: [] })),
+    setBuiltInEnabled: vi.fn(),
+    replaceCustom: vi.fn(),
+    reimportBuiltIns: vi.fn(),
+  },
   preferences: {
     getIgnoredDiagnostics: vi.fn(async () => []),
     replaceIgnoredDiagnostics: vi.fn(),
@@ -302,7 +307,11 @@ describe("connection onboarding", () => {
     );
     expect(connection.test).toHaveBeenCalledOnce();
     expect(
-      await screen.findByRole("heading", { name: "Projects" }),
+      await screen.findByRole(
+        "heading",
+        { name: "Projects" },
+        { timeout: 5_000 },
+      ),
     ).toBeInTheDocument();
   });
 
@@ -326,7 +335,11 @@ describe("connection onboarding", () => {
     expect(connection.completeOnboarding).toHaveBeenCalledOnce();
     expect(connection.update).not.toHaveBeenCalled();
     expect(
-      await screen.findByRole("heading", { name: "Projects" }),
+      await screen.findByRole(
+        "heading",
+        { name: "Projects" },
+        { timeout: 5_000 },
+      ),
     ).toBeInTheDocument();
   });
 });

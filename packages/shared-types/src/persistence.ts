@@ -1,5 +1,5 @@
 import { z } from "zod";
-import globalLexiconCatalog from "./globalLexicon.json";
+import globalLexiconCatalog from "./globalLexicon.json" with { type: "json" };
 import {
   DEFAULT_PARAGRAPH_PAUSE_DURATION_MS,
   DEFAULT_PARAGRAPH_PAUSE_ID,
@@ -29,7 +29,9 @@ export const PERSISTENCE_CHANNELS = Object.freeze({
   ignoredGet: "preferences.ignored.get",
   ignoredReplace: "preferences.ignored.replace",
   globalLexiconList: "lexicon.global.list",
-  globalLexiconReplace: "lexicon.global.replace",
+  globalLexiconBuiltInEnabled: "lexicon.global.built-in-enabled",
+  globalLexiconCustomReplace: "lexicon.global.custom-replace",
+  globalLexiconBuiltInReimport: "lexicon.global.built-in-reimport",
   backupsList: "persistence.backups.list",
   backupsRestore: "persistence.backups.restore",
 } as const);
@@ -436,13 +438,34 @@ export const ProjectDetailSchema = z
 export type ProjectDetail = z.infer<typeof ProjectDetailSchema>;
 
 export const ProjectSummaryCollectionSchema = z.array(ProjectSummarySchema);
+// Internal render and preview paths consume the effective combined lexicon.
 export const GlobalLexiconEntryCollectionSchema = z.array(
   GlobalLexiconEntrySchema,
 );
-export const GlobalLexiconReplaceInputSchema =
+const BuiltInGlobalLexiconEntrySchema = GlobalLexiconEntrySchema.extend({
+  entryKind: z.literal("builtIn"),
+});
+const CustomGlobalLexiconEntrySchema = GlobalLexiconEntrySchema.extend({
+  entryKind: z.literal("custom"),
+});
+export const GlobalLexiconStateSchema = z
+  .object({
+    builtIns: z.array(BuiltInGlobalLexiconEntrySchema),
+    custom: z.array(CustomGlobalLexiconEntrySchema),
+  })
+  .strict();
+export type GlobalLexiconState = z.infer<typeof GlobalLexiconStateSchema>;
+
+export const GlobalLexiconBuiltInEnabledInputSchema = z
+  .object({ id: z.string().min(1), enabled: z.boolean() })
+  .strict();
+export type GlobalLexiconBuiltInEnabledInput = z.input<
+  typeof GlobalLexiconBuiltInEnabledInputSchema
+>;
+export const CustomGlobalLexiconReplaceInputSchema =
   GlobalLexiconAuthoringCollectionSchema;
-export type GlobalLexiconReplaceInput = z.input<
-  typeof GlobalLexiconReplaceInputSchema
+export type CustomGlobalLexiconReplaceInput = z.input<
+  typeof CustomGlobalLexiconReplaceInputSchema
 >;
 
 const GlobalLexiconCatalogExactTermSchema = z
@@ -464,7 +487,7 @@ const GlobalLexiconCatalogNamedSenseSchema = z
     enabled: z.boolean(),
   })
   .strict();
-const GlobalLexiconCatalogSchema = z
+const GlobalLexiconBuiltInCatalogSchema = z
   .object({
     schemaVersion: z.literal(1),
     entries: z.array(
@@ -480,7 +503,7 @@ const GlobalLexiconCatalogSchema = z
   });
 
 function globalLexiconEntryFromCatalog(
-  entry: z.infer<typeof GlobalLexiconCatalogSchema>["entries"][number],
+  entry: z.infer<typeof GlobalLexiconBuiltInCatalogSchema>["entries"][number],
 ) {
   return GlobalLexiconAuthoringSchema.parse({
     ...entry,
@@ -498,10 +521,10 @@ function globalLexiconEntryFromCatalog(
  * upgrades; new imports and resets always use this validated JSON catalog.
  */
 export const GLOBAL_LEXICON_BUILT_INS = Object.freeze(
-  GlobalLexiconCatalogSchema.parse(globalLexiconCatalog).entries.map((entry) =>
-    Object.freeze(globalLexiconEntryFromCatalog(entry)),
+  GlobalLexiconBuiltInCatalogSchema.parse(globalLexiconCatalog).entries.map(
+    (entry) => Object.freeze(globalLexiconEntryFromCatalog(entry)),
   ),
-) satisfies Readonly<GlobalLexiconReplaceInput>;
+) satisfies Readonly<CustomGlobalLexiconReplaceInput>;
 
 export const IgnoredDiagnosticCollectionSchema = z
   .array(IgnoredDiagnosticSchema)
@@ -648,10 +671,14 @@ interface PreferencesClient {
 }
 
 interface GlobalLexiconClient {
-  list(): Promise<z.infer<typeof GlobalLexiconEntryCollectionSchema>>;
-  replace(
-    input: GlobalLexiconReplaceInput,
-  ): Promise<z.infer<typeof GlobalLexiconEntryCollectionSchema>>;
+  list(): Promise<GlobalLexiconState>;
+  setBuiltInEnabled(
+    input: GlobalLexiconBuiltInEnabledInput,
+  ): Promise<GlobalLexiconState>;
+  replaceCustom(
+    input: CustomGlobalLexiconReplaceInput,
+  ): Promise<GlobalLexiconState>;
+  reimportBuiltIns(): Promise<GlobalLexiconState>;
 }
 
 export interface PersistenceClient {

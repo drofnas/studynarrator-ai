@@ -3,7 +3,7 @@ import {
   ConnectionSetupStateSchema,
   ConnectionTestSummarySchema,
   EmptyResponseSchema,
-  GlobalLexiconEntryCollectionSchema,
+  GlobalLexiconStateSchema,
   IgnoredDiagnosticCollectionSchema,
   PERSISTENCE_CHANNELS,
   PersistenceBackupCollectionSchema,
@@ -168,13 +168,23 @@ export function createPreloadBridge(
     },
     globalLexicon: {
       async list() {
-        return GlobalLexiconEntryCollectionSchema.parse(
+        return GlobalLexiconStateSchema.parse(
           await invoke(PERSISTENCE_CHANNELS.globalLexiconList),
         );
       },
-      async replace(input) {
-        return GlobalLexiconEntryCollectionSchema.parse(
-          await invoke(PERSISTENCE_CHANNELS.globalLexiconReplace, input),
+      async setBuiltInEnabled(input) {
+        return GlobalLexiconStateSchema.parse(
+          await invoke(PERSISTENCE_CHANNELS.globalLexiconBuiltInEnabled, input),
+        );
+      },
+      async replaceCustom(input) {
+        return GlobalLexiconStateSchema.parse(
+          await invoke(PERSISTENCE_CHANNELS.globalLexiconCustomReplace, input),
+        );
+      },
+      async reimportBuiltIns() {
+        return GlobalLexiconStateSchema.parse(
+          await invoke(PERSISTENCE_CHANNELS.globalLexiconBuiltInReimport, {}),
         );
       },
     },
