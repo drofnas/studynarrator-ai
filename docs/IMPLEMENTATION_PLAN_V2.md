@@ -134,7 +134,8 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 27.3  | Migrate the mutating pages                         | P2       | M    | complete    |
 | 28    | Route code splitting                               | P2       | S    | complete    |
 | 29.0a | Decouple shared-types schemas from core            | P2       | M    | complete    |
-| 29.0b | Remove the shared-types core dependency            | P2       | XS   | in progress |
+| 29.0b | Remove the shared-types core package dependency    | P2       | XS   | complete    |
+| 29.0c | Remove the shared-types core build reference       | P2       | XS   | in progress |
 | 29    | Enforce package dependency direction               | P2       | S    | todo        |
 | 30    | Replace the dead-code script with knip             | P2       | S    | todo        |
 | 26    | Single typed contract map                          | P2       | —    | deferred    |
@@ -2134,9 +2135,9 @@ The grep must return nothing after 29.0b, not necessarily after this task while 
 
 `refactor(shared-types): decouple transport schemas from core`
 
-## TASK 29.0b — Remove the shared-types core dependency
+## TASK 29.0b — Remove the shared-types core package dependency
 
-**Status:** in progress
+**Status:** complete
 
 **Priority:** P2 · **Size:** XS
 
@@ -2161,6 +2162,34 @@ The grep must return nothing.
 ### COMMIT
 
 `refactor(shared-types): remove the core package dependency`
+
+## TASK 29.0c — Remove the shared-types core build reference
+
+**Status:** in progress
+
+**Priority:** P2 · **Size:** XS
+
+### FILES YOU MAY TOUCH
+
+```
+packages/shared-types/tsconfig.json
+```
+
+Remove the stale `../core` TypeScript project reference. It is an internal build dependency left behind after 29.0a/29.0b and conflicts with Task 29's declaration that `shared-types` depends on no internal package. Do not change root project-reference ordering or other package references.
+
+### VERIFY
+
+```sh
+npx tsc --build packages/shared-types
+npm run typecheck
+rg -n '"\.\./core"|@studynarrator/core' packages/shared-types --glob '!dist/**'
+```
+
+The grep must return nothing.
+
+### COMMIT
+
+`refactor(shared-types): remove stale core build reference`
 
 # 29 — ENFORCE PACKAGE DEPENDENCY DIRECTION
 
