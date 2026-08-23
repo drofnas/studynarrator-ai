@@ -133,6 +133,8 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 27.2c | Migrate diagnostics readers                        | P2       | S    | complete    |
 | 27.3  | Migrate the mutating pages                         | P2       | M    | complete    |
 | 28    | Route code splitting                               | P2       | S    | complete    |
+| 29.0a | Decouple shared-types schemas from core            | P2       | M    | in progress |
+| 29.0b | Remove the shared-types core dependency            | P2       | XS   | todo        |
 | 29    | Enforce package dependency direction               | P2       | S    | todo        |
 | 30    | Replace the dead-code script with knip             | P2       | S    | todo        |
 | 26    | Single typed contract map                          | P2       | —    | deferred    |
@@ -2095,6 +2097,70 @@ Standard, plus `npm run test:e2e:web` and confirm the settings route no longer p
 `perf(web): lazy-load routes`
 
 ---
+
+# 29.0 — REMOVE THE SHARED-TYPES CORE DEPENDENCY
+
+This prerequisite preserves Task 29's requested layer direction without weakening it. `core` already has no `shared-types` imports, so the transport-contract subset can be made dependency-free inside `shared-types` without a cyclic dependency or human-led architecture decision.
+
+## TASK 29.0a — Decouple shared-types schemas from core
+
+**Status:** in progress
+
+**Priority:** P2 · **Size:** M
+
+### FILES YOU MAY TOUCH
+
+```
+packages/shared-types/src/contracts.ts   (new)
+packages/shared-types/src/contracts.test.ts   (new)
+packages/shared-types/src/persistence.ts
+packages/shared-types/src/preview.ts
+packages/shared-types/src/renderPlan.ts
+packages/shared-types/src/scriptGeneration.ts
+```
+
+Copy only the dependency-free transport primitives currently imported from `core` into `contracts.ts`: schema/version constants, speaker/pause identifiers, ignored-diagnostic and lexicon-entry schemas, source ranges, and script prompt kinds. Rewire the four importing modules to use the local definitions. Preserve every public shared-types export and Zod validation behavior. The test must cover the copied contract constraints without importing `core`.
+
+### VERIFY
+
+```sh
+npm run format:check && npm run lint && npx tsc --build packages/shared-types && npx vitest run packages/shared-types
+rg -n 'from "@studynarrator/core"' packages/shared-types/src
+```
+
+The grep must return nothing after 29.0b, not necessarily after this task while `package.json` still declares the dependency.
+
+### COMMIT
+
+`refactor(shared-types): decouple transport schemas from core`
+
+## TASK 29.0b — Remove the shared-types core dependency
+
+**Status:** todo
+
+**Priority:** P2 · **Size:** XS
+
+### FILES YOU MAY TOUCH
+
+```
+packages/shared-types/package.json
+package-lock.json
+```
+
+Remove `@studynarrator/core` from shared-types dependencies after 29.0a has removed all source imports. Regenerate the lockfile without changing other dependency versions.
+
+### VERIFY
+
+```sh
+npm run format:check && npm run lint && npm run typecheck && npx vitest run packages/shared-types
+rg -n 'from "@studynarrator/core"' packages/shared-types/src
+```
+
+The grep must return nothing.
+
+### COMMIT
+
+`refactor(shared-types): remove the core package dependency`
 
 # 29 — ENFORCE PACKAGE DEPENDENCY DIRECTION
 
