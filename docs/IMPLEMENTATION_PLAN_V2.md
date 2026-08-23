@@ -139,8 +139,8 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 29.0d | Remove unused private transport type exports       | P2       | XS   | complete    |
 | 29    | Enforce package dependency direction               | P2       | S    | complete    |
 | 30.1  | Cover the disjoint Vitest suites together          | P2       | S    | complete    |
-| 30.2  | Stabilize recovered-connection assertions          | P2       | XS   | in progress |
-| 30    | Replace the dead-code script with knip             | P2       | S    | todo        |
+| 30.2  | Stabilize recovered-connection assertions          | P2       | XS   | complete    |
+| 30    | Replace the dead-code script with knip             | P2       | S    | in progress |
 | 26    | Single typed contract map                          | P2       | —    | deferred    |
 
 Execute in the listed order. Tasks 9.1 through 12.3 are P0 and should be finished before any packaged release.
@@ -2281,7 +2281,7 @@ The default and API suites must remain disjoint, and the coverage command must p
 
 The full verifier intermittently failed because the General Settings recovery test waited only for the restored address. The recovered model is rendered after the asynchronous catalog query supplies its `<option>`, so the immediate model assertion can observe an empty select before the option exists. The product behavior is correct; the test must await the final observable UI state.
 
-**Status:** in progress
+**Status:** complete
 
 **Priority:** P2 · **Size:** XS
 
@@ -2307,7 +2307,7 @@ npm run test:coverage
 
 # 30 — REPLACE THE DEAD-CODE SCRIPT WITH KNIP
 
-**Status:** todo
+**Status:** in progress
 
 **Priority:** P2 · **Size:** S
 
