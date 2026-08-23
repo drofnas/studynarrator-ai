@@ -126,7 +126,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 25.3 | Split the speaches adapter                         | P2       | M    | complete    |
 | 25.4 | Split the render service                           | P2       | M    | complete    |
 | 25.5 | Split ProjectsPage                                 | P2       | M    | complete    |
-| 27.1 | Add TanStack Query and the provider                | P2       | S    |
+| 27.1 | Add TanStack Query and the provider                | P2       | S    | complete    |
 | 27.2 | Migrate the read-only pages                        | P2       | M    |
 | 27.3 | Migrate the mutating pages                         | P2       | M    |
 | 28   | Route code splitting                               | P2       | S    |
