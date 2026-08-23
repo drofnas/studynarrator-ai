@@ -138,8 +138,8 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 29.0c | Remove the shared-types core build reference       | P2       | XS   | complete    |
 | 29.0d | Remove unused private transport type exports       | P2       | XS   | complete    |
 | 29    | Enforce package dependency direction               | P2       | S    | complete    |
-| 30.1  | Cover the disjoint Vitest suites together          | P2       | S    | in progress |
-| 30    | Replace the dead-code script with knip             | P2       | S    | todo        |
+| 30.1  | Cover the disjoint Vitest suites together          | P2       | S    | complete    |
+| 30    | Replace the dead-code script with knip             | P2       | S    | in progress |
 | 26    | Single typed contract map                          | P2       | —    | deferred    |
 
 Execute in the listed order. Tasks 9.1 through 12.3 are P0 and should be finished before any packaged release.
@@ -2248,7 +2248,7 @@ If the rule reports existing violations, **STOP** and report them rather than fi
 
 This prerequisite restores the release verifier after Task 14 deliberately split the default and API suites. The previous coverage command ran only the default suite while counting `packages/application` source whose tests run exclusively in the API suite, which reduced global function coverage to 69.67% despite the full suite measuring 86.26%.
 
-**Status:** in progress
+**Status:** complete
 
 **Priority:** P2 · **Size:** S
 
@@ -2278,7 +2278,7 @@ The default and API suites must remain disjoint, and the coverage command must p
 
 # 30 — REPLACE THE DEAD-CODE SCRIPT WITH KNIP
 
-**Status:** todo
+**Status:** in progress
 
 **Priority:** P2 · **Size:** S
 
