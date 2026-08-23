@@ -55,7 +55,7 @@ If that shows files you did not intend to change, revert them. Do not create com
 
 **G7 — Wrap every failure path in the same error type.** If a function throws a domain error for its failure modes, every failure mode must throw that type, including filesystem errors. Do not leave one path emitting a raw `ENOENT`.
 
-**G8 — After any removal, check for orphans.** Run `npm run audit:dead-code` and grep for the removed identifiers. A removal that leaves an uncalled method behind is incomplete.
+**G8 — After any removal, check for orphans.** Run `npm run audit:knip` and grep for the removed identifiers. A removal that leaves an uncalled method behind is incomplete.
 
 **G9 — Adding an operation touches four places.** The service manifest, the REST route, the IPC channel, and the contract tests. A task that adds one must do all four or explicitly say which are out of scope.
 
@@ -2252,19 +2252,22 @@ If the rule reports existing violations, **STOP** and report them rather than fi
 ### FILES YOU MAY TOUCH
 
 ```
-knip.json   (new)
+knip.config.js   (new)
+knip.json   (delete)
 package.json
 package-lock.json
 scripts/verify.mjs
 scripts/audit-dead-code.mjs   (delete)
 scripts/audit-dead-code.test.ts   (delete)
+README.md
 ```
 
-Add `knip`, tune the configuration until it reports at least what the existing script reports, then delete the script, its actual TypeScript test, and the `audit:dead-code` npm script, updating `scripts/verify.mjs`. Regenerate only the lockfile changes required to add Knip.
+Add `knip`, tune the configuration until it reports at least what the existing script reports, then delete the script, its actual TypeScript test, and the `audit:dead-code` npm script, updating `scripts/verify.mjs` and README. Regenerate only the lockfile changes required to add Knip. Use the JavaScript Knip config to register a CSS compiler that converts `@import` edges to imports and include web CSS project files; Knip does not natively analyze plain CSS, but legacy coverage requires reporting orphan CSS files.
 
 ### Constraints
 
-- Do not delete the old script until knip demonstrably covers the same findings. Record the comparison in the commit body.
+- Do not delete the old script until Knip demonstrably covers the same findings, including plain-CSS orphan detection. Record the comparison in the commit body.
+- Update all repository documentation references to the removed command in the same correction.
 
 ### COMMIT
 
