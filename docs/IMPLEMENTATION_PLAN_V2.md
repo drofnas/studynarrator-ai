@@ -55,7 +55,7 @@ If that shows files you did not intend to change, revert them. Do not create com
 
 **G7 — Wrap every failure path in the same error type.** If a function throws a domain error for its failure modes, every failure mode must throw that type, including filesystem errors. Do not leave one path emitting a raw `ENOENT`.
 
-**G8 — After any removal, check for orphans.** Run `npm run audit:dead-code` and grep for the removed identifiers. A removal that leaves an uncalled method behind is incomplete.
+**G8 — After any removal, check for orphans.** Run `npm run audit:knip` and grep for the removed identifiers. A removal that leaves an uncalled method behind is incomplete.
 
 **G9 — Adding an operation touches four places.** The service manifest, the REST route, the IPC channel, and the contract tests. A task that adds one must do all four or explicitly say which are out of scope.
 
@@ -71,68 +71,78 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 
 ## TASK TABLE
 
-| #    | Task                                               | Priority | Size | Status      |
-| ---- | -------------------------------------------------- | -------- | ---- | ----------- |
-| 9.1  | Add migration 4 and bump the schema version        | P0       | S    | complete    |
-| 9.2  | Rename the connection types in shared-types        | P0       | S    | complete    |
-| 9.3  | Propagate the rename through persistence           | P0       | S    | complete    |
-| 9.4  | Propagate the rename through application           | P0       | M    | complete    |
-| 9.5  | Propagate the rename through server and desktop    | P0       | S    | complete    |
-| 9.6  | Propagate the rename through the web client        | P0       | M    | complete    |
-| 10.1 | Write and read the data directory manifest         | P0       | M    | complete    |
-| 10.2 | Add the layout step runner                         | P0       | S    | done (10.x) |
-| 10.3 | Convert cache metadata parsing to Zod              | P0       | S    | complete    |
-| 10.4 | Add the two initial layout steps                   | P0       | S    | complete    |
-| 11.1 | Add the CI check job                               | P0       | S    | complete    |
-| 11.2 | Add the CI e2e and docker jobs                     | P0       | S    | complete    |
-| 12.1 | Correct the README                                 | P0       | S    | complete    |
-| 12.2 | Write UPGRADE.md                                   | P0       | S    | complete    |
-| 12.3 | Split setup into SETUP.md                          | P0       | S    | complete    |
-| 13   | Lower the Node requirement to 24                   | P1       | S    | complete    |
-| 14   | Make the Vitest configs disjoint                   | P1       | XS   | complete    |
-| 15   | Add coverage thresholds                            | P1       | S    | complete    |
-| 16.1 | Extract the runtime descriptor type                | P1       | S    | complete    |
-| 16.2 | Extract the shared service factory                 | P1       | M    | complete    |
-| 16.3 | Reduce both bootstraps to the factory              | P1       | S    | complete    |
-| 17.1 | Add the async handler and error middleware         | P1       | S    | complete    |
-| 17.2 | Extract the system and persistence routers         | P1       | S    | complete    |
-| 17.3 | Extract the connection and catalog routers         | P1       | S    | complete    |
-| 17.4 | Extract the render and cache routers               | P1       | M    | complete    |
-| 18.1 | Add the logger module                              | P1       | S    | complete    |
-| 18.2 | Log startup and migration events                   | P1       | S    | complete    |
-| 18.3 | Log render lifecycle and boundary errors           | P1       | S    | complete    |
-| 19.1 | Add a render progress observer                     | P1       | S    | complete    |
-| 19.2 | Add the SSE endpoint                               | P1       | S    | complete    |
-| 19.3 | Consume SSE in the web client                      | P1       | M    | complete    |
-| 20.1 | Add the voice timing calibration table             | P1       | S    | complete    |
-| 20.2 | Record calibration after each render               | P1       | S    | complete    |
-| 20.3 | Add the estimation functions                       | P1       | S    | complete    |
-| 20.4 | Show estimates in the script editor                | P1       | M    | complete    |
-| 20.5 | Add the preflight disk space check                 | P1       | S    | complete    |
-| 21.1 | Add the retention settings table and service       | P1       | S    | complete    |
-| 21.2 | Add the cache sweeper                              | P1       | M    | complete    |
-| 21.3 | Add render pinning                                 | P1       | S    | complete    |
-| 21.4 | Add the retention settings screen                  | P1       | M    | complete    |
-| 22   | Host header allowlist                              | P1       | S    | complete    |
-| 23.1 | Add electron-builder configuration                 | P1       | M    | complete    |
-| 23.2 | Verify the native rebuild per target               | P1       | S    | deferred    |
-| 23.3 | Add the release workflow, unsigned                 | P1       | S    | complete    |
-| 23.4 | Add signing and notarization                       | P1       | M    | complete    |
-| 23.5 | Decide and document the Docker support level       | P1       | S    | complete    |
-| 24.1 | Build the golden corpus fixtures                   | P1       | M    | complete    |
-| 24.2 | Add the golden corpus test and regeneration script | P1       | S    | complete    |
-| 25.1 | Split the rendering package                        | P2       | M    | todo        |
-| 25.2 | Split the persistence repository                   | P2       | M    | todo        |
-| 25.3 | Split the speaches adapter                         | P2       | M    | todo        |
-| 25.4 | Split the render service                           | P2       | M    | todo        |
-| 25.5 | Split ProjectsPage                                 | P2       | M    | todo        |
-| 26   | Single typed contract map                          | P2       | —    | todo        |
-| 27.1 | Add TanStack Query and the provider                | P2       | S    |
-| 27.2 | Migrate the read-only pages                        | P2       | M    |
-| 27.3 | Migrate the mutating pages                         | P2       | M    |
-| 28   | Route code splitting                               | P2       | S    |
-| 29   | Enforce package dependency direction               | P2       | S    |
-| 30   | Replace the dead-code script with knip             | P2       | S    |
+| #     | Task                                               | Priority | Size | Status      |
+| ----- | -------------------------------------------------- | -------- | ---- | ----------- |
+| 9.1   | Add migration 4 and bump the schema version        | P0       | S    | complete    |
+| 9.2   | Rename the connection types in shared-types        | P0       | S    | complete    |
+| 9.3   | Propagate the rename through persistence           | P0       | S    | complete    |
+| 9.4   | Propagate the rename through application           | P0       | M    | complete    |
+| 9.5   | Propagate the rename through server and desktop    | P0       | S    | complete    |
+| 9.6   | Propagate the rename through the web client        | P0       | M    | complete    |
+| 10.1  | Write and read the data directory manifest         | P0       | M    | complete    |
+| 10.2  | Add the layout step runner                         | P0       | S    | done (10.x) |
+| 10.3  | Convert cache metadata parsing to Zod              | P0       | S    | complete    |
+| 10.4  | Add the two initial layout steps                   | P0       | S    | complete    |
+| 11.1  | Add the CI check job                               | P0       | S    | complete    |
+| 11.2  | Add the CI e2e and docker jobs                     | P0       | S    | complete    |
+| 12.1  | Correct the README                                 | P0       | S    | complete    |
+| 12.2  | Write UPGRADE.md                                   | P0       | S    | complete    |
+| 12.3  | Split setup into SETUP.md                          | P0       | S    | complete    |
+| 13    | Lower the Node requirement to 24                   | P1       | S    | complete    |
+| 14    | Make the Vitest configs disjoint                   | P1       | XS   | complete    |
+| 15    | Add coverage thresholds                            | P1       | S    | complete    |
+| 16.1  | Extract the runtime descriptor type                | P1       | S    | complete    |
+| 16.2  | Extract the shared service factory                 | P1       | M    | complete    |
+| 16.3  | Reduce both bootstraps to the factory              | P1       | S    | complete    |
+| 17.1  | Add the async handler and error middleware         | P1       | S    | complete    |
+| 17.2  | Extract the system and persistence routers         | P1       | S    | complete    |
+| 17.3  | Extract the connection and catalog routers         | P1       | S    | complete    |
+| 17.4  | Extract the render and cache routers               | P1       | M    | complete    |
+| 18.1  | Add the logger module                              | P1       | S    | complete    |
+| 18.2  | Log startup and migration events                   | P1       | S    | complete    |
+| 18.3  | Log render lifecycle and boundary errors           | P1       | S    | complete    |
+| 19.1  | Add a render progress observer                     | P1       | S    | complete    |
+| 19.2  | Add the SSE endpoint                               | P1       | S    | complete    |
+| 19.3  | Consume SSE in the web client                      | P1       | M    | complete    |
+| 20.1  | Add the voice timing calibration table             | P1       | S    | complete    |
+| 20.2  | Record calibration after each render               | P1       | S    | complete    |
+| 20.3  | Add the estimation functions                       | P1       | S    | complete    |
+| 20.4  | Show estimates in the script editor                | P1       | M    | complete    |
+| 20.5  | Add the preflight disk space check                 | P1       | S    | complete    |
+| 21.1  | Add the retention settings table and service       | P1       | S    | complete    |
+| 21.2  | Add the cache sweeper                              | P1       | M    | complete    |
+| 21.3  | Add render pinning                                 | P1       | S    | complete    |
+| 21.4  | Add the retention settings screen                  | P1       | M    | complete    |
+| 22    | Host header allowlist                              | P1       | S    | complete    |
+| 23.1  | Add electron-builder configuration                 | P1       | M    | complete    |
+| 23.2  | Verify the native rebuild per target               | P1       | S    | deferred    |
+| 23.3  | Add the release workflow, unsigned                 | P1       | S    | complete    |
+| 23.4  | Add signing and notarization                       | P1       | M    | complete    |
+| 23.5  | Decide and document the Docker support level       | P1       | S    | complete    |
+| 24.1  | Build the golden corpus fixtures                   | P1       | M    | complete    |
+| 24.2  | Add the golden corpus test and regeneration script | P1       | S    | complete    |
+| 25.1  | Split the rendering package                        | P2       | M    | complete    |
+| 25.2  | Split the persistence repository                   | P2       | M    | complete    |
+| 25.3  | Split the speaches adapter                         | P2       | M    | complete    |
+| 25.4  | Split the render service                           | P2       | M    | complete    |
+| 25.5  | Split ProjectsPage                                 | P2       | M    | complete    |
+| 27.1  | Add TanStack Query and the provider                | P2       | S    | complete    |
+| 27.2  | Migrate the read-only pages                        | P2       | M    | complete    |
+| 27.2a | Migrate connection-backed readers                  | P2       | M    | complete    |
+| 27.2b | Migrate persistence settings readers               | P2       | M    | complete    |
+| 27.2c | Migrate diagnostics readers                        | P2       | S    | complete    |
+| 27.3  | Migrate the mutating pages                         | P2       | M    | complete    |
+| 28    | Route code splitting                               | P2       | S    | complete    |
+| 29.0a | Decouple shared-types schemas from core            | P2       | M    | complete    |
+| 29.0b | Remove the shared-types core package dependency    | P2       | XS   | complete    |
+| 29.0c | Remove the shared-types core build reference       | P2       | XS   | complete    |
+| 29.0d | Remove unused private transport type exports       | P2       | XS   | complete    |
+| 29    | Enforce package dependency direction               | P2       | S    | complete    |
+| 30.1  | Cover the disjoint Vitest suites together          | P2       | S    | complete    |
+| 30.2  | Stabilize recovered-connection assertions          | P2       | XS   | complete    |
+| 30.3  | Stabilize recovery and voice E2E assertions        | P2       | XS   | complete    |
+| 30    | Replace the dead-code script with knip             | P2       | S    | complete    |
+| 26    | Single typed contract map                          | P2       | —    | deferred    |
 
 Execute in the listed order. Tasks 9.1 through 12.3 are P0 and should be finished before any packaged release.
 
@@ -2042,7 +2052,7 @@ Re-measure before starting each: tasks 8, 17, and 19 have already changed severa
 
 # 26 — SINGLE TYPED CONTRACT MAP
 
-**Status:** todo
+**Status:** deferred (human-led; do not delegate)
 
 **Priority:** P2 · **Human-led. Do not delegate.**
 
@@ -2057,7 +2067,10 @@ Replacing the four-way-maintained operation surface with one contract map is rou
 Do task 19 first. SSE changes how render state arrives and would otherwise be migrated twice.
 
 - **27.1 (S)** — Add `@tanstack/react-query`, the provider in `App.tsx`, and a query key convention. No page migrated yet.
-- **27.2 (M)** — Migrate the read-only pages: settings, system, onboarding.
+- **27.2 (M)** — Migrate the read-only pages. The original scope exceeded the M ceiling, so complete its three sequential sub-tasks before marking 27.2 complete:
+  - **27.2a (M)** — Migrate the connection-backed readers: `GeneralSettingsPage`, `VoicesSettingsPage`, and `OnboardingPage`, with their two direct page tests. Preserve `ConnectionProvider` contracts and page workflows.
+  - **27.2b (M)** — Migrate the persistence settings readers: `LexiconSettingsPage`, `TimingsSettingsPage`, and `RetentionSettingsPage`, with their direct tests. Do not migrate their save mutations.
+  - **27.2c (S)** — Migrate the diagnostics reader hook/page and its direct test coverage. Preserve existing diagnostics rendering and error states.
 - **27.3 (M)** — Migrate the mutating pages: projects, scratchpad. Includes optimistic updates and invalidation.
 
 **COMMIT:** `refactor(web): manage server state with tanstack query`
@@ -2066,7 +2079,7 @@ Do task 19 first. SSE changes how render state arrives and would otherwise be mi
 
 # 28 — ROUTE CODE SPLITTING
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P2 · **Size:** S
 
@@ -2075,6 +2088,7 @@ Do task 19 first. SSE changes how render state arrives and would otherwise be mi
 ```
 apps/web/src/app/routes.tsx
 apps/web/src/app/AppShell.tsx
+apps/web/src/app/App.test.tsx
 ```
 
 Convert to `React.lazy` with a `Suspense` boundary in `AppShell`. Keep the onboarding page eager — it is the first screen a new user sees. Keep the database recovery screen eager; it must render when things are broken.
@@ -2089,9 +2103,128 @@ Standard, plus `npm run test:e2e:web` and confirm the settings route no longer p
 
 ---
 
+# 29.0 — REMOVE THE SHARED-TYPES CORE DEPENDENCY
+
+This prerequisite preserves Task 29's requested layer direction without weakening it. `core` already has no `shared-types` imports, so the transport-contract subset can be made dependency-free inside `shared-types` without a cyclic dependency or human-led architecture decision.
+
+## TASK 29.0a — Decouple shared-types schemas from core
+
+**Status:** complete
+
+**Priority:** P2 · **Size:** M
+
+### FILES YOU MAY TOUCH
+
+```
+packages/shared-types/src/contracts.ts   (new)
+packages/shared-types/src/contracts.test.ts   (new)
+packages/shared-types/src/persistence.ts
+packages/shared-types/src/preview.ts
+packages/shared-types/src/renderPlan.ts
+packages/shared-types/src/scriptGeneration.ts
+```
+
+Copy only the dependency-free transport primitives currently imported from `core` into `contracts.ts`: schema/version constants, speaker/pause identifiers, ignored-diagnostic and lexicon-entry schemas, source ranges, and script prompt kinds. Rewire the four importing modules to use the local definitions. Preserve every public shared-types export and Zod validation behavior. The test must cover the copied contract constraints without importing `core`.
+
+### VERIFY
+
+```sh
+npm run format:check && npm run lint && npx tsc --build packages/shared-types && npx vitest run packages/shared-types
+rg -n 'from "@studynarrator/core"' packages/shared-types/src
+```
+
+The grep must return nothing after 29.0b, not necessarily after this task while `package.json` still declares the dependency.
+
+### COMMIT
+
+`refactor(shared-types): decouple transport schemas from core`
+
+## TASK 29.0b — Remove the shared-types core package dependency
+
+**Status:** complete
+
+**Priority:** P2 · **Size:** XS
+
+### FILES YOU MAY TOUCH
+
+```
+packages/shared-types/package.json
+package-lock.json
+```
+
+Remove `@studynarrator/core` from shared-types dependencies after 29.0a has removed all source imports. Regenerate the lockfile without changing other dependency versions.
+
+### VERIFY
+
+```sh
+npm run format:check && npm run lint && npm run typecheck && npx vitest run packages/shared-types
+rg -n 'from "@studynarrator/core"' packages/shared-types/src
+```
+
+The grep must return nothing.
+
+### COMMIT
+
+`refactor(shared-types): remove the core package dependency`
+
+## TASK 29.0c — Remove the shared-types core build reference
+
+**Status:** complete
+
+**Priority:** P2 · **Size:** XS
+
+### FILES YOU MAY TOUCH
+
+```
+packages/shared-types/tsconfig.json
+```
+
+Remove the stale `../core` TypeScript project reference. It is an internal build dependency left behind after 29.0a/29.0b and conflicts with Task 29's declaration that `shared-types` depends on no internal package. Do not change root project-reference ordering or other package references.
+
+### VERIFY
+
+```sh
+npx tsc --build packages/shared-types
+npm run typecheck
+rg -n '"\.\./core"|@studynarrator/core' packages/shared-types --glob '!dist/**'
+```
+
+The grep must return nothing.
+
+### COMMIT
+
+`refactor(shared-types): remove stale core build reference`
+
+## TASK 29.0d — Remove unused private transport type exports
+
+**Status:** complete
+
+**Priority:** P2 · **Size:** XS
+
+### FILES YOU MAY TOUCH
+
+```
+packages/shared-types/src/contracts.ts
+packages/shared-types/src/scriptGeneration.ts
+```
+
+`contracts.ts` is private to shared-types and is not exported from its public barrel. Change every unconsumed inferred type export to a local type, preserving every schema and runtime export consumed by the shared contract modules. Preserve the public `ScriptPromptKind` export by declaring it in `scriptGeneration.ts` from its local schema rather than re-exporting the private contracts type. This removes the task-caused dead-code audit findings introduced when the Core primitives were decoupled.
+
+### VERIFY
+
+```sh
+npm run format:check && npm run lint && npm run typecheck && npm test
+```
+
+The audit must no longer report any `packages/shared-types/src/contracts.ts` export. The known unrelated Core and rendering audit findings may remain until Task 30 replaces the audit. A failed attempt removed four type exports but left `ScriptPromptKind`; its correction is included in this task.
+
+### COMMIT
+
+`refactor(shared-types): remove unused transport type exports`
+
 # 29 — ENFORCE PACKAGE DEPENDENCY DIRECTION
 
-**Status:** todo
+**Status:** complete
 
 **Priority:** P2 · **Size:** S
 
@@ -2113,27 +2246,118 @@ If the rule reports existing violations, **STOP** and report them rather than fi
 
 ---
 
-# 30 — REPLACE THE DEAD-CODE SCRIPT WITH KNIP
+# 30.1 — COVER THE DISJOINT VITEST SUITES TOGETHER
 
-**Status:** todo
+This prerequisite restores the release verifier after Task 14 deliberately split the default and API suites. The previous coverage command ran only the default suite while counting `packages/application` source whose tests run exclusively in the API suite, which reduced global function coverage to 69.67% despite the full suite measuring 86.26%.
+
+**Status:** complete
 
 **Priority:** P2 · **Size:** S
 
 ### FILES YOU MAY TOUCH
 
 ```
-knip.json   (new)
+vitest.coverage.config.ts   (new)
 package.json
-scripts/verify.mjs
-scripts/audit-dead-code.mjs   (delete)
-scripts/audit-dead-code.test.mjs   (delete)
+tsconfig.tools.json
 ```
 
-Add `knip`, tune the configuration until it reports at least what the existing script reports, then delete the script, its test, and the `audit:dead-code` npm script, updating `scripts/verify.mjs`.
+Add a dedicated coverage config that runs the exact union of the existing default and API test inclusions once, preserving their shared aliases, existing coverage exclusions, reporters, and thresholds. Add it to `tsconfig.tools.json` so ESLint's project service type-checks the new root config; do not suppress typed linting. Update `test:coverage` to use that config. Do not modify either disjoint default/API config or lower thresholds; the coverage command must measure every currently tested source path.
+
+### VERIFY
+
+```sh
+npm test
+npm run test:api
+npm run test:coverage
+```
+
+The default and API suites must remain disjoint, and the coverage command must pass all existing 70/60/70/70 thresholds.
+
+### COMMIT
+
+`test: cover all disjoint Vitest suites together`
+
+# 30.2 — STABILIZE RECOVERED-CONNECTION ASSERTIONS
+
+The full verifier intermittently failed because the General Settings recovery test waited only for the restored address. The recovered model is rendered after the asynchronous catalog query supplies its `<option>`, so the immediate model assertion can observe an empty select before the option exists. The product behavior is correct; the test must await the final observable UI state.
+
+**Status:** complete
+
+**Priority:** P2 · **Size:** XS
+
+### FILES YOU MAY TOUCH
+
+```
+apps/web/src/pages/settings/GeneralSettingsPage.test.tsx
+```
+
+After resolving the recovered connection, await the rendered model select's saved value before asserting the remaining recovered fields. Do not use fixed sleeps, timers, retries, product changes, or weakened assertions.
+
+### VERIFY
+
+```sh
+for run in $(seq 1 10); do npm test -- apps/web/src/pages/settings/GeneralSettingsPage.test.tsx || exit 1; done
+npm test
+npm run test:coverage
+```
+
+### COMMIT
+
+`test(web): await recovered connection catalog`
+
+# 30.3 — STABILIZE RECOVERY AND VOICE E2E ASSERTIONS
+
+The release verifier exposed two Playwright timing races after route code splitting. The recovery scenario observed the transient status after the second request could already restore the form; the persisted-favorite assertion navigated to a lazy page without first observing its loaded route content. The product behavior is correct, but the acceptance test must control the recovery request and await observable page readiness.
+
+**Status:** complete
+
+**Priority:** P2 · **Size:** XS
+
+### FILES YOU MAY TOUCH
+
+```
+e2e/web/projects-and-settings.spec.ts
+```
+
+Hold the recovery GET request through a test-owned promise after proving the restoring status, assert the form is absent, then release it and retain all restored-field assertions. For the favorite-after-reload path, await the Voices route heading before the favorite assertion. Do not use fixed sleeps, retry options, product changes, or weakened persistence assertions.
+
+### VERIFY
+
+```sh
+npx playwright test e2e/web/projects-and-settings.spec.ts --grep 'restores saved connection fields|groups, favorites, and auditions' --repeat-each=5
+npm run test:e2e:web
+```
+
+### COMMIT
+
+`test(e2e): synchronize recovery and voice assertions`
+
+# 30 — REPLACE THE DEAD-CODE SCRIPT WITH KNIP
+
+**Status:** complete
+
+**Priority:** P2 · **Size:** S
+
+### FILES YOU MAY TOUCH
+
+```
+knip.config.js   (new)
+knip.json   (delete)
+package.json
+package-lock.json
+scripts/verify.mjs
+scripts/audit-dead-code.mjs   (delete)
+scripts/audit-dead-code.test.ts   (delete)
+README.md
+```
+
+Add `knip`, tune the configuration until it reports at least what the existing script reports, then delete the script, its actual TypeScript test, and the `audit:dead-code` npm script, updating `scripts/verify.mjs` and README. Regenerate only the lockfile changes required to add Knip. Use the JavaScript Knip config to register a CSS compiler that converts `@import` edges to imports and include web CSS project files; Knip does not natively analyze plain CSS, but legacy coverage requires reporting orphan CSS files.
 
 ### Constraints
 
-- Do not delete the old script until knip demonstrably covers the same findings. Record the comparison in the commit body.
+- Do not delete the old script until Knip demonstrably covers the same findings, including plain-CSS orphan detection. Record the comparison in the commit body.
+- Update all repository documentation references to the removed command in the same correction.
 
 ### COMMIT
 

@@ -1,3 +1,4 @@
+import { z } from "zod";
 import {
   DEFAULT_PARAGRAPH_PAUSE_DURATION_MS,
   DEFAULT_PARAGRAPH_PAUSE_ID,
@@ -5,8 +6,7 @@ import {
   LexiconEntrySchema,
   SpeakerIdSchema,
   SupportedPauseIdSchema,
-} from "@studynarrator/core";
-import { z } from "zod";
+} from "./contracts.js";
 
 export const DATABASE_SCHEMA_VERSION = 7;
 export const PERSISTENCE_CONTRACT_VERSION = 1;

@@ -1,10 +1,11 @@
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
-import {
-  type SpeechBackendConnection,
-  type SpeechCacheClient,
-  type SpeechCacheStatus,
-  type VoiceCatalog,
+import type {
+  SpeechBackendConnection,
+  SpeechCacheClient,
+  SpeechCacheStatus,
 } from "@studynarrator/shared-types";
+import { queryKeys } from "@/app/queryKeys.js";
 import { useConnections } from "@/features/connections/ConnectionProvider.js";
 import { VoiceSelect } from "@/features/connections/VoiceSelect.js";
 import { presentVoices } from "@/features/connections/voicePresentation.js";
@@ -46,7 +47,13 @@ export function GeneralSettingsPage({
     connectionDraft(workspace.connection),
   );
   const [connectionTestAttempted, setConnectionTestAttempted] = useState(false);
-  const [catalog, setCatalog] = useState<VoiceCatalog | null>(null);
+  const catalogQuery = useQuery({
+    queryKey: queryKeys.connection.voiceCatalog(draft.defaultModelId),
+    queryFn: () => workspace.getCatalog(draft.defaultModelId),
+    enabled: Boolean(draft.defaultModelId),
+    retry: false,
+  });
+  const catalog = catalogQuery.data ?? null;
   const [cacheStatus, setCacheStatus] = useState<SpeechCacheStatus | null>(
     null,
   );
@@ -85,25 +92,6 @@ export function GeneralSettingsPage({
       })
       .catch(() => undefined);
   }, [workspace]);
-
-  useEffect(() => {
-    if (!draft.defaultModelId) {
-      setCatalog(null);
-      return;
-    }
-    let active = true;
-    void workspace
-      .getCatalog(draft.defaultModelId)
-      .then((next) => {
-        if (active) setCatalog(next);
-      })
-      .catch(() => {
-        if (active) setCatalog(null);
-      });
-    return () => {
-      active = false;
-    };
-  }, [draft.defaultModelId, workspace]);
 
   const speechModels =
     workspace.catalog.status === "ready"

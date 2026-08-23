@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   cleanup,
   fireEvent,
@@ -10,10 +11,12 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ReactNode } from "react";
 import type {
   GlobalLexiconReplaceInput,
   PersistenceClient,
 } from "@studynarrator/shared-types";
+import { queryKeys } from "@/app/queryKeys.js";
 import { LexiconSettingsPage } from "./LexiconSettingsPage.js";
 import { timestamp } from "./settingsTestFixtures.js";
 
@@ -21,6 +24,20 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
 });
+
+function renderPage(children: ReactNode) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return {
+    queryClient,
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        {children}
+      </QueryClientProvider>,
+    ),
+  };
+}
 
 describe("Lexicon settings", () => {
   it("adds named-sense aliases and autosaves alias text, pronunciation, enablement, and deletion", async () => {
@@ -59,7 +76,7 @@ describe("Lexicon settings", () => {
         replace,
       },
     } as unknown as PersistenceClient;
-    render(<LexiconSettingsPage client={client} />);
+    renderPage(<LexiconSettingsPage client={client} />);
 
     expect(
       await screen.findByRole("heading", { name: "Global lexicon" }),
@@ -161,6 +178,67 @@ describe("Lexicon settings", () => {
     ).toBeInTheDocument();
   });
 
+  it("loads, reports query errors, and preserves active edits during refetch", async () => {
+    type GlobalLexiconEntries = Awaited<
+      ReturnType<PersistenceClient["globalLexicon"]["list"]>
+    >;
+    const entries = (spokenText: string): GlobalLexiconEntries => [
+      {
+        id: "global-sql",
+        scope: "global",
+        entryType: "exactTerm",
+        displayText: "SQL",
+        spokenText,
+        caseSensitive: false,
+        wholeWord: true,
+        priority: 0,
+        enabled: true,
+        notes: "",
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+    ];
+    let resolveInitial!: (entries: GlobalLexiconEntries) => void;
+    const initial = new Promise<GlobalLexiconEntries>((resolve) => {
+      resolveInitial = resolve;
+    });
+    const list = vi
+      .fn()
+      .mockImplementationOnce(async () => await initial)
+      .mockRejectedValueOnce(new Error("Lexicon storage unavailable"))
+      .mockResolvedValueOnce(entries("Reloaded pronunciation"));
+    const client = {
+      globalLexicon: {
+        list,
+        replace: vi.fn(() => new Promise(() => undefined)),
+      },
+    } as unknown as PersistenceClient;
+    const { queryClient } = renderPage(<LexiconSettingsPage client={client} />);
+
+    await waitFor(() => expect(list).toHaveBeenCalledOnce());
+    expect(screen.getByText("0 entries")).toBeInTheDocument();
+    resolveInitial(entries("S Q L"));
+    expect(await screen.findByDisplayValue("S Q L")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByDisplayValue("S Q L"), {
+      target: { value: "unsaved pronunciation" },
+    });
+    await queryClient.invalidateQueries({
+      queryKey: queryKeys.persistence.globalLexicon(),
+    });
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Lexicon storage unavailable",
+    );
+
+    await queryClient.invalidateQueries({
+      queryKey: queryKeys.persistence.globalLexicon(),
+    });
+    expect(
+      screen.getByDisplayValue("unsaved pronunciation"),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  });
+
   it("rejects blank, malformed, and duplicate aliases while preserving failed inline edits", async () => {
     const replace = vi
       .fn()
@@ -194,7 +272,7 @@ describe("Lexicon settings", () => {
         replace,
       },
     } as unknown as PersistenceClient;
-    render(<LexiconSettingsPage client={client} />);
+    renderPage(<LexiconSettingsPage client={client} />);
     await screen.findByDisplayValue("A P I");
 
     await userEvent.click(screen.getByRole("button", { name: "Add" }));

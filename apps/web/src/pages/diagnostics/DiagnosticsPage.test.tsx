@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -10,6 +12,15 @@ import {
 import { DiagnosticsPage } from "./DiagnosticsPage.js";
 
 afterEach(cleanup);
+
+function renderPage(children: ReactNode) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>,
+  );
+}
 
 const passingDiagnostics: SystemDiagnostics = {
   schemaVersion: 1,
@@ -59,7 +70,7 @@ describe("system diagnostics screen", () => {
     const pending = new Promise<SystemDiagnostics>((resolve) => {
       finish = resolve;
     });
-    render(
+    renderPage(
       <DiagnosticsPage client={{ diagnostics: async () => await pending }} />,
     );
 
@@ -77,7 +88,7 @@ describe("system diagnostics screen", () => {
   it("shows the idle state then all required Web/REST pass lines", async () => {
     const user = userEvent.setup();
     const diagnostics = vi.fn(async () => passingDiagnostics);
-    render(<DiagnosticsPage client={{ diagnostics }} />);
+    renderPage(<DiagnosticsPage client={{ diagnostics }} />);
 
     expect(screen.getAllByText("NOT RUN")).toHaveLength(3);
     await user.click(screen.getByRole("button", { name: "Run self-test" }));
@@ -95,7 +106,7 @@ describe("system diagnostics screen", () => {
 
   it("renders Electron/IPC metadata from the same contract", async () => {
     const user = userEvent.setup();
-    render(
+    renderPage(
       <DiagnosticsPage
         client={{
           diagnostics: async () => ({
@@ -135,7 +146,7 @@ describe("system diagnostics screen", () => {
         },
       })
       .mockResolvedValueOnce(passingDiagnostics);
-    render(<DiagnosticsPage client={{ diagnostics }} />);
+    renderPage(<DiagnosticsPage client={{ diagnostics }} />);
     await user.click(screen.getByRole("button", { name: "Run self-test" }));
     expect(
       await screen.findByText(/FFmpeg was not found\./u),
@@ -147,15 +158,11 @@ describe("system diagnostics screen", () => {
 
   it("turns a boundary error into actionable recovery copy", async () => {
     const user = userEvent.setup();
-    render(
-      <DiagnosticsPage
-        client={{
-          diagnostics: async () => {
-            throw new Error("Local API is unavailable.");
-          },
-        }}
-      />,
-    );
+    const diagnostics = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Local API is unavailable."))
+      .mockResolvedValueOnce(passingDiagnostics);
+    renderPage(<DiagnosticsPage client={{ diagnostics }} />);
     await user.click(screen.getByRole("button", { name: "Run self-test" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Local API is unavailable.",
@@ -163,5 +170,8 @@ describe("system diagnostics screen", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       "run the self-test again",
     );
+    await user.click(screen.getByRole("button", { name: "Run self-test" }));
+    expect(await screen.findByText("REST")).toBeInTheDocument();
+    expect(diagnostics).toHaveBeenCalledTimes(2);
   });
 });

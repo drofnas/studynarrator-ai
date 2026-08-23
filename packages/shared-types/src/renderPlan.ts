@@ -1,11 +1,11 @@
+import { z } from "zod";
 import {
   CIR_SCHEMA_VERSION,
   LEXICON_TRANSFORM_VERSION,
   PARAGRAPH_PACING_VERSION,
   SCRIPT_GRAMMAR_VERSION,
   SourceRangeSchema,
-} from "@studynarrator/core";
-import { z } from "zod";
+} from "./contracts.js";
 import {
   GlobalLexiconEntryCollectionSchema,
   IgnoredDiagnosticCollectionSchema,

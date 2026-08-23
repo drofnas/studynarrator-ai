@@ -152,13 +152,20 @@ test.describe("Settings and connection diagnostics", () => {
     studyNarrator,
   }) => {
     let connectionLoads = 0;
+    const recoveryRequestReleased = Promise.withResolvers<void>();
+    const recoveryRequestPending = Promise.withResolvers<void>();
     await page.route("**/api/connection", async (route) => {
-      if (route.request().method() === "GET" && connectionLoads === 0) {
+      if (route.request().method() === "GET") {
         connectionLoads += 1;
-        await route.abort("connectionrefused");
-        return;
+        if (connectionLoads === 1) {
+          await route.abort("connectionrefused");
+          return;
+        }
+        if (connectionLoads === 2) {
+          recoveryRequestPending.resolve();
+          await recoveryRequestReleased.promise;
+        }
       }
-      if (route.request().method() === "GET") connectionLoads += 1;
       await route.continue();
     });
 
@@ -166,7 +173,9 @@ test.describe("Settings and connection diagnostics", () => {
     await expect(
       page.getByRole("status", { name: "Restoring connection settings" }),
     ).toBeVisible();
+    await recoveryRequestPending.promise;
     await expect(page.getByLabel("Address")).toHaveCount(0);
+    recoveryRequestReleased.resolve();
     await expect(page.getByLabel("Address")).toHaveValue(
       studyNarrator.fakeSpeaches.baseUrl,
     );
@@ -305,6 +314,7 @@ test.describe("Settings and connection diagnostics", () => {
       "1250 ms",
     );
     await openRoute(page, studyNarrator, "/settings/voices");
+    await expect(page.getByRole("heading", { name: "Voices" })).toBeVisible();
     await expect(page.getByLabel("Favorites voices")).toContainText("Heart");
     await expect(
       page.getByRole("button", { name: "Remove Heart from favorites" }),

@@ -1,4 +1,5 @@
 import {
+  Suspense,
   useEffect,
   useRef,
   useState,
@@ -357,7 +358,9 @@ export function AppShell() {
         </div>
       </aside>
       <div className={styles.content}>
-        <Outlet />
+        <Suspense fallback={<p role="status">Loading page…</p>}>
+          <Outlet />
+        </Suspense>
       </div>
     </div>
   );

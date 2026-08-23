@@ -33,9 +33,10 @@ if (Number(process.versions.node.split(".")[0]) < 24) {
   );
 }
 
-run("npm", ["run", "audit:dead-code"]);
+run("npm", ["run", "audit:knip"]);
 run("npm", ["run", "format:check"]);
 run("npm", ["run", "lint"]);
+run("npm", ["run", "check:package-dependencies"]);
 run("npm", ["run", "typecheck"]);
 run("npm", ["test"]);
 run("npm", ["run", "test:api"]);

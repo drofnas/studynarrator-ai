@@ -4,6 +4,5 @@
     "outDir": "dist/types",
     "rootDir": "src"
   },
-  "include": ["src/**/*.ts"],
-  "references": [{ "path": "../core" }]
+  "include": ["src/**/*.ts"]
 }

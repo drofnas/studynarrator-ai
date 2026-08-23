@@ -1,8 +1,10 @@
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import {
   type ScratchpadClient,
   type VoiceCatalog,
 } from "@studynarrator/shared-types";
+import { queryKeys } from "@/app/queryKeys.js";
 import { useConnections } from "@/features/connections/ConnectionProvider.js";
 import {
   filterPresentedVoices,
@@ -24,6 +26,12 @@ export function VoicesSettingsPage({
 }) {
   const workspace = useConnections();
   const modelId = workspace.connection?.defaultModelId ?? "";
+  const catalogQuery = useQuery({
+    queryKey: queryKeys.connection.voiceCatalog(modelId),
+    queryFn: () => workspace.getCatalog(modelId),
+    enabled: Boolean(modelId),
+    retry: false,
+  });
   const [catalog, setCatalog] = useState<VoiceCatalog | null>(null);
   const [catalogSearch, setCatalogSearch] = useState("");
   const [voiceTestScript, setVoiceTestScript] = useState(VOICE_TEST_SCRIPT);
@@ -45,23 +53,8 @@ export function VoicesSettingsPage({
   }, [workspace]);
 
   useEffect(() => {
-    if (!modelId) {
-      setCatalog(null);
-      return;
-    }
-    let active = true;
-    void workspace
-      .getCatalog(modelId)
-      .then((next) => {
-        if (active) setCatalog(next);
-      })
-      .catch(() => {
-        if (active) setCatalog(null);
-      });
-    return () => {
-      active = false;
-    };
-  }, [modelId, workspace]);
+    setCatalog(catalogQuery.isError ? null : (catalogQuery.data ?? null));
+  }, [catalogQuery.data, catalogQuery.isError, modelId]);
 
   const speechModels =
     workspace.catalog.status === "ready"

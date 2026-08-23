@@ -145,7 +145,7 @@ Run focused checks while developing:
 ```sh
 npm run lint
 npm run typecheck
-npm run audit:dead-code
+npm run audit:knip
 npm test
 npm run test:api
 ```
