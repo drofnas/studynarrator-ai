@@ -287,6 +287,12 @@ export function useProjectsPageController({
   const currentRouteProjectIdRef = useRef(projectId);
   const loadedProjectIdRef = useRef<string | undefined>(undefined);
   const saveQueueRef = useRef<Promise<boolean>>(Promise.resolve(true));
+  const ignoredDiagnosticsQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const ignoredDiagnosticsOperationRef = useRef(0);
+  const ignoredDiagnosticsPendingRef = useRef(0);
+  const ignoredDiagnosticsPersistedRef = useRef<IgnoredDiagnosticCollection>(
+    [],
+  );
   const autosaveTimerRef = useRef<number | undefined>(undefined);
   const saveNowRef = useRef<() => Promise<boolean>>(() =>
     Promise.resolve(false),
@@ -407,32 +413,6 @@ export function useProjectsPageController({
   const ignoredDiagnosticsMutation = useMutation({
     mutationFn: async (next: IgnoredDiagnosticCollection) =>
       await client.preferences.replaceIgnoredDiagnostics(next),
-    onMutate: async (next) => {
-      const queryKey = queryKeys.persistence.ignoredDiagnostics();
-      await queryClient.cancelQueries({ queryKey });
-      const previous =
-        queryClient.getQueryData<IgnoredDiagnosticCollection>(queryKey);
-      queryClient.setQueryData(queryKey, next);
-      return { previous };
-    },
-    onError: (_error, _next, context) => {
-      if (context?.previous)
-        queryClient.setQueryData(
-          queryKeys.persistence.ignoredDiagnostics(),
-          context.previous,
-        );
-    },
-    onSuccess: (saved) => {
-      queryClient.setQueryData(
-        queryKeys.persistence.ignoredDiagnostics(),
-        saved,
-      );
-    },
-    onSettled: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.persistence.ignoredDiagnostics(),
-      });
-    },
     retry: false,
   });
   const pinMutation = useMutation({
@@ -529,6 +509,14 @@ export function useProjectsPageController({
     renderStartOperationRef.current += 1;
     setRenderStarting(false);
   }, [projectId]);
+
+  useEffect(() => {
+    if (
+      ignoredDiagnosticsQuery.isSuccess &&
+      ignoredDiagnosticsPendingRef.current === 0
+    )
+      ignoredDiagnosticsPersistedRef.current = ignoredDiagnostics;
+  }, [ignoredDiagnostics, ignoredDiagnosticsQuery.isSuccess]);
 
   useEffect(() => {
     if (!selectedConnection?.baseUrl || speechCatalogState.status !== "idle")
@@ -1288,21 +1276,46 @@ export function useProjectsPageController({
     next: IgnoredDiagnosticCollection,
     successMessage: string,
   ) => {
-    try {
-      await ignoredDiagnosticsMutation.mutateAsync(next);
-      setNotice(successMessage);
-    } catch (error) {
-      setErrors([message(error)]);
-    }
+    const queryKey = queryKeys.persistence.ignoredDiagnostics();
+    const operation = ++ignoredDiagnosticsOperationRef.current;
+    ignoredDiagnosticsPendingRef.current += 1;
+    void queryClient.cancelQueries({ queryKey }, { revert: false });
+    queryClient.setQueryData(queryKey, next);
+
+    const run = async () => {
+      try {
+        const saved = await ignoredDiagnosticsMutation.mutateAsync(next);
+        ignoredDiagnosticsPersistedRef.current = saved;
+        if (operation !== ignoredDiagnosticsOperationRef.current) return;
+        queryClient.setQueryData(queryKey, saved);
+        setNotice(successMessage);
+      } catch (error) {
+        if (operation !== ignoredDiagnosticsOperationRef.current) return;
+        queryClient.setQueryData(
+          queryKey,
+          ignoredDiagnosticsPersistedRef.current,
+        );
+        setErrors([message(error)]);
+      } finally {
+        if (operation === ignoredDiagnosticsOperationRef.current)
+          await queryClient.invalidateQueries({ queryKey });
+        ignoredDiagnosticsPendingRef.current -= 1;
+      }
+    };
+    const task = ignoredDiagnosticsQueueRef.current.then(run, run);
+    ignoredDiagnosticsQueueRef.current = task.catch(() => undefined);
+    await task;
   };
 
   const ignoreDiagnostic = async (item: IgnoredDiagnostic) => {
     const key = diagnosticKey(item);
-    const next = ignoredDiagnostics.some(
-      (candidate) => diagnosticKey(candidate) === key,
-    )
-      ? ignoredDiagnostics
-      : [...ignoredDiagnostics, item];
+    const current =
+      queryClient.getQueryData<IgnoredDiagnosticCollection>(
+        queryKeys.persistence.ignoredDiagnostics(),
+      ) ?? ignoredDiagnostics;
+    const next = current.some((candidate) => diagnosticKey(candidate) === key)
+      ? current
+      : [...current, item];
     await replaceIgnoredDiagnostics(
       next,
       "Diagnostic pattern ignored for every project.",
@@ -1311,10 +1324,12 @@ export function useProjectsPageController({
 
   const restoreDiagnostic = async (item: IgnoredDiagnostic) => {
     const key = diagnosticKey(item);
+    const current =
+      queryClient.getQueryData<IgnoredDiagnosticCollection>(
+        queryKeys.persistence.ignoredDiagnostics(),
+      ) ?? ignoredDiagnostics;
     await replaceIgnoredDiagnostics(
-      ignoredDiagnostics.filter(
-        (candidate) => diagnosticKey(candidate) !== key,
-      ),
+      current.filter((candidate) => diagnosticKey(candidate) !== key),
       "Diagnostic pattern restored.",
     );
   };

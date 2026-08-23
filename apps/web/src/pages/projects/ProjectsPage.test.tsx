@@ -388,6 +388,9 @@ function fixture(
       return structuredClone(input);
     },
   );
+  const getIgnoredDiagnostics = vi.fn(async () =>
+    structuredClone(ignoredDiagnostics),
+  );
   const replaceGlobalLexicon = vi.fn(async () => []);
   const listProjects = vi.fn(async () => [
     {
@@ -421,9 +424,7 @@ function fixture(
     },
     retention: {} as PersistenceClient["retention"],
     preferences: {
-      getIgnoredDiagnostics: vi.fn(async () =>
-        structuredClone(ignoredDiagnostics),
-      ),
+      getIgnoredDiagnostics,
       replaceIgnoredDiagnostics,
     },
     globalLexicon: {
@@ -450,6 +451,7 @@ function fixture(
     duplicate,
     create,
     replaceIgnoredDiagnostics,
+    getIgnoredDiagnostics,
     replaceGlobalLexicon,
     listProjects,
   };
@@ -1725,6 +1727,69 @@ describe("Projects workbench", () => {
     expect(
       await screen.findByText("MALFORMED_SECTION_DIRECTIVE"),
     ).toBeInTheDocument();
+  });
+
+  it("serializes diagnostic suppression replacements so an earlier failure cannot roll back a newer action", async () => {
+    const {
+      client,
+      analyze,
+      getIgnoredDiagnostics,
+      replaceIgnoredDiagnostics,
+    } = fixture({
+      ...project,
+      scriptSource: "[section Topic]\n[speaker_teacher] Second.",
+    });
+    const firstReplacement = deferred<IgnoredDiagnosticCollection>();
+    const secondReplacement = deferred<IgnoredDiagnosticCollection>();
+    replaceIgnoredDiagnostics
+      .mockImplementationOnce(() => firstReplacement.promise)
+      .mockImplementationOnce(() => secondReplacement.promise);
+    const { queryClient } = renderPage(client, analyze);
+    await openProjectTab("Details");
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Ignore this pattern" }),
+    );
+    await waitFor(() =>
+      expect(replaceIgnoredDiagnostics).toHaveBeenCalledTimes(1),
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Restore this pattern" }),
+    );
+
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryData<IgnoredDiagnosticCollection>(
+          queryKeys.persistence.ignoredDiagnostics(),
+        ),
+      ).toEqual([]),
+    );
+    expect(replaceIgnoredDiagnostics).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      firstReplacement.reject(new Error("first replacement failed"));
+      await firstReplacement.promise.catch(() => undefined);
+    });
+    await waitFor(() =>
+      expect(replaceIgnoredDiagnostics).toHaveBeenCalledTimes(2),
+    );
+    expect(
+      queryClient.getQueryData<IgnoredDiagnosticCollection>(
+        queryKeys.persistence.ignoredDiagnostics(),
+      ),
+    ).toEqual([]);
+    expect(
+      screen.queryByText("first replacement failed"),
+    ).not.toBeInTheDocument();
+    expect(
+      await screen.findByText("MALFORMED_SECTION_DIRECTIVE"),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      secondReplacement.resolve([]);
+      await secondReplacement.promise;
+    });
+    await waitFor(() => expect(getIgnoredDiagnostics).toHaveBeenCalledTimes(2));
   });
 
   it("schedules one autosave for an edit burst instead of re-arming while saving", async () => {
