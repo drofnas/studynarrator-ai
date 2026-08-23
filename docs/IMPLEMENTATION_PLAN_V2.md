@@ -136,8 +136,8 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 29.0a | Decouple shared-types schemas from core            | P2       | M    | complete    |
 | 29.0b | Remove the shared-types core package dependency    | P2       | XS   | complete    |
 | 29.0c | Remove the shared-types core build reference       | P2       | XS   | complete    |
-| 29.0d | Remove unused private transport type exports       | P2       | XS   | in progress |
-| 29    | Enforce package dependency direction               | P2       | S    | todo        |
+| 29.0d | Remove unused private transport type exports       | P2       | XS   | complete    |
+| 29    | Enforce package dependency direction               | P2       | S    | in progress |
 | 30    | Replace the dead-code script with knip             | P2       | S    | todo        |
 | 26    | Single typed contract map                          | P2       | —    | deferred    |
 
@@ -2194,7 +2194,7 @@ The grep must return nothing.
 
 ## TASK 29.0d — Remove unused private transport type exports
 
-**Status:** in progress
+**Status:** complete
 
 **Priority:** P2 · **Size:** XS
 
@@ -2221,7 +2221,7 @@ The audit must no longer report any `packages/shared-types/src/contracts.ts` exp
 
 # 29 — ENFORCE PACKAGE DEPENDENCY DIRECTION
 
-**Status:** todo
+**Status:** in progress
 
 **Priority:** P2 · **Size:** S
 
