@@ -1,9 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
-import {
-  type SpeechBackendConnection,
-  type SpeechCacheClient,
-  type SpeechCacheStatus,
+import type {
+  SpeechBackendConnection,
+  SpeechCacheClient,
+  SpeechCacheStatus,
 } from "@studynarrator/shared-types";
 import { queryKeys } from "@/app/queryKeys.js";
 import { useConnections } from "@/features/connections/ConnectionProvider.js";
