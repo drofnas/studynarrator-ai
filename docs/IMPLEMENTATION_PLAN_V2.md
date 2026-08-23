@@ -124,7 +124,7 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 25.1 | Split the rendering package                        | P2       | M    | complete    |
 | 25.2 | Split the persistence repository                   | P2       | M    | complete    |
 | 25.3 | Split the speaches adapter                         | P2       | M    | complete    |
-| 25.4 | Split the render service                           | P2       | M    | todo        |
+| 25.4 | Split the render service                           | P2       | M    | complete    |
 | 25.5 | Split ProjectsPage                                 | P2       | M    | todo        |
 | 27.1 | Add TanStack Query and the provider                | P2       | S    |
 | 27.2 | Migrate the read-only pages                        | P2       | M    |
