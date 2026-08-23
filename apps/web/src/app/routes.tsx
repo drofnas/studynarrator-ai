@@ -1,3 +1,4 @@
+import { lazy } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router";
 import type {
   PersistenceClient,
@@ -8,19 +9,46 @@ import type {
   SpeechCacheClient,
   SystemClient,
 } from "@studynarrator/shared-types";
-import { DiagnosticsPage } from "@/pages/diagnostics/DiagnosticsPage.js";
-import { ProjectsPage } from "@/pages/projects/ProjectsPage.js";
 import { OnboardingPage } from "@/pages/onboarding/OnboardingPage.js";
-import { GeneralSettingsPage } from "@/pages/settings/GeneralSettingsPage.js";
-import { LexiconSettingsPage } from "@/pages/settings/LexiconSettingsPage.js";
-import { TimingsSettingsPage } from "@/pages/settings/TimingsSettingsPage.js";
-import { RetentionSettingsPage } from "@/pages/settings/RetentionSettingsPage.js";
-import { VoicesSettingsPage } from "@/pages/settings/VoicesSettingsPage.js";
-import { ScratchpadPage } from "@/pages/scratchpad/ScratchpadPage.js";
-import { ScriptGenerationPage } from "@/pages/scriptGeneration/ScriptGenerationPage.js";
 import type { ScriptAnalyzer } from "@/workers/parser/parserClient.js";
 import { AppShell } from "./AppShell.js";
 import { useConnections } from "@/features/connections/ConnectionProvider.js";
+
+const DiagnosticsPage = lazy(async () => ({
+  default: (await import("@/pages/diagnostics/DiagnosticsPage.js"))
+    .DiagnosticsPage,
+}));
+const ProjectsPage = lazy(async () => ({
+  default: (await import("@/pages/projects/ProjectsPage.js")).ProjectsPage,
+}));
+const GeneralSettingsPage = lazy(async () => ({
+  default: (await import("@/pages/settings/GeneralSettingsPage.js"))
+    .GeneralSettingsPage,
+}));
+const LexiconSettingsPage = lazy(async () => ({
+  default: (await import("@/pages/settings/LexiconSettingsPage.js"))
+    .LexiconSettingsPage,
+}));
+const TimingsSettingsPage = lazy(async () => ({
+  default: (await import("@/pages/settings/TimingsSettingsPage.js"))
+    .TimingsSettingsPage,
+}));
+const RetentionSettingsPage = lazy(async () => ({
+  default: (await import("@/pages/settings/RetentionSettingsPage.js"))
+    .RetentionSettingsPage,
+}));
+const VoicesSettingsPage = lazy(async () => ({
+  default: (await import("@/pages/settings/VoicesSettingsPage.js"))
+    .VoicesSettingsPage,
+}));
+const ScratchpadPage = lazy(async () => ({
+  default: (await import("@/pages/scratchpad/ScratchpadPage.js"))
+    .ScratchpadPage,
+}));
+const ScriptGenerationPage = lazy(async () => ({
+  default: (await import("@/pages/scriptGeneration/ScriptGenerationPage.js"))
+    .ScriptGenerationPage,
+}));
 
 export const APP_PATHS = {
   projects: "/projects",

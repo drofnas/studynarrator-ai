@@ -179,7 +179,7 @@ describe("application routing", () => {
     renderApp("/projects");
     await user.click(screen.getByRole("link", { name: "System diagnostics" }));
     expect(
-      screen.getByRole("heading", { name: "Runtime self-test" }),
+      await screen.findByRole("heading", { name: "Runtime self-test" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "System diagnostics" }),
@@ -205,7 +205,7 @@ describe("application routing", () => {
     const navigation = within(screen.getByRole("navigation"));
     await user.click(navigation.getByRole("link", { name: "Settings" }));
     expect(
-      screen.getByRole("heading", { name: "General" }),
+      await screen.findByRole("heading", { name: "General" }),
     ).toBeInTheDocument();
     expect(
       navigation.getByRole("link", { name: "Settings" }),
