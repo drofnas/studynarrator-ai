@@ -2296,7 +2296,7 @@ After resolving the recovered connection, await the rendered model select's save
 ### VERIFY
 
 ```sh
-npx vitest run apps/web/src/pages/settings/GeneralSettingsPage.test.tsx --repeat=10
+for run in $(seq 1 10); do npm test -- apps/web/src/pages/settings/GeneralSettingsPage.test.tsx || exit 1; done
 npm test
 npm run test:coverage
 ```
