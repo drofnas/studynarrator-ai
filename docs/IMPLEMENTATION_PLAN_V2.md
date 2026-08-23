@@ -133,8 +133,8 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 27.2c | Migrate diagnostics readers                        | P2       | S    | complete    |
 | 27.3  | Migrate the mutating pages                         | P2       | M    | complete    |
 | 28    | Route code splitting                               | P2       | S    | complete    |
-| 29.0a | Decouple shared-types schemas from core            | P2       | M    | in progress |
-| 29.0b | Remove the shared-types core dependency            | P2       | XS   | todo        |
+| 29.0a | Decouple shared-types schemas from core            | P2       | M    | complete    |
+| 29.0b | Remove the shared-types core dependency            | P2       | XS   | in progress |
 | 29    | Enforce package dependency direction               | P2       | S    | todo        |
 | 30    | Replace the dead-code script with knip             | P2       | S    | todo        |
 | 26    | Single typed contract map                          | P2       | —    | deferred    |
@@ -2104,7 +2104,7 @@ This prerequisite preserves Task 29's requested layer direction without weakenin
 
 ## TASK 29.0a — Decouple shared-types schemas from core
 
-**Status:** in progress
+**Status:** complete
 
 **Priority:** P2 · **Size:** M
 
@@ -2136,7 +2136,7 @@ The grep must return nothing after 29.0b, not necessarily after this task while 
 
 ## TASK 29.0b — Remove the shared-types core dependency
 
-**Status:** todo
+**Status:** in progress
 
 **Priority:** P2 · **Size:** XS
 
