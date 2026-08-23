@@ -140,8 +140,8 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 29    | Enforce package dependency direction               | P2       | S    | complete    |
 | 30.1  | Cover the disjoint Vitest suites together          | P2       | S    | complete    |
 | 30.2  | Stabilize recovered-connection assertions          | P2       | XS   | complete    |
-| 30.3  | Stabilize recovery and voice E2E assertions        | P2       | XS   | in progress |
-| 30    | Replace the dead-code script with knip             | P2       | S    | todo        |
+| 30.3  | Stabilize recovery and voice E2E assertions        | P2       | XS   | complete    |
+| 30    | Replace the dead-code script with knip             | P2       | S    | in progress |
 | 26    | Single typed contract map                          | P2       | —    | deferred    |
 
 Execute in the listed order. Tasks 9.1 through 12.3 are P0 and should be finished before any packaged release.
@@ -2310,7 +2310,7 @@ npm run test:coverage
 
 The release verifier exposed two Playwright timing races after route code splitting. The recovery scenario observed the transient status after the second request could already restore the form; the persisted-favorite assertion navigated to a lazy page without first observing its loaded route content. The product behavior is correct, but the acceptance test must control the recovery request and await observable page readiness.
 
-**Status:** in progress
+**Status:** complete
 
 **Priority:** P2 · **Size:** XS
 
@@ -2335,7 +2335,7 @@ npm run test:e2e:web
 
 # 30 — REPLACE THE DEAD-CODE SCRIPT WITH KNIP
 
-**Status:** todo
+**Status:** in progress
 
 **Priority:** P2 · **Size:** S
 
