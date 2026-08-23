@@ -1,3 +1,4 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   useCallback,
   useEffect,
@@ -19,7 +20,6 @@ import {
   type AuthoringPauseRow,
   type AuthoringSpeakerRow,
   type IgnoredDiagnostic,
-  type LexiconEntryAuthoring,
 } from "@studynarrator/core";
 import {
   ProjectReplaceInputSchema,
@@ -34,11 +34,11 @@ import {
   type SpeechCatalogDiscoveryInput,
   type ProjectDetail,
   type ProjectPreviewClient,
+  type ProjectReplaceInput,
   type RenderEstimateContextResult,
   type RenderJob,
+  type RenderStartOptions,
   type RenderWaveform,
-  type ProjectSummary,
-  type SystemTimingConfiguration,
   type VoiceCatalog,
 } from "@studynarrator/shared-types";
 import type { ScriptAnalyzer } from "@/workers/parser/parserClient.js";
@@ -55,6 +55,7 @@ import {
   stripSingleSurroundingCodeFence,
   type ProjectDraft,
 } from "@/features/projects/projectAuthoring.js";
+import { queryKeys } from "@/app/queryKeys.js";
 import { useConnections } from "@/features/connections/ConnectionProvider.js";
 import { presentVoices } from "@/features/connections/voicePresentation.js";
 import type { LexiconEditorValue } from "@/features/lexicon/LexiconEditor.js";
@@ -188,18 +189,46 @@ export function useProjectsPageController({
     requestedTab === "render"
       ? requestedTab
       : "script";
-  const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const queryClient = useQueryClient();
+  const projectsQuery = useQuery({
+    queryKey: queryKeys.persistence.projects(),
+    queryFn: () => client.projects.list(),
+    retry: false,
+  });
+  const projectQuery = useQuery({
+    queryKey: queryKeys.persistence.project(projectId ?? ""),
+    queryFn: async () => {
+      if (!projectId) throw new Error("A project ID is required.");
+      return await client.projects.get(projectId);
+    },
+    enabled: Boolean(projectId),
+    retry: false,
+  });
+  const globalLexiconQuery = useQuery({
+    queryKey: queryKeys.persistence.globalLexicon(),
+    queryFn: () => client.globalLexicon.list(),
+    retry: false,
+  });
+  const ignoredDiagnosticsQuery = useQuery({
+    queryKey: queryKeys.persistence.ignoredDiagnostics(),
+    queryFn: () => client.preferences.getIgnoredDiagnostics(),
+    retry: false,
+  });
+  const timingQuery = useQuery({
+    queryKey: queryKeys.persistence.timing(),
+    queryFn: () => client.settings.getPacing(),
+    retry: false,
+  });
+  const projects = projectsQuery.data ?? [];
+  const globalLexicon = useMemo(
+    () => authoringLexicon(globalLexiconQuery.data ?? []),
+    [globalLexiconQuery.data],
+  );
+  const timing = timingQuery.data ?? DEFAULT_SYSTEM_TIMING;
+  const ignoredDiagnostics = ignoredDiagnosticsQuery.data ?? [];
   const [project, setProject] = useState<ProjectDetail>();
   const [draft, setDraft] = useState<ProjectDraft>();
   const draftRef = useRef<ProjectDraft | undefined>(undefined);
-  const [globalLexicon, setGlobalLexicon] = useState<LexiconEntryAuthoring[]>(
-    [],
-  );
-  const [timing, setTiming] = useState<SystemTimingConfiguration>(
-    DEFAULT_SYSTEM_TIMING,
-  );
-  const [ignoredDiagnostics, setIgnoredDiagnostics] =
-    useState<IgnoredDiagnosticCollection>([]);
   const [configuration, setConfiguration] = useState<{
     speakers: AuthoringSpeakerRow[];
     pauses: AuthoringPauseRow[];
@@ -217,7 +246,6 @@ export function useProjectsPageController({
     "Choose a project or create one to begin.",
   );
   const [errors, setErrors] = useState<string[]>([]);
-  const [busy, setBusy] = useState(true);
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [newProjectOpen, setNewProjectOpen] = useState(false);
@@ -239,7 +267,6 @@ export function useProjectsPageController({
   );
   const [renderWaveform, setRenderWaveform] = useState<RenderWaveform>();
   const [renderError, setRenderError] = useState("");
-  const [pinBusy, setPinBusy] = useState(false);
   const [estimateContextState, setEstimateContextState] =
     useState<EstimateContextState>(
       renderClient ? { status: "loading" } : { status: "unavailable" },
@@ -258,11 +285,226 @@ export function useProjectsPageController({
   const renderStartRevisionRef = useRef(0);
   const renderStartOperationRef = useRef(0);
   const currentRouteProjectIdRef = useRef(projectId);
+  const loadedProjectIdRef = useRef<string | undefined>(undefined);
   const saveQueueRef = useRef<Promise<boolean>>(Promise.resolve(true));
   const autosaveTimerRef = useRef<number | undefined>(undefined);
   const saveNowRef = useRef<() => Promise<boolean>>(() =>
     Promise.resolve(false),
   );
+
+  const createProjectMutation = useMutation({
+    mutationFn: async (
+      input: Parameters<PersistenceClient["projects"]["create"]>[0],
+    ) => await client.projects.create(input),
+    onSuccess: (created) => {
+      queryClient.setQueryData(
+        queryKeys.persistence.project(created.id),
+        created,
+      );
+    },
+    onSettled: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.persistence.projects(),
+      });
+    },
+    retry: false,
+  });
+  const replaceProjectMutation = useMutation({
+    mutationFn: async ({
+      projectId: targetProjectId,
+      input,
+    }: {
+      projectId: string;
+      input: ProjectReplaceInput;
+    }) => await client.projects.replace(targetProjectId, input),
+    onMutate: async ({ projectId: targetProjectId, input }) => {
+      const queryKey = queryKeys.persistence.project(targetProjectId);
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<ProjectDetail>(queryKey);
+      if (previous)
+        queryClient.setQueryData<ProjectDetail>(queryKey, {
+          ...previous,
+          name: input.name,
+          description: input.description,
+          scriptSource: input.scriptSource,
+          speakerMappings: input.speakerMappings,
+        });
+      return { queryKey, previous };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previous)
+        queryClient.setQueryData(context.queryKey, context.previous);
+    },
+    onSuccess: (saved) => {
+      queryClient.setQueryData(queryKeys.persistence.project(saved.id), saved);
+    },
+    onSettled: async (_data, _error, { projectId: targetProjectId }) => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.persistence.projects(),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.persistence.project(targetProjectId),
+        }),
+      ]);
+    },
+    retry: false,
+  });
+  const duplicateProjectMutation = useMutation({
+    mutationFn: async ({
+      projectId: targetProjectId,
+      name,
+    }: {
+      projectId: string;
+      name: string;
+    }) => await client.projects.duplicate(targetProjectId, { name }),
+    onSuccess: (duplicated) => {
+      queryClient.setQueryData(
+        queryKeys.persistence.project(duplicated.id),
+        duplicated,
+      );
+    },
+    onSettled: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.persistence.projects(),
+      });
+    },
+    retry: false,
+  });
+  const deleteProjectMutation = useMutation({
+    mutationFn: async (targetProjectId: string) =>
+      await client.projects.delete(targetProjectId),
+    onMutate: async (targetProjectId) => {
+      const queryKey = queryKeys.persistence.projects();
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<typeof projects>(queryKey);
+      queryClient.setQueryData(
+        queryKey,
+        (current: typeof projects | undefined) =>
+          current?.filter(({ id }) => id !== targetProjectId),
+      );
+      return { previous };
+    },
+    onError: (_error, _targetProjectId, context) => {
+      if (context?.previous)
+        queryClient.setQueryData(
+          queryKeys.persistence.projects(),
+          context.previous,
+        );
+    },
+    onSuccess: (_data, targetProjectId) => {
+      queryClient.removeQueries({
+        queryKey: queryKeys.persistence.project(targetProjectId),
+      });
+    },
+    onSettled: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.persistence.projects(),
+      });
+    },
+    retry: false,
+  });
+  const ignoredDiagnosticsMutation = useMutation({
+    mutationFn: async (next: IgnoredDiagnosticCollection) =>
+      await client.preferences.replaceIgnoredDiagnostics(next),
+    onMutate: async (next) => {
+      const queryKey = queryKeys.persistence.ignoredDiagnostics();
+      await queryClient.cancelQueries({ queryKey });
+      const previous =
+        queryClient.getQueryData<IgnoredDiagnosticCollection>(queryKey);
+      queryClient.setQueryData(queryKey, next);
+      return { previous };
+    },
+    onError: (_error, _next, context) => {
+      if (context?.previous)
+        queryClient.setQueryData(
+          queryKeys.persistence.ignoredDiagnostics(),
+          context.previous,
+        );
+    },
+    onSuccess: (saved) => {
+      queryClient.setQueryData(
+        queryKeys.persistence.ignoredDiagnostics(),
+        saved,
+      );
+    },
+    onSettled: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.persistence.ignoredDiagnostics(),
+      });
+    },
+    retry: false,
+  });
+  const pinMutation = useMutation({
+    mutationFn: async ({
+      renderId,
+      pinned,
+    }: {
+      renderId: string;
+      pinned: boolean;
+      projectId: string;
+    }) => {
+      if (!renderClient) throw new Error("Render controls are unavailable.");
+      return await renderClient.setPinned(renderId, pinned);
+    },
+    onMutate: ({ renderId, pinned }) => {
+      const previousSelected = selectedRenderJob;
+      const previousCompleted = completedRenderJob;
+      setSelectedRenderJob((current) =>
+        current?.id === renderId ? { ...current, pinned } : current,
+      );
+      setCompletedRenderJob((current) =>
+        current?.id === renderId ? { ...current, pinned } : current,
+      );
+      return { previousSelected, previousCompleted };
+    },
+    onError: (_error, _variables, context) => {
+      setSelectedRenderJob(context?.previousSelected);
+      setCompletedRenderJob(context?.previousCompleted);
+    },
+    onSuccess: (updated) => {
+      setCompletedRenderJob(updated);
+      setSelectedRenderJob((current) =>
+        current?.id === updated.id ? updated : current,
+      );
+    },
+    onSettled: async (
+      _data,
+      _error,
+      { renderId, projectId: targetProjectId },
+    ) => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.renders.detail(renderId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.renders.project(targetProjectId),
+        }),
+      ]);
+    },
+    retry: false,
+  });
+  const startRenderMutation = useMutation({
+    mutationFn: async ({
+      projectId: targetProjectId,
+      options,
+    }: {
+      projectId: string;
+      options: RenderStartOptions;
+    }) => {
+      if (!renderClient) throw new Error("Render controls are unavailable.");
+      return await renderClient.startProject(targetProjectId, options);
+    },
+    onSuccess: (job) => {
+      queryClient.setQueryData(queryKeys.renders.detail(job.id), job);
+    },
+    onSettled: async (_data, _error, { projectId: targetProjectId }) => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.renders.project(targetProjectId),
+      });
+    },
+    retry: false,
+  });
 
   draftRef.current = draft;
   currentRouteProjectIdRef.current = projectId;
@@ -337,11 +579,11 @@ export function useProjectsPageController({
         : speechCatalogState?.status !== "ready" ||
             voiceCatalogState !== "ready"
           ? "loading"
-          : !speechModel
-            ? "modelUnavailable"
-            : speechModel.voices.length === 0
+          : speechModel
+            ? speechModel.voices.length === 0
               ? "noSupportedVoices"
               : "ready"
+            : "modelUnavailable"
       : voiceCatalogState;
   const enabledVoices = useMemo(() => {
     if (!voiceCatalog || voiceCatalogState !== "ready") return [];
@@ -365,11 +607,6 @@ export function useProjectsPageController({
     );
   }, [enabledVoices, speechModel]);
 
-  const reloadProjects = useCallback(
-    async () => setProjects(await client.projects.list()),
-    [client],
-  );
-
   const clearAutosave = useCallback(() => {
     if (autosaveTimerRef.current === undefined) return;
     window.clearTimeout(autosaveTimerRef.current);
@@ -385,75 +622,66 @@ export function useProjectsPageController({
     }, 800);
   }, [clearAutosave]);
 
-  useEffect(() => {
-    let active = true;
-    void Promise.all([
-      client.projects.list(),
-      client.globalLexicon.list(),
-      client.preferences.getIgnoredDiagnostics(),
-      client.settings.getPacing(),
-    ])
-      .then(([nextProjects, nextGlobal, nextIgnored, nextTiming]) => {
-        if (!active) return;
-        setProjects(nextProjects);
-        setGlobalLexicon(authoringLexicon(nextGlobal));
-        setIgnoredDiagnostics(nextIgnored);
-        setTiming(nextTiming);
-        setBusy(false);
-      })
-      .catch((error: unknown) => {
-        if (active) {
-          setErrors([message(error)]);
-          setBusy(false);
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [client]);
+  const sharedPersistenceDataReady =
+    projectsQuery.isSuccess &&
+    globalLexiconQuery.isSuccess &&
+    ignoredDiagnosticsQuery.isSuccess &&
+    timingQuery.isSuccess;
+  const queryError = [
+    projectsQuery,
+    projectQuery,
+    globalLexiconQuery,
+    ignoredDiagnosticsQuery,
+    timingQuery,
+  ].find((query) => query.isError)?.error;
+  const busy =
+    createProjectMutation.isPending ||
+    projectsQuery.isPending ||
+    globalLexiconQuery.isPending ||
+    ignoredDiagnosticsQuery.isPending ||
+    timingQuery.isPending ||
+    (Boolean(projectId) && projectQuery.isPending);
 
   useEffect(() => {
-    if (!projectId) {
-      clearAutosave();
-      setProject(undefined);
-      setDraft(undefined);
-      draftRef.current = undefined;
-      setAnalysis(undefined);
-      setConfiguration({ speakers: [], pauses: [], sections: [] });
-      setSelectedRenderJob(undefined);
-      setCompletedRenderJob(undefined);
-      setRenderStarting(false);
-      setRenderWaveform(undefined);
+    if (queryError) setErrors([message(queryError)]);
+  }, [queryError]);
+
+  useEffect(() => {
+    if (projectId) return;
+    loadedProjectIdRef.current = undefined;
+    clearAutosave();
+    setProject(undefined);
+    setDraft(undefined);
+    draftRef.current = undefined;
+    setAnalysis(undefined);
+    setConfiguration({ speakers: [], pauses: [], sections: [] });
+    setSelectedRenderJob(undefined);
+    setCompletedRenderJob(undefined);
+    setRenderStarting(false);
+    setRenderWaveform(undefined);
+  }, [clearAutosave, projectId]);
+
+  useEffect(() => {
+    if (
+      !projectId ||
+      !sharedPersistenceDataReady ||
+      !projectQuery.data ||
+      projectQuery.data.id !== projectId ||
+      loadedProjectIdRef.current === projectId
+    )
       return;
-    }
-    let active = true;
-    setBusy(true);
-    void client.projects
-      .get(projectId)
-      .then((loaded) => {
-        if (!active) return;
-        clearAutosave();
-        const loadedDraft = draftFromProject(loaded);
-        setProject(loaded);
-        setDraft(loadedDraft);
-        draftRef.current = loadedDraft;
-        revisionRef.current = 0;
-        savedRevisionRef.current = 0;
-        setSaveState("saved");
-        setNotice(`Opened ${loaded.name}.`);
-        setErrors([]);
-        setBusy(false);
-      })
-      .catch((error: unknown) => {
-        if (active) {
-          setErrors([message(error)]);
-          setBusy(false);
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [clearAutosave, client, projectId]);
+    loadedProjectIdRef.current = projectId;
+    clearAutosave();
+    const loadedDraft = draftFromProject(projectQuery.data);
+    setProject(projectQuery.data);
+    setDraft(loadedDraft);
+    draftRef.current = loadedDraft;
+    revisionRef.current = 0;
+    savedRevisionRef.current = 0;
+    setSaveState("saved");
+    setNotice(`Opened ${projectQuery.data.name}.`);
+    setErrors([]);
+  }, [clearAutosave, projectId, projectQuery.data, sharedPersistenceDataReady]);
 
   useEffect(() => {
     if (!projectId || !renderClient) return;
@@ -485,21 +713,15 @@ export function useProjectsPageController({
 
   const toggleCompletedRenderPin = async () => {
     if (!renderClient || !completedRenderJob) return;
-    setPinBusy(true);
     setRenderError("");
     try {
-      const updated = await renderClient.setPinned(
-        completedRenderJob.id,
-        !completedRenderJob.pinned,
-      );
-      setCompletedRenderJob(updated);
-      setSelectedRenderJob((current) =>
-        current?.id === updated.id ? updated : current,
-      );
+      await pinMutation.mutateAsync({
+        renderId: completedRenderJob.id,
+        pinned: !completedRenderJob.pinned,
+        projectId: completedRenderJob.projectId,
+      });
     } catch (error) {
       setRenderError(message(error));
-    } finally {
-      setPinBusy(false);
     }
   };
 
@@ -696,10 +918,10 @@ export function useProjectsPageController({
     }
     setSaveState("saving");
     try {
-      const saved = await client.projects.replace(
-        currentProject.id,
-        parsed.data,
-      );
+      const saved = await replaceProjectMutation.mutateAsync({
+        projectId: currentProject.id,
+        input: parsed.data,
+      });
       savedRevisionRef.current = targetRevision;
       setProject(saved);
       if (revisionRef.current === targetRevision) {
@@ -707,7 +929,6 @@ export function useProjectsPageController({
         setDraft(savedDraft);
         draftRef.current = savedDraft;
         setSaveState("saved");
-        setProjects(await client.projects.list());
       } else {
         setSaveState("unsaved");
       }
@@ -717,7 +938,7 @@ export function useProjectsPageController({
       setErrors([message(error)]);
       return false;
     }
-  }, [client, project]);
+  }, [project, replaceProjectMutation]);
 
   const saveNow = useCallback(() => {
     clearAutosave();
@@ -950,21 +1171,17 @@ export function useProjectsPageController({
 
   const createProject = async () => {
     if (!newName.trim()) return;
-    setBusy(true);
     try {
-      const created = await client.projects.create({
+      const created = await createProjectMutation.mutateAsync({
         name: newName,
         description: newDescription,
       });
-      await reloadProjects();
       setNewName("");
       setNewDescription("");
       setNewProjectOpen(false);
       void navigate(`/projects/${created.id}`);
     } catch (error) {
       setErrors([message(error)]);
-    } finally {
-      setBusy(false);
     }
   };
 
@@ -976,8 +1193,10 @@ export function useProjectsPageController({
       ?.trim();
     if (!name) return;
     try {
-      const duplicated = await client.projects.duplicate(project.id, { name });
-      await reloadProjects();
+      const duplicated = await duplicateProjectMutation.mutateAsync({
+        projectId: project.id,
+        name,
+      });
       void navigate(`/projects/${duplicated.id}`);
     } catch (error) {
       setErrors([message(error)]);
@@ -990,9 +1209,12 @@ export function useProjectsPageController({
       !window.confirm(`Delete ${project.name}? This cannot be undone.`)
     )
       return;
-    await client.projects.delete(project.id);
-    await reloadProjects();
-    void navigate("/projects");
+    try {
+      await deleteProjectMutation.mutateAsync(project.id);
+      void navigate("/projects");
+    } catch (error) {
+      setErrors([message(error)]);
+    }
   };
 
   const selectTab = (tab: ProjectTab, focus = false) => {
@@ -1067,9 +1289,7 @@ export function useProjectsPageController({
     successMessage: string,
   ) => {
     try {
-      setIgnoredDiagnostics(
-        await client.preferences.replaceIgnoredDiagnostics(next),
-      );
+      await ignoredDiagnosticsMutation.mutateAsync(next);
       setNotice(successMessage);
     } catch (error) {
       setErrors([message(error)]);
@@ -1164,8 +1384,9 @@ export function useProjectsPageController({
             softUsableBytes,
           );
       }
-      const job = await renderClient.startProject(renderProjectId, {
-        diskSpaceCheckEnabled,
+      const job = await startRenderMutation.mutateAsync({
+        projectId: renderProjectId,
+        options: { diskSpaceCheckEnabled },
       });
       if (!isCurrentRenderStart()) return;
       renderStartRevisionRef.current += 1;
@@ -1261,7 +1482,7 @@ export function useProjectsPageController({
     selectedRenderJob,
     completedRenderJob,
     renderWaveform,
-    pinBusy,
+    pinBusy: pinMutation.isPending,
     toggleCompletedRenderPin,
   };
 }

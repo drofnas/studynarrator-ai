@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@/test/domGeometry.js";
 import {
   act,
@@ -39,6 +40,7 @@ import type {
 } from "@studynarrator/shared-types";
 import type { ScriptAnalyzer } from "@/workers/parser/parserClient.js";
 import type { ScriptAnalysisInput } from "@/workers/parser/parserWorkerProtocol.js";
+import { queryKeys } from "@/app/queryKeys.js";
 import { GLOBAL_VOICE_CATALOG_MODEL_ID } from "@/features/projects/projectAuthoring.js";
 import type { RenderProgressClient } from "@/services/renders/renderClient.js";
 import { ProjectsPage } from "./ProjectsPage.js";
@@ -387,25 +389,26 @@ function fixture(
     },
   );
   const replaceGlobalLexicon = vi.fn(async () => []);
+  const listProjects = vi.fn(async () => [
+    {
+      id: stored.id,
+      name: stored.name,
+      description: stored.description,
+      scriptHash: stored.scriptHash,
+      scriptLineCount:
+        stored.scriptSource === ""
+          ? null
+          : stored.scriptSource.split("\n").length,
+      audioDurationMs: null,
+      ...summaryOverrides,
+      createdAt: stored.createdAt,
+      updatedAt: stored.updatedAt,
+    },
+  ]);
   const client: PersistenceClient = {
     status: vi.fn(),
     projects: {
-      list: vi.fn(async () => [
-        {
-          id: stored.id,
-          name: stored.name,
-          description: stored.description,
-          scriptHash: stored.scriptHash,
-          scriptLineCount:
-            stored.scriptSource === ""
-              ? null
-              : stored.scriptSource.split("\n").length,
-          audioDurationMs: null,
-          ...summaryOverrides,
-          createdAt: stored.createdAt,
-          updatedAt: stored.updatedAt,
-        },
-      ]),
+      list: listProjects,
       create,
       get: vi.fn(async () => structuredClone(stored)),
       replace,
@@ -448,6 +451,7 @@ function fixture(
     create,
     replaceIgnoredDiagnostics,
     replaceGlobalLexicon,
+    listProjects,
   };
 }
 
@@ -520,6 +524,9 @@ function renderPage(
   const previewClient =
     options.previewClient ??
     ({ preview: vi.fn() } as unknown as ProjectPreviewClient);
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
   const page = (
     <ProjectsPage
       client={client}
@@ -529,22 +536,25 @@ function renderPage(
     />
   );
   return {
+    queryClient,
     ...render(
-      <ConnectionProvider
-        connectionClient={connections}
-        voiceCatalog={voiceCatalog}
-      >
-        <MemoryRouter
-          initialEntries={[options.path ?? `/projects/${project.id}`]}
+      <QueryClientProvider client={queryClient}>
+        <ConnectionProvider
+          connectionClient={connections}
+          voiceCatalog={voiceCatalog}
         >
-          <Link to="/settings">Settings test link</Link>
-          <Routes>
-            <Route path="/projects" element={page} />
-            <Route path="/projects/:projectId" element={page} />
-            <Route path="/settings" element={<p>Settings destination</p>} />
-          </Routes>
-        </MemoryRouter>
-      </ConnectionProvider>,
+          <MemoryRouter
+            initialEntries={[options.path ?? `/projects/${project.id}`]}
+          >
+            <Link to="/settings">Settings test link</Link>
+            <Routes>
+              <Route path="/projects" element={page} />
+              <Route path="/projects/:projectId" element={page} />
+              <Route path="/settings" element={<p>Settings destination</p>} />
+            </Routes>
+          </MemoryRouter>
+        </ConnectionProvider>
+      </QueryClientProvider>,
     ),
     connections,
     voiceCatalog,
@@ -2642,6 +2652,42 @@ describe("Projects workbench", () => {
       screen.getByRole("button", { name: "Unpin completed output" }),
     );
     expect(setPinned).toHaveBeenLastCalledWith(completed.id, false);
+  });
+
+  it("rolls back an optimistic save and invalidates the project ledger", async () => {
+    const { client, analyze, replace, listProjects } = fixture();
+    const pendingSave = deferred<ProjectDetail>();
+    replace.mockImplementationOnce(() => pendingSave.promise);
+    const { queryClient } = renderPage(client, analyze);
+    const projectName = await screen.findByDisplayValue("Authoring study");
+
+    fireEvent.change(projectName, { target: { value: "Pending query save" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save now" }));
+
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryData<ProjectDetail>(
+          queryKeys.persistence.project(project.id),
+        ),
+      ).toMatchObject({ name: "Pending query save" }),
+    );
+
+    await act(async () => {
+      pendingSave.reject(new Error("disk unavailable"));
+      await pendingSave.promise.catch(() => undefined);
+    });
+
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryData<ProjectDetail>(
+          queryKeys.persistence.project(project.id),
+        ),
+      ).toMatchObject({ name: project.name }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "disk unavailable",
+    );
+    await waitFor(() => expect(listProjects).toHaveBeenCalledTimes(2));
   });
 
   it("shows failed saves and guards unload and route navigation", async () => {

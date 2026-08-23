@@ -1,3 +1,4 @@
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import {
   transformScratchpadPassage,
@@ -8,6 +9,7 @@ import type {
   ScratchpadClient,
   VoiceCatalog,
 } from "@studynarrator/shared-types";
+import { queryKeys } from "@/app/queryKeys.js";
 import { useConnections } from "@/features/connections/ConnectionProvider.js";
 import { VoiceSelect } from "@/features/connections/VoiceSelect.js";
 import { presentVoices } from "@/features/connections/voicePresentation.js";
@@ -40,26 +42,34 @@ export function ScratchpadPage({
   persistence: PersistenceClient;
 }) {
   const connections = useConnections();
+  const globalLexiconQuery = useQuery({
+    queryKey: queryKeys.persistence.globalLexicon(),
+    queryFn: () => persistence.globalLexicon.list(),
+    retry: false,
+  });
   const { play: playAudition } = useAudioAudition<"scratchpad">();
   const [modelId, setModelId] = useState("");
   const [voiceId, setVoiceId] = useState("");
   const [speed, setSpeed] = useState(1);
   const [text, setText] = useState(readLastPassage);
   const [applyGlobalLexicon, setApplyGlobalLexicon] = useState(false);
-  const [globalLexicon, setGlobalLexicon] = useState<LexiconEntry[]>([]);
+  const globalLexicon: LexiconEntry[] = globalLexiconQuery.data ?? [];
   const [catalog, setCatalog] = useState<VoiceCatalog | null>(null);
   const [catalogState, setCatalogState] = useState<
     "idle" | "loading" | "ready" | "failed"
   >("idle");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    void persistence.globalLexicon
-      .list()
-      .then(setGlobalLexicon)
-      .catch(() => setGlobalLexicon([]));
-  }, [persistence]);
+  const previewMutation = useMutation({
+    mutationFn: async ({
+      input,
+      signal,
+    }: {
+      input: Parameters<ScratchpadClient["preview"]>[0];
+      signal: AbortSignal;
+    }) => await client.preview(input, signal),
+    retry: false,
+  });
 
   useEffect(() => {
     let current = true;
@@ -191,10 +201,10 @@ export function ScratchpadPage({
         "scratchpad",
         async (signal) =>
           (
-            await client.preview(
-              { modelId, voiceId, speed, text, applyGlobalLexicon },
+            await previewMutation.mutateAsync({
+              input: { modelId, voiceId, speed, text, applyGlobalLexicon },
               signal,
-            )
+            })
           ).audio,
       );
     } catch (reason) {

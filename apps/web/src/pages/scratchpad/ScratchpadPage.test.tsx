@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   cleanup,
   render,
@@ -147,16 +148,24 @@ function previewResult(text: string): ScratchpadPreviewResult {
 function renderPage(
   preview = vi.fn(async (input: { text: string }) => previewResult(input.text)),
 ) {
-  return render(
-    <MemoryRouter>
-      <ConnectionProvider
-        connectionClient={connections as never}
-        voiceCatalog={voiceCatalog as never}
-      >
-        <ScratchpadPage client={{ preview }} persistence={persistence} />
-      </ConnectionProvider>
-    </MemoryRouter>,
-  );
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  return {
+    queryClient,
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <ConnectionProvider
+            connectionClient={connections as never}
+            voiceCatalog={voiceCatalog as never}
+          >
+            <ScratchpadPage client={{ preview }} persistence={persistence} />
+          </ConnectionProvider>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    ),
+  };
 }
 
 const sources: Array<{
