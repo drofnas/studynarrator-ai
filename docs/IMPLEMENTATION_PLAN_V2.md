@@ -138,7 +138,8 @@ npm run format:check && npm run lint && npm run typecheck && npm test && npm run
 | 29.0c | Remove the shared-types core build reference       | P2       | XS   | complete    |
 | 29.0d | Remove unused private transport type exports       | P2       | XS   | complete    |
 | 29    | Enforce package dependency direction               | P2       | S    | complete    |
-| 30    | Replace the dead-code script with knip             | P2       | S    | in progress |
+| 30.1  | Cover the disjoint Vitest suites together          | P2       | S    | in progress |
+| 30    | Replace the dead-code script with knip             | P2       | S    | todo        |
 | 26    | Single typed contract map                          | P2       | —    | deferred    |
 
 Execute in the listed order. Tasks 9.1 through 12.3 are P0 and should be finished before any packaged release.
@@ -2243,9 +2244,40 @@ If the rule reports existing violations, **STOP** and report them rather than fi
 
 ---
 
-# 30 — REPLACE THE DEAD-CODE SCRIPT WITH KNIP
+# 30.1 — COVER THE DISJOINT VITEST SUITES TOGETHER
+
+This prerequisite restores the release verifier after Task 14 deliberately split the default and API suites. The previous coverage command ran only the default suite while counting `packages/application` source whose tests run exclusively in the API suite, which reduced global function coverage to 69.67% despite the full suite measuring 86.26%.
 
 **Status:** in progress
+
+**Priority:** P2 · **Size:** S
+
+### FILES YOU MAY TOUCH
+
+```
+vitest.coverage.config.ts   (new)
+package.json
+```
+
+Add a dedicated coverage config that runs the exact union of the existing default and API test inclusions once, preserving their shared aliases, existing coverage exclusions, reporters, and thresholds. Update `test:coverage` to use that config. Do not modify either disjoint default/API config or lower thresholds; the coverage command must measure every currently tested source path.
+
+### VERIFY
+
+```sh
+npm test
+npm run test:api
+npm run test:coverage
+```
+
+The default and API suites must remain disjoint, and the coverage command must pass all existing 70/60/70/70 thresholds.
+
+### COMMIT
+
+`test: cover all disjoint Vitest suites together`
+
+# 30 — REPLACE THE DEAD-CODE SCRIPT WITH KNIP
+
+**Status:** todo
 
 **Priority:** P2 · **Size:** S
 
