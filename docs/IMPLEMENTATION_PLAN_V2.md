@@ -2257,9 +2257,10 @@ This prerequisite restores the release verifier after Task 14 deliberately split
 ```
 vitest.coverage.config.ts   (new)
 package.json
+tsconfig.tools.json
 ```
 
-Add a dedicated coverage config that runs the exact union of the existing default and API test inclusions once, preserving their shared aliases, existing coverage exclusions, reporters, and thresholds. Update `test:coverage` to use that config. Do not modify either disjoint default/API config or lower thresholds; the coverage command must measure every currently tested source path.
+Add a dedicated coverage config that runs the exact union of the existing default and API test inclusions once, preserving their shared aliases, existing coverage exclusions, reporters, and thresholds. Add it to `tsconfig.tools.json` so ESLint's project service type-checks the new root config; do not suppress typed linting. Update `test:coverage` to use that config. Do not modify either disjoint default/API config or lower thresholds; the coverage command must measure every currently tested source path.
 
 ### VERIFY
 
