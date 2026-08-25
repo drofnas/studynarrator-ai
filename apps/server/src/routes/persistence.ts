@@ -1,7 +1,9 @@
 import { Router } from "express";
 import {
-  GlobalLexiconEntryCollectionSchema,
-  GlobalLexiconReplaceInputSchema,
+  CustomGlobalLexiconReplaceInputSchema,
+  EmptyResponseSchema,
+  GlobalLexiconBuiltInEnabledInputSchema,
+  GlobalLexiconStateSchema,
   IgnoredDiagnosticCollectionSchema,
   PersistenceBackupCollectionSchema,
   PersistenceBackupRestoreInputSchema,
@@ -231,20 +233,44 @@ export function createPersistenceRouter(
     "/api/lexicon/global",
     asyncHandler(async (_request, response) => {
       response.json(
-        GlobalLexiconEntryCollectionSchema.parse(
-          await persistence.globalLexicon.list(),
+        GlobalLexiconStateSchema.parse(await persistence.globalLexicon.list()),
+      );
+    }),
+  );
+  router.patch(
+    "/api/lexicon/global/built-ins/:entryId/enabled",
+    asyncHandler(async (request, response) => {
+      response.json(
+        GlobalLexiconStateSchema.parse(
+          await persistence.globalLexicon.setBuiltInEnabled(
+            GlobalLexiconBuiltInEnabledInputSchema.parse({
+              id: request.params.entryId,
+              ...request.body,
+            }),
+          ),
         ),
       );
     }),
   );
   router.put(
-    "/api/lexicon/global",
+    "/api/lexicon/custom",
     asyncHandler(async (request, response) => {
       response.json(
-        GlobalLexiconEntryCollectionSchema.parse(
-          await persistence.globalLexicon.replace(
-            GlobalLexiconReplaceInputSchema.parse(request.body),
+        GlobalLexiconStateSchema.parse(
+          await persistence.globalLexicon.replaceCustom(
+            CustomGlobalLexiconReplaceInputSchema.parse(request.body),
           ),
+        ),
+      );
+    }),
+  );
+  router.post(
+    "/api/lexicon/global/built-ins/reimport",
+    asyncHandler(async (request, response) => {
+      EmptyResponseSchema.parse(request.body ?? {});
+      response.json(
+        GlobalLexiconStateSchema.parse(
+          await persistence.globalLexicon.reimportBuiltIns(),
         ),
       );
     }),

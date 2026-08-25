@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { LexiconEntry } from "@studynarrator/core";
 import type {
   ProjectDetail,
   SystemTimingConfiguration,
@@ -84,29 +85,34 @@ function timing(): SystemTimingConfiguration {
   };
 }
 
+const defaultGlobalLexiconEntries: LexiconEntry[] = [
+  {
+    id: "global-sql",
+    scope: "global",
+    entryType: "exactTerm",
+    displayText: "SQL",
+    spokenText: "sequel",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: "",
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  },
+];
+
 function repository(current: {
   project: ProjectDetail;
   timing?: SystemTimingConfiguration;
+  globalLexiconEntries?: LexiconEntry[];
 }): RenderPlanRepository {
   return {
     getProject: vi.fn(() => current.project),
     getSystemPacing: vi.fn(() => current.timing ?? timing()),
-    listGlobalLexicon: vi.fn(() => [
-      {
-        id: "global-sql",
-        scope: "global",
-        entryType: "exactTerm",
-        displayText: "SQL",
-        spokenText: "sequel",
-        caseSensitive: false,
-        wholeWord: true,
-        priority: 0,
-        enabled: true,
-        notes: "",
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      },
-    ]),
+    listGlobalLexicon: vi.fn(
+      () => current.globalLexiconEntries ?? defaultGlobalLexiconEntries,
+    ),
     getIgnoredDiagnostics: vi.fn(() => []),
     getSpeechBackendConnection: vi.fn(() => connection),
     getVoiceCatalogOverrides: vi.fn(() => ({
@@ -237,6 +243,46 @@ describe("render plan computation", () => {
     const recomputed = await computer.compute(projectId);
     expect(recomputed.plan.scriptHash).toBe("c".repeat(64));
     expect(recomputed.plan.planHash).not.toBe(plan.planHash);
+  });
+
+  it("uses a global named-sense alias in the synthesized render text", async () => {
+    const aliasProject = project();
+    aliasProject.scriptSource =
+      "[speaker_teacher] Review resume/cv before the interview.";
+    const computer = createRenderPlanComputer({
+      repository: repository({
+        project: aliasProject,
+        globalLexiconEntries: [
+          {
+            id: "global-resume-cv",
+            scope: "global",
+            entryType: "namedSense",
+            displayText: "resume",
+            senseId: "cv",
+            spokenText: "rez oo may",
+            caseSensitive: false,
+            wholeWord: true,
+            priority: 0,
+            enabled: true,
+            notes: "",
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          },
+        ],
+      }),
+      cache: cache(),
+      createId: () => planId,
+      now: () => new Date(timestamp),
+    });
+
+    const plan = (await computer.compute(projectId)).plan;
+    expect(plan.entries).toContainEqual(
+      expect.objectContaining({
+        type: "speech",
+        readableText: "Review resume before the interview.",
+        ttsText: "Review rez oo may before the interview.",
+      }),
+    );
   });
 
   it("gives every computed plan its own identity instead of reusing the project's current plan", async () => {

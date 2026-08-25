@@ -108,6 +108,8 @@ describe("script generation", () => {
     expect(prompt).not.toContain("[speaker_teacher]");
     expect(prompt).not.toContain("SQL → sequel");
     expect(prompt).not.toContain("{{resume|cv}}");
+    expect(prompt).not.toContain("import/noun");
+    expect(prompt).not.toContain("import/verb");
     expect(prompt).not.toContain("KNOWLEDGE TO GATHER AND TEACH");
     expect(prompt).not.toContain("SECRET_ALIAS");
     expect(prompt).not.toContain("```");
@@ -147,6 +149,8 @@ describe("script generation", () => {
     expect(prompt).toContain("[section: Descriptive title]");
     expect(prompt).not.toContain("[speaker_student]");
     expect(prompt).not.toContain("SQL → sequel");
+    expect(prompt).not.toContain("import/noun");
+    expect(prompt).not.toContain("import/verb");
     expect(prompt).not.toContain("KNOWLEDGE TO GATHER AND TEACH");
     expect(prompt).not.toContain("Convert the existing study guide");
   });

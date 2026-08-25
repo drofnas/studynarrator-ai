@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  DEFAULT_GLOBAL_LEXICON,
-  DEFAULT_GLOBAL_NAMED_SENSE_LEXICON,
+  GLOBAL_LEXICON_BUILT_INS,
+  CustomGlobalLexiconReplaceInputSchema,
   GlobalLexiconEntryCollectionSchema,
-  GlobalLexiconReplaceInputSchema,
+  GlobalLexiconStateSchema,
   IgnoredDiagnosticCollectionSchema,
   ProjectLexiconAuthoringCollectionSchema,
   ProjectReplaceInputSchema,
@@ -21,6 +21,9 @@ const validProject = {
   speakerMappings: [],
   lexiconEntries: [],
 };
+const globalNamedSenseBuiltIns = GLOBAL_LEXICON_BUILT_INS.filter(
+  (entry) => entry.entryType === "namedSense",
+);
 
 describe("persistence contracts", () => {
   it("accepts strict project summaries with derived index metadata", () => {
@@ -56,7 +59,7 @@ describe("persistence contracts", () => {
     ).toThrow();
   });
 
-  it("enforces project and global lexicon ownership", () => {
+  it("enforces project and custom global lexicon ownership", () => {
     expect(() =>
       ProjectReplaceInputSchema.parse({
         ...validProject,
@@ -71,7 +74,7 @@ describe("persistence contracts", () => {
       }),
     ).toThrow();
     expect(() =>
-      GlobalLexiconReplaceInputSchema.parse([
+      CustomGlobalLexiconReplaceInputSchema.parse([
         {
           scope: "project",
           entryType: "exactTerm",
@@ -81,7 +84,7 @@ describe("persistence contracts", () => {
       ]),
     ).toThrow();
     expect(
-      GlobalLexiconReplaceInputSchema.parse([
+      CustomGlobalLexiconReplaceInputSchema.parse([
         { scope: "global", displayText: " SQL ", spokenText: " S Q L " },
       ]),
     ).toEqual([
@@ -98,7 +101,7 @@ describe("persistence contracts", () => {
       },
     ]);
     expect(
-      GlobalLexiconReplaceInputSchema.parse([
+      CustomGlobalLexiconReplaceInputSchema.parse([
         {
           scope: "global",
           entryType: "namedSense",
@@ -122,7 +125,7 @@ describe("persistence contracts", () => {
       },
     ]);
     expect(() =>
-      GlobalLexiconReplaceInputSchema.parse([
+      CustomGlobalLexiconReplaceInputSchema.parse([
         {
           scope: "global",
           entryType: "namedSense",
@@ -132,7 +135,7 @@ describe("persistence contracts", () => {
       ]),
     ).toThrow();
     expect(() =>
-      GlobalLexiconReplaceInputSchema.parse([
+      CustomGlobalLexiconReplaceInputSchema.parse([
         {
           scope: "global",
           entryType: "namedSense",
@@ -143,7 +146,7 @@ describe("persistence contracts", () => {
       ]),
     ).toThrow();
     expect(() =>
-      GlobalLexiconReplaceInputSchema.parse([
+      CustomGlobalLexiconReplaceInputSchema.parse([
         {
           scope: "global",
           entryType: "exactTerm",
@@ -155,80 +158,147 @@ describe("persistence contracts", () => {
     ).toThrow();
   });
 
-  it("defines the complete stable Global Lexicon defaults", () => {
-    expect(DEFAULT_GLOBAL_LEXICON).toHaveLength(44);
-    expect(DEFAULT_GLOBAL_NAMED_SENSE_LEXICON).toHaveLength(36);
-    expect(DEFAULT_GLOBAL_NAMED_SENSE_LEXICON[0]).toMatchObject({
-      id: "10000000-0000-4000-8000-000000000009",
-      displayText: "resume",
-      senseId: "cv",
-      spokenText: "rez oo may",
-    });
-    expect(DEFAULT_GLOBAL_NAMED_SENSE_LEXICON.at(-1)).toMatchObject({
-      id: "10000000-0000-4000-8000-000000000044",
-      displayText: "axes",
-      senseId: "tools",
-      spokenText: "ak siz",
-    });
-    expect(
-      DEFAULT_GLOBAL_NAMED_SENSE_LEXICON.map(
-        ({ displayText, senseId, spokenText }) => [
-          `${displayText}/${senseId}`,
-          spokenText,
-        ],
-      ),
-    ).toEqual([
-      ["resume/cv", "rez oo may"],
-      ["resume/continue", "ree zoom"],
-      ["read/present", "reed"],
-      ["read/past", "red"],
-      ["lead/guide", "leed"],
-      ["lead/metal", "led"],
-      ["live/exist", "liv"],
-      ["live/realtime", "lyve"],
-      ["record/noun", "reck erd"],
-      ["record/verb", "ree cord"],
-      ["project/noun", "prah jekt"],
-      ["project/verb", "pruh jekt"],
-      ["object/thing", "ob jekt"],
-      ["object/oppose", "ub jekt"],
-      ["subject/topic", "sub jekt"],
-      ["subject/expose", "sub jekt"],
-      ["present/current", "prez ent"],
-      ["present/give", "pree zent"],
-      ["content/material", "con tent"],
-      ["content/satisfied", "kun tent"],
-      ["minute/time", "min it"],
-      ["minute/tiny", "my noot"],
-      ["close/near", "klohs"],
-      ["close/shut", "klohz"],
-      ["use/noun", "yoos"],
-      ["use/verb", "yooz"],
-      ["attribute/property", "at trih byoot"],
-      ["attribute/assign", "uh trib yoot"],
-      ["import/noun", "im port"],
-      ["import/verb", "im port"],
-      ["export/noun", "eks port"],
-      ["export/verb", "ik sport"],
-      ["row/line", "roh"],
-      ["row/argument", "rau"],
-      ["axes/math", "ak seez"],
-      ["axes/tools", "ak siz"],
+  it("loads the complete stable Global Lexicon catalog", () => {
+    expect(GLOBAL_LEXICON_BUILT_INS).toHaveLength(40);
+    expect(globalNamedSenseBuiltIns).toHaveLength(32);
+    expect(GLOBAL_LEXICON_BUILT_INS.map(({ id }) => id)).toEqual([
+      "10000000-0000-4000-8000-000000000007",
+      "10000000-0000-4000-8000-000000000008",
+      "10000000-0000-4000-8000-000000000009",
+      "10000000-0000-4000-8000-000000000010",
+      "10000000-0000-4000-8000-000000000011",
+      "10000000-0000-4000-8000-000000000012",
+      "10000000-0000-4000-8000-000000000013",
+      "10000000-0000-4000-8000-000000000014",
+      "10000000-0000-4000-8000-000000000015",
+      "10000000-0000-4000-8000-000000000016",
+      "10000000-0000-4000-8000-000000000017",
+      "10000000-0000-4000-8000-000000000018",
+      "10000000-0000-4000-8000-000000000019",
+      "10000000-0000-4000-8000-000000000020",
+      "10000000-0000-4000-8000-000000000021",
+      "10000000-0000-4000-8000-000000000022",
+      "10000000-0000-4000-8000-000000000025",
+      "10000000-0000-4000-8000-000000000026",
+      "10000000-0000-4000-8000-000000000027",
+      "10000000-0000-4000-8000-000000000028",
+      "10000000-0000-4000-8000-000000000029",
+      "10000000-0000-4000-8000-000000000030",
+      "10000000-0000-4000-8000-000000000031",
+      "10000000-0000-4000-8000-000000000032",
+      "10000000-0000-4000-8000-000000000033",
+      "10000000-0000-4000-8000-000000000034",
+      "10000000-0000-4000-8000-000000000035",
+      "10000000-0000-4000-8000-000000000036",
+      "10000000-0000-4000-8000-000000000039",
+      "10000000-0000-4000-8000-000000000040",
+      "10000000-0000-4000-8000-000000000041",
+      "10000000-0000-4000-8000-000000000042",
+      "10000000-0000-4000-8000-000000000043",
+      "10000000-0000-4000-8000-000000000044",
+      "10000000-0000-4000-8000-000000000045",
+      "10000000-0000-4000-8000-000000000046",
+      "10000000-0000-4000-8000-000000000047",
+      "10000000-0000-4000-8000-000000000048",
+      "10000000-0000-4000-8000-000000000049",
+      "10000000-0000-4000-8000-000000000050",
     ]);
-    expect(new Set(DEFAULT_GLOBAL_LEXICON.map(({ id }) => id))).toHaveProperty(
-      "size",
-      44,
+    expect(
+      GLOBAL_LEXICON_BUILT_INS.map(({ displayText, spokenText }) => [
+        displayText,
+        spokenText,
+      ]),
+    ).toContainEqual(["iframe", "iFrame"]);
+    expect(
+      GLOBAL_LEXICON_BUILT_INS.map(({ displayText, spokenText }) => [
+        displayText,
+        spokenText,
+      ]),
+    ).toContainEqual(["prefetch", "PreFetch"]);
+    expect(
+      GLOBAL_LEXICON_BUILT_INS.map(({ displayText, spokenText }) => [
+        displayText,
+        spokenText,
+      ]),
+    ).toContainEqual(["database", "DataBase"]);
+    expect(
+      GLOBAL_LEXICON_BUILT_INS.map(({ displayText, spokenText }) => [
+        displayText,
+        spokenText,
+      ]),
+    ).toEqual(
+      expect.arrayContaining([
+        ["reranker", "ReRanker"],
+        ["reranking", "ReRanking"],
+        ["illustrative", "illustray.tiv"],
+      ]),
     );
+    expect(globalNamedSenseBuiltIns).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ displayText: "import", senseId: "noun" }),
+        expect.objectContaining({ displayText: "import", senseId: "verb" }),
+      ]),
+    );
+    expect(GLOBAL_LEXICON_BUILT_INS.map(({ id }) => id)).not.toEqual(
+      expect.arrayContaining([
+        "10000000-0000-4000-8000-000000000001",
+        "10000000-0000-4000-8000-000000000002",
+        "10000000-0000-4000-8000-000000000003",
+        "10000000-0000-4000-8000-000000000004",
+        "10000000-0000-4000-8000-000000000005",
+        "10000000-0000-4000-8000-000000000006",
+        "10000000-0000-4000-8000-000000000023",
+        "10000000-0000-4000-8000-000000000024",
+      ]),
+    );
+    expect(
+      GLOBAL_LEXICON_BUILT_INS.every(
+        ({ spokenText }) => !/\s/u.test(spokenText),
+      ),
+    ).toBe(true);
     const timestamp = "2026-08-16T12:00:00.000Z";
     expect(
       GlobalLexiconEntryCollectionSchema.parse(
-        DEFAULT_GLOBAL_LEXICON.map((entry) => ({
+        GLOBAL_LEXICON_BUILT_INS.map((entry) => ({
           ...entry,
           createdAt: timestamp,
           updatedAt: timestamp,
         })),
       ),
-    ).toHaveLength(44);
+    ).toHaveLength(40);
+  });
+
+  it("preserves legacy custom metadata in read-only Global Lexicon state", () => {
+    const timestamp = "2026-08-16T12:00:00.000Z";
+    const builtIn = {
+      ...GLOBAL_LEXICON_BUILT_INS[0]!,
+      entryKind: "builtIn" as const,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    const legacyCustom = {
+      ...builtIn,
+      id: "20000000-0000-4000-8000-000000000001",
+      entryKind: "custom" as const,
+      displayText: "Legacy custom",
+      spokenText: "legacy.custom",
+      caseSensitive: true,
+      priority: 7,
+      notes: "preserved migration metadata",
+    };
+
+    expect(
+      GlobalLexiconStateSchema.parse({
+        builtIns: [builtIn],
+        custom: [legacyCustom],
+      }).custom,
+    ).toEqual([legacyCustom]);
+    expect(() =>
+      GlobalLexiconStateSchema.parse({
+        builtIns: [{ ...builtIn, priority: 7 }],
+        custom: [],
+      }),
+    ).toThrow("Built-in global lexicon entries use fixed priority.");
   });
 
   it("bounds global timing values and excludes credential-shaped connection fields", () => {
@@ -311,7 +381,7 @@ describe("persistence contracts", () => {
       }),
     ).toBeDefined();
     expect(
-      GlobalLexiconReplaceInputSchema.parse([
+      CustomGlobalLexiconReplaceInputSchema.parse([
         {
           id: "global-sql",
           scope: "global",

@@ -70,7 +70,12 @@ function fixture() {
       getIgnoredDiagnostics: vi.fn(),
       replaceIgnoredDiagnostics: vi.fn(),
     },
-    globalLexicon: { list: vi.fn(async () => []), replace: vi.fn() },
+    globalLexicon: {
+      list: vi.fn(async () => ({ builtIns: [], custom: [] })),
+      setBuiltInEnabled: vi.fn(),
+      replaceCustom: vi.fn(),
+      reimportBuiltIns: vi.fn(),
+    },
   };
   const creation = {
     kind: "creation" as const,

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import globalLexiconCatalog from "./globalLexicon.json" with { type: "json" };
 import {
   DEFAULT_PARAGRAPH_PAUSE_DURATION_MS,
   DEFAULT_PARAGRAPH_PAUSE_ID,
@@ -8,7 +9,7 @@ import {
   SupportedPauseIdSchema,
 } from "./contracts.js";
 
-export const DATABASE_SCHEMA_VERSION = 7;
+export const DATABASE_SCHEMA_VERSION = 11;
 export const PERSISTENCE_CONTRACT_VERSION = 1;
 export const PERSISTENCE_CHANNELS = Object.freeze({
   status: "persistence.status",
@@ -28,7 +29,9 @@ export const PERSISTENCE_CHANNELS = Object.freeze({
   ignoredGet: "preferences.ignored.get",
   ignoredReplace: "preferences.ignored.replace",
   globalLexiconList: "lexicon.global.list",
-  globalLexiconReplace: "lexicon.global.replace",
+  globalLexiconBuiltInEnabled: "lexicon.global.built-in-enabled",
+  globalLexiconCustomReplace: "lexicon.global.custom-replace",
+  globalLexiconBuiltInReimport: "lexicon.global.built-in-reimport",
   backupsList: "persistence.backups.list",
   backupsRestore: "persistence.backups.restore",
 } as const);
@@ -350,30 +353,6 @@ const GlobalLexiconEntrySchema = LexiconEntrySchema.superRefine(
           "Global lexicon entries must use exact-term or named-sense matching.",
         path: ["entryType"],
       });
-    if (entry.caseSensitive)
-      context.addIssue({
-        code: "custom",
-        message: "Global lexicon entries must be case insensitive.",
-        path: ["caseSensitive"],
-      });
-    if (!entry.wholeWord)
-      context.addIssue({
-        code: "custom",
-        message: "Global lexicon entries must match whole words.",
-        path: ["wholeWord"],
-      });
-    if (entry.priority !== 0)
-      context.addIssue({
-        code: "custom",
-        message: "Global lexicon entries use fixed priority.",
-        path: ["priority"],
-      });
-    if (entry.notes !== "")
-      context.addIssue({
-        code: "custom",
-        message: "Global lexicon entries do not store notes.",
-        path: ["notes"],
-      });
   },
 );
 
@@ -435,176 +414,118 @@ export const ProjectDetailSchema = z
 export type ProjectDetail = z.infer<typeof ProjectDetailSchema>;
 
 export const ProjectSummaryCollectionSchema = z.array(ProjectSummarySchema);
+// Internal render and preview paths consume the effective combined lexicon.
 export const GlobalLexiconEntryCollectionSchema = z.array(
   GlobalLexiconEntrySchema,
 );
-export const GlobalLexiconReplaceInputSchema =
+const BuiltInGlobalLexiconEntrySchema = GlobalLexiconEntrySchema.extend({
+  entryKind: z.literal("builtIn"),
+}).superRefine((entry, context) => {
+  if (entry.caseSensitive)
+    context.addIssue({
+      code: "custom",
+      message: "Built-in global lexicon entries must be case insensitive.",
+      path: ["caseSensitive"],
+    });
+  if (!entry.wholeWord)
+    context.addIssue({
+      code: "custom",
+      message: "Built-in global lexicon entries must match whole words.",
+      path: ["wholeWord"],
+    });
+  if (entry.priority !== 0)
+    context.addIssue({
+      code: "custom",
+      message: "Built-in global lexicon entries use fixed priority.",
+      path: ["priority"],
+    });
+  if (entry.notes !== "")
+    context.addIssue({
+      code: "custom",
+      message: "Built-in global lexicon entries do not store notes.",
+      path: ["notes"],
+    });
+});
+const CustomGlobalLexiconEntrySchema = GlobalLexiconEntrySchema.extend({
+  entryKind: z.literal("custom"),
+});
+export const GlobalLexiconStateSchema = z
+  .object({
+    builtIns: z.array(BuiltInGlobalLexiconEntrySchema),
+    custom: z.array(CustomGlobalLexiconEntrySchema),
+  })
+  .strict();
+export type GlobalLexiconState = z.infer<typeof GlobalLexiconStateSchema>;
+
+export const GlobalLexiconBuiltInEnabledInputSchema = z
+  .object({ id: z.string().min(1), enabled: z.boolean() })
+  .strict();
+export type GlobalLexiconBuiltInEnabledInput = z.input<
+  typeof GlobalLexiconBuiltInEnabledInputSchema
+>;
+export const CustomGlobalLexiconReplaceInputSchema =
   GlobalLexiconAuthoringCollectionSchema;
-export type GlobalLexiconReplaceInput = z.input<
-  typeof GlobalLexiconReplaceInputSchema
+export type CustomGlobalLexiconReplaceInput = z.input<
+  typeof CustomGlobalLexiconReplaceInputSchema
 >;
 
-const DEFAULT_GLOBAL_EXACT_TERM_LEXICON = Object.freeze([
-  {
-    id: "10000000-0000-4000-8000-000000000001",
-    scope: "global",
-    entryType: "exactTerm",
-    displayText: "API",
-    spokenText: "A P I",
-    caseSensitive: false,
-    wholeWord: true,
-    priority: 0,
-    enabled: true,
-    notes: "",
-  },
-  {
-    id: "10000000-0000-4000-8000-000000000002",
-    scope: "global",
-    entryType: "exactTerm",
-    displayText: "URL",
-    spokenText: "U R L",
-    caseSensitive: false,
-    wholeWord: true,
-    priority: 0,
-    enabled: true,
-    notes: "",
-  },
-  {
-    id: "10000000-0000-4000-8000-000000000003",
-    scope: "global",
-    entryType: "exactTerm",
-    displayText: "HTTP",
-    spokenText: "H T T P",
-    caseSensitive: false,
-    wholeWord: true,
-    priority: 0,
-    enabled: true,
-    notes: "",
-  },
-  {
-    id: "10000000-0000-4000-8000-000000000004",
-    scope: "global",
-    entryType: "exactTerm",
-    displayText: "HTTPS",
-    spokenText: "H T T P S",
-    caseSensitive: false,
-    wholeWord: true,
-    priority: 0,
-    enabled: true,
-    notes: "",
-  },
-  {
-    id: "10000000-0000-4000-8000-000000000005",
-    scope: "global",
-    entryType: "exactTerm",
-    displayText: "JSON",
-    spokenText: "jay son",
-    caseSensitive: false,
-    wholeWord: true,
-    priority: 0,
-    enabled: true,
-    notes: "",
-  },
-  {
-    id: "10000000-0000-4000-8000-000000000006",
-    scope: "global",
-    entryType: "exactTerm",
-    displayText: "SQL",
-    spokenText: "S Q L",
-    caseSensitive: false,
-    wholeWord: true,
-    priority: 0,
-    enabled: true,
-    notes: "",
-  },
-  {
-    id: "10000000-0000-4000-8000-000000000007",
-    scope: "global",
-    entryType: "exactTerm",
-    displayText: "PostgreSQL",
-    spokenText: "post gres Q L",
-    caseSensitive: false,
-    wholeWord: true,
-    priority: 0,
-    enabled: true,
-    notes: "",
-  },
-  {
-    id: "10000000-0000-4000-8000-000000000008",
-    scope: "global",
-    entryType: "exactTerm",
-    displayText: "GitHub",
-    spokenText: "git hub",
-    caseSensitive: false,
-    wholeWord: true,
-    priority: 0,
-    enabled: true,
-    notes: "",
-  },
-] as const);
+const GlobalLexiconCatalogExactTermSchema = z
+  .object({
+    id: z.uuid(),
+    entryType: z.literal("exactTerm"),
+    displayText: z.string().trim().min(1),
+    spokenText: z.string().trim().min(1),
+    enabled: z.boolean(),
+  })
+  .strict();
+const GlobalLexiconCatalogNamedSenseSchema = z
+  .object({
+    id: z.uuid(),
+    entryType: z.literal("namedSense"),
+    displayText: z.string().trim().min(1),
+    senseId: z.string().regex(/^[A-Za-z0-9_-]+$/u),
+    spokenText: z.string().trim().min(1),
+    enabled: z.boolean(),
+  })
+  .strict();
+const GlobalLexiconBuiltInCatalogSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    entries: z.array(
+      z.discriminatedUnion("entryType", [
+        GlobalLexiconCatalogExactTermSchema,
+        GlobalLexiconCatalogNamedSenseSchema,
+      ]),
+    ),
+  })
+  .strict()
+  .superRefine((catalog, context) => {
+    enforceUniqueOptionalIds(catalog.entries, context, "global lexicon entry");
+  });
 
-const DEFAULT_GLOBAL_NAMED_SENSE_VALUES = Object.freeze([
-  ["resume", "cv", "rez oo may"],
-  ["resume", "continue", "ree zoom"],
-  ["read", "present", "reed"],
-  ["read", "past", "red"],
-  ["lead", "guide", "leed"],
-  ["lead", "metal", "led"],
-  ["live", "exist", "liv"],
-  ["live", "realtime", "lyve"],
-  ["record", "noun", "reck erd"],
-  ["record", "verb", "ree cord"],
-  ["project", "noun", "prah jekt"],
-  ["project", "verb", "pruh jekt"],
-  ["object", "thing", "ob jekt"],
-  ["object", "oppose", "ub jekt"],
-  ["subject", "topic", "sub jekt"],
-  ["subject", "expose", "sub jekt"],
-  ["present", "current", "prez ent"],
-  ["present", "give", "pree zent"],
-  ["content", "material", "con tent"],
-  ["content", "satisfied", "kun tent"],
-  ["minute", "time", "min it"],
-  ["minute", "tiny", "my noot"],
-  ["close", "near", "klohs"],
-  ["close", "shut", "klohz"],
-  ["use", "noun", "yoos"],
-  ["use", "verb", "yooz"],
-  ["attribute", "property", "at trih byoot"],
-  ["attribute", "assign", "uh trib yoot"],
-  ["import", "noun", "im port"],
-  ["import", "verb", "im port"],
-  ["export", "noun", "eks port"],
-  ["export", "verb", "ik sport"],
-  ["row", "line", "roh"],
-  ["row", "argument", "rau"],
-  ["axes", "math", "ak seez"],
-  ["axes", "tools", "ak siz"],
-] as const);
+function globalLexiconEntryFromCatalog(
+  entry: z.infer<typeof GlobalLexiconBuiltInCatalogSchema>["entries"][number],
+) {
+  return GlobalLexiconAuthoringSchema.parse({
+    ...entry,
+    scope: "global",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    notes: "",
+  });
+}
 
-export const DEFAULT_GLOBAL_NAMED_SENSE_LEXICON = Object.freeze(
-  DEFAULT_GLOBAL_NAMED_SENSE_VALUES.map(
-    ([displayText, senseId, spokenText], index) =>
-      Object.freeze({
-        id: `10000000-0000-4000-8000-${String(index + 9).padStart(12, "0")}`,
-        scope: "global" as const,
-        entryType: "namedSense" as const,
-        displayText,
-        senseId,
-        spokenText,
-        caseSensitive: false as const,
-        wholeWord: true as const,
-        priority: 0 as const,
-        enabled: true,
-        notes: "" as const,
-      }),
+/**
+ * The one runtime source of truth for built-in global pronunciation rules.
+ * Historical migration seeds remain frozen in persistence for reproducible
+ * upgrades; new imports and resets always use this validated JSON catalog.
+ */
+export const GLOBAL_LEXICON_BUILT_INS = Object.freeze(
+  GlobalLexiconBuiltInCatalogSchema.parse(globalLexiconCatalog).entries.map(
+    (entry) => Object.freeze(globalLexiconEntryFromCatalog(entry)),
   ),
-) satisfies Readonly<GlobalLexiconReplaceInput>;
-
-export const DEFAULT_GLOBAL_LEXICON = Object.freeze([
-  ...DEFAULT_GLOBAL_EXACT_TERM_LEXICON,
-  ...DEFAULT_GLOBAL_NAMED_SENSE_LEXICON,
-]) satisfies Readonly<GlobalLexiconReplaceInput>;
+) satisfies Readonly<CustomGlobalLexiconReplaceInput>;
 
 export const IgnoredDiagnosticCollectionSchema = z
   .array(IgnoredDiagnosticSchema)
@@ -751,10 +672,14 @@ interface PreferencesClient {
 }
 
 interface GlobalLexiconClient {
-  list(): Promise<z.infer<typeof GlobalLexiconEntryCollectionSchema>>;
-  replace(
-    input: GlobalLexiconReplaceInput,
-  ): Promise<z.infer<typeof GlobalLexiconEntryCollectionSchema>>;
+  list(): Promise<GlobalLexiconState>;
+  setBuiltInEnabled(
+    input: GlobalLexiconBuiltInEnabledInput,
+  ): Promise<GlobalLexiconState>;
+  replaceCustom(
+    input: CustomGlobalLexiconReplaceInput,
+  ): Promise<GlobalLexiconState>;
+  reimportBuiltIns(): Promise<GlobalLexiconState>;
 }
 
 export interface PersistenceClient {

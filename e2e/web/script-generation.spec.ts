@@ -14,7 +14,7 @@ test.describe("external-LLM script generation", () => {
     );
     expect(await projectsResponse.json()).toEqual([]);
     const lexiconResponse = await request.put(
-      `${studyNarrator.baseUrl}/api/lexicon/global`,
+      `${studyNarrator.baseUrl}/api/lexicon/custom`,
       {
         data: [
           {

@@ -86,8 +86,8 @@ function repository() {
     status: vi.fn(() => ({
       contractVersion: 1 as const,
       state: "ready" as const,
-      databaseSchemaVersion: 7 as const,
-      targetDatabaseSchemaVersion: 7 as const,
+      databaseSchemaVersion: 8 as const,
+      targetDatabaseSchemaVersion: 8 as const,
       databasePath: "/tmp/studynarrator.sqlite",
       latestBackupPath: null,
     })),
@@ -104,7 +104,13 @@ function repository() {
       (input: IgnoredDiagnosticCollection) => input,
     ),
     listGlobalLexicon: vi.fn(() => []),
-    replaceGlobalLexicon: vi.fn(() => []),
+    getGlobalLexiconState: vi.fn(() => ({ builtIns: [], custom: [] })),
+    replaceCustomGlobalLexicon: vi.fn(() => ({ builtIns: [], custom: [] })),
+    setBuiltInGlobalLexiconEnabled: vi.fn(() => ({
+      builtIns: [],
+      custom: [],
+    })),
+    reimportBuiltInGlobalLexicon: vi.fn(() => ({ builtIns: [], custom: [] })),
     getRetentionSettings: vi.fn(() => retentionSettings),
     updateRetentionSettings: vi.fn(
       (input: Parameters<PersistenceClient["retention"]["update"]>[0]) => ({
@@ -186,7 +192,11 @@ describe("persistence application service", () => {
     await service.preferences.getIgnoredDiagnostics();
     await service.preferences.replaceIgnoredDiagnostics([]);
     await service.globalLexicon.list();
-    await service.globalLexicon.replace([
+    await service.globalLexicon.setBuiltInEnabled({
+      id: "global-resume-cv",
+      enabled: false,
+    });
+    await service.globalLexicon.replaceCustom([
       {
         scope: "global",
         entryType: "namedSense",
@@ -195,6 +205,7 @@ describe("persistence application service", () => {
         spokenText: "rez oo may",
       },
     ]);
+    await service.globalLexicon.reimportBuiltIns();
 
     expect(source.status).toHaveBeenCalledOnce();
     expect(source.listProjects).toHaveBeenCalledOnce();
@@ -207,13 +218,13 @@ describe("persistence application service", () => {
     expect(source.updateSystemPacing).toHaveBeenCalledOnce();
     expect(source.getIgnoredDiagnostics).toHaveBeenCalledOnce();
     expect(source.replaceIgnoredDiagnostics).toHaveBeenCalledOnce();
-    expect(source.listGlobalLexicon).toHaveBeenCalledOnce();
+    expect(source.getGlobalLexiconState).toHaveBeenCalledOnce();
     expect(source.getRetentionSettings).toHaveBeenCalledOnce();
     expect(source.updateRetentionSettings).toHaveBeenCalledWith(
       DEFAULT_RETENTION_SETTINGS,
     );
     expect(retention.reclaim).toHaveBeenCalledWith({ confirm: true });
-    expect(source.replaceGlobalLexicon).toHaveBeenCalledWith([
+    expect(source.replaceCustomGlobalLexicon).toHaveBeenCalledWith([
       {
         scope: "global",
         entryType: "namedSense",
@@ -227,7 +238,7 @@ describe("persistence application service", () => {
         notes: "",
       },
     ]);
-    expect(liveMethods).toHaveLength(20);
+    expect(liveMethods).toHaveLength(22);
     expect(provider.list).toHaveBeenCalledOnce();
     expect(provider.restore).toHaveBeenCalledWith({
       backupPath:

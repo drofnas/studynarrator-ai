@@ -1,14 +1,18 @@
+import { randomUUID } from "node:crypto";
 import { chmod, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import {
   DATABASE_SCHEMA_VERSION,
   DEFAULT_RETENTION_SETTINGS,
+  GLOBAL_LEXICON_BUILT_INS,
   type PersistenceBackup,
 } from "@studynarrator/shared-types";
 import { MigrationFailureError, SchemaTooNewError } from "./errors.js";
 import {
   V1_GLOBAL_EXACT_TERM_LEXICON,
   V1_SYSTEM_TIMING,
+  V10_GLOBAL_EXACT_TERM_LEXICON,
+  V11_GLOBAL_EXACT_TERM_COLLISION_RECONCILIATION,
   V3_GLOBAL_NAMED_SENSE_LEXICON,
 } from "./migrationSeeds.js";
 
@@ -309,6 +313,260 @@ function applyBaseline(database: DatabaseLike): void {
   });
 }
 
+function reconcileGlobalBuiltInLexicon(database: DatabaseLike): void {
+  const timestamp = new Date().toISOString();
+  const builtInIds = new Set(GLOBAL_LEXICON_BUILT_INS.map(({ id }) => id));
+  const removedBuiltInIds = [
+    "10000000-0000-4000-8000-000000000001",
+    "10000000-0000-4000-8000-000000000002",
+    "10000000-0000-4000-8000-000000000003",
+    "10000000-0000-4000-8000-000000000004",
+    "10000000-0000-4000-8000-000000000005",
+    "10000000-0000-4000-8000-000000000006",
+    "10000000-0000-4000-8000-000000000023",
+    "10000000-0000-4000-8000-000000000024",
+  ];
+  // Migration 8 derives its IDs from the then-current catalog. Mark these
+  // historical seed IDs before removing them so a fresh v1-to-v9 migration
+  // and an upgrade from v8 have the same built-in classification.
+  database
+    .prepare(
+      `UPDATE lexicon_entries SET entry_kind = 'builtIn'
+       WHERE scope = 'global' AND id IN (${removedBuiltInIds.map(() => "?").join(", ")})`,
+    )
+    .run(...removedBuiltInIds);
+  const deleteRemoved = database.prepare(
+    `DELETE FROM lexicon_entries
+     WHERE scope = 'global' AND entry_kind = 'builtIn' AND id = ?`,
+  );
+  const existingBuiltIns = database
+    .prepare(
+      `SELECT id FROM lexicon_entries
+       WHERE scope = 'global' AND entry_kind = 'builtIn'`,
+    )
+    .all() as Array<{ id: string }>;
+  for (const { id } of existingBuiltIns) {
+    if (!builtInIds.has(id)) deleteRemoved.run(id);
+  }
+
+  const updateBuiltIn = database.prepare(`
+    UPDATE lexicon_entries
+    SET ordinal = ?, entry_type = ?, display_text = ?, sense_id = ?, spoken_text = ?,
+        case_sensitive = ?, whole_word = ?, priority = ?, notes = ?, updated_at = ?
+    WHERE id = ? AND scope = 'global' AND entry_kind = 'builtIn'
+  `);
+  const insertBuiltIn = database.prepare(`
+    INSERT INTO lexicon_entries (
+      id, scope, project_id, entry_kind, ordinal, entry_type, display_text, sense_id,
+      spoken_text, case_sensitive, whole_word, priority, enabled, notes, created_at, updated_at
+    ) VALUES (?, 'global', NULL, 'builtIn', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const entryExists = database.prepare(
+    "SELECT id FROM lexicon_entries WHERE id = ?",
+  );
+  const reassignUserOwnedEntry = database.prepare(
+    "UPDATE lexicon_entries SET id = ? WHERE id = ? AND entry_kind != 'builtIn'",
+  );
+  const reassignNewBuiltInCollision = database.prepare(
+    "UPDATE lexicon_entries SET id = ?, entry_kind = 'custom' WHERE id = ?",
+  );
+  const nextCollisionFreeId = (): string => {
+    let id = randomUUID();
+    while (entryExists.get(id) !== undefined) id = randomUUID();
+    return id;
+  };
+  // Migration 8 classified rows by the current catalog IDs. These IDs were
+  // introduced only in migration 9, so any existing occupant is user data.
+  for (const id of [
+    "10000000-0000-4000-8000-000000000045",
+    "10000000-0000-4000-8000-000000000046",
+    "10000000-0000-4000-8000-000000000047",
+  ]) {
+    if (entryExists.get(id) !== undefined)
+      reassignNewBuiltInCollision.run(nextCollisionFreeId(), id);
+  }
+  GLOBAL_LEXICON_BUILT_INS.forEach((entry, ordinal) => {
+    const senseId = entry.entryType === "namedSense" ? entry.senseId : null;
+    const values = [
+      ordinal,
+      entry.entryType,
+      entry.displayText,
+      senseId,
+      entry.spokenText,
+      entry.caseSensitive ? 1 : 0,
+      entry.wholeWord ? 1 : 0,
+      entry.priority,
+      entry.notes,
+      timestamp,
+      entry.id,
+    ] as const;
+    if (Number(updateBuiltIn.run(...values).changes ?? 0) > 0) return;
+    if (entryExists.get(entry.id) !== undefined)
+      reassignUserOwnedEntry.run(nextCollisionFreeId(), entry.id);
+    insertBuiltIn.run(
+      entry.id,
+      ordinal,
+      entry.entryType,
+      entry.displayText,
+      senseId,
+      entry.spokenText,
+      entry.caseSensitive ? 1 : 0,
+      entry.wholeWord ? 1 : 0,
+      entry.priority,
+      entry.enabled ? 1 : 0,
+      entry.notes,
+      timestamp,
+      timestamp,
+    );
+  });
+}
+
+function reconcileV10GlobalBuiltInLexicon(database: DatabaseLike): void {
+  const removedV10BuiltInIds = [
+    "10000000-0000-4000-8000-000000000037",
+    "10000000-0000-4000-8000-000000000038",
+  ];
+  const additionIds = V10_GLOBAL_EXACT_TERM_LEXICON.map(({ id }) => id);
+  const additionsAlreadySeeded = database
+    .prepare(
+      `SELECT count(*) AS count FROM lexicon_entries
+       WHERE scope = 'global' AND entry_kind = 'builtIn'
+         AND id IN (${additionIds.map(() => "?").join(", ")})`,
+    )
+    .get(...additionIds) as { count: number };
+
+  // Fresh databases run migration 9 against the current catalog, so their new
+  // entries are already ordered. Released v9 databases need the tail closed
+  // after the two removed entries before the additions are appended.
+  if (additionsAlreadySeeded.count !== additionIds.length) {
+    database
+      .prepare(
+        `UPDATE lexicon_entries SET ordinal = ordinal - 2
+         WHERE scope = 'global' AND entry_kind = 'builtIn' AND ordinal > 29`,
+      )
+      .run();
+  }
+
+  // Migration 8 derives built-in ownership from the current catalog. Mark the
+  // released-v9 entries explicitly so fresh and upgraded databases both remove
+  // only the built-in rows.
+  database
+    .prepare(
+      `UPDATE lexicon_entries SET entry_kind = 'builtIn'
+       WHERE scope = 'global' AND id IN (${removedV10BuiltInIds.map(() => "?").join(", ")})`,
+    )
+    .run(...removedV10BuiltInIds);
+  database
+    .prepare(
+      `DELETE FROM lexicon_entries
+       WHERE scope = 'global' AND entry_kind = 'builtIn'
+         AND id IN (${removedV10BuiltInIds.map(() => "?").join(", ")})`,
+    )
+    .run(...removedV10BuiltInIds);
+
+  const timestamp = new Date().toISOString();
+  const entryExists = database.prepare(
+    "SELECT id FROM lexicon_entries WHERE id = ?",
+  );
+  const reassignUserOwnedEntry = database.prepare(
+    "UPDATE lexicon_entries SET id = ? WHERE id = ? AND entry_kind != 'builtIn'",
+  );
+  const updateBuiltIn = database.prepare(`
+    UPDATE lexicon_entries
+    SET ordinal = ?, entry_type = ?, display_text = ?, sense_id = NULL, spoken_text = ?,
+        case_sensitive = ?, whole_word = ?, priority = ?, notes = ?, updated_at = ?
+    WHERE id = ? AND scope = 'global' AND entry_kind = 'builtIn'
+  `);
+  const insertBuiltIn = database.prepare(`
+    INSERT INTO lexicon_entries (
+      id, scope, project_id, entry_kind, ordinal, entry_type, display_text, sense_id,
+      spoken_text, case_sensitive, whole_word, priority, enabled, notes, created_at, updated_at
+    ) VALUES (?, 'global', NULL, 'builtIn', ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const nextCollisionFreeId = (): string => {
+    let id = randomUUID();
+    while (entryExists.get(id) !== undefined) id = randomUUID();
+    return id;
+  };
+  for (const entry of V10_GLOBAL_EXACT_TERM_LEXICON) {
+    const values = [
+      entry.ordinal,
+      entry.entryType,
+      entry.displayText,
+      entry.spokenText,
+      entry.caseSensitive ? 1 : 0,
+      entry.wholeWord ? 1 : 0,
+      entry.priority,
+      entry.notes,
+      timestamp,
+      entry.id,
+    ] as const;
+    if (Number(updateBuiltIn.run(...values).changes ?? 0) > 0) continue;
+    if (entryExists.get(entry.id) !== undefined)
+      reassignUserOwnedEntry.run(nextCollisionFreeId(), entry.id);
+    insertBuiltIn.run(
+      entry.id,
+      entry.ordinal,
+      entry.entryType,
+      entry.displayText,
+      entry.spokenText,
+      entry.caseSensitive ? 1 : 0,
+      entry.wholeWord ? 1 : 0,
+      entry.priority,
+      entry.enabled ? 1 : 0,
+      entry.notes,
+      timestamp,
+      timestamp,
+    );
+  }
+}
+
+function reconcileV11GlobalBuiltInCollisions(database: DatabaseLike): void {
+  const matchingCustomEntries = database.prepare<
+    [string, string, number, number, number, string],
+    { id: string; enabled: number; updated_at: string }
+  >(`
+    SELECT id, enabled, updated_at
+    FROM lexicon_entries
+    WHERE scope = 'global' AND project_id IS NULL AND entry_kind = 'custom'
+      AND entry_type = 'exactTerm' AND display_text = ? AND sense_id IS NULL
+      AND spoken_text = ? AND case_sensitive = ? AND whole_word = ?
+      AND priority = ? AND notes = ?
+    ORDER BY created_at, id
+  `);
+  const builtInExists = database.prepare<[string], { id: string }>(`
+    SELECT id FROM lexicon_entries
+    WHERE id = ? AND scope = 'global' AND entry_kind = 'builtIn'
+  `);
+  const restoreEnabledState = database.prepare<[number, string, string]>(`
+    UPDATE lexicon_entries SET enabled = ?, updated_at = ?
+    WHERE id = ? AND scope = 'global' AND entry_kind = 'builtIn'
+  `);
+  const deleteCustomEntry = database.prepare<[string]>(`
+    DELETE FROM lexicon_entries WHERE id = ? AND entry_kind = 'custom'
+  `);
+
+  for (const entry of V11_GLOBAL_EXACT_TERM_COLLISION_RECONCILIATION) {
+    if (builtInExists.get(entry.id) === undefined) continue;
+    const duplicates = matchingCustomEntries.all(
+      entry.displayText,
+      entry.spokenText,
+      entry.caseSensitive ? 1 : 0,
+      entry.wholeWord ? 1 : 0,
+      entry.priority,
+      entry.notes,
+    );
+    // Migration 9 could create at most one displaced copy per built-in ID. If
+    // there is more than one exact match, ownership is ambiguous, so preserve
+    // the rows instead of guessing which one came from the migration.
+    if (duplicates.length !== 1) continue;
+    const [duplicate] = duplicates;
+    if (duplicate === undefined) continue;
+    restoreEnabledState.run(duplicate.enabled, duplicate.updated_at, entry.id);
+    deleteCustomEntry.run(duplicate.id);
+  }
+}
+
 function addGlobalNamedSenseDefaults(database: DatabaseLike): void {
   const timestamp = new Date().toISOString();
   const row = database
@@ -437,6 +695,40 @@ export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
         ALTER TABLE render_jobs ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1));
       `);
     },
+  },
+  {
+    version: 8,
+    name: "global-lexicon-entry-kinds",
+    up(database) {
+      database.exec(`
+        ALTER TABLE lexicon_entries
+        ADD COLUMN entry_kind TEXT NOT NULL DEFAULT 'custom'
+        CHECK (entry_kind IN ('builtIn', 'custom'));
+      `);
+      const builtInIds = GLOBAL_LEXICON_BUILT_INS.map(({ id }) => id);
+      database
+        .prepare(
+          `UPDATE lexicon_entries
+           SET entry_kind = 'builtIn'
+           WHERE scope = 'global' AND id IN (${builtInIds.map(() => "?").join(", ")})`,
+        )
+        .run(...builtInIds);
+    },
+  },
+  {
+    version: 9,
+    name: "global-lexicon-catalog-reconciliation",
+    up: reconcileGlobalBuiltInLexicon,
+  },
+  {
+    version: 10,
+    name: "global-lexicon-import-reconciliation",
+    up: reconcileV10GlobalBuiltInLexicon,
+  },
+  {
+    version: 11,
+    name: "global-lexicon-collision-deduplication",
+    up: reconcileV11GlobalBuiltInCollisions,
   },
 ]);
 

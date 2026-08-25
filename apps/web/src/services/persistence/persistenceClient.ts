@@ -1,7 +1,7 @@
 import {
   BoundaryErrorSchema,
   EmptyResponseSchema,
-  GlobalLexiconEntryCollectionSchema,
+  GlobalLexiconStateSchema,
   IgnoredDiagnosticCollectionSchema,
   PersistenceBackupCollectionSchema,
   PersistenceBackupRestoreResultSchema,
@@ -172,15 +172,23 @@ export function createRestPersistenceClient(
     },
     globalLexicon: {
       list: async () =>
+        await request("/api/lexicon/global", GlobalLexiconStateSchema),
+      setBuiltInEnabled: async (input) =>
         await request(
-          "/api/lexicon/global",
-          GlobalLexiconEntryCollectionSchema,
+          `/api/lexicon/global/built-ins/${encodeURIComponent(input.id)}/enabled`,
+          GlobalLexiconStateSchema,
+          { method: "PATCH", body: body({ enabled: input.enabled }) },
         ),
-      replace: async (input) =>
+      replaceCustom: async (input) =>
+        await request("/api/lexicon/custom", GlobalLexiconStateSchema, {
+          method: "PUT",
+          body: body(input),
+        }),
+      reimportBuiltIns: async () =>
         await request(
-          "/api/lexicon/global",
-          GlobalLexiconEntryCollectionSchema,
-          { method: "PUT", body: body(input) },
+          "/api/lexicon/global/built-ins/reimport",
+          GlobalLexiconStateSchema,
+          { method: "POST", body: body({}) },
         ),
     },
   };

@@ -1,62 +1,129 @@
 #!/usr/bin/env node
 
-import { readFileSync, mkdirSync, mkdtempSync } from "node:fs";
+import {
+  existsSync,
+  readFileSync,
+  mkdirSync,
+  mkdtempSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
+import {
+  BUILDKIT_IMAGE,
+  VERIFICATION_LABEL,
+  VERIFICATION_RUN_LABEL,
+  VerificationInterruptedError,
+  acquireVerificationLock,
+  auditVerificationResources,
+  cleanupVerificationResources,
+  createDockerResourceNames,
+  createSignalController,
+  executeWithCleanup,
+  removeRunOwnedBuildkitImage,
+} from "./verify-docker-cleanup.mjs";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
 const verificationRoot = resolve(repositoryRoot, ".tmp", "verify-docker");
+const buildkitOwnershipMarker = resolve(
+  verificationRoot,
+  "remove-buildkit-image-after-run.json",
+);
 const secret = "docker-verification-secret-never-exposed";
-const imageTag = "studynarrator:verify";
-const projectName = `studynarrator-verify-${process.pid}-${Date.now()}`;
-const sourceRevision = commandOutput("git", [
-  "rev-parse",
-  "--short=12",
-  "HEAD",
-]);
+const resourceNames = createDockerResourceNames(process.pid, Date.now());
+const verificationLabel = `${VERIFICATION_LABEL}=true`;
+const verificationRunLabel = `${VERIFICATION_RUN_LABEL}=${resourceNames.runId}`;
+let sourceRevision;
 let fakeSpeaches;
+let fakeSpeachesStartError;
 let composeEnvironment;
+let activeChild;
+let signalController;
 
 function fail(message) {
   throw new Error(`DOCKER VERIFY: ${message}`);
 }
 
-function commandOutput(command, args, environment = {}) {
-  const result = spawnSync(command, args, {
-    cwd: repositoryRoot,
-    env: { ...process.env, ...environment },
-    encoding: "utf8",
-    shell: false,
+async function executeProcess(command, args, environment, captureOutput) {
+  signalController?.throwIfInterrupted();
+  return new Promise((resolvePromise, reject) => {
+    const child = spawn(command, args, {
+      cwd: repositoryRoot,
+      env: { ...process.env, ...environment },
+      stdio: captureOutput
+        ? ["ignore", "pipe", "pipe"]
+        : ["ignore", "inherit", "inherit"],
+      shell: false,
+    });
+    activeChild = child;
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    if (captureOutput) {
+      child.stdout.setEncoding("utf8");
+      child.stderr.setEncoding("utf8");
+      child.stdout.on("data", (chunk) => {
+        stdout += chunk;
+      });
+      child.stderr.on("data", (chunk) => {
+        stderr += chunk;
+      });
+    }
+    child.once("error", (error) => {
+      if (activeChild === child) activeChild = undefined;
+      if (settled) return;
+      settled = true;
+      reject(new Error(`${command} could not start: ${error.message}`));
+    });
+    child.once("close", (status, childSignal) => {
+      if (activeChild === child) activeChild = undefined;
+      if (settled) return;
+      settled = true;
+      resolvePromise({ status, signal: childSignal, stdout, stderr });
+    });
   });
-  if (result.error) fail(`${command} could not start: ${result.error.message}`);
-  if (result.status !== 0)
+}
+
+async function commandOutput(command, args, environment = {}) {
+  const result = await executeProcess(command, args, environment, true);
+  signalController?.throwIfInterrupted();
+  if (result.status !== 0) {
     fail(
-      `${command} ${args.join(" ")} failed:\n${result.stderr || result.stdout}`,
+      `${command} ${args.join(" ")} failed${
+        result.signal ? ` with ${result.signal}` : ""
+      }:\n${result.stderr || result.stdout}`,
     );
+  }
   return result.stdout.trim();
 }
 
-function run(command, args, environment = {}) {
+async function run(command, args, environment = {}) {
   process.stdout.write(`\n> ${command} ${args.join(" ")}\n`);
-  const result = spawnSync(command, args, {
-    cwd: repositoryRoot,
-    env: { ...process.env, ...environment },
-    stdio: "inherit",
-    shell: false,
-  });
-  if (result.error) fail(`${command} could not start: ${result.error.message}`);
-  if (result.status !== 0)
+  const result = await executeProcess(command, args, environment, false);
+  signalController?.throwIfInterrupted();
+  if (result.status !== 0) {
     fail(
-      `${command} ${args.join(" ")} failed with exit ${String(result.status)}`,
+      `${command} ${args.join(" ")} failed${
+        result.signal
+          ? ` with ${result.signal}`
+          : ` with exit ${String(result.status)}`
+      }`,
     );
+  }
 }
+
+const dockerRunner = {
+  output: commandOutput,
+  run,
+};
 
 function composeArgs(...args) {
-  return ["compose", "--project-name", projectName, ...args];
+  return ["compose", "--project-name", resourceNames.projectName, ...args];
 }
 
-function composeOutput(...args) {
+async function composeOutput(...args) {
   return commandOutput("docker", composeArgs(...args), composeEnvironment);
 }
 
@@ -83,6 +150,7 @@ async function waitForHealthy(baseUrl, timeoutMs = 60_000) {
   const deadline = Date.now() + timeoutMs;
   let lastError = "no response";
   while (Date.now() < deadline) {
+    signalController?.throwIfInterrupted();
     try {
       const response = await fetch(`${baseUrl}/api/health`);
       if (response.ok) return;
@@ -98,6 +166,10 @@ async function waitForHealthy(baseUrl, timeoutMs = 60_000) {
 async function waitForFake(controlUrl) {
   const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) {
+    signalController?.throwIfInterrupted();
+    if (fakeSpeachesStartError) {
+      fail(`fake Speaches could not start: ${fakeSpeachesStartError.message}`);
+    }
     try {
       if ((await fetch(`${controlUrl}/__control/state`)).ok) return;
     } catch {
@@ -252,6 +324,7 @@ async function redactedJson(baseUrl, path) {
   const deadline = Date.now() + 10_000;
   let lastError = "no response";
   while (Date.now() < deadline) {
+    signalController?.throwIfInterrupted();
     try {
       const response = await fetch(`${baseUrl}${path}`);
       invariant(response.ok, `${path} returned HTTP ${response.status}`);
@@ -270,7 +343,14 @@ async function redactedJson(baseUrl, path) {
 }
 
 async function stopFakeSpeaches() {
-  if (!fakeSpeaches || fakeSpeaches.exitCode !== null) return;
+  if (
+    !fakeSpeaches ||
+    fakeSpeachesStartError ||
+    fakeSpeaches.exitCode !== null ||
+    fakeSpeaches.signalCode !== null
+  ) {
+    return;
+  }
   fakeSpeaches.kill("SIGTERM");
   await Promise.race([
     new Promise((resolvePromise) => fakeSpeaches.once("exit", resolvePromise)),
@@ -279,41 +359,82 @@ async function stopFakeSpeaches() {
   if (fakeSpeaches.exitCode === null) fakeSpeaches.kill("SIGKILL");
 }
 
-if (process.argv.length !== 2) fail("usage: npm run verify:docker");
-if (Number(process.versions.node.split(".")[0]) < 24)
-  fail(
-    `verification requires Node 24 or later; current runtime is ${process.versions.node}`,
+async function buildkitImageExists() {
+  return (
+    (
+      await commandOutput("docker", [
+        "image",
+        "ls",
+        "--all",
+        "--quiet",
+        "--filter",
+        `reference=${BUILDKIT_IMAGE}`,
+      ])
+    ).length > 0
   );
-invariant(
-  /^studynarrator-verify-\d+-\d+$/u.test(projectName),
-  "generated unsafe Compose project name",
-);
+}
 
-mkdirSync(verificationRoot, { recursive: true, mode: 0o700 });
-const verificationRun = mkdtempSync(resolve(verificationRoot, "run-"));
-const sbomPath = resolve(verificationRun, "studynarrator.cdx.json");
-const scoutPath = resolve(verificationRun, "docker-scout.sarif");
-const hostPort = await reservePort();
-const fakePort = await reservePort();
-const baseUrl = `http://127.0.0.1:${hostPort}`;
-const fakeControlUrl = `http://127.0.0.1:${fakePort}`;
-const fakeApplicationUrl = `http://host.docker.internal:${fakePort}`;
+function clearBuildkitOwnershipMarker() {
+  try {
+    unlinkSync(buildkitOwnershipMarker);
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+}
 
-composeEnvironment = {
-  STUDYNARRATOR_BIND_ADDRESS: "127.0.0.1",
-  STUDYNARRATOR_HOST_PORT: String(hostPort),
-  STUDYNARRATOR_IMAGE_TAG: "verify",
-  STUDYNARRATOR_SOURCE_REVISION: sourceRevision,
-};
+function smokeContainerArgs(name, entrypoint, ...args) {
+  return [
+    "run",
+    "--rm",
+    "--name",
+    `${resourceNames.runId}-${name}`,
+    "--label",
+    verificationLabel,
+    "--label",
+    verificationRunLabel,
+    "--tmpfs",
+    "/data:rw,noexec,nosuid,size=16m",
+    "--entrypoint",
+    entrypoint,
+    resourceNames.imageTag,
+    ...args,
+  ];
+}
 
-try {
-  const config = JSON.parse(composeOutput("config", "--format", "json"));
+async function runDockerAcceptance({
+  baseUrl,
+  fakeControlUrl,
+  fakeApplicationUrl,
+  fakePort,
+  sbomPath,
+  scoutPath,
+}) {
+  const config = JSON.parse(await composeOutput("config", "--format", "json"));
   assertComposeContract(config);
 
-  run("docker", [
+  await run("docker", [
+    "buildx",
+    "create",
+    "--name",
+    resourceNames.builderName,
+    "--driver",
+    "docker-container",
+    "--driver-opt",
+    `image=${BUILDKIT_IMAGE}`,
+    "--bootstrap",
+  ]);
+  await run("docker", [
+    "buildx",
     "build",
+    "--builder",
+    resourceNames.builderName,
+    "--load",
     "--tag",
-    imageTag,
+    resourceNames.imageTag,
+    "--label",
+    verificationLabel,
+    "--label",
+    verificationRunLabel,
     "--build-arg",
     "STUDYNARRATOR_VERSION=verify",
     "--build-arg",
@@ -321,57 +442,52 @@ try {
     ".",
   ]);
   assertImageContract(
-    JSON.parse(commandOutput("docker", ["image", "inspect", imageTag]))[0],
+    JSON.parse(
+      await commandOutput("docker", [
+        "image",
+        "inspect",
+        resourceNames.imageTag,
+      ]),
+    )[0],
   );
   invariant(
-    commandOutput("docker", [
-      "run",
-      "--rm",
-      "--entrypoint",
-      "/usr/bin/id",
-      imageTag,
-      "-u",
-    ]) === "10001",
+    (await commandOutput(
+      "docker",
+      smokeContainerArgs("id", "/usr/bin/id", "-u"),
+    )) === "10001",
     "runtime process is not non-root",
   );
   invariant(
-    commandOutput("docker", [
-      "run",
-      "--rm",
-      "--entrypoint",
-      "/usr/bin/ffmpeg",
-      imageTag,
-      "-version",
-    ]).startsWith("ffmpeg version 7.1"),
+    (
+      await commandOutput(
+        "docker",
+        smokeContainerArgs("ffmpeg", "/usr/bin/ffmpeg", "-version"),
+      )
+    ).startsWith("ffmpeg version 7.1"),
     "FFmpeg 7.1 is unavailable",
   );
-  run("docker", [
-    "run",
-    "--rm",
-    "--entrypoint",
-    "/usr/bin/test",
-    imageTag,
-    "-s",
-    "/app/LICENSE",
-  ]);
-  run("docker", [
-    "run",
-    "--rm",
-    "--entrypoint",
-    "/usr/bin/test",
-    imageTag,
-    "-s",
-    "/app/ACKNOWLEDGMENTS.md",
-  ]);
+  await run(
+    "docker",
+    smokeContainerArgs("license", "/usr/bin/test", "-s", "/app/LICENSE"),
+  );
+  await run(
+    "docker",
+    smokeContainerArgs(
+      "acknowledgments",
+      "/usr/bin/test",
+      "-s",
+      "/app/ACKNOWLEDGMENTS.md",
+    ),
+  );
 
-  run("docker", [
+  await run("docker", [
     "scout",
     "sbom",
     "--format",
     "cyclonedx",
     "--output",
     sbomPath,
-    `local://${imageTag}`,
+    `local://${resourceNames.imageTag}`,
   ]);
   const sbom = JSON.parse(readFileSync(sbomPath, "utf8"));
   invariant(
@@ -380,7 +496,7 @@ try {
       sbom.components.length > 0,
     "CycloneDX image inventory is invalid",
   );
-  run("docker", [
+  await run("docker", [
     "scout",
     "cves",
     "--only-severity",
@@ -389,7 +505,7 @@ try {
     "sarif",
     "--output",
     scoutPath,
-    `local://${imageTag}`,
+    `local://${resourceNames.imageTag}`,
   ]);
   assertScoutPolicy(scoutPath);
 
@@ -407,22 +523,30 @@ try {
       stdio: ["ignore", "inherit", "inherit"],
     },
   );
+  fakeSpeaches.once("error", (error) => {
+    fakeSpeachesStartError = error;
+  });
   await waitForFake(fakeControlUrl);
 
-  run(
+  await run(
     "docker",
     composeArgs("up", "--detach", "--no-build"),
     composeEnvironment,
   );
   await waitForHealthy(baseUrl);
-  const initialContainerId = composeOutput("ps", "--quiet", "study-narrator");
+  const initialContainerId = await composeOutput(
+    "ps",
+    "--quiet",
+    "study-narrator",
+  );
   invariant(
     initialContainerId.length > 10,
     "Compose did not return the application container ID",
   );
   invariant(
-    JSON.parse(commandOutput("docker", ["inspect", initialContainerId]))[0]
-      .RestartCount === 0,
+    JSON.parse(
+      await commandOutput("docker", ["inspect", initialContainerId]),
+    )[0].RestartCount === 0,
     "container restarted while Speaches was unavailable",
   );
   const runtime = await redactedJson(baseUrl, "/api/runtime");
@@ -432,7 +556,7 @@ try {
     "runtime metadata does not identify this Docker build",
   );
 
-  run(
+  await run(
     "npx",
     ["playwright", "test", "--config", "playwright.docker.config.ts"],
     {
@@ -445,7 +569,8 @@ try {
   );
   await waitForHealthy(baseUrl);
   invariant(
-    composeOutput("ps", "--quiet", "study-narrator") === initialContainerId,
+    (await composeOutput("ps", "--quiet", "study-narrator")) ===
+      initialContainerId,
     "offline recovery unexpectedly recreated the container",
   );
 
@@ -479,13 +604,13 @@ try {
     !browserPayload.includes(secret),
     "API or diagnostic payload exposed the verification sentinel",
   );
-  const logs = composeOutput("logs", "--no-color", "study-narrator");
+  const logs = await composeOutput("logs", "--no-color", "study-narrator");
   invariant(
     !logs.includes(secret),
     "container logs exposed the verification sentinel",
   );
 
-  run(
+  await run(
     "docker",
     composeArgs(
       "up",
@@ -497,7 +622,11 @@ try {
     composeEnvironment,
   );
   await waitForHealthy(baseUrl);
-  const recreatedContainerId = composeOutput("ps", "--quiet", "study-narrator");
+  const recreatedContainerId = await composeOutput(
+    "ps",
+    "--quiet",
+    "study-narrator",
+  );
   invariant(
     recreatedContainerId !== initialContainerId,
     "Compose force-recreate retained the old container",
@@ -526,33 +655,185 @@ try {
     );
   }
   invariant(
-    JSON.parse(commandOutput("docker", ["inspect", recreatedContainerId]))[0]
-      .RestartCount === 0,
+    JSON.parse(
+      await commandOutput("docker", ["inspect", recreatedContainerId]),
+    )[0].RestartCount === 0,
     "recreated container restarted unexpectedly",
   );
+}
+
+async function main() {
+  if (process.argv.length !== 2) fail("usage: npm run verify:docker");
+  if (Number(process.versions.node.split(".")[0]) < 24) {
+    fail(
+      `verification requires Node 24 or later; current runtime is ${process.versions.node}`,
+    );
+  }
+
+  mkdirSync(verificationRoot, { recursive: true, mode: 0o700 });
+  const releaseLock = acquireVerificationLock({
+    lockPath: resolve(verificationRoot, "active.lock"),
+  });
+  signalController = createSignalController({
+    getActiveChild: () => activeChild,
+  });
+
+  let buildkitImageExistedBeforeRun = true;
+  let sbomPath;
+  let scoutPath;
+  try {
+    await executeWithCleanup({
+      execute: async () => {
+        const staleCleanupFailures = await cleanupVerificationResources({
+          runner: dockerRunner,
+        });
+        if (staleCleanupFailures.length > 0) {
+          fail(
+            `stale Docker cleanup failed:\n${staleCleanupFailures.join("\n")}`,
+          );
+        }
+        const staleAudit = await auditVerificationResources({
+          runner: dockerRunner,
+        });
+        if (staleAudit.failures.length > 0 || staleAudit.leftovers.length > 0) {
+          fail(
+            `stale Docker resources remain:\n${[
+              ...staleAudit.failures,
+              ...staleAudit.leftovers,
+            ].join("\n")}`,
+          );
+        }
+
+        if (existsSync(buildkitOwnershipMarker)) {
+          const staleBuildkitFailures = await removeRunOwnedBuildkitImage({
+            runner: dockerRunner,
+            existedBeforeRun: false,
+          });
+          if (staleBuildkitFailures.length > 0) {
+            fail(
+              `stale BuildKit image cleanup failed:\n${staleBuildkitFailures.join("\n")}`,
+            );
+          }
+          if (!(await buildkitImageExists())) {
+            clearBuildkitOwnershipMarker();
+          }
+        }
+
+        await commandOutput("docker", ["buildx", "version"]);
+        buildkitImageExistedBeforeRun = await buildkitImageExists();
+        if (!buildkitImageExistedBeforeRun) {
+          writeFileSync(
+            buildkitOwnershipMarker,
+            JSON.stringify({ runId: resourceNames.runId }),
+            { encoding: "utf8", mode: 0o600 },
+          );
+        }
+        sourceRevision = await commandOutput("git", [
+          "rev-parse",
+          "--short=12",
+          "HEAD",
+        ]);
+
+        const verificationRun = mkdtempSync(resolve(verificationRoot, "run-"));
+        sbomPath = resolve(verificationRun, "studynarrator.cdx.json");
+        scoutPath = resolve(verificationRun, "docker-scout.sarif");
+        const hostPort = await reservePort();
+        const fakePort = await reservePort();
+        const baseUrl = `http://127.0.0.1:${hostPort}`;
+        const fakeControlUrl = `http://127.0.0.1:${fakePort}`;
+        const fakeApplicationUrl = `http://host.docker.internal:${fakePort}`;
+
+        composeEnvironment = {
+          STUDYNARRATOR_BIND_ADDRESS: "127.0.0.1",
+          STUDYNARRATOR_HOST_PORT: String(hostPort),
+          STUDYNARRATOR_IMAGE_TAG: resourceNames.imageVersionTag,
+          STUDYNARRATOR_SOURCE_REVISION: sourceRevision,
+        };
+
+        await runDockerAcceptance({
+          baseUrl,
+          fakeControlUrl,
+          fakeApplicationUrl,
+          fakePort,
+          sbomPath,
+          scoutPath,
+        });
+      },
+      cleanup: async () => {
+        signalController.beginCleanup();
+        const failures = [];
+        try {
+          await stopFakeSpeaches();
+        } catch (error) {
+          failures.push(
+            `stop fake Speaches: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+        failures.push(
+          ...(await cleanupVerificationResources({
+            runner: dockerRunner,
+            currentNames: resourceNames,
+            composeEnvironment,
+          })),
+        );
+        failures.push(
+          ...(await removeRunOwnedBuildkitImage({
+            runner: dockerRunner,
+            existedBeforeRun: buildkitImageExistedBeforeRun,
+          })),
+        );
+        if (failures.length === 0 && existsSync(buildkitOwnershipMarker)) {
+          try {
+            if (!(await buildkitImageExists())) {
+              clearBuildkitOwnershipMarker();
+            }
+          } catch (error) {
+            failures.push(
+              `verify BuildKit image cleanup: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            );
+          }
+        }
+        return failures;
+      },
+      audit: async () => {
+        const audit = await auditVerificationResources({
+          runner: dockerRunner,
+        });
+        return [
+          ...audit.failures,
+          ...audit.leftovers.map(
+            (leftover) => `Docker verification resource remains: ${leftover}`,
+          ),
+        ];
+      },
+      release: async () => {
+        releaseLock();
+      },
+    });
+  } finally {
+    signalController.dispose();
+  }
 
   process.stdout.write(
     `\nDOCKER VERIFY: ALL CHECKS PASSED\nCycloneDX inventory: ${sbomPath}\nDocker Scout report: ${scoutPath}\n`,
   );
-} finally {
-  if (composeEnvironment) {
-    const currentProject = composeOutput("config", "--format", "json");
-    invariant(
-      JSON.parse(currentProject).name === projectName,
-      "refusing to clean up an unexpected Compose project",
-    );
-    const cleanup = spawnSync(
-      "docker",
-      composeArgs("down", "--volumes", "--remove-orphans"),
-      {
-        cwd: repositoryRoot,
-        env: { ...process.env, ...composeEnvironment },
-        stdio: "inherit",
-        shell: false,
-      },
-    );
-    if (cleanup.status !== 0)
-      process.stderr.write("DOCKER VERIFY: warning: Compose cleanup failed.\n");
+}
+
+try {
+  await main();
+} catch (error) {
+  const signal = signalController?.signal;
+  const message = error instanceof Error ? error.message : String(error);
+  process.stderr.write(`DOCKER VERIFY: ERROR: ${message}\n`);
+  process.exitCode = signal === "SIGINT" ? 130 : signal === "SIGTERM" ? 143 : 1;
+  if (
+    error instanceof VerificationInterruptedError ||
+    error?.cause instanceof VerificationInterruptedError
+  ) {
+    process.stderr.write(`DOCKER VERIFY: interrupted by ${signal}.\n`);
   }
-  await stopFakeSpeaches();
 }

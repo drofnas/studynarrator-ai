@@ -19,12 +19,54 @@ import { ErrorNotice } from "@/shared/ui/ErrorNotice.js";
 import styles from "./ScratchpadPage.module.css";
 
 const LAST_PASSAGE_STORAGE_KEY = "studynarrator.scratchpad.lastPassage";
+const SESSION_SETTINGS_STORAGE_KEY = "studynarrator.scratchpad.settings";
 
-function readLastPassage(): string {
+type ScratchpadSessionSettings = {
+  modelId: string;
+  voiceId: string;
+  speed: number;
+  text: string;
+  applyGlobalLexicon: boolean;
+};
+
+const DEFAULT_SESSION_SETTINGS: ScratchpadSessionSettings = {
+  modelId: "",
+  voiceId: "",
+  speed: 1,
+  text: "",
+  applyGlobalLexicon: false,
+};
+
+function isScratchpadSessionSettings(
+  value: unknown,
+): value is ScratchpadSessionSettings {
+  if (!value || typeof value !== "object") return false;
+  const settings = value as Record<string, unknown>;
+  return (
+    typeof settings.modelId === "string" &&
+    typeof settings.voiceId === "string" &&
+    typeof settings.speed === "number" &&
+    Number.isFinite(settings.speed) &&
+    typeof settings.text === "string" &&
+    typeof settings.applyGlobalLexicon === "boolean"
+  );
+}
+
+function readSessionSettings(): ScratchpadSessionSettings {
   try {
-    return window.sessionStorage.getItem(LAST_PASSAGE_STORAGE_KEY) ?? "";
+    const storedSettings = window.sessionStorage.getItem(
+      SESSION_SETTINGS_STORAGE_KEY,
+    );
+    if (storedSettings) {
+      const parsedSettings: unknown = JSON.parse(storedSettings);
+      if (isScratchpadSessionSettings(parsedSettings)) return parsedSettings;
+    }
+    return {
+      ...DEFAULT_SESSION_SETTINGS,
+      text: window.sessionStorage.getItem(LAST_PASSAGE_STORAGE_KEY) ?? "",
+    };
   } catch {
-    return "";
+    return DEFAULT_SESSION_SETTINGS;
   }
 }
 
@@ -48,12 +90,20 @@ export function ScratchpadPage({
     retry: false,
   });
   const { play: playAudition } = useAudioAudition<"scratchpad">();
-  const [modelId, setModelId] = useState("");
-  const [voiceId, setVoiceId] = useState("");
-  const [speed, setSpeed] = useState(1);
-  const [text, setText] = useState(readLastPassage);
-  const [applyGlobalLexicon, setApplyGlobalLexicon] = useState(false);
-  const globalLexicon: LexiconEntry[] = globalLexiconQuery.data ?? [];
+  const [initialSessionSettings] = useState(readSessionSettings);
+  const [modelId, setModelId] = useState(initialSessionSettings.modelId);
+  const [voiceId, setVoiceId] = useState(initialSessionSettings.voiceId);
+  const [speed, setSpeed] = useState(initialSessionSettings.speed);
+  const [text, setText] = useState(initialSessionSettings.text);
+  const [applyGlobalLexicon, setApplyGlobalLexicon] = useState(
+    initialSessionSettings.applyGlobalLexicon,
+  );
+  const globalLexicon: LexiconEntry[] = globalLexiconQuery.data
+    ? [
+        ...globalLexiconQuery.data.builtIns,
+        ...globalLexiconQuery.data.custom,
+      ].map(({ entryKind: _entryKind, ...entry }) => entry)
+    : [];
   const [catalog, setCatalog] = useState<VoiceCatalog | null>(null);
   const [catalogState, setCatalogState] = useState<
     "idle" | "loading" | "ready" | "failed"
@@ -113,12 +163,16 @@ export function ScratchpadPage({
 
   useEffect(() => {
     try {
+      window.sessionStorage.setItem(
+        SESSION_SETTINGS_STORAGE_KEY,
+        JSON.stringify({ modelId, voiceId, speed, text, applyGlobalLexicon }),
+      );
       if (text) window.sessionStorage.setItem(LAST_PASSAGE_STORAGE_KEY, text);
       else window.sessionStorage.removeItem(LAST_PASSAGE_STORAGE_KEY);
     } catch {
       /* Session storage can be unavailable in restricted browser contexts. */
     }
-  }, [text]);
+  }, [applyGlobalLexicon, modelId, speed, text, voiceId]);
 
   const connection = connections.connection;
   const speechCatalogState = connections.catalog;
@@ -279,11 +333,11 @@ export function ScratchpadPage({
             />
           </label>
         </div>
-        {!connection?.baseUrl ? (
+        {connection?.baseUrl ? null : (
           <p className={styles.fieldError}>
             Configure the Speaches server in Settings before synthesis.
           </p>
-        ) : null}
+        )}
         {speechCatalogState?.status === "loading" ? (
           <p className={styles.catalogNotice}>Loading available models…</p>
         ) : null}

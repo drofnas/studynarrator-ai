@@ -10,6 +10,7 @@
     "vitest.coverage.config.ts",
     "playwright.config.ts",
     "playwright.docker.config.ts",
+    "scripts/**/*.d.mts",
     "scripts/**/*.test.ts"
   ]
 }

@@ -24,6 +24,9 @@ interface LexiconEditorProps {
   searchLabel: string;
   emptyMessage: string;
   disabled?: boolean;
+  allowAdd?: boolean;
+  allowEdit?: boolean;
+  allowDelete?: boolean;
   hideSearchWhenEmpty?: boolean;
   rowErrors?: Readonly<Record<string, string | undefined>>;
   displayTextLabel?: string;
@@ -63,6 +66,9 @@ export function LexiconEditor({
   searchLabel,
   emptyMessage,
   disabled = false,
+  allowAdd = true,
+  allowEdit = true,
+  allowDelete = true,
   hideSearchWhenEmpty = false,
   rowErrors = {},
   displayTextLabel = "Script Text",
@@ -132,46 +138,48 @@ export function LexiconEditor({
 
   return (
     <div className={styles.editor}>
-      <form
-        className={styles.add}
-        onSubmit={(event) => {
-          event.preventDefault();
-          void submit();
-        }}
-      >
-        <label>
-          {displayTextLabel}
-          <input
-            disabled={disabled || pending}
-            value={draft.displayText}
-            onChange={(event) => {
-              setDraft((current) => ({
-                ...current,
-                displayText: event.target.value,
-              }));
-              setValidationError("");
-            }}
-          />
-        </label>
-        <span aria-hidden="true">→</span>
-        <label>
-          Spoken Text
-          <input
-            disabled={disabled || pending}
-            value={draft.spokenText}
-            onChange={(event) => {
-              setDraft((current) => ({
-                ...current,
-                spokenText: event.target.value,
-              }));
-              setValidationError("");
-            }}
-          />
-        </label>
-        <button type="submit" disabled={disabled || pending}>
-          {pending ? "Adding…" : "Add"}
-        </button>
-      </form>
+      {allowAdd ? (
+        <form
+          className={styles.add}
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submit();
+          }}
+        >
+          <label>
+            {displayTextLabel}
+            <input
+              disabled={disabled || pending}
+              value={draft.displayText}
+              onChange={(event) => {
+                setDraft((current) => ({
+                  ...current,
+                  displayText: event.target.value,
+                }));
+                setValidationError("");
+              }}
+            />
+          </label>
+          <span aria-hidden="true">→</span>
+          <label>
+            Spoken Text
+            <input
+              disabled={disabled || pending}
+              value={draft.spokenText}
+              onChange={(event) => {
+                setDraft((current) => ({
+                  ...current,
+                  spokenText: event.target.value,
+                }));
+                setValidationError("");
+              }}
+            />
+          </label>
+          <button type="submit" disabled={disabled || pending}>
+            {pending ? "Adding…" : "Add"}
+          </button>
+        </form>
+      ) : null}
       {validationError ? (
         <p className={styles.validation} role="alert">
           {validationError}
@@ -199,7 +207,7 @@ export function LexiconEditor({
                 <label>
                   {displayTextLabel}
                   <input
-                    disabled={disabled || pending}
+                    disabled={disabled || pending || !allowEdit}
                     value={entry.displayText}
                     onChange={(event) =>
                       update(index, id, "displayText", event.target.value)
@@ -213,7 +221,7 @@ export function LexiconEditor({
                 <label>
                   Spoken Text
                   <input
-                    disabled={disabled || pending}
+                    disabled={disabled || pending || !allowEdit}
                     value={entry.spokenText}
                     onChange={(event) =>
                       update(index, id, "spokenText", event.target.value)
@@ -246,22 +254,24 @@ export function LexiconEditor({
                     {rowErrors[id]}
                   </span>
                 ) : null}
-                <button
-                  type="button"
-                  className={styles.danger}
-                  disabled={disabled || pending}
-                  onClick={() =>
-                    void onChange(
-                      value.filter(
-                        (_candidate, candidateIndex) =>
-                          candidateIndex !== index,
-                      ),
-                      { kind: "delete", id },
-                    )
-                  }
-                >
-                  Delete
-                </button>
+                {allowDelete ? (
+                  <button
+                    type="button"
+                    className={styles.danger}
+                    disabled={disabled || pending}
+                    onClick={() =>
+                      void onChange(
+                        value.filter(
+                          (_candidate, candidateIndex) =>
+                            candidateIndex !== index,
+                        ),
+                        { kind: "delete", id },
+                      )
+                    }
+                  >
+                    Delete
+                  </button>
+                ) : null}
               </article>
             );
           })

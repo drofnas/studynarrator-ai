@@ -4,7 +4,7 @@
 // migration inserted at the time it shipped. Changing them changes history and
 // makes freshly created databases diverge from migrated ones.
 //
-// To change application defaults, edit packages/shared-types/src/persistence.ts
+// To change application defaults, edit packages/shared-types/src/globalLexicon.json
 // and add a NEW migration that reconciles existing rows.
 
 export const V1_SYSTEM_TIMING = {
@@ -605,6 +605,78 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     wholeWord: true,
     priority: 0,
     enabled: true,
+    notes: "",
+  },
+];
+
+export const V10_GLOBAL_EXACT_TERM_LEXICON = [
+  {
+    id: "10000000-0000-4000-8000-000000000048",
+    ordinal: 37,
+    entryType: "exactTerm",
+    displayText: "reranker",
+    spokenText: "ReRanker",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: "",
+  },
+  {
+    id: "10000000-0000-4000-8000-000000000049",
+    ordinal: 38,
+    entryType: "exactTerm",
+    displayText: "reranking",
+    spokenText: "ReRanking",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: "",
+  },
+  {
+    id: "10000000-0000-4000-8000-000000000050",
+    ordinal: 39,
+    entryType: "exactTerm",
+    displayText: "illustrative",
+    spokenText: "illustray.tiv",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: "",
+  },
+];
+
+export const V11_GLOBAL_EXACT_TERM_COLLISION_RECONCILIATION = [
+  {
+    id: "10000000-0000-4000-8000-000000000045",
+    entryType: "exactTerm",
+    displayText: "iframe",
+    spokenText: "iFrame",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    notes: "",
+  },
+  {
+    id: "10000000-0000-4000-8000-000000000046",
+    entryType: "exactTerm",
+    displayText: "prefetch",
+    spokenText: "PreFetch",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    notes: "",
+  },
+  {
+    id: "10000000-0000-4000-8000-000000000047",
+    entryType: "exactTerm",
+    displayText: "database",
+    spokenText: "DataBase",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
     notes: "",
   },
 ];

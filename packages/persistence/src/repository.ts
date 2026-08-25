@@ -5,7 +5,9 @@ import {
   PERSISTENCE_CONTRACT_VERSION,
   PersistenceReadyStatusSchema,
   type ConnectionTestSummary,
-  type GlobalLexiconReplaceInput,
+  type CustomGlobalLexiconReplaceInput,
+  type GlobalLexiconBuiltInEnabledInput,
+  type GlobalLexiconState,
   type IgnoredDiagnosticCollection,
   type PersistenceStatus,
   type ProjectCreateInput,
@@ -85,7 +87,14 @@ export interface StudyNarratorRepository {
     input: IgnoredDiagnosticCollection,
   ): IgnoredDiagnosticCollection;
   listGlobalLexicon(): LexiconEntry[];
-  replaceGlobalLexicon(input: GlobalLexiconReplaceInput): LexiconEntry[];
+  getGlobalLexiconState(): GlobalLexiconState;
+  replaceCustomGlobalLexicon(
+    input: CustomGlobalLexiconReplaceInput,
+  ): GlobalLexiconState;
+  setBuiltInGlobalLexiconEnabled(
+    input: GlobalLexiconBuiltInEnabledInput,
+  ): GlobalLexiconState;
+  reimportBuiltInGlobalLexicon(): GlobalLexiconState;
   getSpeechBackendConnection(): SpeechBackendConnection;
   replaceSpeechBackendConnection(
     input: SpeechBackendConnectionAuthoring,

@@ -46,7 +46,12 @@ export const REST_API_MANIFEST = [
   { method: "GET", path: "/api/preferences/ignored-diagnostics" },
   { method: "PUT", path: "/api/preferences/ignored-diagnostics" },
   { method: "GET", path: "/api/lexicon/global" },
-  { method: "PUT", path: "/api/lexicon/global" },
+  {
+    method: "PATCH",
+    path: "/api/lexicon/global/built-ins/:entryId/enabled",
+  },
+  { method: "PUT", path: "/api/lexicon/custom" },
+  { method: "POST", path: "/api/lexicon/global/built-ins/reimport" },
   { method: "GET", path: "/api/connection" },
   { method: "PUT", path: "/api/connection" },
   { method: "POST", path: "/api/connection/test" },

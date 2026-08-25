@@ -391,7 +391,10 @@ function fixture(
   const getIgnoredDiagnostics = vi.fn(async () =>
     structuredClone(ignoredDiagnostics),
   );
-  const replaceGlobalLexicon = vi.fn(async () => []);
+  const replaceCustomGlobalLexicon = vi.fn(async () => ({
+    builtIns: [],
+    custom: [],
+  }));
   const listProjects = vi.fn(async () => [
     {
       id: stored.id,
@@ -428,8 +431,10 @@ function fixture(
       replaceIgnoredDiagnostics,
     },
     globalLexicon: {
-      list: vi.fn(async () => []),
-      replace: replaceGlobalLexicon,
+      list: vi.fn(async () => ({ builtIns: [], custom: [] })),
+      setBuiltInEnabled: vi.fn(),
+      replaceCustom: replaceCustomGlobalLexicon,
+      reimportBuiltIns: vi.fn(),
     },
   };
   const analyze = vi.fn(async (input: ScriptAnalysisInput) => {
@@ -452,7 +457,7 @@ function fixture(
     create,
     replaceIgnoredDiagnostics,
     getIgnoredDiagnostics,
-    replaceGlobalLexicon,
+    replaceCustomGlobalLexicon,
     listProjects,
   };
 }
@@ -1174,7 +1179,7 @@ describe("Projects workbench", () => {
   });
 
   it("keeps project lexicon changes isolated from global entries", async () => {
-    const { client, analyze, replace, replaceGlobalLexicon } = fixture();
+    const { client, analyze, replace, replaceCustomGlobalLexicon } = fixture();
     renderPage(client, analyze);
     await openProjectTab("Settings");
     const lexicon = (
@@ -1207,7 +1212,7 @@ describe("Projects workbench", () => {
         notes: "",
       }),
     );
-    expect(replaceGlobalLexicon).not.toHaveBeenCalled();
+    expect(replaceCustomGlobalLexicon).not.toHaveBeenCalled();
   });
 
   it("uses the singleton model and maps searchable friendly voices with raw IDs", async () => {

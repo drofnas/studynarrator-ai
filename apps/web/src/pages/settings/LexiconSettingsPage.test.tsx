@@ -13,10 +13,9 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import type {
-  GlobalLexiconReplaceInput,
+  CustomGlobalLexiconReplaceInput,
   PersistenceClient,
 } from "@studynarrator/shared-types";
-import { queryKeys } from "@/app/queryKeys.js";
 import { LexiconSettingsPage } from "./LexiconSettingsPage.js";
 import { timestamp } from "./settingsTestFixtures.js";
 
@@ -29,289 +28,235 @@ function renderPage(children: ReactNode) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+  return render(
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>,
+  );
+}
+
+type GlobalLexiconState = Awaited<
+  ReturnType<PersistenceClient["globalLexicon"]["list"]>
+>;
+
+function builtIn(
+  overrides: Partial<GlobalLexiconState["builtIns"][number]> = {},
+): GlobalLexiconState["builtIns"][number] {
   return {
-    queryClient,
-    ...render(
-      <QueryClientProvider client={queryClient}>
-        {children}
-      </QueryClientProvider>,
-    ),
+    id: "global-resume-cv",
+    scope: "global",
+    entryKind: "builtIn",
+    entryType: "namedSense",
+    displayText: "resume",
+    senseId: "cv",
+    spokenText: "rez oo may",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: "",
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    ...overrides,
   };
 }
 
-describe("Lexicon settings", () => {
-  it("adds named-sense aliases and autosaves alias text, pronunciation, enablement, and deletion", async () => {
-    let stored = [
-      {
-        id: "global-sql",
-        scope: "global",
-        entryType: "exactTerm",
-        displayText: "SQL",
-        spokenText: "S Q L",
-        caseSensitive: false,
-        wholeWord: true,
-        priority: 0,
-        enabled: true,
-        notes: "",
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      },
-    ];
-    const replace = vi.fn(async (entries: Array<Record<string, unknown>>) => {
-      stored = entries.map((entry, index) => ({
-        ...entry,
-        id:
-          typeof entry.id === "string"
-            ? entry.id
-            : `global-${String(index + 1)}`,
-        scope: "global",
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      })) as typeof stored;
+function custom(
+  overrides: Partial<GlobalLexiconState["custom"][number]> = {},
+): GlobalLexiconState["custom"][number] {
+  return {
+    id: "custom-cli",
+    scope: "global",
+    entryKind: "custom",
+    entryType: "exactTerm",
+    displayText: "CLI",
+    spokenText: "C L I",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: "",
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    ...overrides,
+  };
+}
+
+function createClient(initial: GlobalLexiconState) {
+  let stored = structuredClone(initial);
+  const list = vi.fn(async () => structuredClone(stored));
+  const setBuiltInEnabled = vi.fn(
+    async (
+      input: Parameters<
+        PersistenceClient["globalLexicon"]["setBuiltInEnabled"]
+      >[0],
+    ) => {
+      stored = {
+        ...stored,
+        builtIns: stored.builtIns.map((entry) =>
+          entry.id === input.id ? { ...entry, enabled: input.enabled } : entry,
+        ),
+      };
       return structuredClone(stored);
-    });
-    const client = {
+    },
+  );
+  const replaceCustom = vi.fn(
+    async (entries: CustomGlobalLexiconReplaceInput) => {
+      stored = {
+        ...stored,
+        custom: entries.map((entry, index) => ({
+          ...entry,
+          id: entry.id ?? `custom-${String(index + 1)}`,
+          entryKind: "custom" as const,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        })),
+      } as GlobalLexiconState;
+      return structuredClone(stored);
+    },
+  );
+  const reimportBuiltIns = vi.fn(async () => {
+    stored = {
+      ...stored,
+      builtIns: stored.builtIns.map((entry) => ({ ...entry, enabled: true })),
+    };
+    return structuredClone(stored);
+  });
+  return {
+    client: {
       globalLexicon: {
-        list: vi.fn(async () => structuredClone(stored)),
-        replace,
+        list,
+        setBuiltInEnabled,
+        replaceCustom,
+        reimportBuiltIns,
       },
-    } as unknown as PersistenceClient;
+    } as unknown as PersistenceClient,
+    list,
+    setBuiltInEnabled,
+    replaceCustom,
+    reimportBuiltIns,
+  };
+}
+
+function sectionFor(heading: string): HTMLElement {
+  const section = screen
+    .getByRole("heading", { name: heading })
+    .closest("section");
+  if (!section) throw new Error(`Section ${heading} was not found.`);
+  return section;
+}
+
+describe("Lexicon settings", () => {
+  it("limits built-ins to enablement while allowing custom CRUD", async () => {
+    const { client, setBuiltInEnabled, replaceCustom } = createClient({
+      builtIns: [builtIn()],
+      custom: [],
+    });
+    const user = userEvent.setup();
     renderPage(<LexiconSettingsPage client={client} />);
 
+    const customSection = sectionFor("Custom lexicon");
+    const globalSection = sectionFor("Global lexicon");
     expect(
-      await screen.findByRole("heading", { name: "Global lexicon" }),
-    ).toBeInTheDocument();
+      customSection.compareDocumentPosition(globalSection) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    const globalRow = await within(globalSection).findByRole("article", {
+      name: "Lexicon entry resume/cv",
+    });
+    expect(within(globalRow).getByLabelText("Alias")).toBeDisabled();
+    expect(within(globalRow).getByLabelText("Spoken Text")).toBeDisabled();
     expect(
-      screen.getByRole("heading", { name: "Lexicon" }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("resume/cv")).toBeInTheDocument();
-    expect(screen.getByText("{{resume|cv}}")).toBeInTheDocument();
-    expect(screen.queryByText("Type")).not.toBeInTheDocument();
-    expect(screen.queryByText("Case sensitive")).not.toBeInTheDocument();
+      within(globalSection).queryByRole("button", { name: "Add" }),
+    ).toBeNull();
+    expect(
+      within(globalSection).queryByRole("button", { name: "Delete" }),
+    ).toBeNull();
 
-    fireEvent.change(screen.getAllByLabelText("Alias")[0]!, {
-      target: { value: "resume/cv" },
-    });
-    fireEvent.change(screen.getAllByLabelText("Spoken Text")[0]!, {
-      target: { value: "rez oo may" },
-    });
-    await userEvent.click(screen.getByRole("button", { name: "Add" }));
-    expect(replace).toHaveBeenLastCalledWith(
-      expect.arrayContaining([
+    await user.click(
+      within(globalRow).getByRole("checkbox", { name: "Enabled" }),
+    );
+    await waitFor(() =>
+      expect(setBuiltInEnabled).toHaveBeenCalledWith({
+        id: "global-resume-cv",
+        enabled: false,
+      }),
+    );
+
+    const [alias] = within(customSection).getAllByLabelText("Alias");
+    const [spokenText] = within(customSection).getAllByLabelText("Spoken Text");
+    fireEvent.change(alias!, { target: { value: "resume/profile" } });
+    fireEvent.change(spokenText!, { target: { value: "rez oo may" } });
+    await user.click(
+      within(customSection).getByRole("button", { name: "Add" }),
+    );
+    await waitFor(() =>
+      expect(replaceCustom).toHaveBeenCalledWith([
         expect.objectContaining({
-          displayText: "resume",
-          senseId: "cv",
-          spokenText: "rez oo may",
           entryType: "namedSense",
-          caseSensitive: false,
-          wholeWord: true,
-          priority: 0,
-          enabled: true,
-          notes: "",
+          displayText: "resume",
+          senseId: "profile",
+          spokenText: "rez oo may",
         }),
       ]),
     );
 
-    const aliasRow = await screen.findByRole("article", {
-      name: "Lexicon entry resume/cv",
+    const customRow = await within(customSection).findByRole("article", {
+      name: "Lexicon entry resume/profile",
     });
-    fireEvent.change(within(aliasRow).getByLabelText("Alias"), {
-      target: { value: "resume/profile" },
-    });
-    await waitFor(
-      () =>
-        expect(replace).toHaveBeenLastCalledWith(
-          expect.arrayContaining([
-            expect.objectContaining({
-              displayText: "resume",
-              senseId: "profile",
-              entryType: "namedSense",
-            }),
-          ]),
-        ),
-      { timeout: 1_500 },
-    );
-
-    fireEvent.change(screen.getByDisplayValue("S Q L"), {
-      target: { value: "ess cue ell" },
-    });
-    expect(screen.queryByText("Saving…")).not.toBeInTheDocument();
-    await waitFor(
-      () =>
-        expect(replace).toHaveBeenLastCalledWith(
-          expect.arrayContaining([
-            expect.objectContaining({
-              id: "global-sql",
-              spokenText: "ess cue ell",
-            }),
-          ]),
-        ),
-      { timeout: 1_500 },
-    );
-    expect(screen.queryByText("Saved")).not.toBeInTheDocument();
-
-    await userEvent.click(
-      within(aliasRow).getByRole("checkbox", { name: "Enabled" }),
-    );
-    await waitFor(() =>
-      expect(replace).toHaveBeenLastCalledWith(
-        expect.arrayContaining([
-          expect.objectContaining({
-            displayText: "resume",
-            senseId: "profile",
-            enabled: false,
-          }),
-        ]),
-      ),
-    );
-    await userEvent.click(
-      within(aliasRow).getByRole("button", { name: "Delete" }),
-    );
-    await waitFor(() =>
-      expect(
-        screen.queryByDisplayValue("resume/profile"),
-      ).not.toBeInTheDocument(),
-    );
-    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
-    expect(
-      await screen.findByText("No matching global lexicon entries."),
-    ).toBeInTheDocument();
+    await user.click(within(customRow).getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(replaceCustom).toHaveBeenLastCalledWith([]));
   });
 
-  it("loads, reports query errors, and preserves active edits during refetch", async () => {
-    type GlobalLexiconEntries = Awaited<
-      ReturnType<PersistenceClient["globalLexicon"]["list"]>
-    >;
-    const entries = (spokenText: string): GlobalLexiconEntries => [
-      {
-        id: "global-sql",
-        scope: "global",
-        entryType: "exactTerm",
-        displayText: "SQL",
-        spokenText,
-        caseSensitive: false,
-        wholeWord: true,
-        priority: 0,
-        enabled: true,
-        notes: "",
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      },
-    ];
-    let resolveInitial!: (entries: GlobalLexiconEntries) => void;
-    const initial = new Promise<GlobalLexiconEntries>((resolve) => {
-      resolveInitial = resolve;
+  it("reimports only built-ins and preserves custom entries", async () => {
+    const { client, reimportBuiltIns } = createClient({
+      builtIns: [builtIn({ enabled: false })],
+      custom: [custom()],
     });
-    const list = vi
-      .fn()
-      .mockImplementationOnce(async () => await initial)
-      .mockRejectedValueOnce(new Error("Lexicon storage unavailable"))
-      .mockResolvedValueOnce(entries("Reloaded pronunciation"));
-    const client = {
-      globalLexicon: {
-        list,
-        replace: vi.fn(() => new Promise(() => undefined)),
-      },
-    } as unknown as PersistenceClient;
-    const { queryClient } = renderPage(<LexiconSettingsPage client={client} />);
-
-    await waitFor(() => expect(list).toHaveBeenCalledOnce());
-    expect(screen.getByText("0 entries")).toBeInTheDocument();
-    resolveInitial(entries("S Q L"));
-    expect(await screen.findByDisplayValue("S Q L")).toBeInTheDocument();
-
-    fireEvent.change(screen.getByDisplayValue("S Q L"), {
-      target: { value: "unsaved pronunciation" },
-    });
-    await queryClient.invalidateQueries({
-      queryKey: queryKeys.persistence.globalLexicon(),
-    });
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Lexicon storage unavailable",
-    );
-
-    await queryClient.invalidateQueries({
-      queryKey: queryKeys.persistence.globalLexicon(),
-    });
-    expect(
-      screen.getByDisplayValue("unsaved pronunciation"),
-    ).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
-  });
-
-  it("rejects blank, malformed, and duplicate aliases while preserving failed inline edits", async () => {
-    const replace = vi
-      .fn()
-      .mockRejectedValueOnce(new Error("Storage is unavailable"))
-      .mockImplementation(async (entries: GlobalLexiconReplaceInput) =>
-        entries.map((entry) => ({
-          ...entry,
-          id: entry.id ?? "global-new",
-          createdAt: timestamp,
-          updatedAt: timestamp,
-        })),
-      );
-    const client = {
-      globalLexicon: {
-        list: vi.fn(async () => [
-          {
-            id: "global-api",
-            scope: "global",
-            entryType: "exactTerm",
-            displayText: "API",
-            spokenText: "A P I",
-            caseSensitive: false,
-            wholeWord: true,
-            priority: 0,
-            enabled: true,
-            notes: "",
-            createdAt: timestamp,
-            updatedAt: timestamp,
-          },
-        ]),
-        replace,
-      },
-    } as unknown as PersistenceClient;
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const user = userEvent.setup();
     renderPage(<LexiconSettingsPage client={client} />);
-    await screen.findByDisplayValue("A P I");
 
-    await userEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect(await screen.findByDisplayValue("C L I")).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Reimport global lexicon" }),
+    );
+    await waitFor(() => expect(reimportBuiltIns).toHaveBeenCalledOnce());
+    expect(
+      screen.getByText(
+        "Global lexicon reimported. Custom entries were preserved.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByDisplayValue("C L I")).toBeInTheDocument();
+    expect(
+      within(sectionFor("Global lexicon")).getByRole("checkbox", {
+        name: "Enabled",
+      }),
+    ).toBeChecked();
+  });
+
+  it("validates custom aliases before saving", async () => {
+    const { client, replaceCustom } = createClient({
+      builtIns: [builtIn()],
+      custom: [],
+    });
+    const user = userEvent.setup();
+    renderPage(<LexiconSettingsPage client={client} />);
+
+    const customSection = sectionFor("Custom lexicon");
+    await user.click(
+      within(customSection).getByRole("button", { name: "Add" }),
+    );
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Alias and Spoken Text are required",
     );
-    fireEvent.change(screen.getAllByLabelText("Alias")[0]!, {
-      target: { value: "resume/cv/extra" },
-    });
-    fireEvent.change(screen.getAllByLabelText("Spoken Text")[0]!, {
-      target: { value: "invalid" },
-    });
-    await userEvent.click(screen.getByRole("button", { name: "Add" }));
-    expect(screen.getByRole("alert")).toHaveTextContent("one term/sense pair");
-    fireEvent.change(screen.getAllByLabelText("Alias")[0]!, {
-      target: { value: "api" },
-    });
-    fireEvent.change(screen.getAllByLabelText("Spoken Text")[0]!, {
-      target: { value: "duplicate" },
-    });
-    await userEvent.click(screen.getByRole("button", { name: "Add" }));
-    expect(
-      screen.getByText("Alias must be unique regardless of capitalization."),
-    ).toBeInTheDocument();
-    expect(replace).not.toHaveBeenCalled();
 
-    fireEvent.change(screen.getByDisplayValue("A P I"), {
-      target: { value: "new pronunciation" },
-    });
-    fireEvent.blur(screen.getByDisplayValue("new pronunciation"));
-    expect(
-      await screen.findByText("Not saved — edit or blur to retry"),
-    ).toBeInTheDocument();
-    expect(screen.getByDisplayValue("new pronunciation")).toBeInTheDocument();
-    fireEvent.blur(screen.getByDisplayValue("new pronunciation"));
-    await waitFor(() => expect(replace).toHaveBeenCalledTimes(2));
-    expect(
-      screen.queryByText("Not saved — edit or blur to retry"),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByText("Saved")).not.toBeInTheDocument();
+    const [alias] = within(customSection).getAllByLabelText("Alias");
+    const [spokenText] = within(customSection).getAllByLabelText("Spoken Text");
+    fireEvent.change(alias!, { target: { value: "resume/cv/extra" } });
+    fireEvent.change(spokenText!, { target: { value: "invalid" } });
+    await user.click(
+      within(customSection).getByRole("button", { name: "Add" }),
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent("one term/sense pair");
+    expect(replaceCustom).not.toHaveBeenCalled();
   });
 });

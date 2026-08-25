@@ -110,14 +110,22 @@ function entryMatchesAt(
   entry: LexiconEntry,
   text: string,
   index: number,
+  matchText = entry.displayText,
 ): boolean {
-  const candidate = text.slice(index, index + entry.displayText.length);
-  if (!sameText(candidate, entry.displayText, entry.caseSensitive))
-    return false;
+  const candidate = text.slice(index, index + matchText.length);
+  if (!sameText(candidate, matchText, entry.caseSensitive)) return false;
   return (
     !entry.wholeWord ||
-    hasWholeWordBoundaries(text, index, index + entry.displayText.length)
+    hasWholeWordBoundaries(text, index, index + matchText.length)
   );
+}
+
+function namedAliasText(entry: LexiconEntry): string {
+  if (!entry.senseId)
+    throw new Error(
+      `Named-sense lexicon entry ${entry.id} is missing a sense.`,
+    );
+  return `${entry.displayText}/${entry.senseId}`;
 }
 
 function ordinaryRank(entry: LexiconEntry): number {
@@ -372,19 +380,35 @@ export function transformScript(
           (minimum, item) => Math.min(minimum, item.readableStart),
           projection.text.length,
         );
-      const candidates = ordinaryEntries
-        .filter(
-          (entry) =>
-            index + entry.displayText.length <= nextProtectedStart &&
-            entryMatchesAt(entry, projection.text, index),
-        )
-        .sort(compareOrdinary);
+      const namedAliasCandidates = namedEntries
+        .filter((entry) => {
+          const alias = namedAliasText(entry);
+          return (
+            index + alias.length <= nextProtectedStart &&
+            entryMatchesAt(entry, projection.text, index, alias)
+          );
+        })
+        .sort(compareNamed);
+      const candidates =
+        namedAliasCandidates.length > 0
+          ? namedAliasCandidates
+          : ordinaryEntries
+              .filter(
+                (entry) =>
+                  index + entry.displayText.length <= nextProtectedStart &&
+                  entryMatchesAt(entry, projection.text, index),
+              )
+              .sort(compareOrdinary);
       const selected = candidates[0];
       if (!selected) {
         index += codePointAt(projection.text, index).length || 1;
         continue;
       }
-      const readableEnd = index + selected.displayText.length;
+      const matchText =
+        selected.entryType === "namedSense"
+          ? namedAliasText(selected)
+          : selected.displayText;
+      const readableEnd = index + matchText.length;
       const sourceStartOffset =
         projection.sourceStarts[index] ?? nodeStartOffset;
       const sourceEndOffset =
@@ -399,12 +423,15 @@ export function transformScript(
         sourceEndOffset,
         lineStarts,
       );
-      events.push({
+      const event: ReplacementEvent = {
         readableStart: index,
         readableEnd,
         ttsReplacement: selected.spokenText,
         audit,
-      });
+      };
+      if (selected.entryType === "namedSense")
+        event.readableReplacement = selected.displayText;
+      events.push(event);
       const warning = conflictWarning(
         candidates,
         node.ordinal,

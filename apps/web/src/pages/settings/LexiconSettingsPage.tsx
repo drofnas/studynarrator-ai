@@ -1,6 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { LexiconEntryAuthoring } from "@studynarrator/core";
 import type { PersistenceClient } from "@studynarrator/shared-types";
 import {
   LexiconEditor,
@@ -8,7 +7,6 @@ import {
   type LexiconEditorValue,
 } from "@/features/lexicon/LexiconEditor.js";
 import { queryKeys } from "@/app/queryKeys.js";
-import { authoringLexicon } from "@/features/projects/projectAuthoring.js";
 import styles from "./SettingsPage.module.css";
 
 type SimplifiedGlobalEntry = {
@@ -30,29 +28,18 @@ type GlobalLexiconRow = {
 };
 type LexiconRowState = "saving" | "saved" | "error";
 
-function fixedGlobalEntry(entry: LexiconEntryAuthoring): SimplifiedGlobalEntry {
-  const common = {
-    ...(entry.id ? { id: entry.id } : {}),
-    scope: "global",
-    displayText: entry.displayText,
-    spokenText: entry.spokenText,
-    caseSensitive: false,
-    wholeWord: true,
-    priority: 0,
-    enabled: entry.enabled ?? true,
-    notes: "",
-  } as const;
-  if (entry.entryType === "namedSense" && entry.senseId) {
-    return { ...common, entryType: "namedSense", senseId: entry.senseId };
-  }
-  return { ...common, entryType: "exactTerm" };
-}
-
-function rowFromEntry(entry: SimplifiedGlobalEntry): GlobalLexiconRow {
+function rowFromEntry(entry: {
+  id?: string | undefined;
+  entryType: string;
+  displayText: string;
+  senseId?: string | undefined;
+  spokenText: string;
+  enabled: boolean;
+}): GlobalLexiconRow {
   return {
     ...(entry.id ? { id: entry.id } : {}),
     alias:
-      entry.entryType === "namedSense"
+      entry.entryType === "namedSense" && entry.senseId
         ? `${entry.displayText}/${entry.senseId}`
         : entry.displayText,
     spokenText: entry.spokenText,
@@ -66,7 +53,7 @@ function entryFromRow(row: GlobalLexiconRow): SimplifiedGlobalEntry {
   if (!alias || !row.spokenText.trim())
     throw new Error("Alias and Spoken Text are required.");
   if (parts.length === 1) {
-    return fixedGlobalEntry({
+    return {
       ...(row.id ? { id: row.id } : {}),
       scope: "global",
       entryType: "exactTerm",
@@ -77,18 +64,17 @@ function entryFromRow(row: GlobalLexiconRow): SimplifiedGlobalEntry {
       priority: 0,
       enabled: row.enabled,
       notes: "",
-    });
+    };
   }
-  if (parts.length !== 2 || !parts[0]?.trim() || !parts[1]?.trim()) {
+  if (parts.length !== 2 || !parts[0]?.trim() || !parts[1]?.trim())
     throw new Error("Alias must be a term or one term/sense pair.");
-  }
   const senseId = parts[1].trim();
   if (!/^[A-Za-z0-9_-]+$/u.test(senseId)) {
     throw new Error(
       "The sense in an Alias may use only letters, numbers, underscores, and hyphens.",
     );
   }
-  return fixedGlobalEntry({
+  return {
     ...(row.id ? { id: row.id } : {}),
     scope: "global",
     entryType: "namedSense",
@@ -100,23 +86,26 @@ function entryFromRow(row: GlobalLexiconRow): SimplifiedGlobalEntry {
     priority: 0,
     enabled: row.enabled,
     notes: "",
-  });
+  };
 }
 
 export function LexiconSettingsPage({ client }: { client: PersistenceClient }) {
+  const queryClient = useQueryClient();
   const globalLexiconQuery = useQuery({
     queryKey: queryKeys.persistence.globalLexicon(),
     queryFn: () => client.globalLexicon.list(),
     retry: false,
   });
-  const [globalLexicon, setGlobalLexicon] = useState<GlobalLexiconRow[]>([]);
+  const [customLexicon, setCustomLexicon] = useState<GlobalLexiconRow[]>([]);
   const [lexiconRowState, setLexiconRowState] = useState<
     Record<string, LexiconRowState>
   >({});
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
-  const globalLexiconRef = useRef(globalLexicon);
-  const globalLexiconDirtyRef = useRef(false);
+  const [builtInBusy, setBuiltInBusy] = useState(false);
+  const [reimporting, setReimporting] = useState(false);
+  const customLexiconRef = useRef(customLexicon);
+  const customLexiconDirtyRef = useRef(false);
   const lexiconRevisionRef = useRef(0);
   const lexiconQueueRef = useRef<Promise<void>>(Promise.resolve());
   const lexiconTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
@@ -125,19 +114,20 @@ export function LexiconSettingsPage({ client }: { client: PersistenceClient }) {
   const pendingLexiconRowsRef = useRef(new Set<string>());
 
   useEffect(() => {
-    if (!globalLexiconQuery.data || globalLexiconDirtyRef.current) return;
-    const loaded = authoringLexicon(globalLexiconQuery.data)
-      .map(fixedGlobalEntry)
-      .map(rowFromEntry);
-    globalLexiconRef.current = loaded;
-    setGlobalLexicon(loaded);
+    if (!globalLexiconQuery.data || customLexiconDirtyRef.current) return;
+    const loaded = globalLexiconQuery.data.custom.map(rowFromEntry);
+    customLexiconRef.current = loaded;
+    setCustomLexicon(loaded);
   }, [globalLexiconQuery.data]);
 
   const loadError = globalLexiconQuery.isError
     ? globalLexiconQuery.error instanceof Error
       ? globalLexiconQuery.error.message
-      : "The global lexicon could not be loaded."
+      : "The lexicon could not be loaded."
     : "";
+  const builtInLexicon = (globalLexiconQuery.data?.builtIns ?? []).map(
+    rowFromEntry,
+  );
 
   useEffect(
     () => () => {
@@ -146,7 +136,19 @@ export function LexiconSettingsPage({ client }: { client: PersistenceClient }) {
     [],
   );
 
-  const persistGlobalLexicon = useCallback(
+  const applyGlobalLexiconState = useCallback(
+    (
+      state: Awaited<ReturnType<PersistenceClient["globalLexicon"]["list"]>>,
+    ) => {
+      queryClient.setQueryData(queryKeys.persistence.globalLexicon(), state);
+      const custom = state.custom.map(rowFromEntry);
+      customLexiconRef.current = custom;
+      setCustomLexicon(custom);
+    },
+    [queryClient],
+  );
+
+  const persistCustomLexicon = useCallback(
     (entries: GlobalLexiconRow[], affectedIds: string[], success?: string) => {
       let snapshot: SimplifiedGlobalEntry[];
       try {
@@ -161,7 +163,7 @@ export function LexiconSettingsPage({ client }: { client: PersistenceClient }) {
         setError(
           reason instanceof Error
             ? reason.message
-            : "The Global Lexicon Alias is invalid.",
+            : "The Custom Lexicon Alias is invalid.",
         );
         return Promise.resolve(false);
       }
@@ -190,21 +192,16 @@ export function LexiconSettingsPage({ client }: { client: PersistenceClient }) {
       }));
       const task = lexiconQueueRef.current.then(async () => {
         try {
-          const saved = authoringLexicon(
-            await client.globalLexicon.replace(snapshot),
-          )
-            .map(fixedGlobalEntry)
-            .map(rowFromEntry);
+          const state = await client.globalLexicon.replaceCustom(snapshot);
           if (revision === lexiconRevisionRef.current) {
-            globalLexiconRef.current = saved;
-            setGlobalLexicon(saved);
+            applyGlobalLexiconState(state);
             setLexiconRowState((current) => ({
               ...current,
               ...Object.fromEntries(
                 affectedIds.map((id) => [id, "saved" as const]),
               ),
             }));
-            globalLexiconDirtyRef.current = false;
+            customLexiconDirtyRef.current = false;
             if (success) setStatus(success);
             setError("");
           }
@@ -220,7 +217,7 @@ export function LexiconSettingsPage({ client }: { client: PersistenceClient }) {
             setError(
               reason instanceof Error
                 ? reason.message
-                : "The global lexicon could not be saved. Your edits are still here; try again.",
+                : "The custom lexicon could not be saved. Your edits are still here; try again.",
             );
           }
           return false;
@@ -232,23 +229,23 @@ export function LexiconSettingsPage({ client }: { client: PersistenceClient }) {
       );
       return task;
     },
-    [client],
+    [applyGlobalLexiconState, client],
   );
 
-  const flushGlobalLexicon = useCallback(() => {
+  const flushCustomLexicon = useCallback(() => {
     if (lexiconTimerRef.current) clearTimeout(lexiconTimerRef.current);
     lexiconTimerRef.current = undefined;
     const affectedIds = [...pendingLexiconRowsRef.current];
     pendingLexiconRowsRef.current.clear();
-    if (affectedIds.length === 0) return;
-    void persistGlobalLexicon(
-      globalLexiconRef.current,
+    if (affectedIds.length === 0) return Promise.resolve(true);
+    return persistCustomLexicon(
+      customLexiconRef.current,
       affectedIds,
-      "Global pronunciation saved.",
+      "Custom pronunciation saved.",
     );
-  }, [persistGlobalLexicon]);
+  }, [persistCustomLexicon]);
 
-  const changeGlobalLexicon = (
+  const changeCustomLexicon = (
     value: LexiconEditorValue[],
     change: LexiconEditorChange,
   ) => {
@@ -259,32 +256,89 @@ export function LexiconSettingsPage({ client }: { client: PersistenceClient }) {
       enabled: entry.enabled,
     }));
     if (change.kind === "add" || change.kind === "delete") {
-      globalLexiconDirtyRef.current = true;
-      flushGlobalLexicon();
+      customLexiconDirtyRef.current = true;
+      void flushCustomLexicon();
       lexiconRevisionRef.current += 1;
-      return persistGlobalLexicon(
+      return persistCustomLexicon(
         next,
         [change.id],
         change.kind === "add"
-          ? "Global pronunciation added."
-          : "Global pronunciation deleted.",
+          ? "Custom pronunciation added."
+          : "Custom pronunciation deleted.",
       );
     }
     if (change.kind === "commit") {
       pendingLexiconRowsRef.current.add(change.id);
-      flushGlobalLexicon();
+      void flushCustomLexicon();
       return;
     }
-    globalLexiconDirtyRef.current = true;
+    customLexiconDirtyRef.current = true;
     lexiconRevisionRef.current += 1;
-    globalLexiconRef.current = next;
-    setGlobalLexicon(next);
+    customLexiconRef.current = next;
+    setCustomLexicon(next);
     pendingLexiconRowsRef.current.add(change.id);
     setLexiconRowState((current) => ({ ...current, [change.id]: "saving" }));
-    if (change.kind === "toggle") flushGlobalLexicon();
+    if (change.kind === "toggle") void flushCustomLexicon();
     else {
       if (lexiconTimerRef.current) clearTimeout(lexiconTimerRef.current);
-      lexiconTimerRef.current = setTimeout(flushGlobalLexicon, 500);
+      lexiconTimerRef.current = setTimeout(() => {
+        void flushCustomLexicon();
+      }, 500);
+    }
+  };
+
+  const changeBuiltInLexicon = async (
+    value: LexiconEditorValue[],
+    change: LexiconEditorChange,
+  ) => {
+    if (change.kind !== "toggle") return false;
+    const entry = value.find((candidate) => candidate.id === change.id);
+    if (!entry?.id) return false;
+    setBuiltInBusy(true);
+    try {
+      applyGlobalLexiconState(
+        await client.globalLexicon.setBuiltInEnabled({
+          id: entry.id,
+          enabled: entry.enabled,
+        }),
+      );
+      setStatus("Global pronunciation updated.");
+      setError("");
+      return true;
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "The global lexicon entry could not be updated.",
+      );
+      return false;
+    } finally {
+      setBuiltInBusy(false);
+    }
+  };
+
+  const reimportBuiltIns = async () => {
+    if (
+      !window.confirm(
+        "Reimport every built-in global lexicon entry from the bundled catalog? Your custom lexicon entries will not be changed.",
+      )
+    )
+      return;
+    if (!(await flushCustomLexicon())) return;
+    setReimporting(true);
+    try {
+      applyGlobalLexiconState(await client.globalLexicon.reimportBuiltIns());
+      customLexiconDirtyRef.current = false;
+      setStatus("Global lexicon reimported. Custom entries were preserved.");
+      setError("");
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "The global lexicon could not be reimported.",
+      );
+    } finally {
+      setReimporting(false);
     }
   };
 
@@ -310,37 +364,94 @@ export function LexiconSettingsPage({ client }: { client: PersistenceClient }) {
 
       <section
         className={styles.globalLexicon}
-        aria-labelledby="global-lexicon-heading"
+        aria-labelledby="custom-lexicon-heading"
       >
         <div className={styles.sectionHeading}>
           <div>
-            <p>Shared pronunciation</p>
-            <h3 id="global-lexicon-heading">Global lexicon</h3>
+            <p>User defined</p>
+            <h3 id="custom-lexicon-heading">Custom lexicon</h3>
           </div>
-          <span>{globalLexicon.length} entries</span>
+          <span>{customLexicon.length} entries</span>
         </div>
         <p>
-          Aliases match regardless of capitalization. Use <code>resume/cv</code>{" "}
-          to resolve the script annotation <code>{"{{resume|cv}}"}</code>. These
-          rules apply to every project and pronunciation preview.
+          Add, edit, delete, or enable custom pronunciation rules without
+          changing the built-in global catalog.
         </p>
         <LexiconEditor
-          value={globalLexicon.map(({ id, alias, spokenText, enabled }) => ({
+          value={customLexicon.map(({ id, alias, spokenText, enabled }) => ({
             ...(id ? { id } : {}),
             displayText: alias,
             spokenText,
             enabled,
           }))}
-          onChange={changeGlobalLexicon}
-          searchLabel="Search global lexicon"
-          emptyMessage="No matching global lexicon entries."
+          onChange={changeCustomLexicon}
+          searchLabel="Search custom lexicon"
+          emptyMessage="No matching custom lexicon entries."
           displayTextLabel="Alias"
+          disabled={reimporting}
           rowErrors={Object.fromEntries(
             Object.entries(lexiconRowState)
               .filter(([, state]) => state === "error")
               .map(([id]) => [id, "Not saved — edit or blur to retry"]),
           )}
         />
+      </section>
+
+      <section
+        className={styles.globalLexicon}
+        aria-labelledby="global-lexicon-heading"
+      >
+        <div className={styles.sectionHeading}>
+          <div>
+            <p>Built in</p>
+            <h3 id="global-lexicon-heading">Global lexicon</h3>
+          </div>
+          <span>{builtInLexicon.length} entries</span>
+        </div>
+        <p>
+          Built-in aliases such as <code>resume/cv</code> are fixed. You may
+          enable or disable them, but only the bundled catalog can change their
+          spelling or pronunciation.
+        </p>
+        <LexiconEditor
+          value={builtInLexicon.map(({ id, alias, spokenText, enabled }) => ({
+            ...(id ? { id } : {}),
+            displayText: alias,
+            spokenText,
+            enabled,
+          }))}
+          onChange={changeBuiltInLexicon}
+          searchLabel="Search global lexicon"
+          emptyMessage="No matching global lexicon entries."
+          displayTextLabel="Alias"
+          allowAdd={false}
+          allowEdit={false}
+          allowDelete={false}
+          disabled={builtInBusy || reimporting}
+        />
+      </section>
+
+      <section
+        className={styles.globalLexicon}
+        aria-labelledby="reimport-heading"
+      >
+        <div className={styles.sectionHeading}>
+          <div>
+            <p>Restore built-ins</p>
+            <h3 id="reimport-heading">Reimport global lexicon</h3>
+          </div>
+        </div>
+        <p>
+          Restore every built-in global entry from the bundled JSON catalog.
+          Custom entries are preserved.
+        </p>
+        <button
+          type="button"
+          onClick={() => void reimportBuiltIns()}
+          disabled={reimporting || builtInBusy}
+        >
+          {reimporting ? "Reimporting…" : "Reimport global lexicon"}
+        </button>
       </section>
     </div>
   );

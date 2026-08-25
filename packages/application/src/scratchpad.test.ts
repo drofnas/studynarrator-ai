@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { SpeachesSynthesisError } from "@studynarrator/speaches-adapter";
 import type { SpeechCache } from "@studynarrator/rendering";
-import { DEFAULT_GLOBAL_NAMED_SENSE_LEXICON } from "@studynarrator/shared-types";
+import { GLOBAL_LEXICON_BUILT_INS } from "@studynarrator/shared-types";
 import {
   createScratchpadService,
   type ScratchpadRepository,
@@ -24,7 +24,9 @@ const connection = {
   createdAt: timestamp,
   updatedAt: timestamp,
 };
-const namedSenseDefaults = DEFAULT_GLOBAL_NAMED_SENSE_LEXICON.map((entry) => ({
+const namedSenseDefaults = GLOBAL_LEXICON_BUILT_INS.filter(
+  (entry) => entry.entryType === "namedSense",
+).map((entry) => ({
   ...entry,
   createdAt: timestamp,
   updatedAt: timestamp,
@@ -203,8 +205,8 @@ describe("scratchpad service", () => {
     ).toHaveLength(0);
   });
 
-  it("applies built-in named senses and keeps disabled or deleted senses literal", async () => {
-    const source = "{{resume|cv}}, {{lead|metal}}, and {{axes|tools}}.";
+  it("applies literal built-in named-sense aliases and keeps disabled or missing aliases literal", async () => {
+    const source = "resume/cv, lead/metal, and axes/tools.";
     const synthesize = vi.fn(async () => ({
       bytes: new Uint8Array([1]),
       mimeType: "audio/wav" as const,
@@ -225,7 +227,7 @@ describe("scratchpad service", () => {
       }),
     ).resolves.toMatchObject({
       readableText: "resume, lead, and axes.",
-      transformedText: "rez oo may, led, and ak siz.",
+      transformedText: "rez.oo.may, led, and ak.siz.",
       warnings: [],
     });
 
@@ -243,12 +245,12 @@ describe("scratchpad service", () => {
         modelId: "model",
         voiceId: "voice",
         speed: 1,
-        text: "Review {{resume|cv}}.",
+        text: "Review resume/cv.",
         applyGlobalLexicon: true,
       }),
     ).resolves.toMatchObject({
-      transformedText: "Review {{resume|cv}}.",
-      warnings: [expect.objectContaining({ code: "UNRESOLVED_NAMED_SENSE" })],
+      transformedText: "Review resume/cv.",
+      warnings: [],
     });
 
     const deleted = createScratchpadService({
@@ -261,12 +263,12 @@ describe("scratchpad service", () => {
         modelId: "model",
         voiceId: "voice",
         speed: 1,
-        text: "Review {{resume|cv}}.",
+        text: "Review resume/cv.",
         applyGlobalLexicon: true,
       }),
     ).resolves.toMatchObject({
-      transformedText: "Review {{resume|cv}}.",
-      warnings: [expect.objectContaining({ code: "UNRESOLVED_NAMED_SENSE" })],
+      transformedText: "Review resume/cv.",
+      warnings: [],
     });
   });
 

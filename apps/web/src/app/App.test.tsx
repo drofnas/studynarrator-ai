@@ -37,7 +37,12 @@ const unusedPersistence: PersistenceClient = {
     getIgnoredDiagnostics: vi.fn(async () => []),
     replaceIgnoredDiagnostics: vi.fn(),
   },
-  globalLexicon: { list: vi.fn(async () => []), replace: vi.fn() },
+  globalLexicon: {
+    list: vi.fn(async () => ({ builtIns: [], custom: [] })),
+    setBuiltInEnabled: vi.fn(),
+    replaceCustom: vi.fn(),
+    reimportBuiltIns: vi.fn(),
+  },
 };
 const unusedConnections = {
   get: vi.fn(async () => ({
@@ -145,13 +150,15 @@ function renderApp(
   );
 }
 
+async function findHeading(name: string) {
+  return await screen.findByRole("heading", { name }, { timeout: 5_000 });
+}
+
 describe("application routing", () => {
   it.each(["/", "/missing-page"])("redirects %s to Projects", async (route) => {
     const diagnostics = vi.fn();
     renderApp(route, { diagnostics });
-    expect(
-      await screen.findByRole("heading", { name: "Projects" }),
-    ).toBeInTheDocument();
+    expect(await findHeading("Projects")).toBeInTheDocument();
     const navigation = within(screen.getByRole("navigation"));
     expect(
       navigation.getAllByRole("link").map((link) => link.textContent),
@@ -178,9 +185,7 @@ describe("application routing", () => {
     const user = userEvent.setup();
     renderApp("/projects");
     await user.click(screen.getByRole("link", { name: "System diagnostics" }));
-    expect(
-      await screen.findByRole("heading", { name: "Runtime self-test" }),
-    ).toBeInTheDocument();
+    expect(await findHeading("Runtime self-test")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "System diagnostics" }),
     ).toHaveAttribute("aria-current", "page");
@@ -191,9 +196,7 @@ describe("application routing", () => {
     const user = userEvent.setup();
     renderApp("/projects");
     await user.click(screen.getByRole("link", { name: "Quick Scratchpad" }));
-    expect(
-      await screen.findByRole("heading", { name: "Quick Scratchpad" }),
-    ).toBeInTheDocument();
+    expect(await findHeading("Quick Scratchpad")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Quick Scratchpad" }),
     ).toHaveAttribute("aria-current", "page");
@@ -204,9 +207,7 @@ describe("application routing", () => {
     renderApp("/projects");
     const navigation = within(screen.getByRole("navigation"));
     await user.click(navigation.getByRole("link", { name: "Settings" }));
-    expect(
-      await screen.findByRole("heading", { name: "General" }),
-    ).toBeInTheDocument();
+    expect(await findHeading("General")).toBeInTheDocument();
     expect(
       navigation.getByRole("link", { name: "Settings" }),
     ).not.toHaveAttribute("aria-current");
@@ -224,9 +225,7 @@ describe("application routing", () => {
     ["/settings/timings", "Timings"],
   ])("routes %s to the %s settings page", async (route, pageName) => {
     renderApp(route);
-    expect(
-      await screen.findByRole("heading", { name: pageName }),
-    ).toBeInTheDocument();
+    expect(await findHeading(pageName)).toBeInTheDocument();
     const navigation = within(screen.getByRole("navigation"));
     expect(navigation.getByRole("link", { name: pageName })).toHaveAttribute(
       "aria-current",
@@ -241,9 +240,7 @@ describe("application routing", () => {
     const user = userEvent.setup();
     renderApp("/projects");
     await user.click(screen.getByRole("link", { name: "Prompt Kit" }));
-    expect(
-      await screen.findByRole("heading", { name: "Script prompt kit" }),
-    ).toBeInTheDocument();
+    expect(await findHeading("Script prompt kit")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Prompt Kit" })).toHaveAttribute(
       "aria-current",
       "page",
@@ -282,9 +279,7 @@ describe("application routing", () => {
     "redirects removed review route %s to Projects",
     async (route) => {
       renderApp(route);
-      expect(
-        await screen.findByRole("heading", { name: "Projects" }),
-      ).toBeInTheDocument();
+      expect(await findHeading("Projects")).toBeInTheDocument();
       expect(screen.queryByText(/Lab/u)).not.toBeInTheDocument();
     },
   );

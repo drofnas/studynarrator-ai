@@ -6,8 +6,8 @@ import {
   test,
 } from "../support/studyNarratorTest.js";
 
-const original = "Review {{resume|cv}} before the interview.";
-const transformed = "Review rez oo may before the interview.";
+const original = "Review resume/cv before the interview.";
+const transformed = "Review rez.oo.may before the interview.";
 
 test.describe("Quick Scratchpad", () => {
   test("transforms, synthesizes, recovers from failures, and never mutates projects", async ({
