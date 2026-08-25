@@ -1250,6 +1250,10 @@ export function useProjectsPageController({
   };
 
   const selectTab = (tab: ProjectTab, focus = false) => {
+    if (tab === activeTab) {
+      if (focus) window.setTimeout(() => tabRefs.current[tab]?.focus(), 0);
+      return;
+    }
     setSearchParams(tab === "script" ? {} : { tab });
     if (focus) window.setTimeout(() => tabRefs.current[tab]?.focus(), 0);
   };
@@ -1379,6 +1383,13 @@ export function useProjectsPageController({
   };
 
   const runPreview = async (nodeOrdinal: number) => {
+    if (
+      segmentAudition?.key === nodeOrdinal &&
+      segmentAudition.phase === "playing"
+    ) {
+      stopSegmentAudition();
+      return;
+    }
     if (!project || !(await saveNow())) {
       setPreviewError("Save valid project changes before previewing.");
       return;

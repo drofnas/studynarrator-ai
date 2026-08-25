@@ -624,6 +624,11 @@ test.describe("Projects connected authoring", () => {
     await expect
       .poll(() => page.evaluate(() => window.scrollY))
       .toBeGreaterThan(0);
+    const scrollPosition = await page.evaluate(() => window.scrollY);
+    await page.getByRole("tab", { name: "Details" }).click();
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBe(scrollPosition);
 
     await page.getByRole("button", { name: "Save now" }).click();
     await expect(page.getByText("All changes saved.")).toHaveCount(0);

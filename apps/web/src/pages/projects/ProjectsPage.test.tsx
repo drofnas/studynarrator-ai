@@ -1002,6 +1002,43 @@ describe("Projects workbench", () => {
     );
   });
 
+  it("hides a stale preview error while the script is parsing", async () => {
+    const { source } = installAudioContext();
+    const { client, analyze } = fixture();
+    const preview = vi.fn(async () => {
+      throw new Error(
+        "Empty Script: Add at least one speech segment before rendering.",
+      );
+    });
+    renderPage(client, analyze, {
+      previewClient: { preview } as unknown as ProjectPreviewClient,
+    });
+
+    await openProjectTab("Details");
+    await userEvent.click(
+      (
+        await screen.findAllByRole("button", { name: /Play narration row/u })
+      )[0]!,
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Empty Script: Add at least one speech segment before rendering.",
+    );
+
+    await openProjectTab("Script Editor");
+    replaceScriptSource("[speaker_teacher] Updated script.");
+    await openProjectTab("Details");
+    await waitFor(() =>
+      expect(screen.getByText("Parsing…")).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByRole("alert", {
+        name: /Empty Script: Add at least one speech segment before rendering\./u,
+      }),
+    ).not.toBeInTheDocument();
+    expect(preview).toHaveBeenCalledOnce();
+    expect(source.start).not.toHaveBeenCalled();
+  });
+
   it("ignores stale estimate context after the configured voice changes", async () => {
     const { client, analyze } = fixture();
     const stale = deferred<RenderEstimateContextResult>();
@@ -2022,6 +2059,16 @@ describe("Projects workbench", () => {
       await screen.findByRole("button", { name: /Playing narration row/u }),
     ).toBeInTheDocument();
     expect(source.start).toHaveBeenCalledOnce();
+    await userEvent.click(
+      screen.getByRole("button", { name: /Playing narration row/u }),
+    );
+    expect(
+      (
+        await screen.findAllByRole("button", { name: /Play narration row/u })
+      )[0],
+    ).toBeInTheDocument();
+    expect(source.stop).toHaveBeenCalledOnce();
+    expect(preview).toHaveBeenCalledOnce();
     expect(
       screen.queryByRole("region", { name: "Project preview result" }),
     ).not.toBeInTheDocument();
