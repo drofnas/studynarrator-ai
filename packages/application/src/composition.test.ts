@@ -297,7 +297,7 @@ describe("createStudyNarratorServices", () => {
     });
   }
 
-  it("builds the healthy service graph with the speech cache before persistence opens", async () => {
+  it("builds the healthy service graph with the cache before persistence and its service after retention dependencies", async () => {
     await withDataDirectory(async (dataDirectory) => {
       const services = await servicesIn(
         dataDirectory,
@@ -305,10 +305,10 @@ describe("createStudyNarratorServices", () => {
       );
       expect(recorded.calls).toEqual([
         "speechCache",
-        "speechCacheService",
         "manifest",
         "layout",
         "open",
+        "speechCacheService",
       ]);
       expect(logger.info).toHaveBeenCalledTimes(1);
       expect(logger.info).toHaveBeenCalledWith(

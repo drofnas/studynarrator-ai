@@ -1585,7 +1585,11 @@ describe("REST API operation manifest", () => {
         .body as unknown,
     );
     SpeechCacheCleanupResultSchema.parse(
-      (await call("DELETE", "/api/speech-cache", 200)).body as unknown,
+      (
+        await call("DELETE", "/api/speech-cache", 200, {
+          includeRenderedProjectClips: false,
+        })
+      ).body as unknown,
     );
     await call("DELETE", `/api/projects/${created.id}`, 204);
 
@@ -1716,6 +1720,14 @@ describe("REST API operation manifest", () => {
       request(app).get("/api/render-artifacts/not-a-uuid").expect(400),
       request(app).delete("/api/projects/not-a-uuid/speech-cache").expect(400),
       request(app).delete("/api/speech-cache/not-a-key").expect(400),
+      request(app)
+        .delete("/api/speech-cache")
+        .send({ includeRenderedProjectClips: "yes", secret })
+        .expect(400),
+      request(app)
+        .delete("/api/speech-cache")
+        .send({ includeRenderedProjectClips: false, unexpected: true, secret })
+        .expect(400),
     ];
     const responses = await Promise.all(invalidCases);
     expect(

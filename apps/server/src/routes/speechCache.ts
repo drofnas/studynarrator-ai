@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   ProjectIdSchema,
   SpeechCacheCleanupResultSchema,
+  SpeechCacheClearAllInputSchema,
   SpeechCacheKeyInputSchema,
   SpeechCacheStatusSchema,
   type SpeechCacheClient,
@@ -23,9 +24,12 @@ export function createSpeechCacheRouter(
     );
     router.delete(
       "/api/speech-cache",
-      asyncHandler(async (_request, response) => {
+      asyncHandler(async (request, response) => {
+        const input = SpeechCacheClearAllInputSchema.parse(request.body);
         response.json(
-          SpeechCacheCleanupResultSchema.parse(await speechCache.clearAll()),
+          SpeechCacheCleanupResultSchema.parse(
+            await speechCache.clearAll(input),
+          ),
         );
       }),
     );

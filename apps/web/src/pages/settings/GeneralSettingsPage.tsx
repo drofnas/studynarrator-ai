@@ -58,6 +58,8 @@ export function GeneralSettingsPage({
     null,
   );
   const [cacheBusy, setCacheBusy] = useState(false);
+  const [includeRenderedProjectClips, setIncludeRenderedProjectClips] =
+    useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
 
@@ -201,15 +203,21 @@ export function GeneralSettingsPage({
   const clearAllCache = async () => {
     if (
       !window.confirm(
-        "Clear every cached speech preview? Future previews will contact Speaches again. This does not change projects or render history.",
+        includeRenderedProjectClips
+          ? "Clear every cached speech preview and rendered project clip? Future previews will contact Speaches again. This preserves projects and render history."
+          : "Clear every cached speech preview? Future previews will contact Speaches again. This does not change projects or render history.",
       )
     )
       return;
     setCacheBusy(true);
     try {
-      const removed = await cacheClient.clearAll();
+      const removed = await cacheClient.clearAll({
+        includeRenderedProjectClips,
+      });
       setStatus(
-        `Cleared ${String(removed.entriesRemoved)} cached speech ${removed.entriesRemoved === 1 ? "entry" : "entries"} and freed ${formatBytes(removed.bytesFreed)}.`,
+        includeRenderedProjectClips
+          ? `Cleared ${String(removed.entriesRemoved)} cached speech ${removed.entriesRemoved === 1 ? "entry" : "entries"}, freed ${formatBytes(removed.bytesFreed)}, and removed rendered project clips. Projects and render history were preserved.`
+          : `Cleared ${String(removed.entriesRemoved)} cached speech ${removed.entriesRemoved === 1 ? "entry" : "entries"} and freed ${formatBytes(removed.bytesFreed)}.`,
       );
       await refreshCache();
     } catch (reason) {
@@ -467,14 +475,30 @@ export function GeneralSettingsPage({
         ) : (
           <p>Loading cache statistics…</p>
         )}
-        <button
-          type="button"
-          className={styles.danger}
-          disabled={cacheBusy || cacheStatus?.entryCount === 0}
-          onClick={() => void clearAllCache()}
-        >
-          {cacheBusy ? "Clearing…" : "Clear all cached speech"}
-        </button>
+        <div className={styles.cacheControls}>
+          <label>
+            <input
+              type="checkbox"
+              checked={includeRenderedProjectClips}
+              disabled={cacheBusy}
+              onChange={(event) =>
+                setIncludeRenderedProjectClips(event.target.checked)
+              }
+            />
+            Include Rendered Project Clips
+          </label>
+          <button
+            type="button"
+            className={styles.danger}
+            disabled={
+              cacheBusy ||
+              (cacheStatus?.entryCount === 0 && !includeRenderedProjectClips)
+            }
+            onClick={() => void clearAllCache()}
+          >
+            {cacheBusy ? "Clearing…" : "Clear all cached speech"}
+          </button>
+        </div>
       </section>
     </div>
   );

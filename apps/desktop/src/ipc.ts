@@ -62,6 +62,7 @@ import {
   SpeechBackendConnectionSchema,
   SPEECH_CACHE_CHANNELS,
   SpeechCacheCleanupResultSchema,
+  SpeechCacheClearAllInputSchema,
   SpeechCacheKeyInputSchema,
   SpeechCacheProjectInputSchema,
   SpeechCacheStatusSchema,
@@ -462,8 +463,10 @@ export function registerSpeechCacheHandlers(
   handle(SPEECH_CACHE_CHANNELS.status, async () =>
     SpeechCacheStatusSchema.parse(await speechCache.status()),
   );
-  handle(SPEECH_CACHE_CHANNELS.clearAll, async () =>
-    SpeechCacheCleanupResultSchema.parse(await speechCache.clearAll()),
+  handle(SPEECH_CACHE_CHANNELS.clearAll, async (input) =>
+    SpeechCacheCleanupResultSchema.parse(
+      await speechCache.clearAll(SpeechCacheClearAllInputSchema.parse(input)),
+    ),
   );
   handle(SPEECH_CACHE_CHANNELS.clearProject, async (input) => {
     const { projectId } = SpeechCacheProjectInputSchema.parse(input);
