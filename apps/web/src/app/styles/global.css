@@ -1,4 +1,5 @@
 :root {
+  scrollbar-gutter: stable;
   color: #17304b;
   background: #eaf0f2;
   font-family: "Avenir Next", Avenir, "Segoe UI", sans-serif;
