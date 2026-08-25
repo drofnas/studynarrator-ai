@@ -2,59 +2,17 @@
   "schemaVersion": 1,
   "entries": [
     {
-      "id": "10000000-0000-4000-8000-000000000001",
-      "entryType": "exactTerm",
-      "displayText": "API",
-      "spokenText": "A P I",
-      "enabled": true
-    },
-    {
-      "id": "10000000-0000-4000-8000-000000000002",
-      "entryType": "exactTerm",
-      "displayText": "URL",
-      "spokenText": "U R L",
-      "enabled": true
-    },
-    {
-      "id": "10000000-0000-4000-8000-000000000003",
-      "entryType": "exactTerm",
-      "displayText": "HTTP",
-      "spokenText": "H T T P",
-      "enabled": true
-    },
-    {
-      "id": "10000000-0000-4000-8000-000000000004",
-      "entryType": "exactTerm",
-      "displayText": "HTTPS",
-      "spokenText": "H T T P S",
-      "enabled": true
-    },
-    {
-      "id": "10000000-0000-4000-8000-000000000005",
-      "entryType": "exactTerm",
-      "displayText": "JSON",
-      "spokenText": "jay son",
-      "enabled": true
-    },
-    {
-      "id": "10000000-0000-4000-8000-000000000006",
-      "entryType": "exactTerm",
-      "displayText": "SQL",
-      "spokenText": "S Q L",
-      "enabled": true
-    },
-    {
       "id": "10000000-0000-4000-8000-000000000007",
       "entryType": "exactTerm",
       "displayText": "PostgreSQL",
-      "spokenText": "post gres Q L",
+      "spokenText": "post.gres.Q.L",
       "enabled": true
     },
     {
       "id": "10000000-0000-4000-8000-000000000008",
       "entryType": "exactTerm",
       "displayText": "GitHub",
-      "spokenText": "git hub",
+      "spokenText": "git.hub",
       "enabled": true
     },
     {
@@ -62,7 +20,7 @@
       "entryType": "namedSense",
       "displayText": "resume",
       "senseId": "cv",
-      "spokenText": "rez oo may",
+      "spokenText": "rez.oo.may",
       "enabled": true
     },
     {
@@ -70,7 +28,7 @@
       "entryType": "namedSense",
       "displayText": "resume",
       "senseId": "continue",
-      "spokenText": "ree zoom",
+      "spokenText": "ree.zoom",
       "enabled": true
     },
     {
@@ -126,7 +84,7 @@
       "entryType": "namedSense",
       "displayText": "record",
       "senseId": "noun",
-      "spokenText": "reck erd",
+      "spokenText": "reck.erd",
       "enabled": true
     },
     {
@@ -134,7 +92,7 @@
       "entryType": "namedSense",
       "displayText": "record",
       "senseId": "verb",
-      "spokenText": "ree cord",
+      "spokenText": "ree.cord",
       "enabled": true
     },
     {
@@ -142,7 +100,7 @@
       "entryType": "namedSense",
       "displayText": "project",
       "senseId": "noun",
-      "spokenText": "prah jekt",
+      "spokenText": "prah.jekt",
       "enabled": true
     },
     {
@@ -150,7 +108,7 @@
       "entryType": "namedSense",
       "displayText": "project",
       "senseId": "verb",
-      "spokenText": "pruh jekt",
+      "spokenText": "pruh.jekt",
       "enabled": true
     },
     {
@@ -158,7 +116,7 @@
       "entryType": "namedSense",
       "displayText": "object",
       "senseId": "thing",
-      "spokenText": "ob jekt",
+      "spokenText": "ob.jekt",
       "enabled": true
     },
     {
@@ -166,23 +124,7 @@
       "entryType": "namedSense",
       "displayText": "object",
       "senseId": "oppose",
-      "spokenText": "ub jekt",
-      "enabled": true
-    },
-    {
-      "id": "10000000-0000-4000-8000-000000000023",
-      "entryType": "namedSense",
-      "displayText": "subject",
-      "senseId": "topic",
-      "spokenText": "sub jekt",
-      "enabled": true
-    },
-    {
-      "id": "10000000-0000-4000-8000-000000000024",
-      "entryType": "namedSense",
-      "displayText": "subject",
-      "senseId": "expose",
-      "spokenText": "sub jekt",
+      "spokenText": "ub.jekt",
       "enabled": true
     },
     {
@@ -190,7 +132,7 @@
       "entryType": "namedSense",
       "displayText": "present",
       "senseId": "current",
-      "spokenText": "prez ent",
+      "spokenText": "prez.ent",
       "enabled": true
     },
     {
@@ -198,7 +140,7 @@
       "entryType": "namedSense",
       "displayText": "present",
       "senseId": "give",
-      "spokenText": "pree zent",
+      "spokenText": "pree.zent",
       "enabled": true
     },
     {
@@ -206,7 +148,7 @@
       "entryType": "namedSense",
       "displayText": "content",
       "senseId": "material",
-      "spokenText": "con tent",
+      "spokenText": "con.tent",
       "enabled": true
     },
     {
@@ -214,7 +156,7 @@
       "entryType": "namedSense",
       "displayText": "content",
       "senseId": "satisfied",
-      "spokenText": "kun tent",
+      "spokenText": "kun.tent",
       "enabled": true
     },
     {
@@ -222,7 +164,7 @@
       "entryType": "namedSense",
       "displayText": "minute",
       "senseId": "time",
-      "spokenText": "min it",
+      "spokenText": "min.it",
       "enabled": true
     },
     {
@@ -230,7 +172,7 @@
       "entryType": "namedSense",
       "displayText": "minute",
       "senseId": "tiny",
-      "spokenText": "my noot",
+      "spokenText": "my.noot",
       "enabled": true
     },
     {
@@ -270,7 +212,7 @@
       "entryType": "namedSense",
       "displayText": "attribute",
       "senseId": "property",
-      "spokenText": "at trih byoot",
+      "spokenText": "at.trih.byoot",
       "enabled": true
     },
     {
@@ -278,7 +220,7 @@
       "entryType": "namedSense",
       "displayText": "attribute",
       "senseId": "assign",
-      "spokenText": "uh trib yoot",
+      "spokenText": "uh.trib.yoot",
       "enabled": true
     },
     {
@@ -286,7 +228,7 @@
       "entryType": "namedSense",
       "displayText": "import",
       "senseId": "noun",
-      "spokenText": "im port",
+      "spokenText": "im.port",
       "enabled": true
     },
     {
@@ -294,7 +236,7 @@
       "entryType": "namedSense",
       "displayText": "import",
       "senseId": "verb",
-      "spokenText": "im port",
+      "spokenText": "im.port",
       "enabled": true
     },
     {
@@ -302,7 +244,7 @@
       "entryType": "namedSense",
       "displayText": "export",
       "senseId": "noun",
-      "spokenText": "eks port",
+      "spokenText": "eks.port",
       "enabled": true
     },
     {
@@ -310,7 +252,7 @@
       "entryType": "namedSense",
       "displayText": "export",
       "senseId": "verb",
-      "spokenText": "ik sport",
+      "spokenText": "ik.sport",
       "enabled": true
     },
     {
@@ -334,7 +276,7 @@
       "entryType": "namedSense",
       "displayText": "axes",
       "senseId": "math",
-      "spokenText": "ak seez",
+      "spokenText": "ak.seez",
       "enabled": true
     },
     {
@@ -342,7 +284,28 @@
       "entryType": "namedSense",
       "displayText": "axes",
       "senseId": "tools",
-      "spokenText": "ak siz",
+      "spokenText": "ak.siz",
+      "enabled": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000045",
+      "entryType": "exactTerm",
+      "displayText": "iframe",
+      "spokenText": "iFrame",
+      "enabled": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000046",
+      "entryType": "exactTerm",
+      "displayText": "prefetch",
+      "spokenText": "PreFetch",
+      "enabled": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000047",
+      "entryType": "exactTerm",
+      "displayText": "database",
+      "spokenText": "DataBase",
       "enabled": true
     }
   ]

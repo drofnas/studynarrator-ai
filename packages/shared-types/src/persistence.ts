@@ -9,7 +9,7 @@ import {
   SupportedPauseIdSchema,
 } from "./contracts.js";
 
-export const DATABASE_SCHEMA_VERSION = 8;
+export const DATABASE_SCHEMA_VERSION = 9;
 export const PERSISTENCE_CONTRACT_VERSION = 1;
 export const PERSISTENCE_CHANNELS = Object.freeze({
   status: "persistence.status",
@@ -353,30 +353,6 @@ const GlobalLexiconEntrySchema = LexiconEntrySchema.superRefine(
           "Global lexicon entries must use exact-term or named-sense matching.",
         path: ["entryType"],
       });
-    if (entry.caseSensitive)
-      context.addIssue({
-        code: "custom",
-        message: "Global lexicon entries must be case insensitive.",
-        path: ["caseSensitive"],
-      });
-    if (!entry.wholeWord)
-      context.addIssue({
-        code: "custom",
-        message: "Global lexicon entries must match whole words.",
-        path: ["wholeWord"],
-      });
-    if (entry.priority !== 0)
-      context.addIssue({
-        code: "custom",
-        message: "Global lexicon entries use fixed priority.",
-        path: ["priority"],
-      });
-    if (entry.notes !== "")
-      context.addIssue({
-        code: "custom",
-        message: "Global lexicon entries do not store notes.",
-        path: ["notes"],
-      });
   },
 );
 
@@ -444,6 +420,31 @@ export const GlobalLexiconEntryCollectionSchema = z.array(
 );
 const BuiltInGlobalLexiconEntrySchema = GlobalLexiconEntrySchema.extend({
   entryKind: z.literal("builtIn"),
+}).superRefine((entry, context) => {
+  if (entry.caseSensitive)
+    context.addIssue({
+      code: "custom",
+      message: "Built-in global lexicon entries must be case insensitive.",
+      path: ["caseSensitive"],
+    });
+  if (!entry.wholeWord)
+    context.addIssue({
+      code: "custom",
+      message: "Built-in global lexicon entries must match whole words.",
+      path: ["wholeWord"],
+    });
+  if (entry.priority !== 0)
+    context.addIssue({
+      code: "custom",
+      message: "Built-in global lexicon entries use fixed priority.",
+      path: ["priority"],
+    });
+  if (entry.notes !== "")
+    context.addIssue({
+      code: "custom",
+      message: "Built-in global lexicon entries do not store notes.",
+      path: ["notes"],
+    });
 });
 const CustomGlobalLexiconEntrySchema = GlobalLexiconEntrySchema.extend({
   entryKind: z.literal("custom"),

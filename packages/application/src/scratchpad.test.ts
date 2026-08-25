@@ -227,7 +227,7 @@ describe("scratchpad service", () => {
       }),
     ).resolves.toMatchObject({
       readableText: "resume, lead, and axes.",
-      transformedText: "rez oo may, led, and ak siz.",
+      transformedText: "rez.oo.may, led, and ak.siz.",
       warnings: [],
     });
 

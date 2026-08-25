@@ -88,6 +88,63 @@ function renderPage(children: ReactNode) {
 }
 
 describe("Voices settings", () => {
+  it("keeps Stop usable after clearing its script without requesting a replacement preview", async () => {
+    const localVoiceCatalog = {
+      get: vi.fn(async (modelId: string) => ({
+        schemaVersion: 1 as const,
+        modelId,
+        entries: [
+          {
+            voiceId: "voice-b1",
+            label: "First voice",
+            enabled: true,
+            favorite: false,
+            language: null,
+            locale: null,
+            accent: null,
+            category: null,
+            style: null,
+            sampleText: null,
+          },
+        ],
+      })),
+      replace: vi.fn(),
+    };
+    const preview = vi.fn<ScratchpadClient["preview"]>(async (input) => ({
+      ...scratchpadResult,
+      originalText: input.text,
+      readableText: input.text,
+      transformedText: input.text,
+      voiceId: input.voiceId,
+    }));
+    renderPage(
+      <ConnectionProvider
+        connectionClient={connectionClient()}
+        voiceCatalog={localVoiceCatalog}
+      >
+        <VoicesSettingsPage scratchpadClient={{ preview }} />
+      </ConnectionProvider>,
+    );
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Test First" }),
+    );
+    const stopButton = await screen.findByRole("button", {
+      name: "Stop First",
+    });
+    fireEvent.change(screen.getByLabelText("Voice test script"), {
+      target: { value: "" },
+    });
+    expect(stopButton).toBeEnabled();
+    await userEvent.click(stopButton);
+
+    expect(audioSource.stop).toHaveBeenCalledOnce();
+    expect(
+      screen.getByRole("button", { name: "Test First" }),
+    ).toBeInTheDocument();
+    expect(preview).toHaveBeenCalledOnce();
+  });
+
   it("uses the saved model, preserves server ordering, and auditions disabled voices without a player", async () => {
     const localVoiceCatalog = {
       get: vi.fn(async (modelId: string) => ({
@@ -207,7 +264,7 @@ describe("Voices settings", () => {
     await userEvent.click(screen.getByRole("button", { name: "Test Second" }));
     expect(firstSignal?.aborted).toBe(true);
     expect(
-      await screen.findByRole("button", { name: "Playing Second" }),
+      await screen.findByRole("button", { name: "Stop Second" }),
     ).toBeInTheDocument();
     expect(preview).toHaveBeenLastCalledWith(
       {

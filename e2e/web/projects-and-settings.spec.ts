@@ -278,6 +278,8 @@ test.describe("Settings and connection diagnostics", () => {
     await page.getByLabel("Voice test script").fill(script);
     studyNarrator.fakeSpeaches.reset();
     await page.getByRole("button", { name: /^Test Heart/u }).click();
+    const stopHeart = page.getByRole("button", { name: /^Stop Heart/u });
+    await expect(stopHeart).toBeVisible();
     await expect
       .poll(
         () =>
@@ -301,9 +303,17 @@ test.describe("Settings and connection diagnostics", () => {
       inputHash: createHash("sha256").update(script).digest("hex"),
     });
     await expect(page.locator("audio")).toHaveCount(0);
+    await stopHeart.click();
     await expect(
       page.getByRole("button", { name: /^Test Heart/u }),
-    ).toBeVisible({ timeout: 5_000 });
+    ).toBeVisible();
+    expect(
+      studyNarrator.fakeSpeaches
+        .getState()
+        .requests.filter(
+          ({ path, status }) => path === "/v1/audio/speech" && status === 200,
+        ).length,
+    ).toBe(1);
 
     await openRoute(page, studyNarrator, "/settings/timings");
     await page.getByLabel("pause_medium duration").fill("1.25 s");
@@ -333,7 +343,7 @@ test.describe("Settings and connection diagnostics", () => {
     const custom = page.getByRole("region", { name: "Custom lexicon" });
     await expect(globals).toBeVisible();
     await expect(custom).toBeVisible();
-    await expect(globals.getByText("44 entries")).toBeVisible();
+    await expect(globals.getByText("39 entries")).toBeVisible();
 
     const seeded = globals.getByRole("article", {
       name: "Lexicon entry resume/cv",

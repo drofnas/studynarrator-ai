@@ -28,6 +28,7 @@ import {
 import {
   DATABASE_SCHEMA_VERSION,
   DEFAULT_RETENTION_SETTINGS,
+  GLOBAL_LEXICON_BUILT_INS,
 } from "@studynarrator/shared-types";
 
 const DatabaseAdapter = Database as unknown as DatabaseConstructor;
@@ -71,9 +72,10 @@ describe("database baseline", () => {
       { version: 6, name: "retention-settings" },
       { version: 7, name: "render-pinning" },
       { version: 8, name: "global-lexicon-entry-kinds" },
+      { version: 9, name: "global-lexicon-catalog-reconciliation" },
     ]);
-    expect(first.appliedVersions).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
-    expect(first.databaseSchemaVersion).toBe(8);
+    expect(first.appliedVersions).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    expect(first.databaseSchemaVersion).toBe(9);
     expect(first.backupPath).toBeNull();
     expect(
       first.database.prepare("SELECT version FROM schema_migrations").all(),
@@ -86,6 +88,7 @@ describe("database baseline", () => {
       { version: 6 },
       { version: 7 },
       { version: 8 },
+      { version: 9 },
     ]);
     expect(
       first.database
@@ -113,7 +116,7 @@ describe("database baseline", () => {
           "SELECT display_text, sense_id, spoken_text FROM lexicon_entries WHERE scope = 'global' ORDER BY ordinal",
         )
         .all(),
-    ).toHaveLength(44);
+    ).toHaveLength(39);
     expect(
       first.database
         .prepare(
@@ -123,7 +126,7 @@ describe("database baseline", () => {
     ).toEqual({
       display_text: "resume",
       sense_id: "cv",
-      spoken_text: "rez oo may",
+      spoken_text: "rez.oo.may",
       entry_kind: "builtIn",
     });
     first.database
@@ -146,9 +149,9 @@ describe("database baseline", () => {
     second.database.close();
   });
 
-  it("classifies catalog rows as built-ins and preserves existing custom globals", async () => {
+  it("reconciles built-ins to the current catalog while preserving custom globals and enabled state", async () => {
     const databasePath = await temporaryDatabase(
-      "studynarrator-global-lexicon-kinds-",
+      "studynarrator-global-lexicon-reconciliation-",
     );
     const v7 = await migrateDatabase({
       Database: DatabaseAdapter,
@@ -157,16 +160,18 @@ describe("database baseline", () => {
     });
     const timestamp = "2026-08-23T00:00:00.000Z";
     v7.database
-      .prepare("UPDATE lexicon_entries SET enabled = 0 WHERE id = ?")
-      .run("10000000-0000-4000-8000-000000000009");
+      .prepare(
+        `UPDATE lexicon_entries
+         SET spoken_text = ?, case_sensitive = 1, enabled = 0
+         WHERE id = ?`,
+      )
+      .run("obsolete", "10000000-0000-4000-8000-000000000009");
     v7.database
       .prepare(
-        `
-          INSERT INTO lexicon_entries (
-            id, scope, project_id, ordinal, entry_type, display_text, sense_id, spoken_text,
-            case_sensitive, whole_word, priority, enabled, notes, created_at, updated_at
-          ) VALUES (?, 'global', NULL, ?, 'exactTerm', ?, NULL, ?, 0, 1, 0, 1, '', ?, ?)
-        `,
+        `INSERT INTO lexicon_entries (
+          id, scope, project_id, ordinal, entry_type, display_text, sense_id,
+          spoken_text, case_sensitive, whole_word, priority, enabled, notes, created_at, updated_at
+        ) VALUES (?, 'global', NULL, ?, 'exactTerm', ?, NULL, ?, 0, 1, 0, 1, '', ?, ?)`,
       )
       .run(
         "20000000-0000-4000-8000-000000000001",
@@ -176,40 +181,131 @@ describe("database baseline", () => {
         timestamp,
         timestamp,
       );
+    v7.database
+      .prepare(
+        `INSERT INTO lexicon_entries (
+          id, scope, project_id, ordinal, entry_type, display_text, sense_id,
+          spoken_text, case_sensitive, whole_word, priority, enabled, notes, created_at, updated_at
+        ) VALUES (?, 'global', NULL, ?, 'exactTerm', ?, NULL, ?, 1, 1, 7, 0, 'v7 collision metadata', ?, ?)`,
+      )
+      .run(
+        "10000000-0000-4000-8000-000000000045",
+        45,
+        "custom iframe",
+        "custom.i.frame",
+        timestamp,
+        timestamp,
+      );
     v7.database.close();
 
     const upgraded = await migrateDatabase({
       Database: DatabaseAdapter,
       databasePath,
     });
-    expect(upgraded.appliedVersions).toEqual([8]);
+    expect(upgraded.appliedVersions).toEqual([8, 9]);
     expect(
       upgraded.database
         .prepare(
-          "SELECT id, entry_kind, enabled FROM lexicon_entries WHERE id IN (?, ?) ORDER BY id",
+          "SELECT id, display_text, spoken_text, case_sensitive, enabled FROM lexicon_entries WHERE id = ?",
+        )
+        .get("10000000-0000-4000-8000-000000000009"),
+    ).toEqual({
+      id: "10000000-0000-4000-8000-000000000009",
+      display_text: "resume",
+      spoken_text: "rez.oo.may",
+      case_sensitive: 0,
+      enabled: 0,
+    });
+    expect(
+      upgraded.database
+        .prepare(
+          "SELECT display_text, spoken_text, entry_kind, enabled FROM lexicon_entries WHERE id = ?",
+        )
+        .get("10000000-0000-4000-8000-000000000045"),
+    ).toEqual({
+      display_text: "iframe",
+      spoken_text: "iFrame",
+      entry_kind: "builtIn",
+      enabled: 1,
+    });
+    const preservedCustom = upgraded.database
+      .prepare(
+        "SELECT id, display_text, entry_kind, spoken_text, case_sensitive, priority, enabled, notes, created_at, updated_at FROM lexicon_entries WHERE display_text = ?",
+      )
+      .get("custom iframe") as unknown as {
+      id: string;
+      display_text: string;
+      entry_kind: string;
+      spoken_text: string;
+      case_sensitive: number;
+      priority: number;
+      enabled: number;
+      notes: string;
+      created_at: string;
+      updated_at: string;
+    };
+    expect(preservedCustom.id).not.toMatch(/000000000045$/u);
+    expect(preservedCustom).toEqual({
+      id: preservedCustom.id,
+      display_text: "custom iframe",
+      entry_kind: "custom",
+      spoken_text: "custom.i.frame",
+      case_sensitive: 1,
+      priority: 7,
+      enabled: 0,
+      notes: "v7 collision metadata",
+      created_at: timestamp,
+      updated_at: timestamp,
+    });
+    expect(
+      upgraded.database
+        .prepare(
+          "SELECT id FROM lexicon_entries WHERE id IN (?, ?) ORDER BY id",
         )
         .all(
-          "10000000-0000-4000-8000-000000000009",
-          "20000000-0000-4000-8000-000000000001",
+          "10000000-0000-4000-8000-000000000001",
+          "10000000-0000-4000-8000-000000000023",
         ),
-    ).toEqual([
-      {
-        id: "10000000-0000-4000-8000-000000000009",
-        entry_kind: "builtIn",
-        enabled: 0,
-      },
-      {
-        id: "20000000-0000-4000-8000-000000000001",
-        entry_kind: "custom",
-        enabled: 1,
-      },
-    ]);
+    ).toEqual([]);
+    expect(
+      upgraded.database
+        .prepare(
+          "SELECT entry_kind, spoken_text, enabled FROM lexicon_entries WHERE id = ?",
+        )
+        .get("20000000-0000-4000-8000-000000000001"),
+    ).toEqual({ entry_kind: "custom", spoken_text: "C L I", enabled: 1 });
     expect(() =>
       upgraded.database
         .prepare("UPDATE lexicon_entries SET entry_kind = ? WHERE id = ?")
         .run("invalid", "20000000-0000-4000-8000-000000000001"),
     ).toThrow(/CHECK constraint failed/u);
     upgraded.database.close();
+
+    const repository = await openStudyNarratorRepository({
+      Database: DatabaseAdapter,
+      databasePath,
+    });
+    expect(repository.listGlobalLexicon()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          displayText: "custom iframe",
+          caseSensitive: true,
+          priority: 7,
+          notes: "v7 collision metadata",
+        }),
+      ]),
+    );
+    expect(repository.getGlobalLexiconState().custom).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          displayText: "custom iframe",
+          caseSensitive: true,
+          priority: 7,
+          notes: "v7 collision metadata",
+        }),
+      ]),
+    );
+    repository.close();
   });
 
   it("creates the constrained voice timing calibration table", async () => {
@@ -400,7 +496,7 @@ describe("database baseline", () => {
     database.close();
   });
 
-  it("seeds the same global lexicon rows a pre-change database contains", async () => {
+  it("seeds the current global lexicon catalog", async () => {
     const databasePath = await temporaryDatabase("studynarrator-frozen-seed-");
     const first = await migrateDatabase({
       Database: DatabaseAdapter,
@@ -412,316 +508,15 @@ describe("database baseline", () => {
           "SELECT id, entry_type, display_text, sense_id, spoken_text FROM lexicon_entries WHERE scope = 'global' ORDER BY id",
         )
         .all(),
-    ).toEqual([
-      {
-        id: "10000000-0000-4000-8000-000000000001",
-        entry_type: "exactTerm",
-        display_text: "API",
-        sense_id: null,
-        spoken_text: "A P I",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000002",
-        entry_type: "exactTerm",
-        display_text: "URL",
-        sense_id: null,
-        spoken_text: "U R L",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000003",
-        entry_type: "exactTerm",
-        display_text: "HTTP",
-        sense_id: null,
-        spoken_text: "H T T P",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000004",
-        entry_type: "exactTerm",
-        display_text: "HTTPS",
-        sense_id: null,
-        spoken_text: "H T T P S",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000005",
-        entry_type: "exactTerm",
-        display_text: "JSON",
-        sense_id: null,
-        spoken_text: "jay son",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000006",
-        entry_type: "exactTerm",
-        display_text: "SQL",
-        sense_id: null,
-        spoken_text: "S Q L",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000007",
-        entry_type: "exactTerm",
-        display_text: "PostgreSQL",
-        sense_id: null,
-        spoken_text: "post gres Q L",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000008",
-        entry_type: "exactTerm",
-        display_text: "GitHub",
-        sense_id: null,
-        spoken_text: "git hub",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000009",
-        entry_type: "namedSense",
-        display_text: "resume",
-        sense_id: "cv",
-        spoken_text: "rez oo may",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000010",
-        entry_type: "namedSense",
-        display_text: "resume",
-        sense_id: "continue",
-        spoken_text: "ree zoom",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000011",
-        entry_type: "namedSense",
-        display_text: "read",
-        sense_id: "present",
-        spoken_text: "reed",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000012",
-        entry_type: "namedSense",
-        display_text: "read",
-        sense_id: "past",
-        spoken_text: "red",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000013",
-        entry_type: "namedSense",
-        display_text: "lead",
-        sense_id: "guide",
-        spoken_text: "leed",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000014",
-        entry_type: "namedSense",
-        display_text: "lead",
-        sense_id: "metal",
-        spoken_text: "led",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000015",
-        entry_type: "namedSense",
-        display_text: "live",
-        sense_id: "exist",
-        spoken_text: "liv",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000016",
-        entry_type: "namedSense",
-        display_text: "live",
-        sense_id: "realtime",
-        spoken_text: "lyve",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000017",
-        entry_type: "namedSense",
-        display_text: "record",
-        sense_id: "noun",
-        spoken_text: "reck erd",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000018",
-        entry_type: "namedSense",
-        display_text: "record",
-        sense_id: "verb",
-        spoken_text: "ree cord",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000019",
-        entry_type: "namedSense",
-        display_text: "project",
-        sense_id: "noun",
-        spoken_text: "prah jekt",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000020",
-        entry_type: "namedSense",
-        display_text: "project",
-        sense_id: "verb",
-        spoken_text: "pruh jekt",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000021",
-        entry_type: "namedSense",
-        display_text: "object",
-        sense_id: "thing",
-        spoken_text: "ob jekt",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000022",
-        entry_type: "namedSense",
-        display_text: "object",
-        sense_id: "oppose",
-        spoken_text: "ub jekt",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000023",
-        entry_type: "namedSense",
-        display_text: "subject",
-        sense_id: "topic",
-        spoken_text: "sub jekt",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000024",
-        entry_type: "namedSense",
-        display_text: "subject",
-        sense_id: "expose",
-        spoken_text: "sub jekt",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000025",
-        entry_type: "namedSense",
-        display_text: "present",
-        sense_id: "current",
-        spoken_text: "prez ent",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000026",
-        entry_type: "namedSense",
-        display_text: "present",
-        sense_id: "give",
-        spoken_text: "pree zent",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000027",
-        entry_type: "namedSense",
-        display_text: "content",
-        sense_id: "material",
-        spoken_text: "con tent",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000028",
-        entry_type: "namedSense",
-        display_text: "content",
-        sense_id: "satisfied",
-        spoken_text: "kun tent",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000029",
-        entry_type: "namedSense",
-        display_text: "minute",
-        sense_id: "time",
-        spoken_text: "min it",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000030",
-        entry_type: "namedSense",
-        display_text: "minute",
-        sense_id: "tiny",
-        spoken_text: "my noot",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000031",
-        entry_type: "namedSense",
-        display_text: "close",
-        sense_id: "near",
-        spoken_text: "klohs",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000032",
-        entry_type: "namedSense",
-        display_text: "close",
-        sense_id: "shut",
-        spoken_text: "klohz",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000033",
-        entry_type: "namedSense",
-        display_text: "use",
-        sense_id: "noun",
-        spoken_text: "yoos",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000034",
-        entry_type: "namedSense",
-        display_text: "use",
-        sense_id: "verb",
-        spoken_text: "yooz",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000035",
-        entry_type: "namedSense",
-        display_text: "attribute",
-        sense_id: "property",
-        spoken_text: "at trih byoot",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000036",
-        entry_type: "namedSense",
-        display_text: "attribute",
-        sense_id: "assign",
-        spoken_text: "uh trib yoot",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000037",
-        entry_type: "namedSense",
-        display_text: "import",
-        sense_id: "noun",
-        spoken_text: "im port",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000038",
-        entry_type: "namedSense",
-        display_text: "import",
-        sense_id: "verb",
-        spoken_text: "im port",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000039",
-        entry_type: "namedSense",
-        display_text: "export",
-        sense_id: "noun",
-        spoken_text: "eks port",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000040",
-        entry_type: "namedSense",
-        display_text: "export",
-        sense_id: "verb",
-        spoken_text: "ik sport",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000041",
-        entry_type: "namedSense",
-        display_text: "row",
-        sense_id: "line",
-        spoken_text: "roh",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000042",
-        entry_type: "namedSense",
-        display_text: "row",
-        sense_id: "argument",
-        spoken_text: "rau",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000043",
-        entry_type: "namedSense",
-        display_text: "axes",
-        sense_id: "math",
-        spoken_text: "ak seez",
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000044",
-        entry_type: "namedSense",
-        display_text: "axes",
-        sense_id: "tools",
-        spoken_text: "ak siz",
-      },
-    ]);
+    ).toEqual(
+      GLOBAL_LEXICON_BUILT_INS.map((entry) => ({
+        id: entry.id,
+        entry_type: entry.entryType,
+        display_text: entry.displayText,
+        sense_id: entry.entryType === "namedSense" ? entry.senseId : null,
+        spoken_text: entry.spokenText,
+      })),
+    );
     first.database.close();
   });
 
@@ -780,9 +575,9 @@ describe("database baseline", () => {
       databasePath,
       logger,
     });
-    expect(upgraded.appliedVersions).toEqual([3, 4, 5, 6, 7, 8]);
-    expect(upgraded.databaseSchemaVersion).toBe(8);
-    expect(upgraded.backupPath).toContain("-v0002-to-v0008-");
+    expect(upgraded.appliedVersions).toEqual([3, 4, 5, 6, 7, 8, 9]);
+    expect(upgraded.databaseSchemaVersion).toBe(9);
+    expect(upgraded.backupPath).toContain("-v0002-to-v0009-");
     if (upgraded.backupPath === null)
       throw new Error("Expected the migration backup path.");
     expect(logger.info).toHaveBeenNthCalledWith(
@@ -791,7 +586,7 @@ describe("database baseline", () => {
         event: "database-migration-backup-created",
         backupPath: upgraded.backupPath,
         fromDatabaseSchemaVersion: 2,
-        toDatabaseSchemaVersion: 8,
+        toDatabaseSchemaVersion: 9,
       },
       "Database migration backup created",
     );
@@ -852,6 +647,15 @@ describe("database baseline", () => {
     expect(logger.info).toHaveBeenNthCalledWith(
       8,
       {
+        event: "database-migration-applied",
+        migrationVersion: 9,
+        migrationName: "global-lexicon-catalog-reconciliation",
+      },
+      "Database migration applied",
+    );
+    expect(logger.info).toHaveBeenNthCalledWith(
+      9,
+      {
         event: "database-backups-pruned",
         removedCount: 0,
         retainedCount: 1,
@@ -867,7 +671,7 @@ describe("database baseline", () => {
           "SELECT count(*) AS count FROM lexicon_entries WHERE entry_type = 'namedSense'",
         )
         .get(),
-    ).toEqual({ count: 36 });
+    ).toEqual({ count: 35 });
     expect(
       upgraded.database
         .prepare(
@@ -898,7 +702,7 @@ describe("database baseline", () => {
           "SELECT count(*) AS count FROM lexicon_entries WHERE entry_type = 'namedSense'",
         )
         .get(),
-    ).toEqual({ count: 35 });
+    ).toEqual({ count: 34 });
     expect(
       reopened.database
         .prepare("SELECT id FROM lexicon_entries WHERE id = ?")
@@ -950,8 +754,8 @@ describe("database baseline", () => {
       Database: DatabaseAdapter,
       databasePath,
     });
-    expect(upgraded.appliedVersions).toEqual([4, 5, 6, 7, 8]);
-    expect(upgraded.databaseSchemaVersion).toBe(8);
+    expect(upgraded.appliedVersions).toEqual([4, 5, 6, 7, 8, 9]);
+    expect(upgraded.databaseSchemaVersion).toBe(9);
     expect(
       upgraded.database
         .prepare(
@@ -1093,7 +897,7 @@ describe("database baseline", () => {
       .run();
     baseline.database.close();
     const failing: Migration = {
-      version: 9,
+      version: 10,
       name: "intentional-test-failure",
       up(database) {
         database.exec(
@@ -1113,7 +917,7 @@ describe("database baseline", () => {
       failure = error as MigrationFailureError;
     }
     expect(failure).toBeInstanceOf(MigrationFailureError);
-    expect(failure?.backupPath).toContain("-v0008-to-v0009-");
+    expect(failure?.backupPath).toContain("-v0009-to-v0010-");
     expect((await stat(failure!.backupPath!)).mode & 0o777).toBe(0o600);
     expect((await readFile(failure!.backupPath!)).byteLength).toBeGreaterThan(
       0,
@@ -1191,7 +995,7 @@ describe("StudyNarratorRepository", () => {
       reimported.builtIns.find(
         ({ id }) => id === "10000000-0000-4000-8000-000000000009",
       ),
-    ).toMatchObject({ spokenText: "rez oo may", enabled: true });
+    ).toMatchObject({ spokenText: "rez.oo.may", enabled: true });
     expect(reimported.custom).toMatchObject([
       { id: lexiconId, spokenText: "custom résumé", enabled: false },
     ]);
@@ -1210,7 +1014,7 @@ describe("StudyNarratorRepository", () => {
       },
     ]);
     expect(reopened.replaceCustomGlobalLexicon([]).custom).toEqual([]);
-    expect(reopened.listGlobalLexicon()).toHaveLength(44);
+    expect(reopened.listGlobalLexicon()).toHaveLength(39);
     reopened.close();
   });
 
@@ -1273,7 +1077,7 @@ describe("StudyNarratorRepository", () => {
     });
     expect(first.status()).toMatchObject({
       contractVersion: 1,
-      databaseSchemaVersion: 8,
+      databaseSchemaVersion: 9,
     });
     const created = first.createProject({
       name: "Persistence restart proof",
@@ -1602,7 +1406,7 @@ describe("StudyNarratorRepository", () => {
     });
     expect(repository.runMarker()).toMatchObject({
       markerKey: "runtime.storage-self-test",
-      migrationVersion: 8,
+      migrationVersion: 9,
     });
     const project = repository.createProject({ name: "Rendered" });
     repository.replaceProject(project.id, {

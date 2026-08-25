@@ -342,6 +342,122 @@ describe("Quick Scratchpad", () => {
     );
   });
 
+  it("persists every scratchpad setting for a return to the page", async () => {
+    connections.discoverSpeechCatalog.mockResolvedValue({
+      schemaVersion: 1 as const,
+      models: [
+        {
+          modelId: "model",
+          voices: [
+            {
+              voiceId: "voice",
+              name: "Teacher",
+              language: null,
+              gender: null,
+            },
+          ],
+        },
+        {
+          modelId: "alternate-model",
+          voices: [
+            {
+              voiceId: "alternate-voice",
+              name: "Narrator",
+              language: null,
+              gender: null,
+            },
+          ],
+        },
+      ],
+    });
+    voiceCatalog.get.mockResolvedValue({
+      schemaVersion: 1 as const,
+      modelId: "alternate-model",
+      entries: [
+        {
+          voiceId: "alternate-voice",
+          label: "Narrator",
+          enabled: true,
+          favorite: false,
+          language: null,
+          locale: null,
+          accent: null,
+          category: null,
+          style: null,
+          sampleText: null,
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    const firstVisit = renderPage();
+    await waitFor(() =>
+      expect(screen.getByLabelText("Model")).toHaveValue("model"),
+    );
+    await user.selectOptions(screen.getByLabelText("Model"), "alternate-model");
+    await waitFor(() =>
+      expect(screen.getByLabelText("Voice")).toHaveValue("alternate-voice"),
+    );
+    await user.clear(screen.getByLabelText("Speed"));
+    await user.type(screen.getByLabelText("Speed"), "1.75");
+    await user.type(
+      screen.getByLabelText("Passage"),
+      "Persist this passage for the session.",
+    );
+    await user.click(screen.getByLabelText("Apply global lexicon"));
+    firstVisit.unmount();
+
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByLabelText("Model")).toHaveValue("alternate-model"),
+    );
+    await waitFor(() =>
+      expect(screen.getByLabelText("Voice")).toHaveValue("alternate-voice"),
+    );
+    expect(screen.getByLabelText("Speed")).toHaveValue(1.75);
+    expect(screen.getByLabelText("Passage")).toHaveValue(
+      "Persist this passage for the session.",
+    );
+    expect(screen.getByLabelText("Apply global lexicon")).toBeChecked();
+  });
+
+  it("ignores malformed scratchpad session settings", async () => {
+    window.sessionStorage.setItem(
+      "studynarrator.scratchpad.settings",
+      "not valid JSON",
+    );
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByLabelText("Model")).toHaveValue("model"),
+    );
+    expect(screen.getByLabelText("Speed")).toHaveValue(1);
+    expect(screen.getByLabelText("Passage")).toHaveValue("");
+    expect(screen.getByLabelText("Apply global lexicon")).not.toBeChecked();
+  });
+
+  it("uses normal defaults and controls when session storage is unavailable", async () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("Session storage is unavailable.");
+    });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("Session storage is unavailable.");
+    });
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Model")).toHaveValue("model"),
+    );
+    await waitFor(() =>
+      expect(screen.getByLabelText("Voice")).toHaveValue("voice"),
+    );
+    await user.type(screen.getByLabelText("Passage"), "Still usable.");
+    await user.click(screen.getByLabelText("Apply global lexicon"));
+
+    expect(screen.getByLabelText("Passage")).toHaveValue("Still usable.");
+    expect(screen.getByLabelText("Apply global lexicon")).toBeChecked();
+  });
+
   it("groups enabled supported voices with shared friendly labels", async () => {
     connections.discoverSpeechCatalog.mockResolvedValue({
       schemaVersion: 1 as const,

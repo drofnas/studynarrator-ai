@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import {
-  type ScratchpadClient,
-  type VoiceCatalog,
+import type {
+  ScratchpadClient,
+  VoiceCatalog,
 } from "@studynarrator/shared-types";
 import { queryKeys } from "@/app/queryKeys.js";
 import { useConnections } from "@/features/connections/ConnectionProvider.js";
@@ -35,7 +35,11 @@ export function VoicesSettingsPage({
   const [catalog, setCatalog] = useState<VoiceCatalog | null>(null);
   const [catalogSearch, setCatalogSearch] = useState("");
   const [voiceTestScript, setVoiceTestScript] = useState(VOICE_TEST_SCRIPT);
-  const { audition, play: playAudition } = useAudioAudition<string>();
+  const {
+    audition,
+    play: playAudition,
+    stop: stopAudition,
+  } = useAudioAudition<string>();
   const [auditionError, setAuditionError] = useState("");
   const [favoriteSaving, setFavoriteSaving] = useState("");
   const [favoriteError, setFavoriteError] = useState("");
@@ -238,7 +242,7 @@ export function VoicesSettingsPage({
                     phase === "processing"
                       ? "Preparing"
                       : phase === "playing"
-                        ? "Playing"
+                        ? "Stop"
                         : "Test";
                   return (
                     <article data-enabled={entry.enabled} key={entry.voiceId}>
@@ -266,9 +270,14 @@ export function VoicesSettingsPage({
                           type="button"
                           className={styles.auditionButton}
                           data-state={phase}
-                          disabled={!auditionReady}
+                          disabled={
+                            phase === "playing" ? false : !auditionReady
+                          }
                           aria-label={`${action} ${entry.friendlyName}`}
-                          onClick={() => void auditionVoice(entry.voiceId)}
+                          onClick={() => {
+                            if (phase === "playing") stopAudition();
+                            else void auditionVoice(entry.voiceId);
+                          }}
                         >
                           <AuditionIcon phase={phase} />
                         </button>
