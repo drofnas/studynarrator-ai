@@ -150,13 +150,13 @@ npm test
 npm run test:api
 ```
 
-The release-level verifier requires Node `26.7.0`, Playwright browser dependencies, Docker Compose, and Docker Scout:
+The release-level verifier requires Node `26.7.0`, Playwright browser dependencies, Docker Buildx, Docker Compose, and Docker Scout:
 
 ```sh
 npm run verify
 ```
 
-`npm run verify:docker` can run the Docker acceptance suite alone. It builds the image, produces a CycloneDX dependency inventory, applies the Docker Scout vulnerability policy, runs Chromium and Firefox against a disposable Compose deployment, recreates the container to prove volume persistence, and removes the test deployment afterward.
+`npm run verify:docker` can run the Docker acceptance suite alone. It builds the image with an isolated disposable builder, produces a CycloneDX dependency inventory, applies the Docker Scout vulnerability policy, runs Chromium and Firefox against a disposable Compose deployment, and recreates the container to prove volume persistence. Before reporting success, it removes and audits all verification-owned images, containers, networks, volumes, builders, and build cache. The CycloneDX and Docker Scout reports remain available under `.tmp/verify-docker/`.
 
 ## Documentation
 
