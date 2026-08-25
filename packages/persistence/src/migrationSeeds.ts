@@ -647,3 +647,36 @@ export const V10_GLOBAL_EXACT_TERM_LEXICON = [
     notes: "",
   },
 ];
+
+export const V11_GLOBAL_EXACT_TERM_COLLISION_RECONCILIATION = [
+  {
+    id: "10000000-0000-4000-8000-000000000045",
+    entryType: "exactTerm",
+    displayText: "iframe",
+    spokenText: "iFrame",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    notes: "",
+  },
+  {
+    id: "10000000-0000-4000-8000-000000000046",
+    entryType: "exactTerm",
+    displayText: "prefetch",
+    spokenText: "PreFetch",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    notes: "",
+  },
+  {
+    id: "10000000-0000-4000-8000-000000000047",
+    entryType: "exactTerm",
+    displayText: "database",
+    spokenText: "DataBase",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    notes: "",
+  },
+];

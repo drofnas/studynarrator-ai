@@ -326,10 +326,10 @@ describe("newer-schema databases", () => {
     expect(reported.code).toBe("SCHEMA_TOO_NEW");
     expect(reported.databasePath).toBe(databasePath);
     expect(reported.databaseSchemaVersion).toBe(99);
-    expect(reported.supportedSchemaVersion).toBe(10);
+    expect(reported.supportedSchemaVersion).toBe(11);
     expect(reported.backups.map(({ path }) => path)).toEqual([backupPath]);
     expect(reported.message).toContain("database format 99");
-    expect(reported.message).toContain("supports format 10");
+    expect(reported.message).toContain("supports format 11");
 
     // The data stays untouched and no migration ran.
     const inspected = new Database(databasePath, { readonly: true });
@@ -358,7 +358,7 @@ describe("newer-schema databases", () => {
       restored
         .prepare("SELECT MAX(version) AS version FROM schema_migrations")
         .get(),
-    ).toEqual({ version: 10 });
+    ).toEqual({ version: 11 });
     restored.close();
   });
 });

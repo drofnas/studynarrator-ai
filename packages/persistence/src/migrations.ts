@@ -12,6 +12,7 @@ import {
   V1_GLOBAL_EXACT_TERM_LEXICON,
   V1_SYSTEM_TIMING,
   V10_GLOBAL_EXACT_TERM_LEXICON,
+  V11_GLOBAL_EXACT_TERM_COLLISION_RECONCILIATION,
   V3_GLOBAL_NAMED_SENSE_LEXICON,
 } from "./migrationSeeds.js";
 
@@ -520,6 +521,52 @@ function reconcileV10GlobalBuiltInLexicon(database: DatabaseLike): void {
   }
 }
 
+function reconcileV11GlobalBuiltInCollisions(database: DatabaseLike): void {
+  const matchingCustomEntries = database.prepare<
+    [string, string, number, number, number, string],
+    { id: string; enabled: number; updated_at: string }
+  >(`
+    SELECT id, enabled, updated_at
+    FROM lexicon_entries
+    WHERE scope = 'global' AND project_id IS NULL AND entry_kind = 'custom'
+      AND entry_type = 'exactTerm' AND display_text = ? AND sense_id IS NULL
+      AND spoken_text = ? AND case_sensitive = ? AND whole_word = ?
+      AND priority = ? AND notes = ?
+    ORDER BY created_at, id
+  `);
+  const builtInExists = database.prepare<[string], { id: string }>(`
+    SELECT id FROM lexicon_entries
+    WHERE id = ? AND scope = 'global' AND entry_kind = 'builtIn'
+  `);
+  const restoreEnabledState = database.prepare<[number, string, string]>(`
+    UPDATE lexicon_entries SET enabled = ?, updated_at = ?
+    WHERE id = ? AND scope = 'global' AND entry_kind = 'builtIn'
+  `);
+  const deleteCustomEntry = database.prepare<[string]>(`
+    DELETE FROM lexicon_entries WHERE id = ? AND entry_kind = 'custom'
+  `);
+
+  for (const entry of V11_GLOBAL_EXACT_TERM_COLLISION_RECONCILIATION) {
+    if (builtInExists.get(entry.id) === undefined) continue;
+    const duplicates = matchingCustomEntries.all(
+      entry.displayText,
+      entry.spokenText,
+      entry.caseSensitive ? 1 : 0,
+      entry.wholeWord ? 1 : 0,
+      entry.priority,
+      entry.notes,
+    );
+    // Migration 9 could create at most one displaced copy per built-in ID. If
+    // there is more than one exact match, ownership is ambiguous, so preserve
+    // the rows instead of guessing which one came from the migration.
+    if (duplicates.length !== 1) continue;
+    const [duplicate] = duplicates;
+    if (duplicate === undefined) continue;
+    restoreEnabledState.run(duplicate.enabled, duplicate.updated_at, entry.id);
+    deleteCustomEntry.run(duplicate.id);
+  }
+}
+
 function addGlobalNamedSenseDefaults(database: DatabaseLike): void {
   const timestamp = new Date().toISOString();
   const row = database
@@ -677,6 +724,11 @@ export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
     version: 10,
     name: "global-lexicon-import-reconciliation",
     up: reconcileV10GlobalBuiltInLexicon,
+  },
+  {
+    version: 11,
+    name: "global-lexicon-collision-deduplication",
+    up: reconcileV11GlobalBuiltInCollisions,
   },
 ]);
 
