@@ -1251,6 +1251,7 @@ export function useProjectsPageController({
 
   const selectTab = (tab: ProjectTab, focus = false) => {
     if (tab === activeTab) {
+      window.scrollTo(0, 0);
       if (focus) window.setTimeout(() => tabRefs.current[tab]?.focus(), 0);
       return;
     }
