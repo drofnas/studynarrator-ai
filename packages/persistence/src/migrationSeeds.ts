@@ -608,3 +608,42 @@ export const V3_GLOBAL_NAMED_SENSE_LEXICON = [
     notes: "",
   },
 ];
+
+export const V10_GLOBAL_EXACT_TERM_LEXICON = [
+  {
+    id: "10000000-0000-4000-8000-000000000048",
+    ordinal: 37,
+    entryType: "exactTerm",
+    displayText: "reranker",
+    spokenText: "ReRanker",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: "",
+  },
+  {
+    id: "10000000-0000-4000-8000-000000000049",
+    ordinal: 38,
+    entryType: "exactTerm",
+    displayText: "reranking",
+    spokenText: "ReRanking",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: "",
+  },
+  {
+    id: "10000000-0000-4000-8000-000000000050",
+    ordinal: 39,
+    entryType: "exactTerm",
+    displayText: "illustrative",
+    spokenText: "illustray.tiv",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    enabled: true,
+    notes: "",
+  },
+];

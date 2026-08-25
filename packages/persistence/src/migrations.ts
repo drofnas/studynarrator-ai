@@ -11,6 +11,7 @@ import { MigrationFailureError, SchemaTooNewError } from "./errors.js";
 import {
   V1_GLOBAL_EXACT_TERM_LEXICON,
   V1_SYSTEM_TIMING,
+  V10_GLOBAL_EXACT_TERM_LEXICON,
   V3_GLOBAL_NAMED_SENSE_LEXICON,
 } from "./migrationSeeds.js";
 
@@ -419,6 +420,106 @@ function reconcileGlobalBuiltInLexicon(database: DatabaseLike): void {
   });
 }
 
+function reconcileV10GlobalBuiltInLexicon(database: DatabaseLike): void {
+  const removedV10BuiltInIds = [
+    "10000000-0000-4000-8000-000000000037",
+    "10000000-0000-4000-8000-000000000038",
+  ];
+  const additionIds = V10_GLOBAL_EXACT_TERM_LEXICON.map(({ id }) => id);
+  const additionsAlreadySeeded = database
+    .prepare(
+      `SELECT count(*) AS count FROM lexicon_entries
+       WHERE scope = 'global' AND entry_kind = 'builtIn'
+         AND id IN (${additionIds.map(() => "?").join(", ")})`,
+    )
+    .get(...additionIds) as { count: number };
+
+  // Fresh databases run migration 9 against the current catalog, so their new
+  // entries are already ordered. Released v9 databases need the tail closed
+  // after the two removed entries before the additions are appended.
+  if (additionsAlreadySeeded.count !== additionIds.length) {
+    database
+      .prepare(
+        `UPDATE lexicon_entries SET ordinal = ordinal - 2
+         WHERE scope = 'global' AND entry_kind = 'builtIn' AND ordinal > 29`,
+      )
+      .run();
+  }
+
+  // Migration 8 derives built-in ownership from the current catalog. Mark the
+  // released-v9 entries explicitly so fresh and upgraded databases both remove
+  // only the built-in rows.
+  database
+    .prepare(
+      `UPDATE lexicon_entries SET entry_kind = 'builtIn'
+       WHERE scope = 'global' AND id IN (${removedV10BuiltInIds.map(() => "?").join(", ")})`,
+    )
+    .run(...removedV10BuiltInIds);
+  database
+    .prepare(
+      `DELETE FROM lexicon_entries
+       WHERE scope = 'global' AND entry_kind = 'builtIn'
+         AND id IN (${removedV10BuiltInIds.map(() => "?").join(", ")})`,
+    )
+    .run(...removedV10BuiltInIds);
+
+  const timestamp = new Date().toISOString();
+  const entryExists = database.prepare(
+    "SELECT id FROM lexicon_entries WHERE id = ?",
+  );
+  const reassignUserOwnedEntry = database.prepare(
+    "UPDATE lexicon_entries SET id = ? WHERE id = ? AND entry_kind != 'builtIn'",
+  );
+  const updateBuiltIn = database.prepare(`
+    UPDATE lexicon_entries
+    SET ordinal = ?, entry_type = ?, display_text = ?, sense_id = NULL, spoken_text = ?,
+        case_sensitive = ?, whole_word = ?, priority = ?, notes = ?, updated_at = ?
+    WHERE id = ? AND scope = 'global' AND entry_kind = 'builtIn'
+  `);
+  const insertBuiltIn = database.prepare(`
+    INSERT INTO lexicon_entries (
+      id, scope, project_id, entry_kind, ordinal, entry_type, display_text, sense_id,
+      spoken_text, case_sensitive, whole_word, priority, enabled, notes, created_at, updated_at
+    ) VALUES (?, 'global', NULL, 'builtIn', ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const nextCollisionFreeId = (): string => {
+    let id = randomUUID();
+    while (entryExists.get(id) !== undefined) id = randomUUID();
+    return id;
+  };
+  for (const entry of V10_GLOBAL_EXACT_TERM_LEXICON) {
+    const values = [
+      entry.ordinal,
+      entry.entryType,
+      entry.displayText,
+      entry.spokenText,
+      entry.caseSensitive ? 1 : 0,
+      entry.wholeWord ? 1 : 0,
+      entry.priority,
+      entry.notes,
+      timestamp,
+      entry.id,
+    ] as const;
+    if (Number(updateBuiltIn.run(...values).changes ?? 0) > 0) continue;
+    if (entryExists.get(entry.id) !== undefined)
+      reassignUserOwnedEntry.run(nextCollisionFreeId(), entry.id);
+    insertBuiltIn.run(
+      entry.id,
+      entry.ordinal,
+      entry.entryType,
+      entry.displayText,
+      entry.spokenText,
+      entry.caseSensitive ? 1 : 0,
+      entry.wholeWord ? 1 : 0,
+      entry.priority,
+      entry.enabled ? 1 : 0,
+      entry.notes,
+      timestamp,
+      timestamp,
+    );
+  }
+}
+
 function addGlobalNamedSenseDefaults(database: DatabaseLike): void {
   const timestamp = new Date().toISOString();
   const row = database
@@ -571,6 +672,11 @@ export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
     version: 9,
     name: "global-lexicon-catalog-reconciliation",
     up: reconcileGlobalBuiltInLexicon,
+  },
+  {
+    version: 10,
+    name: "global-lexicon-import-reconciliation",
+    up: reconcileV10GlobalBuiltInLexicon,
   },
 ]);
 

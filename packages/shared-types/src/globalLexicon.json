@@ -224,22 +224,6 @@
       "enabled": true
     },
     {
-      "id": "10000000-0000-4000-8000-000000000037",
-      "entryType": "namedSense",
-      "displayText": "import",
-      "senseId": "noun",
-      "spokenText": "im.port",
-      "enabled": true
-    },
-    {
-      "id": "10000000-0000-4000-8000-000000000038",
-      "entryType": "namedSense",
-      "displayText": "import",
-      "senseId": "verb",
-      "spokenText": "im.port",
-      "enabled": true
-    },
-    {
       "id": "10000000-0000-4000-8000-000000000039",
       "entryType": "namedSense",
       "displayText": "export",
@@ -306,6 +290,27 @@
       "entryType": "exactTerm",
       "displayText": "database",
       "spokenText": "DataBase",
+      "enabled": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000048",
+      "entryType": "exactTerm",
+      "displayText": "reranker",
+      "spokenText": "ReRanker",
+      "enabled": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000049",
+      "entryType": "exactTerm",
+      "displayText": "reranking",
+      "spokenText": "ReRanking",
+      "enabled": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000050",
+      "entryType": "exactTerm",
+      "displayText": "illustrative",
+      "spokenText": "illustray.tiv",
       "enabled": true
     }
   ]

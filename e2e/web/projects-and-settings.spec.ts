@@ -343,7 +343,7 @@ test.describe("Settings and connection diagnostics", () => {
     const custom = page.getByRole("region", { name: "Custom lexicon" });
     await expect(globals).toBeVisible();
     await expect(custom).toBeVisible();
-    await expect(globals.getByText("39 entries")).toBeVisible();
+    await expect(globals.getByText("40 entries")).toBeVisible();
 
     const seeded = globals.getByRole("article", {
       name: "Lexicon entry resume/cv",

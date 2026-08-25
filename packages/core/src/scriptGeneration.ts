@@ -326,8 +326,6 @@ Configured aliases:
 - \`minute/tiny\` — extremely small.
 - \`attribute/property\` — an attribute, property, or characteristic.
 - \`attribute/assign\` — to attribute something to a source or cause.
-- \`import/noun\` — an import or imported item.
-- \`import/verb\` — to import something.
 - \`export/noun\` — an export or exported item.
 - \`export/verb\` — to export something.
 - \`row/line\` — a row of items or a database row.
@@ -504,8 +502,6 @@ Configured aliases:
 - \`minute/tiny\` — extremely small.
 - \`attribute/property\` — an attribute, property, or characteristic.
 - \`attribute/assign\` — to attribute something to a source or cause.
-- \`import/noun\` — an import or imported item.
-- \`import/verb\` — to import something.
 - \`export/noun\` — an export or exported item.
 - \`export/verb\` — to export something.
 - \`row/line\` — a row of items or a database row.

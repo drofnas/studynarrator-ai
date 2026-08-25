@@ -159,8 +159,8 @@ describe("persistence contracts", () => {
   });
 
   it("loads the complete stable Global Lexicon catalog", () => {
-    expect(GLOBAL_LEXICON_BUILT_INS).toHaveLength(39);
-    expect(globalNamedSenseBuiltIns).toHaveLength(34);
+    expect(GLOBAL_LEXICON_BUILT_INS).toHaveLength(40);
+    expect(globalNamedSenseBuiltIns).toHaveLength(32);
     expect(GLOBAL_LEXICON_BUILT_INS.map(({ id }) => id)).toEqual([
       "10000000-0000-4000-8000-000000000007",
       "10000000-0000-4000-8000-000000000008",
@@ -190,8 +190,6 @@ describe("persistence contracts", () => {
       "10000000-0000-4000-8000-000000000034",
       "10000000-0000-4000-8000-000000000035",
       "10000000-0000-4000-8000-000000000036",
-      "10000000-0000-4000-8000-000000000037",
-      "10000000-0000-4000-8000-000000000038",
       "10000000-0000-4000-8000-000000000039",
       "10000000-0000-4000-8000-000000000040",
       "10000000-0000-4000-8000-000000000041",
@@ -201,6 +199,9 @@ describe("persistence contracts", () => {
       "10000000-0000-4000-8000-000000000045",
       "10000000-0000-4000-8000-000000000046",
       "10000000-0000-4000-8000-000000000047",
+      "10000000-0000-4000-8000-000000000048",
+      "10000000-0000-4000-8000-000000000049",
+      "10000000-0000-4000-8000-000000000050",
     ]);
     expect(
       GLOBAL_LEXICON_BUILT_INS.map(({ displayText, spokenText }) => [
@@ -220,6 +221,24 @@ describe("persistence contracts", () => {
         spokenText,
       ]),
     ).toContainEqual(["database", "DataBase"]);
+    expect(
+      GLOBAL_LEXICON_BUILT_INS.map(({ displayText, spokenText }) => [
+        displayText,
+        spokenText,
+      ]),
+    ).toEqual(
+      expect.arrayContaining([
+        ["reranker", "ReRanker"],
+        ["reranking", "ReRanking"],
+        ["illustrative", "illustray.tiv"],
+      ]),
+    );
+    expect(globalNamedSenseBuiltIns).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ displayText: "import", senseId: "noun" }),
+        expect.objectContaining({ displayText: "import", senseId: "verb" }),
+      ]),
+    );
     expect(GLOBAL_LEXICON_BUILT_INS.map(({ id }) => id)).not.toEqual(
       expect.arrayContaining([
         "10000000-0000-4000-8000-000000000001",
@@ -246,7 +265,7 @@ describe("persistence contracts", () => {
           updatedAt: timestamp,
         })),
       ),
-    ).toHaveLength(39);
+    ).toHaveLength(40);
   });
 
   it("preserves legacy custom metadata in read-only Global Lexicon state", () => {
