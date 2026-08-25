@@ -316,6 +316,20 @@ function renderJobFixture(
   };
 }
 
+function mp3Artifact(renderId: string) {
+  return {
+    contractVersion: 1 as const,
+    id: "00000000-0000-4000-8000-000000000004",
+    renderId,
+    type: "mp3" as const,
+    fileName: "offline-fixture.mp3",
+    sizeBytes: 1_024,
+    checksum: "a".repeat(64),
+    durationMs: 1_000,
+    createdAt: "2026-08-12T14:00:02.000Z",
+  };
+}
+
 function renderClientFixture(
   jobs: RenderJob[],
   get: RenderClient["get"],
@@ -335,7 +349,7 @@ function renderClientFixture(
     cancel: vi.fn(async () => fallbackJob),
     retry: vi.fn(async () => fallbackJob),
     setPinned: vi.fn(async () => fallbackJob),
-    listArtifacts: vi.fn(async () => []),
+    listArtifacts: vi.fn(async (renderId: string) => [mp3Artifact(renderId)]),
     exportArtifact: vi.fn(),
     exportAudio: vi.fn(),
     exportDetails: vi.fn(),
@@ -2165,7 +2179,7 @@ describe("Projects workbench", () => {
       subscribe,
       cancel: vi.fn(),
       retry: vi.fn(),
-      listArtifacts: vi.fn(async () => []),
+      listArtifacts: vi.fn(async (renderId: string) => [mp3Artifact(renderId)]),
       exportArtifact: vi.fn(),
       exportAudio: vi.fn(),
       exportDetails: vi.fn(),
@@ -2690,6 +2704,38 @@ describe("Projects workbench", () => {
       screen.getByRole("button", { name: "Download Details" }),
     );
     expect(exportDetails).toHaveBeenCalledWith(job.id);
+  });
+
+  it("hides a completed historical render after its MP3 artifact is removed", async () => {
+    const { client, analyze } = fixture();
+    const completed = renderJobFixture(
+      "00000000-0000-4000-8000-000000000094",
+      "complete",
+    );
+    const renderClient = renderClientFixture(
+      [completed],
+      async () => completed,
+    );
+    const listArtifacts = vi.fn(async () => []);
+    renderClient.listArtifacts = listArtifacts;
+    renderPage(client, analyze, { renderClient });
+    await openProjectTab("Render");
+
+    await waitFor(() =>
+      expect(listArtifacts).toHaveBeenCalledWith(completed.id),
+    );
+    expect(
+      screen.queryByLabelText("Audio player for Completed project render"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Download" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Download Details" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Pin completed output" }),
+    ).not.toBeInTheDocument();
   });
 
   it("pins and unpins the completed render from the render result", async () => {

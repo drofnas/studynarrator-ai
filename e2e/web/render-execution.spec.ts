@@ -195,6 +195,34 @@ test.describe("render execution", () => {
     await expect(row).toContainText(
       formatAudioDuration(summary!.audioDurationMs!),
     );
+
+    await openRoute(page, studyNarrator, "/settings/general");
+    await page.getByLabel("Include Rendered Project Clips").check();
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: "Clear all cached speech" }).click();
+    await expect(
+      page.getByText(/removed rendered project clips/u),
+    ).toBeVisible();
+
+    const artifactsLoaded = page.waitForResponse(
+      (response) =>
+        response.request().method() === "GET" &&
+        /\/api\/renders\/[^/]+\/artifacts$/u.test(response.url()),
+    );
+    await openRoute(page, studyNarrator, `/projects/${created.id}?tab=render`);
+    await artifactsLoaded;
+    await expect(
+      page.getByLabel(/Audio player for Completed project render/u),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Download", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Download Details" }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: /Pin completed output/u }),
+    ).toHaveCount(0);
   });
 
   test("shows a concise failure and retries from the same project action", async ({

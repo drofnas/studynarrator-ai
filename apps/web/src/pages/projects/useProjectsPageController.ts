@@ -264,6 +264,8 @@ export function useProjectsPageController({
   } = useAudioAudition<number>();
   const [previewError, setPreviewError] = useState("");
   const [selectedRenderJob, setSelectedRenderJob] = useState<RenderJob>();
+  const [completedRenderCandidate, setCompletedRenderCandidate] =
+    useState<RenderJob>();
   const [completedRenderJob, setCompletedRenderJob] = useState<RenderJob>();
   const [renderStarting, setRenderStarting] = useState(false);
   const [diskSpaceCheckEnabled, setDiskSpaceCheckEnabled] = useState(
@@ -433,20 +435,30 @@ export function useProjectsPageController({
     },
     onMutate: ({ renderId, pinned }) => {
       const previousSelected = selectedRenderJob;
+      const previousCompletedCandidate = completedRenderCandidate;
       const previousCompleted = completedRenderJob;
       setSelectedRenderJob((current) =>
+        current?.id === renderId ? { ...current, pinned } : current,
+      );
+      setCompletedRenderCandidate((current) =>
         current?.id === renderId ? { ...current, pinned } : current,
       );
       setCompletedRenderJob((current) =>
         current?.id === renderId ? { ...current, pinned } : current,
       );
-      return { previousSelected, previousCompleted };
+      return {
+        previousSelected,
+        previousCompletedCandidate,
+        previousCompleted,
+      };
     },
     onError: (_error, _variables, context) => {
       setSelectedRenderJob(context?.previousSelected);
+      setCompletedRenderCandidate(context?.previousCompletedCandidate);
       setCompletedRenderJob(context?.previousCompleted);
     },
     onSuccess: (updated) => {
+      setCompletedRenderCandidate(updated);
       setCompletedRenderJob(updated);
       setSelectedRenderJob((current) =>
         current?.id === updated.id ? updated : current,
@@ -512,6 +524,10 @@ export function useProjectsPageController({
   useEffect(() => {
     renderStartOperationRef.current += 1;
     setRenderStarting(false);
+    setSelectedRenderJob(undefined);
+    setCompletedRenderCandidate(undefined);
+    setCompletedRenderJob(undefined);
+    setRenderWaveform(undefined);
   }, [projectId]);
 
   useEffect(() => {
@@ -648,6 +664,7 @@ export function useProjectsPageController({
     setAnalysis(undefined);
     setConfiguration({ speakers: [], pauses: [], sections: [] });
     setSelectedRenderJob(undefined);
+    setCompletedRenderCandidate(undefined);
     setCompletedRenderJob(undefined);
     setRenderStarting(false);
     setRenderWaveform(undefined);
@@ -686,7 +703,9 @@ export function useProjectsPageController({
         if (!active || renderStartRevisionRef.current !== renderStartRevision)
           return;
         setSelectedRenderJob(jobs[0]);
-        setCompletedRenderJob(jobs.find(({ state }) => state === "complete"));
+        setCompletedRenderCandidate(
+          jobs.find(({ state }) => state === "complete"),
+        );
       })
       .catch((error: unknown) => {
         if (active) setRenderError(message(error));
@@ -723,7 +742,7 @@ export function useProjectsPageController({
     const applyJob = (job: RenderJob) => {
       if (!active) return;
       setSelectedRenderJob(job);
-      if (job.state === "complete") setCompletedRenderJob(job);
+      if (job.state === "complete") setCompletedRenderCandidate(job);
     };
 
     if (renderClient.subscribe) {
@@ -780,6 +799,27 @@ export function useProjectsPageController({
       stopPolling();
     };
   }, [activeRenderId, renderClient]);
+
+  useEffect(() => {
+    if (!renderClient || !completedRenderCandidate) {
+      setCompletedRenderJob(undefined);
+      return;
+    }
+    let active = true;
+    setCompletedRenderJob(undefined);
+    void renderClient
+      .listArtifacts(completedRenderCandidate.id)
+      .then((artifacts) => {
+        if (active && artifacts.some(({ type }) => type === "mp3"))
+          setCompletedRenderJob(completedRenderCandidate);
+      })
+      .catch((error: unknown) => {
+        if (active) setRenderError(message(error));
+      });
+    return () => {
+      active = false;
+    };
+  }, [completedRenderCandidate, renderClient]);
 
   useEffect(() => {
     if (!renderClient || !completedRenderJob) {
@@ -1410,7 +1450,7 @@ export function useProjectsPageController({
       if (!isCurrentRenderStart()) return;
       renderStartRevisionRef.current += 1;
       setSelectedRenderJob(job);
-      if (job.state === "complete") setCompletedRenderJob(job);
+      if (job.state === "complete") setCompletedRenderCandidate(job);
       setNotice(startNotice);
     } catch (error) {
       if (isCurrentRenderStart()) setRenderError(message(error));
