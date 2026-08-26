@@ -75,9 +75,12 @@ describe("database baseline", () => {
       { version: 9, name: "global-lexicon-catalog-reconciliation" },
       { version: 10, name: "global-lexicon-import-reconciliation" },
       { version: 11, name: "global-lexicon-collision-deduplication" },
+      { version: 12, name: "global-lexicon-pronunciation-reconciliation" },
     ]);
-    expect(first.appliedVersions).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
-    expect(first.databaseSchemaVersion).toBe(11);
+    expect(first.appliedVersions).toEqual([
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+    ]);
+    expect(first.databaseSchemaVersion).toBe(12);
     expect(first.backupPath).toBeNull();
     expect(
       first.database.prepare("SELECT version FROM schema_migrations").all(),
@@ -93,6 +96,7 @@ describe("database baseline", () => {
       { version: 9 },
       { version: 10 },
       { version: 11 },
+      { version: 12 },
     ]);
     expect(
       first.database
@@ -120,7 +124,7 @@ describe("database baseline", () => {
           "SELECT display_text, sense_id, spoken_text FROM lexicon_entries WHERE scope = 'global' ORDER BY ordinal",
         )
         .all(),
-    ).toHaveLength(40);
+    ).toHaveLength(45);
     expect(
       first.database
         .prepare(
@@ -206,7 +210,7 @@ describe("database baseline", () => {
       Database: DatabaseAdapter,
       databasePath,
     });
-    expect(upgraded.appliedVersions).toEqual([8, 9, 10, 11]);
+    expect(upgraded.appliedVersions).toEqual([8, 9, 10, 11, 12]);
     expect(
       upgraded.database
         .prepare(
@@ -418,8 +422,8 @@ describe("database baseline", () => {
       Database: DatabaseAdapter,
       databasePath,
     });
-    expect(upgraded.appliedVersions).toEqual([11]);
-    expect(upgraded.databaseSchemaVersion).toBe(11);
+    expect(upgraded.appliedVersions).toEqual([11, 12]);
+    expect(upgraded.databaseSchemaVersion).toBe(12);
     expect(
       upgraded.database
         .prepare(
@@ -525,10 +529,10 @@ describe("database baseline", () => {
         )
         .get(),
     ).toEqual({
-      count: 39,
-      distinct_ordinals: 39,
+      count: 44,
+      distinct_ordinals: 44,
       minimum_ordinal: 0,
-      maximum_ordinal: 38,
+      maximum_ordinal: 44,
     });
     v9.database.close();
 
@@ -536,7 +540,7 @@ describe("database baseline", () => {
       Database: DatabaseAdapter,
       databasePath,
     });
-    expect(upgraded.appliedVersions).toEqual([10, 11]);
+    expect(upgraded.appliedVersions).toEqual([10, 11, 12]);
     expect(
       upgraded.database
         .prepare(
@@ -569,8 +573,8 @@ describe("database baseline", () => {
           "10000000-0000-4000-8000-000000000050",
         ),
     ).toEqual([
-      { ordinal: 37, display_text: "reranker", spoken_text: "ReRanker" },
-      { ordinal: 38, display_text: "reranking", spoken_text: "ReRanking" },
+      { ordinal: 37, display_text: "reranker", spoken_text: "ree.ranker" },
+      { ordinal: 38, display_text: "reranking", spoken_text: "ree.ranking" },
       {
         ordinal: 39,
         display_text: "illustrative",
@@ -609,11 +613,134 @@ describe("database baseline", () => {
         )
         .get(),
     ).toEqual({
-      count: 40,
-      distinct_ordinals: 40,
+      count: 45,
+      distinct_ordinals: 45,
       minimum_ordinal: 0,
-      maximum_ordinal: 39,
+      maximum_ordinal: 44,
     });
+    upgraded.database.close();
+  });
+
+  it("upgrades schema-v11 Global Lexicon rows without losing collisions", async () => {
+    const databasePath = await temporaryDatabase(
+      "studynarrator-v12-global-lexicon-reconciliation-",
+    );
+    const v11 = await migrateDatabase({
+      Database: DatabaseAdapter,
+      databasePath,
+      migrations: STUDYNARRATOR_MIGRATIONS.slice(0, 11),
+    });
+    const timestamp = "2026-08-26T00:00:00.000Z";
+    v11.database
+      .prepare(
+        "UPDATE lexicon_entries SET spoken_text = ?, enabled = 0 WHERE id = ?",
+      )
+      .run("obsolete", "10000000-0000-4000-8000-000000000048");
+    v11.database
+      .prepare("DELETE FROM lexicon_entries WHERE id IN (?, ?, ?, ?, ?)")
+      .run(
+        "10000000-0000-4000-8000-000000000051",
+        "10000000-0000-4000-8000-000000000052",
+        "10000000-0000-4000-8000-000000000053",
+        "10000000-0000-4000-8000-000000000054",
+        "10000000-0000-4000-8000-000000000055",
+      );
+    v11.database
+      .prepare(
+        `INSERT INTO lexicon_entries (
+          id, scope, project_id, entry_kind, ordinal, entry_type, display_text, sense_id,
+          spoken_text, case_sensitive, whole_word, priority, enabled, notes, created_at, updated_at
+        ) VALUES (?, 'global', NULL, 'custom', ?, 'exactTerm', ?, NULL, ?, 1, 1, 7, 0, ?, ?, ?)`,
+      )
+      .run(
+        "10000000-0000-4000-8000-000000000051",
+        40,
+        "custom coordinates",
+        "custom.cord.in.its",
+        "v11 collision metadata",
+        timestamp,
+        timestamp,
+      );
+    v11.database.close();
+
+    const upgraded = await migrateDatabase({
+      Database: DatabaseAdapter,
+      databasePath,
+    });
+    expect(upgraded.appliedVersions).toEqual([12]);
+    expect(upgraded.databaseSchemaVersion).toBe(12);
+    expect(
+      upgraded.database
+        .prepare(
+          "SELECT spoken_text, enabled FROM lexicon_entries WHERE id IN (?, ?) ORDER BY id",
+        )
+        .all(
+          "10000000-0000-4000-8000-000000000048",
+          "10000000-0000-4000-8000-000000000049",
+        ),
+    ).toEqual([
+      { spoken_text: "ree.ranker", enabled: 0 },
+      { spoken_text: "ree.ranking", enabled: 1 },
+    ]);
+    expect(
+      upgraded.database
+        .prepare(
+          "SELECT entry_type, display_text, sense_id, spoken_text FROM lexicon_entries WHERE id IN (?, ?, ?, ?, ?) ORDER BY id",
+        )
+        .all(
+          "10000000-0000-4000-8000-000000000051",
+          "10000000-0000-4000-8000-000000000052",
+          "10000000-0000-4000-8000-000000000053",
+          "10000000-0000-4000-8000-000000000054",
+          "10000000-0000-4000-8000-000000000055",
+        ),
+    ).toEqual([
+      {
+        entry_type: "namedSense",
+        display_text: "coordinates",
+        sense_id: "location",
+        spoken_text: "cord.in.its",
+      },
+      {
+        entry_type: "namedSense",
+        display_text: "coordinates",
+        sense_id: "organize",
+        spoken_text: "cord.in.ates",
+      },
+      {
+        entry_type: "namedSense",
+        display_text: "coordinate",
+        sense_id: "location",
+        spoken_text: "cord.in.it",
+      },
+      {
+        entry_type: "namedSense",
+        display_text: "coordinate",
+        sense_id: "organize",
+        spoken_text: "cord.in.ate",
+      },
+      {
+        entry_type: "exactTerm",
+        display_text: "solr",
+        sense_id: null,
+        spoken_text: "solar",
+      },
+    ]);
+    const collision = upgraded.database
+      .prepare(
+        "SELECT id, entry_kind, spoken_text, case_sensitive, priority, enabled, notes FROM lexicon_entries WHERE display_text = ?",
+      )
+      .get("custom coordinates") as { id: string } & Record<string, unknown>;
+    expect(collision).toEqual({
+      id: collision.id,
+      entry_kind: "custom",
+      spoken_text: "custom.cord.in.its",
+      case_sensitive: 1,
+      priority: 7,
+      enabled: 0,
+      notes: "v11 collision metadata",
+    });
+    expect(collision.id).not.toBe("10000000-0000-4000-8000-000000000051");
     upgraded.database.close();
   });
 
@@ -884,9 +1011,9 @@ describe("database baseline", () => {
       databasePath,
       logger,
     });
-    expect(upgraded.appliedVersions).toEqual([3, 4, 5, 6, 7, 8, 9, 10, 11]);
-    expect(upgraded.databaseSchemaVersion).toBe(11);
-    expect(upgraded.backupPath).toContain("-v0002-to-v0011-");
+    expect(upgraded.appliedVersions).toEqual([3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    expect(upgraded.databaseSchemaVersion).toBe(12);
+    expect(upgraded.backupPath).toContain("-v0002-to-v0012-");
     if (upgraded.backupPath === null)
       throw new Error("Expected the migration backup path.");
     expect(logger.info).toHaveBeenNthCalledWith(
@@ -895,7 +1022,7 @@ describe("database baseline", () => {
         event: "database-migration-backup-created",
         backupPath: upgraded.backupPath,
         fromDatabaseSchemaVersion: 2,
-        toDatabaseSchemaVersion: 11,
+        toDatabaseSchemaVersion: 12,
       },
       "Database migration backup created",
     );
@@ -983,6 +1110,15 @@ describe("database baseline", () => {
     expect(logger.info).toHaveBeenNthCalledWith(
       11,
       {
+        event: "database-migration-applied",
+        migrationVersion: 12,
+        migrationName: "global-lexicon-pronunciation-reconciliation",
+      },
+      "Database migration applied",
+    );
+    expect(logger.info).toHaveBeenNthCalledWith(
+      12,
+      {
         event: "database-backups-pruned",
         removedCount: 0,
         retainedCount: 1,
@@ -998,7 +1134,7 @@ describe("database baseline", () => {
           "SELECT count(*) AS count FROM lexicon_entries WHERE entry_type = 'namedSense'",
         )
         .get(),
-    ).toEqual({ count: 33 });
+    ).toEqual({ count: 37 });
     expect(
       upgraded.database
         .prepare(
@@ -1029,7 +1165,7 @@ describe("database baseline", () => {
           "SELECT count(*) AS count FROM lexicon_entries WHERE entry_type = 'namedSense'",
         )
         .get(),
-    ).toEqual({ count: 32 });
+    ).toEqual({ count: 36 });
     expect(
       reopened.database
         .prepare("SELECT id FROM lexicon_entries WHERE id = ?")
@@ -1081,8 +1217,8 @@ describe("database baseline", () => {
       Database: DatabaseAdapter,
       databasePath,
     });
-    expect(upgraded.appliedVersions).toEqual([4, 5, 6, 7, 8, 9, 10, 11]);
-    expect(upgraded.databaseSchemaVersion).toBe(11);
+    expect(upgraded.appliedVersions).toEqual([4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    expect(upgraded.databaseSchemaVersion).toBe(12);
     expect(
       upgraded.database
         .prepare(
@@ -1165,7 +1301,7 @@ describe("database baseline", () => {
     migrated.database.close();
   });
 
-  it.each([1, 12])(
+  it.each([1, 13])(
     "rejects an unsupported pre-release schema %d database without deleting it",
     async (version) => {
       const databasePath = await temporaryDatabase(
@@ -1186,7 +1322,7 @@ describe("database baseline", () => {
         .run("keep-me");
       old.close();
 
-      if (version > 11) {
+      if (version > 12) {
         await expect(
           migrateDatabase({ Database: DatabaseAdapter, databasePath }),
         ).rejects.toBeInstanceOf(SchemaTooNewError);
@@ -1224,7 +1360,7 @@ describe("database baseline", () => {
       .run();
     baseline.database.close();
     const failing: Migration = {
-      version: 12,
+      version: 13,
       name: "intentional-test-failure",
       up(database) {
         database.exec(
@@ -1244,7 +1380,7 @@ describe("database baseline", () => {
       failure = error as MigrationFailureError;
     }
     expect(failure).toBeInstanceOf(MigrationFailureError);
-    expect(failure?.backupPath).toContain("-v0011-to-v0012-");
+    expect(failure?.backupPath).toContain("-v0012-to-v0013-");
     expect((await stat(failure!.backupPath!)).mode & 0o777).toBe(0o600);
     expect((await readFile(failure!.backupPath!)).byteLength).toBeGreaterThan(
       0,
@@ -1341,7 +1477,7 @@ describe("StudyNarratorRepository", () => {
       },
     ]);
     expect(reopened.replaceCustomGlobalLexicon([]).custom).toEqual([]);
-    expect(reopened.listGlobalLexicon()).toHaveLength(40);
+    expect(reopened.listGlobalLexicon()).toHaveLength(45);
     reopened.close();
   });
 
@@ -1404,7 +1540,7 @@ describe("StudyNarratorRepository", () => {
     });
     expect(first.status()).toMatchObject({
       contractVersion: 1,
-      databaseSchemaVersion: 11,
+      databaseSchemaVersion: 12,
     });
     const created = first.createProject({
       name: "Persistence restart proof",
@@ -1733,7 +1869,7 @@ describe("StudyNarratorRepository", () => {
     });
     expect(repository.runMarker()).toMatchObject({
       markerKey: "runtime.storage-self-test",
-      migrationVersion: 11,
+      migrationVersion: 12,
     });
     const project = repository.createProject({ name: "Rendered" });
     repository.replaceProject(project.id, {

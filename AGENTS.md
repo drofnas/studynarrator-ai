@@ -42,7 +42,7 @@ Before editing:
 - Return errors through the central boundary. Preserve stable domain error types across all failure paths, including filesystem and external-service failures.
 - Use the injected structured logger. Do not add raw `console` logging to application code or log script text, project names, request bodies, credentials, raw private endpoints, upstream response bodies, or unsanitized errors.
 - Add a sentinel-secret regression assertion for changes to logs, diagnostics, connection handling, exported artifacts, REST errors, or IPC errors.
-- Keep SQLite migrations append-only, consecutive, and immutable after commit. Append the next migration and bump `DATABASE_SCHEMA_VERSION` in the same checkpoint. Do not edit existing migration seed values to change current defaults; add an explicit reconciliation migration.
+- Keep SQLite migrations append-only, consecutive, and immutable after commit. Append the next migration, bump `DATABASE_SCHEMA_VERSION`, and update the version-check test in `apps/server/src/migrate.test.ts` in the same checkpoint. Do not edit existing migration seed values to change current defaults; add an explicit reconciliation migration.
 - Test schema changes against fresh creation, upgrades from relevant older versions, user-data preservation, failure rollback, backup recovery, idempotent reopen, and newer-schema refusal as applicable.
 - Use disposable data directories for migration and recovery tests. Never point development or test migrations at user data.
 - Implement data-directory layout changes as stable, idempotent, retryable steps. Record a step only after it succeeds and preserve too-new layouts without modification.

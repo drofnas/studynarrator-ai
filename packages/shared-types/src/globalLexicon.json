@@ -296,14 +296,14 @@
       "id": "10000000-0000-4000-8000-000000000048",
       "entryType": "exactTerm",
       "displayText": "reranker",
-      "spokenText": "ReRanker",
+      "spokenText": "ree.ranker",
       "enabled": true
     },
     {
       "id": "10000000-0000-4000-8000-000000000049",
       "entryType": "exactTerm",
       "displayText": "reranking",
-      "spokenText": "ReRanking",
+      "spokenText": "ree.ranking",
       "enabled": true
     },
     {
@@ -311,6 +311,45 @@
       "entryType": "exactTerm",
       "displayText": "illustrative",
       "spokenText": "illustray.tiv",
+      "enabled": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000051",
+      "entryType": "namedSense",
+      "displayText": "coordinates",
+      "senseId": "location",
+      "spokenText": "cord.in.its",
+      "enabled": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000052",
+      "entryType": "namedSense",
+      "displayText": "coordinates",
+      "senseId": "organize",
+      "spokenText": "cord.in.ates",
+      "enabled": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000053",
+      "entryType": "namedSense",
+      "displayText": "coordinate",
+      "senseId": "location",
+      "spokenText": "cord.in.it",
+      "enabled": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000054",
+      "entryType": "namedSense",
+      "displayText": "coordinate",
+      "senseId": "organize",
+      "spokenText": "cord.in.ate",
+      "enabled": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000055",
+      "entryType": "exactTerm",
+      "displayText": "solr",
+      "spokenText": "solar",
       "enabled": true
     }
   ]
