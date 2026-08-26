@@ -1,4 +1,7 @@
+import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { promisify } from "node:util";
 import { strFromU8, unzipSync } from "fflate";
 import {
   configureConnection,
@@ -133,19 +136,48 @@ test.describe("render execution", () => {
         ),
     ).toHaveLength(3);
 
+    const renamedProjectName = "Renamed render acceptance";
+    const renameResponse = await request.put(
+      `${studyNarrator.baseUrl}/api/projects/${created.id}`,
+      {
+        data: {
+          ...projectInput,
+          name: renamedProjectName,
+          scriptSource:
+            "[speaker_teacher] Render an edited sentence.\n\n[speaker_teacher] Keep this sentence.",
+        },
+      },
+    );
+    expect(renameResponse.ok()).toBe(true);
+
     const audioDownload = page.waitForEvent("download");
     await page.getByRole("button", { name: "Download", exact: true }).click();
     const audio = await audioDownload;
     expect(audio.suggestedFilename()).toBe("render-acceptance.mp3");
-    expect((await readFile(await audio.path())).subarray(0, 3).toString()).toBe(
-      "ID3",
-    );
+    const audioPath = await audio.path();
+    expect((await readFile(audioPath)).subarray(0, 3).toString()).toBe("ID3");
+    const { stdout: audioMetadata } = await promisify(execFile)("ffprobe", [
+      "-v",
+      "error",
+      "-show_entries",
+      "format_tags=title",
+      "-of",
+      "json",
+      audioPath,
+    ]);
+    expect(
+      (
+        JSON.parse(audioMetadata) as {
+          format?: { tags?: Record<string, string> };
+        }
+      ).format?.tags?.title,
+    ).toBe(renamedProjectName);
 
     const detailsDownload = page.waitForEvent("download");
     await page.getByRole("button", { name: "Download Details" }).click();
     const details = await detailsDownload;
     expect(details.suggestedFilename()).toBe(
-      "render-acceptance-render-details.zip",
+      "renamed-render-acceptance-render-details.zip",
     );
     const files = unzipSync(await readFile(await details.path()));
     expect(Object.keys(files).sort()).toEqual(
@@ -162,6 +194,18 @@ test.describe("render execution", () => {
     expect(strFromU8(files["tts-transcript.txt"]!)).toContain(
       "Render an edited sentence",
     );
+    const checksums = new Map(
+      strFromU8(files["checksums.txt"]!)
+        .trim()
+        .split("\n")
+        .map((line) => line.split("  ").reverse() as [string, string]),
+    );
+    for (const [fileName, bytes] of Object.entries(files)) {
+      if (fileName !== "checksums.txt")
+        expect(checksums.get(fileName)).toBe(
+          createHash("sha256").update(bytes).digest("hex"),
+        );
+    }
     expect(
       Object.keys(files).some(
         (name) => name.includes("segment") || name.includes("waveform"),
@@ -190,7 +234,7 @@ test.describe("render execution", () => {
     expect(summary).toMatchObject({ scriptLineCount: 3 });
     expect(summary?.audioDurationMs).not.toBeNull();
     await page.getByRole("link", { name: "← Back to Projects" }).click();
-    const row = page.getByRole("row", { name: /Render acceptance/u });
+    const row = page.getByRole("row", { name: renamedProjectName });
     await expect(row).toContainText("3");
     await expect(row).toContainText(
       formatAudioDuration(summary!.audioDurationMs!),
