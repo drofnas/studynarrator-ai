@@ -354,7 +354,12 @@ test.describe("Electron acceptance", () => {
     );
     await page.getByRole("button", { name: "Download", exact: true }).click();
     await expect
-      .poll(async () => (await stat(destination)).size)
+      .poll(
+        async () =>
+          await stat(destination)
+            .then(({ size }) => size)
+            .catch(() => 0),
+      )
       .toBeGreaterThan(0);
 
     const detailsDestination = resolve(
