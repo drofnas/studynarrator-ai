@@ -1,7 +1,9 @@
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { unzipSync } from "fflate";
 import type {
@@ -159,6 +161,7 @@ async function fixture(
     cloneGate?: Promise<void>;
     onCompute?: () => void;
     onClone?: () => void;
+    createIdFailureAt?: number;
   } = {},
 ) {
   const dataDirectory = await mkdtemp(join(tmpdir(), "studynarrator-render-"));
@@ -348,8 +351,12 @@ async function fixture(
     dataDirectory,
     planComputer: { compute: computePlan },
     speech: { synthesize },
-    createId: () =>
-      `00000000-0000-4000-8000-${String(nextId++).padStart(12, "0")}`,
+    createId: () => {
+      const id = nextId++;
+      if (id === options.createIdFailureAt)
+        throw new Error("injected artifact replacement failure");
+      return `00000000-0000-4000-8000-${String(id).padStart(12, "0")}`;
+    },
     now: () => new Date(timestamp),
     logger,
     ...(options.activityGate ? { activityGate: options.activityGate } : {}),
@@ -941,6 +948,24 @@ describe("render coordinator", () => {
     const probe = await probeAudioFile({ inputPath: resolved.path });
     expect(probe.decodable).toBe(true);
     expect(probe.formatName).toContain("mp3");
+    const { stdout: metadataOutput } = await promisify(execFile)("ffprobe", [
+      "-v",
+      "error",
+      "-show_entries",
+      "format_tags=title,artist,date,genre",
+      "-of",
+      "json",
+      resolved.path,
+    ]);
+    const metadata = JSON.parse(metadataOutput) as {
+      format?: { tags?: Record<string, string> };
+    };
+    expect(metadata.format?.tags).toMatchObject({
+      title: "Render fixture",
+      artist: "Study Narrator AI",
+      date: "2026",
+      genre: "Audio Book",
+    });
     const [reviewSegment] = repository.listRenderSegments(started.id);
     expect(reviewSegment?.state).toBe("complete");
     expect(reviewSegment?.audioFileName).toBe("000001.wav");
@@ -1018,6 +1043,192 @@ describe("render coordinator", () => {
     await expect(service.resolveDetailsArchive!(started.id)).rejects.toThrow(
       /integrity/iu,
     );
+    await service.close();
+  });
+
+  it("refreshes renamed project titles and detail checksums during exports", async () => {
+    const { service, repository, projectId, dataDirectory } = await fixture();
+    const started = await service.startProject(projectId);
+    await terminal(service, started.id);
+    const originalMp3 = (await service.listArtifacts(started.id)).find(
+      ({ type }) => type === "mp3",
+    )!;
+
+    repository.project.name = "Renamed details fixture";
+    const details = await service.resolveDetailsArchive!(started.id);
+    const detailFiles = unzipSync(details.bytes);
+    const archiveMp3Path = join(dataDirectory, "details.mp3");
+    await writeFile(archiveMp3Path, detailFiles[originalMp3.fileName]!);
+    const { stdout: detailsMetadataOutput } = await promisify(execFile)(
+      "ffprobe",
+      [
+        "-v",
+        "error",
+        "-show_entries",
+        "format_tags=title",
+        "-of",
+        "json",
+        archiveMp3Path,
+      ],
+    );
+    expect(
+      (
+        JSON.parse(detailsMetadataOutput) as {
+          format?: { tags?: Record<string, string> };
+        }
+      ).format?.tags?.title,
+    ).toBe("Renamed details fixture");
+    const manifest = JSON.parse(
+      new TextDecoder().decode(detailFiles["render-manifest.json"]!),
+    ) as { artifacts: Array<{ fileName: string; checksum: string }> };
+    const checksums = new Map(
+      new TextDecoder()
+        .decode(detailFiles["checksums.txt"]!)
+        .trim()
+        .split("\n")
+        .map((line) => line.split("  ").reverse() as [string, string]),
+    );
+    for (const [fileName, bytes] of Object.entries(detailFiles)) {
+      if (fileName !== "checksums.txt")
+        expect(checksums.get(fileName)).toBe(sha(bytes));
+    }
+    expect(
+      manifest.artifacts.find(
+        ({ fileName }) => fileName === originalMp3.fileName,
+      )?.checksum,
+    ).toBe(sha(detailFiles[originalMp3.fileName]!));
+
+    repository.project.name = "Renamed audio fixture";
+    await expect(service.exportAudio!(started.id)).resolves.toEqual({
+      disposition: "download",
+      fileName: originalMp3.fileName,
+    });
+    const refreshedMp3 = (await service.listArtifacts(started.id)).find(
+      ({ type }) => type === "mp3",
+    )!;
+    expect(refreshedMp3.fileName).toBe(originalMp3.fileName);
+    const { stdout: audioMetadataOutput } = await promisify(execFile)(
+      "ffprobe",
+      [
+        "-v",
+        "error",
+        "-show_entries",
+        "format_tags=title",
+        "-of",
+        "json",
+        (await service.resolveArtifact(refreshedMp3.id)).path,
+      ],
+    );
+    expect(
+      (
+        JSON.parse(audioMetadataOutput) as {
+          format?: { tags?: Record<string, string> };
+        }
+      ).format?.tags?.title,
+    ).toBe("Renamed audio fixture");
+    await expect(service.resolveDetailsArchive!(started.id)).resolves.toEqual(
+      expect.objectContaining({ mimeType: "application/zip" }),
+    );
+    for (const artifact of await service.listArtifacts(started.id))
+      await expect(service.resolveArtifact(artifact.id)).resolves.toBeDefined();
+    await service.close();
+  });
+
+  it("restores the rendered snapshot title after a temporary export", async () => {
+    const { service, repository, projectId, dataDirectory } = await fixture();
+    const started = await service.startProject(projectId);
+    await terminal(service, started.id);
+    const mp3 = (await service.listArtifacts(started.id)).find(
+      ({ type }) => type === "mp3",
+    )!;
+
+    repository.project.name = "Temporary render fixture";
+    await service.exportAudio!(started.id);
+    repository.project.name = "Render fixture";
+
+    const details = unzipSync(
+      (await service.resolveDetailsArchive!(started.id)).bytes,
+    );
+    const archiveMp3Path = join(dataDirectory, "reverted-details.mp3");
+    await writeFile(archiveMp3Path, details[mp3.fileName]!);
+    const { stdout: metadataOutput } = await promisify(execFile)("ffprobe", [
+      "-v",
+      "error",
+      "-show_entries",
+      "format_tags=title",
+      "-of",
+      "json",
+      archiveMp3Path,
+    ]);
+    expect(
+      (
+        JSON.parse(metadataOutput) as {
+          format?: { tags?: Record<string, string> };
+        }
+      ).format?.tags?.title,
+    ).toBe("Render fixture");
+
+    const manifest = JSON.parse(
+      new TextDecoder().decode(details["render-manifest.json"]!),
+    ) as { artifacts: Array<{ fileName: string; checksum: string }> };
+    const checksums = new Map(
+      new TextDecoder()
+        .decode(details["checksums.txt"]!)
+        .trim()
+        .split("\n")
+        .map((line) => line.split("  ").reverse() as [string, string]),
+    );
+    for (const [fileName, bytes] of Object.entries(details)) {
+      if (fileName !== "checksums.txt")
+        expect(checksums.get(fileName)).toBe(sha(bytes));
+    }
+    expect(
+      manifest.artifacts.find(({ fileName }) => fileName === mp3.fileName)
+        ?.checksum,
+    ).toBe(sha(details[mp3.fileName]!));
+    for (const artifact of await service.listArtifacts(started.id))
+      await expect(service.resolveArtifact(artifact.id)).resolves.toBeDefined();
+    await service.close();
+  });
+
+  it("recovers a renamed export after MP3 replacement succeeds but manifest replacement fails", async () => {
+    const { service, repository, projectId } = await fixture({
+      // The job consumes ID 10 and publication consumes IDs 11 through 17.
+      // The MP3 replacement uses 18; fail the following manifest replacement.
+      createIdFailureAt: 19,
+    });
+    const started = await service.startProject(projectId);
+    await terminal(service, started.id);
+    repository.project.name = "Recovered title fixture";
+
+    await expect(service.exportAudio!(started.id)).rejects.toThrow(
+      "The render artifact could not be updated.",
+    );
+    const mp3 = (await service.listArtifacts(started.id)).find(
+      ({ type }) => type === "mp3",
+    )!;
+    await expect(service.resolveArtifact(mp3.id)).resolves.toBeDefined();
+
+    await expect(service.exportAudio!(started.id)).resolves.toEqual({
+      disposition: "download",
+      fileName: mp3.fileName,
+    });
+    const details = unzipSync(
+      (await service.resolveDetailsArchive!(started.id)).bytes,
+    );
+    const checksums = new Map(
+      new TextDecoder()
+        .decode(details["checksums.txt"]!)
+        .trim()
+        .split("\n")
+        .map((line) => line.split("  ").reverse() as [string, string]),
+    );
+    for (const [fileName, bytes] of Object.entries(details)) {
+      if (fileName !== "checksums.txt")
+        expect(checksums.get(fileName)).toBe(sha(bytes));
+    }
+    for (const artifact of await service.listArtifacts(started.id))
+      await expect(service.resolveArtifact(artifact.id)).resolves.toBeDefined();
     await service.close();
   });
 

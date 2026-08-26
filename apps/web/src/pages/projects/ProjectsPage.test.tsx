@@ -2785,7 +2785,7 @@ describe("Projects workbench", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("pins and unpins the completed render from the render result", async () => {
+  it("offers completed render controls without a pin action", async () => {
     const { client, analyze } = fixture();
     const completed = renderJobFixture(
       "00000000-0000-4000-8000-000000000094",
@@ -2795,26 +2795,22 @@ describe("Projects workbench", () => {
       [completed],
       async () => completed,
     );
-    const setPinned = vi.fn(async (_renderId: string, pinned: boolean) => ({
-      ...completed,
-      pinned,
-    }));
+    const setPinned = vi.fn(async () => completed);
     renderClient.setPinned = setPinned;
     renderPage(client, analyze, { renderClient });
     await openProjectTab("Render");
 
-    const pin = await screen.findByRole("button", {
-      name: "Pin completed output",
-    });
-    await userEvent.click(pin);
-    expect(setPinned).toHaveBeenCalledWith(completed.id, true);
     expect(
-      await screen.findByRole("button", { name: "Unpin completed output" }),
-    ).toHaveAttribute("aria-pressed", "true");
-    await userEvent.click(
-      screen.getByRole("button", { name: "Unpin completed output" }),
-    );
-    expect(setPinned).toHaveBeenLastCalledWith(completed.id, false);
+      await screen.findByLabelText("Audio player for Completed project render"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Download" })).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Download Details" }),
+    ).toBeEnabled();
+    expect(
+      screen.queryByRole("button", { name: /pin completed output/i }),
+    ).not.toBeInTheDocument();
+    expect(setPinned).not.toHaveBeenCalled();
   });
 
   it("rolls back an optimistic save and invalidates the project ledger", async () => {

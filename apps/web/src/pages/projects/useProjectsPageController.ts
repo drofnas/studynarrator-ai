@@ -421,65 +421,6 @@ export function useProjectsPageController({
       await client.preferences.replaceIgnoredDiagnostics(next),
     retry: false,
   });
-  const pinMutation = useMutation({
-    mutationFn: async ({
-      renderId,
-      pinned,
-    }: {
-      renderId: string;
-      pinned: boolean;
-      projectId: string;
-    }) => {
-      if (!renderClient) throw new Error("Render controls are unavailable.");
-      return await renderClient.setPinned(renderId, pinned);
-    },
-    onMutate: ({ renderId, pinned }) => {
-      const previousSelected = selectedRenderJob;
-      const previousCompletedCandidate = completedRenderCandidate;
-      const previousCompleted = completedRenderJob;
-      setSelectedRenderJob((current) =>
-        current?.id === renderId ? { ...current, pinned } : current,
-      );
-      setCompletedRenderCandidate((current) =>
-        current?.id === renderId ? { ...current, pinned } : current,
-      );
-      setCompletedRenderJob((current) =>
-        current?.id === renderId ? { ...current, pinned } : current,
-      );
-      return {
-        previousSelected,
-        previousCompletedCandidate,
-        previousCompleted,
-      };
-    },
-    onError: (_error, _variables, context) => {
-      setSelectedRenderJob(context?.previousSelected);
-      setCompletedRenderCandidate(context?.previousCompletedCandidate);
-      setCompletedRenderJob(context?.previousCompleted);
-    },
-    onSuccess: (updated) => {
-      setCompletedRenderCandidate(updated);
-      setCompletedRenderJob(updated);
-      setSelectedRenderJob((current) =>
-        current?.id === updated.id ? updated : current,
-      );
-    },
-    onSettled: async (
-      _data,
-      _error,
-      { renderId, projectId: targetProjectId },
-    ) => {
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.renders.detail(renderId),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.renders.project(targetProjectId),
-        }),
-      ]);
-    },
-    retry: false,
-  });
   const startRenderMutation = useMutation({
     mutationFn: async ({
       projectId: targetProjectId,
@@ -721,20 +662,6 @@ export function useProjectsPageController({
     !terminalRenderStates.has(selectedRenderJob.state)
       ? selectedRenderJob.id
       : undefined;
-
-  const toggleCompletedRenderPin = async () => {
-    if (!renderClient || !completedRenderJob) return;
-    setRenderError("");
-    try {
-      await pinMutation.mutateAsync({
-        renderId: completedRenderJob.id,
-        pinned: !completedRenderJob.pinned,
-        projectId: completedRenderJob.projectId,
-      });
-    } catch (error) {
-      setRenderError(message(error));
-    }
-  };
 
   useEffect(() => {
     if (!renderClient || !activeRenderId) return;
@@ -1553,8 +1480,6 @@ export function useProjectsPageController({
     selectedRenderJob,
     completedRenderJob,
     renderWaveform,
-    pinBusy: pinMutation.isPending,
-    toggleCompletedRenderPin,
   };
 }
 

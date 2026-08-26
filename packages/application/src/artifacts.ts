@@ -30,6 +30,7 @@ import {
   extractWaveformPeaks,
   normalizeSpeechWav,
   probeAudioFile,
+  writeFinalMp3Metadata,
   type RenderPlanStore,
 } from "@studynarrator/rendering";
 import type { ResolvedRenderMedia } from "./renderMedia.js";
@@ -297,10 +298,139 @@ export async function createRenderArtifacts(options: {
     return RenderHistorySegmentCollectionSchema.parse(values);
   }
 
+  async function replaceFileAtomically(
+    path: string,
+    bytes: Uint8Array,
+  ): Promise<{ checksum: string; sizeBytes: number }> {
+    let temporary: string | undefined;
+    try {
+      temporary = join(
+        dirname(path),
+        `.${basename(path)}.${options.createId()}.tmp`,
+      );
+      await writeFile(temporary, bytes, { mode: 0o600, flag: "wx" });
+      const metadata = await fileMetadataAt(temporary);
+      await rename(temporary, path);
+      return metadata;
+    } catch {
+      if (temporary) await rm(temporary, { force: true });
+      throw new Error("The render artifact could not be updated.");
+    }
+  }
+
+  async function refreshTitleForCurrentProject(renderId: string) {
+    const job = options.repository.getRenderJob(renderId);
+    const currentProject = options.repository.getProject?.(job.projectId);
+    if (!currentProject) return;
+    const artifacts = options.repository.listRenderArtifacts(renderId);
+    const mp3 = artifacts.find(({ type }) => type === "mp3");
+    const manifest = artifacts.find(({ type }) => type === "manifest");
+    const checksums = artifacts.find(({ type }) => type === "checksums");
+    if (!mp3 || !manifest || !checksums)
+      throw new Error("The render details package is incomplete.");
+
+    const resolvedArtifacts = new Map(
+      await Promise.all(
+        artifacts.map(
+          async (artifact) =>
+            [artifact.id, await resolveArtifactFile(artifact.id)] as const,
+        ),
+      ),
+    );
+    const mp3Path = resolvedArtifacts.get(mp3.id)?.path;
+    const manifestPath = resolvedArtifacts.get(manifest.id)?.path;
+    const checksumsPath = resolvedArtifacts.get(checksums.id)?.path;
+    if (!mp3Path || !manifestPath || !checksumsPath)
+      throw new Error("The render details package is incomplete.");
+
+    const persistArtifacts = (values: RenderArtifact[]) => {
+      options.repository.replaceRenderArtifacts(
+        renderId,
+        values.map((artifact) => {
+          const path = resolvedArtifacts.get(artifact.id)?.path;
+          if (!path)
+            throw new Error("The render details package is incomplete.");
+          return { ...artifact, path };
+        }),
+      );
+    };
+
+    const temporary = join(
+      dirname(mp3Path),
+      `.${basename(mp3Path)}.${options.createId()}.tmp`,
+    );
+    let mp3Metadata: { checksum: string; sizeBytes: number };
+    try {
+      await writeFile(temporary, await readFile(mp3Path), {
+        mode: 0o600,
+        flag: "wx",
+      });
+      writeFinalMp3Metadata({
+        path: temporary,
+        title: currentProject.name,
+        year: options.now().getFullYear(),
+      });
+      mp3Metadata = await fileMetadataAt(temporary);
+      await rename(temporary, mp3Path);
+    } catch {
+      await rm(temporary, { force: true });
+      throw new Error("Final MP3 metadata could not be updated.");
+    }
+    let refreshedArtifacts = artifacts.map((artifact) =>
+      artifact.id === mp3.id ? { ...artifact, ...mp3Metadata } : artifact,
+    );
+    persistArtifacts(refreshedArtifacts);
+    let manifestValue: { artifacts?: unknown };
+    try {
+      manifestValue = JSON.parse(await readFile(manifestPath, "utf8")) as {
+        artifacts?: unknown;
+      };
+      if (!Array.isArray(manifestValue.artifacts)) throw new Error();
+      const manifestArtifacts = manifestValue.artifacts as unknown[];
+      const matchingArtifact = manifestArtifacts.find(
+        (artifact): artifact is Record<string, unknown> =>
+          typeof artifact === "object" &&
+          artifact !== null &&
+          "fileName" in artifact &&
+          artifact.fileName === mp3.fileName,
+      );
+      if (!matchingArtifact) throw new Error();
+      matchingArtifact.checksum = mp3Metadata.checksum;
+      matchingArtifact.sizeBytes = mp3Metadata.sizeBytes;
+    } catch {
+      throw new Error("The render manifest could not be updated.");
+    }
+    const manifestMetadata = await replaceFileAtomically(
+      manifestPath,
+      new TextEncoder().encode(`${JSON.stringify(manifestValue, null, 2)}\n`),
+    );
+    refreshedArtifacts = refreshedArtifacts.map((artifact) =>
+      artifact.id === manifest.id
+        ? { ...artifact, ...manifestMetadata }
+        : artifact,
+    );
+    persistArtifacts(refreshedArtifacts);
+    const checksumContents = refreshedArtifacts
+      .filter(({ type }) => type !== "checksums")
+      .map(({ checksum, fileName }) => `${checksum}  ${fileName}`)
+      .join("\n");
+    const checksumsMetadata = await replaceFileAtomically(
+      checksumsPath,
+      new TextEncoder().encode(`${checksumContents}\n`),
+    );
+    refreshedArtifacts = refreshedArtifacts.map((artifact) =>
+      artifact.id === checksums.id
+        ? { ...artifact, ...checksumsMetadata }
+        : artifact,
+    );
+    persistArtifacts(refreshedArtifacts);
+  }
+
   async function resolveRenderAudio(
     renderId: string,
   ): Promise<ResolvedRenderMedia> {
     const normalized = RenderIdSchema.parse(renderId);
+    await refreshTitleForCurrentProject(normalized);
     const artifact = options.repository
       .listRenderArtifacts(normalized)
       .find(({ type }) => type === "mp3");
@@ -485,6 +615,7 @@ export async function createRenderArtifacts(options: {
 
   async function resolveDetailsArchive(renderIdInput: string) {
     const renderId = RenderIdSchema.parse(renderIdInput);
+    await refreshTitleForCurrentProject(renderId);
     const artifacts = options.repository.listRenderArtifacts(renderId);
     const expected = [
       "mp3",
@@ -553,6 +684,11 @@ export async function createRenderArtifacts(options: {
         outputPath: mp3Path,
         ...(options.ffmpegPath ? { ffmpegPath: options.ffmpegPath } : {}),
         signal,
+      });
+      writeFinalMp3Metadata({
+        path: mp3Path,
+        title: projectName,
+        year: options.now().getFullYear(),
       });
       const mp3Probe = await probeAudioFile({
         inputPath: mp3Path,
