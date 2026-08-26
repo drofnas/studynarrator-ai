@@ -159,8 +159,8 @@ describe("persistence contracts", () => {
   });
 
   it("loads the complete stable Global Lexicon catalog", () => {
-    expect(GLOBAL_LEXICON_BUILT_INS).toHaveLength(40);
-    expect(globalNamedSenseBuiltIns).toHaveLength(32);
+    expect(GLOBAL_LEXICON_BUILT_INS).toHaveLength(45);
+    expect(globalNamedSenseBuiltIns).toHaveLength(36);
     expect(GLOBAL_LEXICON_BUILT_INS.map(({ id }) => id)).toEqual([
       "10000000-0000-4000-8000-000000000007",
       "10000000-0000-4000-8000-000000000008",
@@ -202,6 +202,11 @@ describe("persistence contracts", () => {
       "10000000-0000-4000-8000-000000000048",
       "10000000-0000-4000-8000-000000000049",
       "10000000-0000-4000-8000-000000000050",
+      "10000000-0000-4000-8000-000000000051",
+      "10000000-0000-4000-8000-000000000052",
+      "10000000-0000-4000-8000-000000000053",
+      "10000000-0000-4000-8000-000000000054",
+      "10000000-0000-4000-8000-000000000055",
     ]);
     expect(
       GLOBAL_LEXICON_BUILT_INS.map(({ displayText, spokenText }) => [
@@ -228,8 +233,13 @@ describe("persistence contracts", () => {
       ]),
     ).toEqual(
       expect.arrayContaining([
-        ["reranker", "ReRanker"],
-        ["reranking", "ReRanking"],
+        ["reranker", "ree.ranker"],
+        ["reranking", "ree.ranking"],
+        ["coordinates", "cord.in.its"],
+        ["coordinates", "cord.in.ates"],
+        ["coordinate", "cord.in.it"],
+        ["coordinate", "cord.in.ate"],
+        ["solr", "solar"],
         ["illustrative", "illustray.tiv"],
       ]),
     );
@@ -265,7 +275,7 @@ describe("persistence contracts", () => {
           updatedAt: timestamp,
         })),
       ),
-    ).toHaveLength(40);
+    ).toHaveLength(45);
   });
 
   it("preserves legacy custom metadata in read-only Global Lexicon state", () => {

@@ -144,7 +144,7 @@ export async function createStudyNarratorServices(options: {
     descriptor.dataDirectory,
     cacheActivityGate,
   );
-  const speechCache = createSpeechCacheService(cache);
+  let speechCache: SpeechCacheClient;
   let storageFailure: StorageCheck | undefined;
   let persistence: PersistenceClient;
   let repository: DiagnosticRepository;
@@ -179,6 +179,10 @@ export async function createStudyNarratorServices(options: {
       speechCacheSweeper,
       activityGate: cacheActivityGate,
       dataDirectory: descriptor.dataDirectory,
+    });
+    speechCache = createSpeechCacheService(cache, {
+      clearCacheAndRenderedProjectClips:
+        retentionMaintenance.clearCacheAndRenderedProjectClips,
     });
     const runRetentionSweep = async () => {
       try {
@@ -258,6 +262,7 @@ export async function createStudyNarratorServices(options: {
     });
     void runRetentionSweep();
   } catch (error) {
+    speechCache = createSpeechCacheService(cache);
     if (
       !(error instanceof MigrationFailureError) &&
       !(error instanceof SchemaTooNewError) &&

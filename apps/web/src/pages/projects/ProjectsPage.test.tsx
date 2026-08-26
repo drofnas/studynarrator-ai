@@ -316,6 +316,20 @@ function renderJobFixture(
   };
 }
 
+function mp3Artifact(renderId: string) {
+  return {
+    contractVersion: 1 as const,
+    id: "00000000-0000-4000-8000-000000000004",
+    renderId,
+    type: "mp3" as const,
+    fileName: "offline-fixture.mp3",
+    sizeBytes: 1_024,
+    checksum: "a".repeat(64),
+    durationMs: 1_000,
+    createdAt: "2026-08-12T14:00:02.000Z",
+  };
+}
+
 function renderClientFixture(
   jobs: RenderJob[],
   get: RenderClient["get"],
@@ -335,7 +349,7 @@ function renderClientFixture(
     cancel: vi.fn(async () => fallbackJob),
     retry: vi.fn(async () => fallbackJob),
     setPinned: vi.fn(async () => fallbackJob),
-    listArtifacts: vi.fn(async () => []),
+    listArtifacts: vi.fn(async (renderId: string) => [mp3Artifact(renderId)]),
     exportArtifact: vi.fn(),
     exportAudio: vi.fn(),
     exportDetails: vi.fn(),
@@ -986,6 +1000,43 @@ describe("Projects workbench", () => {
     expect(within(strip).getByRole("status")).toHaveTextContent(
       "Waiting for script analysis",
     );
+  });
+
+  it("hides a stale preview error while the script is parsing", async () => {
+    const { source } = installAudioContext();
+    const { client, analyze } = fixture();
+    const preview = vi.fn(async () => {
+      throw new Error(
+        "Empty Script: Add at least one speech segment before rendering.",
+      );
+    });
+    renderPage(client, analyze, {
+      previewClient: { preview } as unknown as ProjectPreviewClient,
+    });
+
+    await openProjectTab("Details");
+    await userEvent.click(
+      (
+        await screen.findAllByRole("button", { name: /Play narration row/u })
+      )[0]!,
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Empty Script: Add at least one speech segment before rendering.",
+    );
+
+    await openProjectTab("Script Editor");
+    replaceScriptSource("[speaker_teacher] Updated script.");
+    await openProjectTab("Details");
+    await waitFor(() =>
+      expect(screen.getByText("Parsing…")).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByRole("alert", {
+        name: /Empty Script: Add at least one speech segment before rendering\./u,
+      }),
+    ).not.toBeInTheDocument();
+    expect(preview).toHaveBeenCalledOnce();
+    expect(source.start).not.toHaveBeenCalled();
   });
 
   it("ignores stale estimate context after the configured voice changes", async () => {
@@ -2008,6 +2059,16 @@ describe("Projects workbench", () => {
       await screen.findByRole("button", { name: /Playing narration row/u }),
     ).toBeInTheDocument();
     expect(source.start).toHaveBeenCalledOnce();
+    await userEvent.click(
+      screen.getByRole("button", { name: /Playing narration row/u }),
+    );
+    expect(
+      (
+        await screen.findAllByRole("button", { name: /Play narration row/u })
+      )[0],
+    ).toBeInTheDocument();
+    expect(source.stop).toHaveBeenCalledOnce();
+    expect(preview).toHaveBeenCalledOnce();
     expect(
       screen.queryByRole("region", { name: "Project preview result" }),
     ).not.toBeInTheDocument();
@@ -2165,7 +2226,7 @@ describe("Projects workbench", () => {
       subscribe,
       cancel: vi.fn(),
       retry: vi.fn(),
-      listArtifacts: vi.fn(async () => []),
+      listArtifacts: vi.fn(async (renderId: string) => [mp3Artifact(renderId)]),
       exportArtifact: vi.fn(),
       exportAudio: vi.fn(),
       exportDetails: vi.fn(),
@@ -2690,6 +2751,38 @@ describe("Projects workbench", () => {
       screen.getByRole("button", { name: "Download Details" }),
     );
     expect(exportDetails).toHaveBeenCalledWith(job.id);
+  });
+
+  it("hides a completed historical render after its MP3 artifact is removed", async () => {
+    const { client, analyze } = fixture();
+    const completed = renderJobFixture(
+      "00000000-0000-4000-8000-000000000094",
+      "complete",
+    );
+    const renderClient = renderClientFixture(
+      [completed],
+      async () => completed,
+    );
+    const listArtifacts = vi.fn(async () => []);
+    renderClient.listArtifacts = listArtifacts;
+    renderPage(client, analyze, { renderClient });
+    await openProjectTab("Render");
+
+    await waitFor(() =>
+      expect(listArtifacts).toHaveBeenCalledWith(completed.id),
+    );
+    expect(
+      screen.queryByLabelText("Audio player for Completed project render"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Download" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Download Details" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Pin completed output" }),
+    ).not.toBeInTheDocument();
   });
 
   it("pins and unpins the completed render from the render result", async () => {

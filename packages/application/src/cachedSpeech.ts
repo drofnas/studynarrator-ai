@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import {
   SPEECH_CACHE_CONTRACT_VERSION,
   ProjectIdSchema,
+  SpeechCacheClearAllInputSchema,
   SpeechCacheKeyInputSchema,
   SpeechCacheCleanupResultSchema,
   SpeechCacheStatusSchema,
@@ -171,6 +172,12 @@ export function createCachedSpeechSynthesis(dependencies: {
 
 export function createSpeechCacheService(
   cache: SpeechCache,
+  options: {
+    clearCacheAndRenderedProjectClips?: () => Promise<{
+      entriesRemoved: number;
+      bytesFreed: number;
+    }>;
+  } = {},
 ): SpeechCacheClient {
   const cleanup = (result: Awaited<ReturnType<SpeechCache["clearAll"]>>) =>
     SpeechCacheCleanupResultSchema.parse({
@@ -184,7 +191,14 @@ export function createSpeechCacheService(
         ...(await cache.status()),
       });
     },
-    async clearAll() {
+    async clearAll(input) {
+      const { includeRenderedProjectClips } =
+        SpeechCacheClearAllInputSchema.parse(input);
+      if (includeRenderedProjectClips) {
+        if (!options.clearCacheAndRenderedProjectClips)
+          throw new Error("Rendered project clip cleanup is unavailable.");
+        return cleanup(await options.clearCacheAndRenderedProjectClips());
+      }
       return cleanup(await cache.clearAll());
     },
     async clearProject(projectId) {

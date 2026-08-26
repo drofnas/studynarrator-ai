@@ -63,7 +63,9 @@ function job(id: string, pinned = false): RenderJob {
   };
 }
 
-async function fixture(options: { pinned?: boolean; roots?: boolean } = {}) {
+async function fixture(
+  options: { pinned?: boolean; roots?: boolean; recoverable?: boolean } = {},
+) {
   const dataDirectory = await mkdtemp(
     join(tmpdir(), "studynarrator-retention-"),
   );
@@ -124,7 +126,7 @@ async function fixture(options: { pinned?: boolean; roots?: boolean } = {}) {
   const repository = {
     getRetentionSettings: () => settings,
     listPinnedRenderProjectIds: () => (render.pinned ? [projectId] : []),
-    listRecoverableRenderJobs: () => [],
+    listRecoverableRenderJobs: () => (options.recoverable ? [render] : []),
     listRetentionRenderJobs: () => [render],
     clearRenderMedia: (id: string) => cleared.push(id),
   };
@@ -153,6 +155,60 @@ async function fixture(options: { pinned?: boolean; roots?: boolean } = {}) {
 }
 
 describe("retention maintenance", () => {
+  it("clears selected terminal render clips while preserving snapshots and history", async () => {
+    const { cache, cleared, dataDirectory, maintenance } = await fixture();
+
+    await expect(
+      maintenance.clearCacheAndRenderedProjectClips(),
+    ).resolves.toEqual({ entriesRemoved: 1, bytesFreed: 7 });
+    await expect(cache.status()).resolves.toMatchObject({ entryCount: 0 });
+    await expect(
+      readFile(join(dataDirectory, "renders", renderId, "audio.mp3")),
+    ).rejects.toThrow();
+    await expect(
+      readFile(
+        join(
+          dataDirectory,
+          "render-plans",
+          ".jobs",
+          renderId,
+          "project-snapshot.json",
+        ),
+      ),
+    ).resolves.toEqual(Buffer.from("snapshot"));
+    expect(cleared).toEqual([renderId]);
+  });
+
+  it("preserves pinned rendered clips while clearing cache", async () => {
+    const { cache, cleared, dataDirectory, maintenance } = await fixture({
+      pinned: true,
+    });
+
+    await expect(
+      maintenance.clearCacheAndRenderedProjectClips(),
+    ).resolves.toEqual({ entriesRemoved: 1, bytesFreed: 7 });
+    await expect(cache.status()).resolves.toMatchObject({ entryCount: 0 });
+    await expect(
+      readFile(join(dataDirectory, "renders", renderId, "audio.mp3")),
+    ).resolves.toEqual(Buffer.from("artifact"));
+    expect(cleared).toEqual([]);
+  });
+
+  it("preserves cache and media when a render is recoverable", async () => {
+    const { cache, cleared, dataDirectory, maintenance } = await fixture({
+      recoverable: true,
+    });
+
+    await expect(
+      maintenance.clearCacheAndRenderedProjectClips(),
+    ).rejects.toThrow("while a render is recoverable");
+    await expect(cache.status()).resolves.toMatchObject({ entryCount: 1 });
+    await expect(
+      readFile(join(dataDirectory, "renders", renderId, "audio.mp3")),
+    ).resolves.toEqual(Buffer.from("artifact"));
+    expect(cleared).toEqual([]);
+  });
+
   it("honors saved TTLs for cache, job snapshots, and render artifacts", async () => {
     const { cache, cleared, dataDirectory, maintenance } = await fixture();
 

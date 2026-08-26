@@ -825,6 +825,9 @@ describe("Electron boundary", () => {
         projectId: project.id,
         preview: { mode: "segment", nodeOrdinal: 1 },
       },
+      [SPEECH_CACHE_CHANNELS.clearAll]: {
+        includeRenderedProjectClips: false,
+      },
       [SPEECH_CACHE_CHANNELS.clearProject]: { projectId: project.id },
       [SPEECH_CACHE_CHANNELS.clearEntry]: { cacheKey: "a".repeat(64) },
       [RENDER_CHANNELS.startProject]: {
@@ -899,6 +902,12 @@ describe("Electron boundary", () => {
     );
 
     const secret = "test-secret-must-not-appear";
+    await expect(
+      handlers.get(SPEECH_CACHE_CHANNELS.clearAll)?.(undefined, {
+        includeRenderedProjectClips: "yes",
+        secret,
+      }),
+    ).rejects.toThrow("The request does not match the speech cache contract.");
     for (const channel of Object.keys(inputs)) {
       await expect(
         handlers.get(channel)?.(undefined, { malformed: true, apiKey: secret }),

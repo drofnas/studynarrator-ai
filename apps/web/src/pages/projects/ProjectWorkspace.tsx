@@ -208,7 +208,9 @@ export function ProjectWorkspace({
               <ProjectLexiconPanel controller={controller} />
             ) : null}
 
-            {previewError && activeTab === "details" ? (
+            {previewError &&
+            analysisState !== "parsing" &&
+            activeTab === "details" ? (
               <p className={styles.previewError} role="alert">
                 {previewError} Your project and preview selection are unchanged.
               </p>

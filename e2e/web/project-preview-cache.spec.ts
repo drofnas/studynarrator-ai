@@ -74,6 +74,9 @@ test.describe("project preview cache", () => {
         page.getByRole("button", { name: /Playing narration row/u }).first(),
       ).toBeVisible();
       await expect(page.locator("audio")).toHaveCount(0);
+      await expect(
+        page.getByRole("button", { name: /Play narration row/u }).first(),
+      ).toBeVisible();
       return (await response.json()) as {
         cache: { key: string; status: "hit" | "miss" };
       };

@@ -2,6 +2,7 @@ import {
   BoundaryErrorSchema,
   ProjectPreviewResultSchema,
   SpeechCacheCleanupResultSchema,
+  SpeechCacheClearAllInputSchema,
   SpeechCacheStatusSchema,
   type ProjectPreviewClient,
   type SpeechCacheClient,
@@ -89,11 +90,14 @@ export function createRestSpeechCacheClient(
     async status() {
       return await request("/api/speech-cache", SpeechCacheStatusSchema);
     },
-    async clearAll() {
+    async clearAll(input) {
       return await request(
         "/api/speech-cache",
         SpeechCacheCleanupResultSchema,
-        { method: "DELETE" },
+        {
+          method: "DELETE",
+          body: JSON.stringify(SpeechCacheClearAllInputSchema.parse(input)),
+        },
       );
     },
     async clearProject(projectId) {

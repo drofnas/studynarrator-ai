@@ -343,7 +343,7 @@ test.describe("Settings and connection diagnostics", () => {
     const custom = page.getByRole("region", { name: "Custom lexicon" });
     await expect(globals).toBeVisible();
     await expect(custom).toBeVisible();
-    await expect(globals.getByText("40 entries")).toBeVisible();
+    await expect(globals.getByText("45 entries")).toBeVisible();
 
     const seeded = globals.getByRole("article", {
       name: "Lexicon entry resume/cv",
@@ -624,6 +624,8 @@ test.describe("Projects connected authoring", () => {
     await expect
       .poll(() => page.evaluate(() => window.scrollY))
       .toBeGreaterThan(0);
+    await page.getByRole("tab", { name: "Details" }).click();
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
 
     await page.getByRole("button", { name: "Save now" }).click();
     await expect(page.getByText("All changes saved.")).toHaveCount(0);

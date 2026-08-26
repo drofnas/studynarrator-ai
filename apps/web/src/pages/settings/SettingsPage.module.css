@@ -552,6 +552,18 @@
   font-size: 0.68rem;
   line-height: 1.45;
 }
+.cacheControls {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+}
+.cacheControls label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.74rem;
+  font-weight: 800;
+}
 @media (max-width: 960px) {
   .page {
     grid-template-columns: 1fr;

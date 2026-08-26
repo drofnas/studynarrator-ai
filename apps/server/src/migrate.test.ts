@@ -19,13 +19,13 @@ describe("db:migrate command", () => {
     const first = await runMigrationCommand(["--data-dir", dataDirectory]);
     expect(first).toMatchObject({
       state: "ready",
-      databaseSchemaVersion: 11,
-      appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+      databaseSchemaVersion: 12,
+      appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
       backupPath: null,
     });
     const second = await runMigrationCommand(["--data-dir", dataDirectory]);
     expect(second).toMatchObject({
-      databaseSchemaVersion: 11,
+      databaseSchemaVersion: 12,
       appliedVersions: [],
     });
     expect(JSON.stringify(second)).not.toContain("scriptSource");

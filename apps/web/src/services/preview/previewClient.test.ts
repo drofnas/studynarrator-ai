@@ -71,7 +71,7 @@ describe("preview REST clients", () => {
     };
     const cleanup = { contractVersion: 1, entriesRemoved: 1, bytesFreed: 3 };
     const fetchInput = vi.fn(
-      async (path: string, init?: RequestInit) =>
+      async (_path: string, init?: RequestInit) =>
         new Response(
           JSON.stringify(init?.method === "DELETE" ? cleanup : status),
           { status: 200 },
@@ -79,7 +79,9 @@ describe("preview REST clients", () => {
     );
     const client = createRestSpeechCacheClient(fetchInput as typeof fetch);
     await expect(client.status()).resolves.toEqual(status);
-    await expect(client.clearAll()).resolves.toEqual(cleanup);
+    await expect(
+      client.clearAll({ includeRenderedProjectClips: false }),
+    ).resolves.toEqual(cleanup);
     await expect(client.clearProject(preview.projectId)).resolves.toEqual(
       cleanup,
     );

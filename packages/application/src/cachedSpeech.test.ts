@@ -1,9 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type {
   ProjectReplaceInput,
   SpeechBackendConnection,
 } from "@studynarrator/shared-types";
-import { createProjectSpeechCacheKeyPlanner } from "./cachedSpeech.js";
+import {
+  createProjectSpeechCacheKeyPlanner,
+  createSpeechCacheService,
+} from "./cachedSpeech.js";
 
 const connection: SpeechBackendConnection = {
   backendId: "speaches",
@@ -39,6 +42,29 @@ const input: ProjectReplaceInput = {
   ],
   lexiconEntries: [],
 };
+
+describe("speech cache service", () => {
+  it("uses coordinated rendered-clip cleanup only when selected", async () => {
+    const clearAll = vi.fn(async () => ({ entriesRemoved: 1, bytesFreed: 3 }));
+    const clearCacheAndRenderedProjectClips = vi.fn(async () => ({
+      entriesRemoved: 2,
+      bytesFreed: 5,
+    }));
+    const service = createSpeechCacheService({ clearAll } as never, {
+      clearCacheAndRenderedProjectClips,
+    });
+
+    await expect(
+      service.clearAll({ includeRenderedProjectClips: false }),
+    ).resolves.toMatchObject({ entriesRemoved: 1, bytesFreed: 3 });
+    await expect(
+      service.clearAll({ includeRenderedProjectClips: true }),
+    ).resolves.toMatchObject({ entriesRemoved: 2, bytesFreed: 5 });
+    expect(clearAll).toHaveBeenCalledOnce();
+    expect(clearCacheAndRenderedProjectClips).toHaveBeenCalledOnce();
+    await expect(service.clearAll({} as never)).rejects.toThrow();
+  });
+});
 
 describe("project speech cache key planning", () => {
   it("changes identity for voice, speed, and pronunciation text and restores the original key on reversion", () => {

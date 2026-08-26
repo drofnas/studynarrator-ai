@@ -40,6 +40,7 @@ import {
   ScratchpadPreviewResultSchema,
   SPEECH_CACHE_CHANNELS,
   SpeechCacheCleanupResultSchema,
+  SpeechCacheClearAllInputSchema,
   SpeechCacheStatusSchema,
   SpeechCatalogSchema,
   SpeechBackendConnectionSchema,
@@ -266,9 +267,12 @@ export function createPreloadBridge(
         await invoke(SPEECH_CACHE_CHANNELS.status),
       );
     },
-    async clearAll() {
+    async clearAll(input) {
       return SpeechCacheCleanupResultSchema.parse(
-        await invoke(SPEECH_CACHE_CHANNELS.clearAll),
+        await invoke(
+          SPEECH_CACHE_CHANNELS.clearAll,
+          SpeechCacheClearAllInputSchema.parse(input),
+        ),
       );
     },
     async clearProject(projectId) {

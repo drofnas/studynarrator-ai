@@ -1,4 +1,5 @@
 import { lstat, readdir, rm } from "node:fs/promises";
+import { PersistenceConflictError } from "@studynarrator/persistence";
 import { join, resolve } from "node:path";
 import {
   RetentionReclaimInputSchema,
@@ -192,6 +193,35 @@ export function createRetentionMaintenance(options: {
     });
   };
 
+  const clearCacheAndRenderedProjectClips = async (): Promise<{
+    entriesRemoved: number;
+    bytesFreed: number;
+  }> => {
+    const maintenance = options.activityGate.beginMaintenance();
+    if (!maintenance)
+      throw new PersistenceConflictError(
+        "Rendered project clips cannot be cleared while speech activity is in progress.",
+      );
+    try {
+      if (options.repository.listRecoverableRenderJobs().length > 0)
+        throw new PersistenceConflictError(
+          "Rendered project clips cannot be cleared while a render is recoverable.",
+        );
+      const directories = await directoryUsage();
+      const renderedClips = directories.artifacts.filter(
+        ({ job }) => terminal(job) && !job.pinned,
+      );
+      const cacheResult = await options.cache.clearAll();
+      for (const item of renderedClips) {
+        await rm(item.path, { recursive: true, force: true });
+        options.repository.clearRenderMedia(item.job.id);
+      }
+      return cacheResult;
+    } finally {
+      maintenance.release();
+    }
+  };
+
   const reclaim = async (
     preview: boolean,
   ): Promise<RetentionReclaimPreview | RetentionReclaimResult> => {
@@ -297,5 +327,6 @@ export function createRetentionMaintenance(options: {
       RetentionReclaimInputSchema.parse(input);
       return (await reclaim(false)) as RetentionReclaimResult;
     },
+    clearCacheAndRenderedProjectClips,
   };
 }

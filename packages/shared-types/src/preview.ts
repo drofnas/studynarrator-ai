@@ -136,6 +136,10 @@ export const SpeechCacheCleanupResultSchema = z
   .strict();
 type SpeechCacheCleanupResult = z.infer<typeof SpeechCacheCleanupResultSchema>;
 
+export const SpeechCacheClearAllInputSchema = z
+  .object({ includeRenderedProjectClips: z.boolean() })
+  .strict();
+type SpeechCacheClearAllInput = z.infer<typeof SpeechCacheClearAllInputSchema>;
 export const SpeechCacheKeyInputSchema = z
   .object({ cacheKey: z.string().regex(CACHE_KEY_PATTERN) })
   .strict();
@@ -153,7 +157,7 @@ export interface ProjectPreviewClient {
 
 export interface SpeechCacheClient {
   status(): Promise<SpeechCacheStatus>;
-  clearAll(): Promise<SpeechCacheCleanupResult>;
+  clearAll(input: SpeechCacheClearAllInput): Promise<SpeechCacheCleanupResult>;
   clearProject(projectId: string): Promise<SpeechCacheCleanupResult>;
   clearEntry(cacheKey: string): Promise<SpeechCacheCleanupResult>;
 }

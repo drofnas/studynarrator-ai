@@ -13,6 +13,7 @@ import {
   V1_SYSTEM_TIMING,
   V10_GLOBAL_EXACT_TERM_LEXICON,
   V11_GLOBAL_EXACT_TERM_COLLISION_RECONCILIATION,
+  V12_GLOBAL_LEXICON_RECONCILIATION,
   V3_GLOBAL_NAMED_SENSE_LEXICON,
 } from "./migrationSeeds.js";
 
@@ -567,6 +568,67 @@ function reconcileV11GlobalBuiltInCollisions(database: DatabaseLike): void {
   }
 }
 
+function reconcileV12GlobalLexicon(database: DatabaseLike): void {
+  const timestamp = new Date().toISOString();
+  const entryExists = database.prepare(
+    "SELECT id FROM lexicon_entries WHERE id = ?",
+  );
+  const reassignUserOwnedEntry = database.prepare(
+    "UPDATE lexicon_entries SET id = ? WHERE id = ? AND entry_kind != 'builtIn'",
+  );
+  const updateBuiltIn = database.prepare(`
+    UPDATE lexicon_entries
+    SET ordinal = ?, entry_type = ?, display_text = ?, sense_id = ?, spoken_text = ?,
+        case_sensitive = ?, whole_word = ?, priority = ?, notes = ?, updated_at = ?
+    WHERE id = ? AND scope = 'global' AND entry_kind = 'builtIn'
+  `);
+  const insertBuiltIn = database.prepare(`
+    INSERT INTO lexicon_entries (
+      id, scope, project_id, entry_kind, ordinal, entry_type, display_text, sense_id,
+      spoken_text, case_sensitive, whole_word, priority, enabled, notes, created_at, updated_at
+    ) VALUES (?, 'global', NULL, 'builtIn', ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+  `);
+  const nextCollisionFreeId = (): string => {
+    let id = randomUUID();
+    while (entryExists.get(id) !== undefined) id = randomUUID();
+    return id;
+  };
+
+  for (const entry of V12_GLOBAL_LEXICON_RECONCILIATION) {
+    const senseId = entry.entryType === "namedSense" ? entry.senseId : null;
+    const values = [
+      entry.ordinal,
+      entry.entryType,
+      entry.displayText,
+      senseId,
+      entry.spokenText,
+      entry.caseSensitive ? 1 : 0,
+      entry.wholeWord ? 1 : 0,
+      entry.priority,
+      entry.notes,
+      timestamp,
+      entry.id,
+    ] as const;
+    if (Number(updateBuiltIn.run(...values).changes ?? 0) > 0) continue;
+    if (entryExists.get(entry.id) !== undefined)
+      reassignUserOwnedEntry.run(nextCollisionFreeId(), entry.id);
+    insertBuiltIn.run(
+      entry.id,
+      entry.ordinal,
+      entry.entryType,
+      entry.displayText,
+      senseId,
+      entry.spokenText,
+      entry.caseSensitive ? 1 : 0,
+      entry.wholeWord ? 1 : 0,
+      entry.priority,
+      entry.notes,
+      timestamp,
+      timestamp,
+    );
+  }
+}
+
 function addGlobalNamedSenseDefaults(database: DatabaseLike): void {
   const timestamp = new Date().toISOString();
   const row = database
@@ -729,6 +791,11 @@ export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
     version: 11,
     name: "global-lexicon-collision-deduplication",
     up: reconcileV11GlobalBuiltInCollisions,
+  },
+  {
+    version: 12,
+    name: "global-lexicon-pronunciation-reconciliation",
+    up: reconcileV12GlobalLexicon,
   },
 ]);
 

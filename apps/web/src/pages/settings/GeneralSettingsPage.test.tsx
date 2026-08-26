@@ -139,13 +139,71 @@ describe("General settings", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Clear all cached speech" }),
     );
-    expect(clearAll).toHaveBeenCalledOnce();
+    expect(clearAll).toHaveBeenCalledWith({
+      includeRenderedProjectClips: false,
+    });
     expect(
       await screen.findByText(/Cleared 2 cached speech entries/u),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Clear all cached speech" }),
     ).toBeDisabled();
+  });
+
+  it("includes rendered clips only when explicitly selected", async () => {
+    const clearAll = vi.fn(async () => ({
+      contractVersion: 1 as const,
+      entriesRemoved: 0,
+      bytesFreed: 0,
+    }));
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderPage(
+      <ConnectionProvider
+        connectionClient={connectionClient()}
+        voiceCatalog={voiceCatalog}
+      >
+        <GeneralSettingsPage
+          cacheClient={{
+            status: vi.fn(async () => ({
+              contractVersion: 1 as const,
+              entryCount: 0,
+              totalBytes: 0,
+              lastUsedAt: null,
+              sessionHits: 0,
+              sessionMisses: 0,
+              sessionWrites: 0,
+              sessionCorruptMisses: 0,
+              inFlight: 0,
+            })),
+            clearAll,
+            clearProject: vi.fn(),
+            clearEntry: vi.fn(),
+          }}
+        />
+      </ConnectionProvider>,
+    );
+    const checkbox = await screen.findByRole("checkbox", {
+      name: "Include Rendered Project Clips",
+    });
+    expect(checkbox).not.toBeChecked();
+    const clearButton = screen.getByRole("button", {
+      name: "Clear all cached speech",
+    });
+    const cacheControls = checkbox.parentElement?.parentElement;
+    expect(cacheControls).not.toBeNull();
+    expect(Array.from(cacheControls?.children ?? [])).toEqual([
+      checkbox.parentElement,
+      clearButton,
+    ]);
+    expect(clearButton).toBeDisabled();
+    await userEvent.click(checkbox);
+    await userEvent.click(clearButton);
+    expect(clearAll).toHaveBeenCalledWith({
+      includeRenderedProjectClips: true,
+    });
+    expect(
+      await screen.findByText(/removed rendered project clips/u),
+    ).toBeInTheDocument();
   });
 
   it("shows recovery state instead of empty fields until the saved connection returns", async () => {
