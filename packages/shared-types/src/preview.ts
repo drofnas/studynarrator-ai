@@ -139,9 +139,7 @@ type SpeechCacheCleanupResult = z.infer<typeof SpeechCacheCleanupResultSchema>;
 export const SpeechCacheClearAllInputSchema = z
   .object({ includeRenderedProjectClips: z.boolean() })
   .strict();
-export type SpeechCacheClearAllInput = z.infer<
-  typeof SpeechCacheClearAllInputSchema
->;
+type SpeechCacheClearAllInput = z.infer<typeof SpeechCacheClearAllInputSchema>;
 export const SpeechCacheKeyInputSchema = z
   .object({ cacheKey: z.string().regex(CACHE_KEY_PATTERN) })
   .strict();
