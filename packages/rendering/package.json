@@ -8,6 +8,7 @@
   "types": "./src/index.ts",
   "dependencies": {
     "@studynarrator/shared-types": "0.1.0",
+    "node-id3": "0.2.9",
     "zod": "4.4.3"
   }
 }

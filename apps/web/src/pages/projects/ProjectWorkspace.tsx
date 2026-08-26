@@ -60,8 +60,6 @@ export function ProjectWorkspace({
     selectedRenderJob,
     completedRenderJob,
     renderWaveform,
-    pinBusy,
-    toggleCompletedRenderPin,
   } = controller;
 
   return (
@@ -325,17 +323,6 @@ export function ProjectWorkspace({
                       {...(renderWaveform ? { waveform: renderWaveform } : {})}
                     />
                     <div className={styles.renderDownloads}>
-                      <button
-                        type="button"
-                        className={styles.textLinkButton}
-                        aria-pressed={completedRenderJob.pinned}
-                        disabled={renderActive || pinBusy}
-                        onClick={() => void toggleCompletedRenderPin()}
-                      >
-                        {completedRenderJob.pinned
-                          ? "Unpin completed output"
-                          : "Pin completed output"}
-                      </button>
                       <button
                         type="button"
                         className={styles.textLinkButton}

@@ -30,6 +30,7 @@ import {
   extractWaveformPeaks,
   normalizeSpeechWav,
   probeAudioFile,
+  writeFinalMp3Metadata,
   type RenderPlanStore,
 } from "@studynarrator/rendering";
 import type { ResolvedRenderMedia } from "./renderMedia.js";
@@ -553,6 +554,11 @@ export async function createRenderArtifacts(options: {
         outputPath: mp3Path,
         ...(options.ffmpegPath ? { ffmpegPath: options.ffmpegPath } : {}),
         signal,
+      });
+      writeFinalMp3Metadata({
+        path: mp3Path,
+        title: projectName,
+        year: options.now().getFullYear(),
       });
       const mp3Probe = await probeAudioFile({
         inputPath: mp3Path,

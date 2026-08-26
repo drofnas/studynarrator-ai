@@ -1,7 +1,9 @@
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { unzipSync } from "fflate";
 import type {
@@ -941,6 +943,24 @@ describe("render coordinator", () => {
     const probe = await probeAudioFile({ inputPath: resolved.path });
     expect(probe.decodable).toBe(true);
     expect(probe.formatName).toContain("mp3");
+    const { stdout: metadataOutput } = await promisify(execFile)("ffprobe", [
+      "-v",
+      "error",
+      "-show_entries",
+      "format_tags=title,artist,date,genre",
+      "-of",
+      "json",
+      resolved.path,
+    ]);
+    const metadata = JSON.parse(metadataOutput) as {
+      format?: { tags?: Record<string, string> };
+    };
+    expect(metadata.format?.tags).toMatchObject({
+      title: "Render fixture",
+      artist: "Study Narrator AI",
+      date: "2026",
+      genre: "Audio Book",
+    });
     const [reviewSegment] = repository.listRenderSegments(started.id);
     expect(reviewSegment?.state).toBe("complete");
     expect(reviewSegment?.audioFileName).toBe("000001.wav");
