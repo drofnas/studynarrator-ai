@@ -11,6 +11,13 @@ interface AudioProbeMetadata {
   formatName: string | null;
 }
 
+export interface Mp3Metadata {
+  title: string;
+  artist: string;
+  year: number;
+  genre: string;
+}
+
 interface WaveformPeaks {
   durationMs: number;
   sampleRate: number;
@@ -274,9 +281,24 @@ export async function concatenateWavs(options: {
 export async function encodeMp3(options: {
   inputPath: string;
   outputPath: string;
+  metadata?: Mp3Metadata;
   ffmpegPath?: string;
   signal?: AbortSignal;
 }): Promise<void> {
+  const metadataArgs = options.metadata
+    ? [
+        "-metadata",
+        `title=${options.metadata.title}`,
+        "-metadata",
+        `artist=${options.metadata.artist}`,
+        "-metadata",
+        `date=${String(options.metadata.year)}`,
+        "-metadata",
+        `genre=${options.metadata.genre}`,
+        "-id3v2_version",
+        "3",
+      ]
+    : [];
   await runAudioProcess(
     options.ffmpegPath ?? "ffmpeg",
     [
@@ -289,6 +311,7 @@ export async function encodeMp3(options: {
       "libmp3lame",
       "-b:a",
       "192k",
+      ...metadataArgs,
       options.outputPath,
     ],
     options.signal,

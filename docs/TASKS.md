@@ -36,7 +36,7 @@ Status values: `todo`, `in progress`, `blocked`, `deferred`, `complete`.
 
 | ID  | Task                                                     | Priority | Status   | Depends on |
 | --- | -------------------------------------------------------- | -------- | -------- | ---------- |
-| R01 | Add MP3 metadata to the FFmpeg encoder                   | P0       | todo     | none       |
+| R01 | Add MP3 metadata to the FFmpeg encoder                   | P0       | complete | none       |
 | R02 | Make published render artifacts immutable                | P0       | todo     | R01        |
 | R03 | Remove `node-id3` and its obsolete wrapper               | P0       | todo     | R02        |
 | R04 | Reject redirects from every Speaches request             | P0       | todo     | none       |
