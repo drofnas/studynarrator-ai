@@ -13,8 +13,10 @@ ordered checkpoints. It starts from `main` commit `ed6879d` on branch
 3. Read the current source, public manifests, affected tests, accepted ADRs,
    and `docs/technical-debt.md` before editing. Source and manifests override
    claims in this plan when they conflict.
-4. Keep render artifacts immutable after publication. Do not add a metadata
-   tracking column, read-path mutex, or multi-file repair transaction.
+4. Keep one MP3 per render. Keep its audio frames and frozen project snapshot
+   stable after publication. An explicit project rename may replace ID3 metadata.
+   Do not add a persistent download copy, metadata tracking column, read-path
+   mutex, or multi-file repair transaction.
 5. Keep migrations append-only. Do not squash, edit, or renumber migrations
    9 through 12.
 6. Keep raw exceptions, private paths, script text, project names, endpoint
@@ -37,7 +39,7 @@ Status values: `todo`, `in progress`, `blocked`, `deferred`, `complete`.
 | ID  | Task                                                     | Priority | Status   | Depends on |
 | --- | -------------------------------------------------------- | -------- | -------- | ---------- |
 | R01 | Add MP3 metadata to the FFmpeg encoder                   | P0       | complete | none       |
-| R02 | Make published render artifacts immutable                | P0       | todo     | R01        |
+| R02 | Retag MP3 downloads when a project is renamed            | P0       | todo     | R01        |
 | R03 | Remove `node-id3` and its obsolete wrapper               | P0       | todo     | R02        |
 | R04 | Reject redirects from every Speaches request             | P0       | todo     | none       |
 | R05 | Correct runtime documentation and the browser title      | P1       | todo     | none       |
@@ -99,59 +101,101 @@ npm run test:api -- packages/application/src/render.test.ts
 
 **Commit:** `feat(rendering): write MP3 metadata during encoding`
 
-### R02: Make published render artifacts immutable
+### R02: Retag MP3 downloads when a project is renamed
 
-**Goal:** Stop playback, waveform, audio download, and details download from
-changing published files or artifact rows.
+**Goal:** Move title refresh from playback and download paths to the explicit
+Project Name update so each render keeps one MP3 and downloads start without
+FFmpeg or filesystem preparation.
 
 **Expected files:**
 
+- `packages/rendering/src/ffmpeg.ts`
+- `packages/rendering/src/ffmpeg.test.ts`
 - `packages/application/src/artifacts.ts`
+- `packages/application/src/persistence.ts`
+- `packages/application/src/persistence.test.ts`
+- `packages/application/src/composition.ts`
 - `packages/application/src/render.test.ts`
 - `e2e/web/render-execution.spec.ts`
-- `apps/server/src/app.test.ts` if a route-level Range assertion belongs there
+- `apps/server/src/app.test.ts`
+- focused Electron IPC or acceptance coverage if the shared project update needs
+  a native-boundary assertion
 
 **Work:**
 
 1. Pass the render snapshot project name and fixed StudyNarrator metadata to the
    FFmpeg encoder from R01.
-2. Remove `refreshTitleForCurrentProject` and the byte-buffer replacement helper
-   that supports it.
-3. Remove every refresh call from audio resolution and details archive creation.
-4. Keep the MP3 title and MP3 filename captured at render time after a project
-   rename. The outer details archive may keep its current download name because
-   that name does not modify stored artifacts.
-5. Replace tests that expect project renames to retag old MP3 files.
-6. Add regression coverage that records artifact bytes, checksums, sizes, and
-   modification times before GET, HEAD, Range, waveform, audio download, and
-   details download operations, then proves those values did not change.
-7. Resolve the same audio through concurrent calls and assert that each call
-   succeeds without changing files or database rows.
-8. Keep the existing path, regular-file, symlink, size, and checksum validation.
+2. Add a bounded-memory FFmpeg metadata remux operation that copies the existing
+   MP3 audio stream without decoding or re-encoding it. Pass metadata through
+   separate arguments, keep shell execution disabled, and preserve ID3v2.3.
+3. Detect a Project Name change in the application project-replacement use case.
+   Reconcile every retained completed MP3 for that project before reporting the
+   update as successful. A repeated save with the same name must retry an earlier
+   failed reconciliation.
+4. Process MP3s one at a time. Write each result to a temporary sibling, verify
+   it, and replace the original with an atomic rename. Check free space first.
+   Peak temporary storage must stay at one source MP3, and the application must
+   not retain a second MP3 or cached details archive.
+5. Preserve the MPEG audio frames. Prove that the title changes while an audio
+   frame or decoded-audio hash, duration, sample rate, and channel count remain
+   unchanged.
+6. Update the MP3 artifact checksum and size plus the corresponding manifest and
+   `checksums.txt` entries after replacement. Keep the frozen project snapshot
+   and render-time script, voice, model, and transformation records unchanged.
+7. Use the current Project Name for the audio download filename without renaming
+   the stored artifact path. Keep Download Details as an on-demand diagnostics
+   archive of the small scripts, transcripts, snapshot, manifest, and
+   archive-local checksums. Exclude the MP3 and other audio files because they
+   have dedicated download actions. Do not persist the archive.
+8. Remove `refreshTitleForCurrentProject`, its Node byte-buffer replacement
+   helper, and every refresh call from playback, waveform, GET, HEAD, Range,
+   audio download, artifact download, and details download paths.
+9. Keep those read paths free of FFmpeg calls, filesystem writes, and artifact-row
+   updates. Concurrent downloads must stream the reconciled MP3 without locks or
+   mutations.
+10. Define a sanitized failure for a rename-time remux. Atomic replacement must
+    leave the prior MP3 playable, and retrying the same Project Name update must
+    converge without a repair state machine.
+11. Keep the existing path, regular-file, symlink, size, and checksum validation.
 
 **Acceptance:**
 
-- Published render files and artifact rows change only through retention or
-  deletion operations.
-- A project rename does not change an earlier MP3 title or checksum.
-- HTTP Range playback returns the expected bytes without filesystem writes.
-- The render manifest and `checksums.txt` remain valid after each read path.
-- No metadata column, render mutex, or artifact repair state machine is added.
+- Each render directory contains one MP3. Project renames create no persistent
+  download variant and no stored details archive.
+- After a successful Project Name update, every retained completed MP3 for that
+  project reports the current title, while its audio content remains unchanged.
+- Audio Download and Download Details use filenames based on the current Project
+  Name. Download Details contains no MP3 or other audio duplicate, and the frozen
+  project snapshot still records the render-time name.
+- Clicking Download performs no retagging or preparation. GET, HEAD, Range,
+  waveform, audio download, artifact download, and details download do not change
+  persisted files or artifact rows.
+- HTTP Range playback returns the expected bytes, and concurrent downloads do
+  not invoke FFmpeg or wait on a metadata lock.
+- The current artifact rows, render manifest, and `checksums.txt` match the
+  renamed MP3 after the Project Name update.
+- A failed retag leaves a playable MP3 and returns a stable sanitized error. A
+  retry of the same Project Name update completes without corruption.
+- No metadata column, read-path mutex, permanent MP3 copy, or artifact repair
+  state machine is added.
 
 **Focused verification:**
 
 ```sh
+npm test -- packages/rendering/src/ffmpeg.test.ts
+npm run test:api -- packages/application/src/persistence.test.ts
 npm run test:api -- packages/application/src/render.test.ts
 npm test -- apps/server/src/app.test.ts
 npm run test:e2e:web -- e2e/web/render-execution.spec.ts
+npm run test:e2e:electron
 ```
 
-**Commit:** `fix(render): keep published artifacts immutable`
+**Commit:** `fix(render): retag MP3s when projects are renamed`
 
 ### R03: Remove `node-id3` and its obsolete wrapper
 
-**Goal:** Remove the synchronous whole-file tag writer after R02 removes its last
-caller.
+**Goal:** Remove the synchronous whole-file tag writer after R02 moves initial
+and rename-time MP3 metadata work to FFmpeg.
 
 **Expected files:**
 
@@ -173,7 +217,8 @@ caller.
 
 **Acceptance:**
 
-- The application produces the same required MP3 tags through FFmpeg.
+- The application produces the same required MP3 tags through FFmpeg during
+  initial encoding and Project Name updates.
 - The lockfile contains no `node-id3` package.
 - Knip reports no new findings.
 - The production dependency audit reports no known vulnerabilities.
@@ -869,8 +914,8 @@ that it solves a recurring project need.
 
 - Do not squash migrations 9 through 12.
 - Do not add a container memory limit to mask MP3 rewrite costs.
-- Do not add a render mutex or `title_tagged_as` column after R02 removes
-  read-path mutation.
+- Do not add a render read-path mutex or `title_tagged_as` column. R02 owns title
+  changes in the explicit project-update path.
 - Do not replace every bare `catch` block. Preserve causes on operational
   failures that need diagnosis and keep raw details out of public errors and
   logs.
