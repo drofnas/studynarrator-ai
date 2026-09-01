@@ -324,7 +324,6 @@ function mp3Artifact(renderId: string) {
     type: "mp3" as const,
     fileName: "offline-fixture.mp3",
     sizeBytes: 1_024,
-    checksum: "a".repeat(64),
     durationMs: 1_000,
     createdAt: "2026-08-12T14:00:02.000Z",
   };
@@ -2682,7 +2681,6 @@ describe("Projects workbench", () => {
       type: "mp3" as const,
       fileName: "offline-fixture.mp3",
       sizeBytes: 1_024,
-      checksum: "a".repeat(64),
       durationMs: 1_000,
       createdAt: job.finishedAt,
     };

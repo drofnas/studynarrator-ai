@@ -17,6 +17,7 @@ import {
   MigrationFailureError,
   PersistenceConflictError,
   SchemaTooNewError,
+  removeLegacyRenderProvenance,
   removeStandaloneRenderPlans,
   listPersistenceBackups,
   openStudyNarratorRepository,
@@ -168,6 +169,13 @@ export async function createStudyNarratorServices(options: {
       logger: options.logger,
     });
     repository = openedRepository;
+    await runLayoutSteps(
+      descriptor.dataDirectory,
+      [removeLegacyRenderProvenance],
+      {
+        logger: options.logger,
+      },
+    );
     const speechCacheSweeper = createSpeechCacheSweeper({
       cache,
       rootDirectory: resolve(descriptor.dataDirectory, "cache/speech"),
@@ -212,6 +220,11 @@ export async function createStudyNarratorServices(options: {
         createProjectSpeechCacheKeyPlanner(openedRepository),
       backups,
       retention: retentionMaintenance,
+      reconcileProjectName: async (projectId, projectName) => {
+        if (!renders)
+          throw new Error("Render metadata reconciliation is unavailable.");
+        await renders.reconcileProjectName(projectId, projectName);
+      },
     });
     const context = {
       client: descriptor.client,

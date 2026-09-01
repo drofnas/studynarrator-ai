@@ -9,7 +9,7 @@ Use it to:
 - Maintain project and global pronunciation lexicons.
 - Test short passages in the Quick Scratchpad.
 - Freeze an immutable render plan before generating audio.
-- Render, review, and export MP3 audio, transcripts, manifests, checksums, and individual speech segments.
+- Render, review, and export MP3 audio, transcripts, frozen project snapshots, and individual speech segments.
 - Export prompt kits for creating or updating scripts with an external language model.
 - Continue authoring while the speech server is offline.
 

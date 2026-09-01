@@ -99,6 +99,10 @@ export function createPersistenceService(
     projectSpeechCacheKeys?: (
       input: ProjectReplaceInput,
     ) => readonly string[] | undefined;
+    reconcileProjectName?: (
+      projectId: string,
+      projectName: string,
+    ) => Promise<void>;
     backups?: PersistenceBackupsProvider;
     retention?: RetentionMaintenanceProvider;
   } = {},
@@ -159,15 +163,21 @@ export function createPersistenceService(
         );
       },
       replace(projectId, input) {
-        return execute(() => {
+        return execute(async () => {
           const parsed = ProjectReplaceInputSchema.parse(input);
-          return ProjectDetailSchema.parse(
+          const normalizedProjectId = ProjectIdSchema.parse(projectId);
+          const replaced = ProjectDetailSchema.parse(
             repository.replaceProject(
-              ProjectIdSchema.parse(projectId),
+              normalizedProjectId,
               parsed,
               options.projectSpeechCacheKeys?.(parsed),
             ),
           );
+          await options.reconcileProjectName?.(
+            normalizedProjectId,
+            replaced.name,
+          );
+          return replaced;
         });
       },
       duplicate(projectId, input) {

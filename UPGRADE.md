@@ -8,7 +8,7 @@ One row per released version.
 
 | Application version | Database schema version | Data directory layout version |
 | ------------------- | ----------------------- | ----------------------------- |
-| 0.1.0               | 4                       | 1                             |
+| 0.1.0               | 13                      | 2                             |
 
 ## Distribution support decision
 
@@ -20,7 +20,7 @@ Upgrading is automatic. StudyNarrator migrates the database forward when it star
 
 - If the database is behind the schema version the application supports, it migrates forward automatically.
 - Before applying a schema upgrade, StudyNarrator takes a full backup of the current database in the `backups/` directory next to the database file, for example `<dataDir>/backups/`.
-- One-time data directory layout steps run on startup where needed and are recorded in `<dataDir>/manifest.json` so they never run twice.
+- One-time data directory layout steps run on startup where needed and are recorded in `<dataDir>/manifest.json` so they never run twice. Schema 13 removes completed-render checksum/provenance rows; layout 2 removes only the corresponding legacy `render-manifest.json` and `checksums.txt` files from managed render directories.
 - Old backups are pruned automatically: the newest backup for each source schema version, plus the three most recent backup files, plus the two most recent pre-restore safety copies always survive.
 - If the data directory was created by a **newer** version of this application than the one you are starting, a recovery screen appears offering a restore from one of the saved backups. Nothing is ever deleted or converted automatically.
 

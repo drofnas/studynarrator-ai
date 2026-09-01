@@ -10,6 +10,7 @@ export {
 } from "./dataDirectoryManifest.js";
 export {
   createSpeechCacheSweep,
+  removeLegacyRenderProvenance,
   removeStandaloneRenderPlans,
 } from "./layoutSteps.js";
 export {

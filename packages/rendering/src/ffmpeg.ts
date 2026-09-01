@@ -9,6 +9,8 @@ interface AudioProbeMetadata {
   durationMs: number;
   bitRate: number | null;
   formatName: string | null;
+  title: string | null;
+  artist: string | null;
 }
 
 export interface Mp3Metadata {
@@ -318,6 +320,42 @@ export async function encodeMp3(options: {
   );
 }
 
+/** Stream-copy an MP3 while replacing its public ID3 metadata. */
+export async function remuxMp3Metadata(options: {
+  inputPath: string;
+  outputPath: string;
+  metadata: Mp3Metadata;
+  ffmpegPath?: string;
+  signal?: AbortSignal;
+}): Promise<void> {
+  await runAudioProcess(
+    options.ffmpegPath ?? "ffmpeg",
+    [
+      "-y",
+      "-v",
+      "error",
+      "-i",
+      options.inputPath,
+      "-map",
+      "0:a:0",
+      "-c:a",
+      "copy",
+      "-metadata",
+      `title=${options.metadata.title}`,
+      "-metadata",
+      `artist=${options.metadata.artist}`,
+      "-metadata",
+      `date=${String(options.metadata.year)}`,
+      "-metadata",
+      `genre=${options.metadata.genre}`,
+      "-id3v2_version",
+      "3",
+      options.outputPath,
+    ],
+    options.signal,
+  );
+}
+
 export async function probeAudioFile(options: {
   inputPath: string;
   ffprobePath?: string;
@@ -329,7 +367,7 @@ export async function probeAudioFile(options: {
       "-v",
       "error",
       "-show_entries",
-      "format=format_name,duration,bit_rate:stream=codec_type",
+      "format=format_name,duration,bit_rate:format_tags=title,artist:stream=codec_type",
       "-of",
       "json",
       options.inputPath,
@@ -342,6 +380,7 @@ export async function probeAudioFile(options: {
         format_name?: unknown;
         duration?: unknown;
         bit_rate?: unknown;
+        tags?: { title?: unknown; artist?: unknown };
       };
       streams?: Array<{ codec_type?: unknown }>;
     };
@@ -368,8 +407,23 @@ export async function probeAudioFile(options: {
         typeof value.format?.format_name === "string"
           ? value.format.format_name
           : null,
+      title:
+        typeof value.format?.tags?.title === "string"
+          ? value.format.tags.title
+          : null,
+      artist:
+        typeof value.format?.tags?.artist === "string"
+          ? value.format.tags.artist
+          : null,
     };
   } catch {
-    return { decodable: false, durationMs: 0, bitRate: null, formatName: null };
+    return {
+      decodable: false,
+      durationMs: 0,
+      bitRate: null,
+      formatName: null,
+      title: null,
+      artist: null,
+    };
   }
 }

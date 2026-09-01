@@ -260,8 +260,6 @@ export function createRenderOrchestration(options: {
         throw new Error("Frozen endpoint identity changed.");
 
       const orderedAudio: string[] = [];
-      const actualCacheStatuses = new Map<number, "hit" | "miss">();
-      const actualDurations = new Map<number, number>();
       let speechOrdinal = 0;
       let sectionOrdinal = 0;
       for (const entry of plan.entries) {
@@ -298,7 +296,6 @@ export function createRenderOrchestration(options: {
               bytes,
             );
             orderedAudio.push(output);
-            actualDurations.set(entry.ordinal, entry.durationMs);
             options.repository.updateRenderSegment({
               ...segment(renderId, entry),
               state: "complete",
@@ -337,8 +334,6 @@ export function createRenderOrchestration(options: {
           signal,
         );
         orderedAudio.push(rendered.output);
-        actualCacheStatuses.set(entry.ordinal, result.status);
-        actualDurations.set(entry.ordinal, rendered.durationMs);
         options.repository.updateRenderSegment(
           {
             ...segment(renderId, entry),
@@ -395,9 +390,6 @@ export function createRenderOrchestration(options: {
         mp3Path,
         mp3Probe,
         combined,
-        actualCacheStatuses,
-        actualDurations,
-        progress: job.progress,
       });
       const completed = options.queue.update(job, "complete");
       options.logger.info(

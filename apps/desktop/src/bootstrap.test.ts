@@ -75,10 +75,11 @@ describe("desktop storage recovery", () => {
           ).toMatchObject({
             manifestVersion: 1,
             appVersion: APPLICATION_VERSION,
-            layoutVersion: 1,
+            layoutVersion: DATA_DIRECTORY_LAYOUT_VERSION,
             completedSteps: [
               "remove-standalone-render-plans",
               "sweep-unreadable-cache-entries",
+              "remove-legacy-render-provenance",
             ],
           });
         } finally {
@@ -154,7 +155,7 @@ describe("desktop storage recovery", () => {
             appVersion: "9.9.9",
             createdAt: "2026-08-18T00:00:00.000Z",
             updatedAt: "2026-08-18T00:00:00.000Z",
-            layoutVersion: 2,
+            layoutVersion: DATA_DIRECTORY_LAYOUT_VERSION + 1,
             completedSteps: ["a-future-layout-step"],
           },
           null,

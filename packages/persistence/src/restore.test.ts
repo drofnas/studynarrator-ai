@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
+import { DATABASE_SCHEMA_VERSION } from "@studynarrator/shared-types";
 import {
   BackupRestoreError,
   listBackups,
@@ -326,10 +327,12 @@ describe("newer-schema databases", () => {
     expect(reported.code).toBe("SCHEMA_TOO_NEW");
     expect(reported.databasePath).toBe(databasePath);
     expect(reported.databaseSchemaVersion).toBe(99);
-    expect(reported.supportedSchemaVersion).toBe(12);
+    expect(reported.supportedSchemaVersion).toBe(DATABASE_SCHEMA_VERSION);
     expect(reported.backups.map(({ path }) => path)).toEqual([backupPath]);
     expect(reported.message).toContain("database format 99");
-    expect(reported.message).toContain("supports format 12");
+    expect(reported.message).toContain(
+      `supports format ${String(DATABASE_SCHEMA_VERSION)}`,
+    );
 
     // The data stays untouched and no migration ran.
     const inspected = new Database(databasePath, { readonly: true });
@@ -358,7 +361,7 @@ describe("newer-schema databases", () => {
       restored
         .prepare("SELECT MAX(version) AS version FROM schema_migrations")
         .get(),
-    ).toEqual({ version: 12 });
+    ).toEqual({ version: DATABASE_SCHEMA_VERSION });
     restored.close();
   });
 });

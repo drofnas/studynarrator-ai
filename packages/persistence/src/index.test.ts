@@ -54,6 +54,193 @@ function columns(database: Database.Database, table: string): string[] {
   ).map(({ name }) => name);
 }
 
+describe("migration 13", () => {
+  it("upgrades schema 12 render rows while removing only completed-artifact provenance", async () => {
+    const databasePath = await temporaryDatabase("studynarrator-v12-render-");
+    const database = new Database(databasePath);
+    database.exec(`
+      CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
+      INSERT INTO schema_migrations (version, applied_at) VALUES
+        (1, '2026-08-12T12:00:00.000Z'), (2, '2026-08-12T12:00:00.000Z'),
+        (3, '2026-08-12T12:00:00.000Z'), (4, '2026-08-12T12:00:00.000Z'),
+        (5, '2026-08-12T12:00:00.000Z'), (6, '2026-08-12T12:00:00.000Z'),
+        (7, '2026-08-12T12:00:00.000Z'), (8, '2026-08-12T12:00:00.000Z'),
+        (9, '2026-08-12T12:00:00.000Z'), (10, '2026-08-12T12:00:00.000Z'),
+        (11, '2026-08-12T12:00:00.000Z'), (12, '2026-08-12T12:00:00.000Z');
+      CREATE TABLE projects (id TEXT PRIMARY KEY, name TEXT NOT NULL);
+      CREATE TABLE render_jobs (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id));
+      CREATE TABLE render_segments (render_id TEXT NOT NULL, ordinal INTEGER NOT NULL, audio_file_name TEXT, audio_path TEXT, audio_size_bytes INTEGER, audio_checksum TEXT, PRIMARY KEY (render_id, ordinal));
+      CREATE TABLE render_artifacts (
+        id TEXT PRIMARY KEY, render_id TEXT NOT NULL REFERENCES render_jobs(id),
+        artifact_type TEXT NOT NULL, file_name TEXT NOT NULL, path TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL, checksum TEXT NOT NULL, duration_ms INTEGER, created_at TEXT NOT NULL
+      );
+    `);
+    database
+      .prepare("INSERT INTO projects VALUES (?, ?)")
+      .run(projectId, "Keep");
+    database
+      .prepare("INSERT INTO render_jobs VALUES (?, ?)")
+      .run("00000000-0000-4000-8000-000000000020", projectId);
+    database
+      .prepare("INSERT INTO render_segments VALUES (?, ?, ?, ?, ?, ?)")
+      .run(
+        "00000000-0000-4000-8000-000000000020",
+        1,
+        "000001.wav",
+        "/renders/segment.wav",
+        4,
+        "a".repeat(64),
+      );
+    const insertArtifact = database.prepare(
+      "INSERT INTO render_artifacts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    );
+    for (const [id, type, fileName, path, sizeBytes, durationMs] of [
+      [
+        "00000000-0000-4000-8000-000000000021",
+        "mp3",
+        "keep.mp3",
+        "/renders/keep.mp3",
+        10,
+        500,
+      ],
+      [
+        "00000000-0000-4000-8000-000000000022",
+        "originalScript",
+        "original.txt",
+        "/renders/original.txt",
+        2,
+        null,
+      ],
+      [
+        "00000000-0000-4000-8000-000000000023",
+        "projectSnapshot",
+        "snapshot.json",
+        "/renders/snapshot.json",
+        3,
+        null,
+      ],
+      [
+        "00000000-0000-4000-8000-000000000026",
+        "readableTranscript",
+        "readable.txt",
+        "/renders/readable.txt",
+        6,
+        null,
+      ],
+      [
+        "00000000-0000-4000-8000-000000000027",
+        "ttsTranscript",
+        "tts.txt",
+        "/renders/tts.txt",
+        7,
+        null,
+      ],
+      [
+        "00000000-0000-4000-8000-000000000024",
+        "manifest",
+        "render-manifest.json",
+        "/renders/render-manifest.json",
+        4,
+        null,
+      ],
+      [
+        "00000000-0000-4000-8000-000000000025",
+        "checksums",
+        "checksums.txt",
+        "/renders/checksums.txt",
+        5,
+        null,
+      ],
+    ] as const)
+      insertArtifact.run(
+        id,
+        "00000000-0000-4000-8000-000000000020",
+        type,
+        fileName,
+        path,
+        sizeBytes,
+        "b".repeat(64),
+        durationMs,
+        "2026-08-12T12:00:00.000Z",
+      );
+    database.close();
+
+    const migrated = await migrateDatabase({
+      Database: DatabaseAdapter,
+      databasePath,
+    });
+    expect(migrated.appliedVersions).toEqual([13]);
+    expect(
+      columns(
+        migrated.database as unknown as Database.Database,
+        "render_artifacts",
+      ),
+    ).not.toContain("checksum");
+    expect(
+      migrated.database.prepare("SELECT name FROM projects").all(),
+    ).toEqual([{ name: "Keep" }]);
+    expect(
+      migrated.database
+        .prepare(
+          "SELECT audio_file_name, audio_path, audio_size_bytes, audio_checksum FROM render_segments",
+        )
+        .all(),
+    ).toEqual([
+      {
+        audio_file_name: "000001.wav",
+        audio_path: "/renders/segment.wav",
+        audio_size_bytes: 4,
+        audio_checksum: "a".repeat(64),
+      },
+    ]);
+    expect(
+      migrated.database
+        .prepare(
+          "SELECT artifact_type, file_name, path, size_bytes, duration_ms FROM render_artifacts ORDER BY id",
+        )
+        .all(),
+    ).toEqual([
+      {
+        artifact_type: "mp3",
+        file_name: "keep.mp3",
+        path: "/renders/keep.mp3",
+        size_bytes: 10,
+        duration_ms: 500,
+      },
+      {
+        artifact_type: "originalScript",
+        file_name: "original.txt",
+        path: "/renders/original.txt",
+        size_bytes: 2,
+        duration_ms: null,
+      },
+      {
+        artifact_type: "projectSnapshot",
+        file_name: "snapshot.json",
+        path: "/renders/snapshot.json",
+        size_bytes: 3,
+        duration_ms: null,
+      },
+      {
+        artifact_type: "readableTranscript",
+        file_name: "readable.txt",
+        path: "/renders/readable.txt",
+        size_bytes: 6,
+        duration_ms: null,
+      },
+      {
+        artifact_type: "ttsTranscript",
+        file_name: "tts.txt",
+        path: "/renders/tts.txt",
+        size_bytes: 7,
+        duration_ms: null,
+      },
+    ]);
+    migrated.database.close();
+  });
+});
+
 describe("database baseline", () => {
   it("applies current migrations, seeds singleton defaults, and reopens idempotently", async () => {
     const databasePath = await temporaryDatabase("studynarrator-v1-baseline-");
@@ -76,11 +263,12 @@ describe("database baseline", () => {
       { version: 10, name: "global-lexicon-import-reconciliation" },
       { version: 11, name: "global-lexicon-collision-deduplication" },
       { version: 12, name: "global-lexicon-pronunciation-reconciliation" },
+      { version: 13, name: "remove-render-artifact-provenance" },
     ]);
     expect(first.appliedVersions).toEqual([
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
     ]);
-    expect(first.databaseSchemaVersion).toBe(12);
+    expect(first.databaseSchemaVersion).toBe(13);
     expect(first.backupPath).toBeNull();
     expect(
       first.database.prepare("SELECT version FROM schema_migrations").all(),
@@ -97,6 +285,7 @@ describe("database baseline", () => {
       { version: 10 },
       { version: 11 },
       { version: 12 },
+      { version: 13 },
     ]);
     expect(
       first.database
@@ -210,7 +399,7 @@ describe("database baseline", () => {
       Database: DatabaseAdapter,
       databasePath,
     });
-    expect(upgraded.appliedVersions).toEqual([8, 9, 10, 11, 12]);
+    expect(upgraded.appliedVersions).toEqual([8, 9, 10, 11, 12, 13]);
     expect(
       upgraded.database
         .prepare(
@@ -422,8 +611,8 @@ describe("database baseline", () => {
       Database: DatabaseAdapter,
       databasePath,
     });
-    expect(upgraded.appliedVersions).toEqual([11, 12]);
-    expect(upgraded.databaseSchemaVersion).toBe(12);
+    expect(upgraded.appliedVersions).toEqual([11, 12, 13]);
+    expect(upgraded.databaseSchemaVersion).toBe(13);
     expect(
       upgraded.database
         .prepare(
@@ -540,7 +729,7 @@ describe("database baseline", () => {
       Database: DatabaseAdapter,
       databasePath,
     });
-    expect(upgraded.appliedVersions).toEqual([10, 11, 12]);
+    expect(upgraded.appliedVersions).toEqual([10, 11, 12, 13]);
     expect(
       upgraded.database
         .prepare(
@@ -667,8 +856,8 @@ describe("database baseline", () => {
       Database: DatabaseAdapter,
       databasePath,
     });
-    expect(upgraded.appliedVersions).toEqual([12]);
-    expect(upgraded.databaseSchemaVersion).toBe(12);
+    expect(upgraded.appliedVersions).toEqual([12, 13]);
+    expect(upgraded.databaseSchemaVersion).toBe(13);
     expect(
       upgraded.database
         .prepare(
@@ -1011,9 +1200,11 @@ describe("database baseline", () => {
       databasePath,
       logger,
     });
-    expect(upgraded.appliedVersions).toEqual([3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
-    expect(upgraded.databaseSchemaVersion).toBe(12);
-    expect(upgraded.backupPath).toContain("-v0002-to-v0012-");
+    expect(upgraded.appliedVersions).toEqual([
+      3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
+    ]);
+    expect(upgraded.databaseSchemaVersion).toBe(13);
+    expect(upgraded.backupPath).toContain("-v0002-to-v0013-");
     if (upgraded.backupPath === null)
       throw new Error("Expected the migration backup path.");
     expect(logger.info).toHaveBeenNthCalledWith(
@@ -1022,7 +1213,7 @@ describe("database baseline", () => {
         event: "database-migration-backup-created",
         backupPath: upgraded.backupPath,
         fromDatabaseSchemaVersion: 2,
-        toDatabaseSchemaVersion: 12,
+        toDatabaseSchemaVersion: 13,
       },
       "Database migration backup created",
     );
@@ -1118,6 +1309,15 @@ describe("database baseline", () => {
     );
     expect(logger.info).toHaveBeenNthCalledWith(
       12,
+      {
+        event: "database-migration-applied",
+        migrationVersion: 13,
+        migrationName: "remove-render-artifact-provenance",
+      },
+      "Database migration applied",
+    );
+    expect(logger.info).toHaveBeenNthCalledWith(
+      13,
       {
         event: "database-backups-pruned",
         removedCount: 0,
@@ -1217,8 +1417,10 @@ describe("database baseline", () => {
       Database: DatabaseAdapter,
       databasePath,
     });
-    expect(upgraded.appliedVersions).toEqual([4, 5, 6, 7, 8, 9, 10, 11, 12]);
-    expect(upgraded.databaseSchemaVersion).toBe(12);
+    expect(upgraded.appliedVersions).toEqual([
+      4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
+    ]);
+    expect(upgraded.databaseSchemaVersion).toBe(13);
     expect(
       upgraded.database
         .prepare(
@@ -1301,7 +1503,7 @@ describe("database baseline", () => {
     migrated.database.close();
   });
 
-  it.each([1, 13])(
+  it.each([1, 14])(
     "rejects an unsupported pre-release schema %d database without deleting it",
     async (version) => {
       const databasePath = await temporaryDatabase(
@@ -1322,7 +1524,7 @@ describe("database baseline", () => {
         .run("keep-me");
       old.close();
 
-      if (version > 12) {
+      if (version > 13) {
         await expect(
           migrateDatabase({ Database: DatabaseAdapter, databasePath }),
         ).rejects.toBeInstanceOf(SchemaTooNewError);
@@ -1360,7 +1562,7 @@ describe("database baseline", () => {
       .run();
     baseline.database.close();
     const failing: Migration = {
-      version: 13,
+      version: 14,
       name: "intentional-test-failure",
       up(database) {
         database.exec(
@@ -1380,7 +1582,7 @@ describe("database baseline", () => {
       failure = error as MigrationFailureError;
     }
     expect(failure).toBeInstanceOf(MigrationFailureError);
-    expect(failure?.backupPath).toContain("-v0012-to-v0013-");
+    expect(failure?.backupPath).toContain("-v0013-to-v0014-");
     expect((await stat(failure!.backupPath!)).mode & 0o777).toBe(0o600);
     expect((await readFile(failure!.backupPath!)).byteLength).toBeGreaterThan(
       0,
@@ -1540,7 +1742,7 @@ describe("StudyNarratorRepository", () => {
     });
     expect(first.status()).toMatchObject({
       contractVersion: 1,
-      databaseSchemaVersion: 12,
+      databaseSchemaVersion: 13,
     });
     const created = first.createProject({
       name: "Persistence restart proof",
@@ -1869,7 +2071,7 @@ describe("StudyNarratorRepository", () => {
     });
     expect(repository.runMarker()).toMatchObject({
       markerKey: "runtime.storage-self-test",
-      migrationVersion: 12,
+      migrationVersion: 13,
     });
     const project = repository.createProject({ name: "Rendered" });
     repository.replaceProject(project.id, {
@@ -1969,7 +2171,6 @@ describe("StudyNarratorRepository", () => {
         fileName: "rendered.mp3",
         path: "/scoped/rendered.mp3",
         sizeBytes: 12,
-        checksum: "a".repeat(64),
         durationMs: 1_000,
         createdAt: timestamp,
       },
@@ -2019,7 +2220,6 @@ describe("StudyNarratorRepository", () => {
         fileName: "latest.mp3",
         path: "/scoped/latest.mp3",
         sizeBytes: 24,
-        checksum: "b".repeat(64),
         durationMs: 752_000,
         createdAt: "2026-08-13T14:00:00.000Z",
       },

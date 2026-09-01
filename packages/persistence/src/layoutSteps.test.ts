@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createSpeechCacheSweep,
+  removeLegacyRenderProvenance,
   removeStandaloneRenderPlans,
 } from "./layoutSteps.js";
 
@@ -43,6 +44,96 @@ afterEach(async () => {
     ),
   );
   vi.restoreAllMocks();
+});
+
+describe("remove-legacy-render-provenance", () => {
+  it("tolerates a missing render root and repeats as a no-op", async () => {
+    const dataDirectory = await makeDataDirectory();
+
+    await removeLegacyRenderProvenance.run(dataDirectory);
+    await removeLegacyRenderProvenance.run(dataDirectory);
+
+    expect(await has(join(dataDirectory, "renders"))).toBe(false);
+  });
+
+  it("removes only the exact legacy files from managed render directories", async () => {
+    const dataDirectory = await makeDataDirectory();
+    const renderDirectory = join(
+      dataDirectory,
+      "renders",
+      "00000000-0000-4000-8000-000000000001",
+    );
+    await mkdir(renderDirectory, { recursive: true });
+    await writeFile(join(renderDirectory, "render-manifest.json"), "{}", {
+      flag: "wx",
+    });
+    await writeFile(join(renderDirectory, "checksums.txt"), "obsolete", {
+      flag: "wx",
+    });
+    await writeFile(join(renderDirectory, "project-snapshot.json"), "{}", {
+      flag: "wx",
+    });
+    await removeLegacyRenderProvenance.run(dataDirectory);
+    expect(await has(join(renderDirectory, "render-manifest.json"))).toBe(
+      false,
+    );
+    expect(await has(join(renderDirectory, "checksums.txt"))).toBe(false);
+    expect(await has(join(renderDirectory, "project-snapshot.json"))).toBe(
+      true,
+    );
+  });
+
+  it("does not follow a provenance symlink and retries remaining cleanup safely", async () => {
+    const dataDirectory = await makeDataDirectory();
+    const renderDirectory = join(
+      dataDirectory,
+      "renders",
+      "00000000-0000-4000-8000-000000000001",
+    );
+    const outside = join(dataDirectory, "outside-checksums.txt");
+    await mkdir(renderDirectory, { recursive: true });
+    await writeFile(join(renderDirectory, "render-manifest.json"), "{}", {
+      flag: "wx",
+    });
+    await writeFile(outside, "preserve", { flag: "wx" });
+    await symlink(outside, join(renderDirectory, "checksums.txt"), "file");
+
+    await expect(
+      removeLegacyRenderProvenance.run(dataDirectory),
+    ).rejects.toThrow("does not follow symlinks");
+    expect(await has(join(renderDirectory, "render-manifest.json"))).toBe(
+      false,
+    );
+    expect(await readFile(outside, "utf8")).toBe("preserve");
+
+    await rm(join(renderDirectory, "checksums.txt"));
+    await writeFile(join(renderDirectory, "checksums.txt"), "obsolete", {
+      flag: "wx",
+    });
+    await removeLegacyRenderProvenance.run(dataDirectory);
+    expect(await has(join(renderDirectory, "checksums.txt"))).toBe(false);
+  });
+
+  it("rejects a render-directory symlink without touching its target", async () => {
+    const dataDirectory = await makeDataDirectory();
+    const rendersRoot = join(dataDirectory, "renders");
+    const outside = join(dataDirectory, "outside-render");
+    await mkdir(rendersRoot, { recursive: true });
+    await mkdir(outside);
+    await writeFile(join(outside, "render-manifest.json"), "{}", {
+      flag: "wx",
+    });
+    await symlink(
+      outside,
+      join(rendersRoot, "00000000-0000-4000-8000-000000000001"),
+      "dir",
+    );
+
+    await expect(
+      removeLegacyRenderProvenance.run(dataDirectory),
+    ).rejects.toThrow("does not follow symlinks");
+    expect(await has(join(outside, "render-manifest.json"))).toBe(true);
+  });
 });
 
 describe("remove-standalone-render-plans", () => {

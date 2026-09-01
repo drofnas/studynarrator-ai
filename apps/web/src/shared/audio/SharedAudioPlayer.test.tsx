@@ -14,7 +14,6 @@ import { SharedAudioPlayer } from "./SharedAudioPlayer.js";
 const waveform: RenderWaveform = {
   status: "available",
   renderId: "00000000-0000-4000-8000-000000000003",
-  sourceChecksum: "a".repeat(64),
   durationMs: 20_000,
   sampleRate: 8_000,
   peaks: [0, 64, 255, 128],

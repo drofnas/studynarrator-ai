@@ -274,7 +274,6 @@ export const RenderWaveformSchema = z.discriminatedUnion("status", [
     .object({
       status: z.literal("available"),
       renderId: RenderIdSchema,
-      sourceChecksum: z.string().regex(/^[a-f0-9]{64}$/u),
       durationMs: z.number().int().nonnegative(),
       sampleRate: z.number().int().positive(),
       peaks: z.array(z.number().int().min(0).max(255)).max(1_024),
@@ -295,9 +294,7 @@ const RenderArtifactTypeSchema = z.enum([
   "originalScript",
   "readableTranscript",
   "ttsTranscript",
-  "manifest",
   "projectSnapshot",
-  "checksums",
 ]);
 export const RenderArtifactSchema = z
   .object({
@@ -307,7 +304,6 @@ export const RenderArtifactSchema = z
     type: RenderArtifactTypeSchema,
     fileName: z.string().min(1).max(255),
     sizeBytes: z.number().int().positive(),
-    checksum: z.string().regex(/^[a-f0-9]{64}$/u),
     durationMs: z.number().int().nonnegative().nullable(),
     createdAt: z.iso.datetime({ offset: true }),
   })

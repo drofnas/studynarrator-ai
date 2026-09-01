@@ -13,7 +13,7 @@ export const DATA_DIRECTORY_MANIFEST_VERSION = 1 as const;
  * record completion against this version; a manifest whose layout is newer
  * is refused with `LayoutTooNewError` rather than migrated downward.
  */
-export const DATA_DIRECTORY_LAYOUT_VERSION = 1;
+export const DATA_DIRECTORY_LAYOUT_VERSION = 2;
 
 const TimestampSchema = z.iso.datetime({ offset: true });
 
@@ -38,6 +38,7 @@ export type DataDirectoryManifest = z.infer<typeof DataDirectoryManifestSchema>;
  */
 export interface LayoutStep {
   id: string;
+  targetLayoutVersion?: number;
   run(dataDirectory: string): Promise<void>;
 }
 
@@ -238,7 +239,10 @@ export async function runLayoutSteps(
       appVersion: manifest?.appVersion ?? "unknown",
       createdAt: manifest?.createdAt ?? stamp,
       updatedAt: stamp,
-      layoutVersion: manifest?.layoutVersion ?? DATA_DIRECTORY_LAYOUT_VERSION,
+      layoutVersion: Math.max(
+        manifest?.layoutVersion ?? DATA_DIRECTORY_LAYOUT_VERSION,
+        step.targetLayoutVersion ?? 1,
+      ),
       completedSteps,
     });
     completed.push(step.id);
