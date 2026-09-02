@@ -15,8 +15,12 @@ ordered checkpoints. It starts from `main` commit `ed6879d` on branch
    claims in this plan when they conflict.
 4. Keep one MP3 per render. Keep its audio frames and frozen project snapshot
    stable after publication. An explicit project rename may replace ID3 metadata.
-   Do not add a persistent download copy, metadata tracking column, read-path
-   mutex, or multi-file repair transaction.
+   Completed render artifacts do not need provenance manifests or persisted
+   checksums because the application can recreate them. Preserve operational
+   hashes used by render plans, speech caching, script export, and data-layout
+   safety, plus release-installer checksums. Do not add a persistent download
+   copy, metadata tracking column, read-path mutex, or multi-file repair
+   transaction.
 5. Keep migrations append-only. Do not squash, edit, or renumber migrations
    9 through 12.
 6. Keep raw exceptions, private paths, script text, project names, endpoint
@@ -39,7 +43,7 @@ Status values: `todo`, `in progress`, `blocked`, `deferred`, `complete`.
 | ID  | Task                                                     | Priority | Status   | Depends on |
 | --- | -------------------------------------------------------- | -------- | -------- | ---------- |
 | R01 | Add MP3 metadata to the FFmpeg encoder                   | P0       | complete | none       |
-| R02 | Retag MP3 downloads when a project is renamed            | P0       | todo     | R01        |
+| R02 | Remove render provenance and retag MP3s on rename        | P0       | complete | R01        |
 | R03 | Remove `node-id3` and its obsolete wrapper               | P0       | todo     | R02        |
 | R04 | Reject redirects from every Speaches request             | P0       | todo     | none       |
 | R05 | Correct runtime documentation and the browser title      | P1       | todo     | none       |
@@ -101,96 +105,163 @@ npm run test:api -- packages/application/src/render.test.ts
 
 **Commit:** `feat(rendering): write MP3 metadata during encoding`
 
-### R02: Retag MP3 downloads when a project is renamed
+### R02: Remove render provenance and retag MP3s on rename
 
-**Goal:** Move title refresh from playback and download paths to the explicit
-Project Name update so each render keeps one MP3 and downloads start without
-FFmpeg or filesystem preparation.
+**Goal:** Remove the completed-render manifest and checksum subsystem, then move
+MP3 title refresh from read paths to the explicit Project Name update. Completed
+renders remain disposable and reproducible, each render keeps one MP3, and
+downloads start without FFmpeg or filesystem preparation.
+
+**Scope decision:** Remove provenance metadata for completed render artifacts,
+including `render-manifest.json`, `checksums.txt`, persisted artifact checksums,
+and waveform cache coupling to the MP3 checksum. Keep operational hashes used by
+render plans and silence assets, the content-addressed speech cache, script
+exports, and the data-directory layout manifest. Keep release-installer
+`SHA256SUMS.txt`; it protects downloaded binaries rather than reproducible render
+output.
 
 **Expected files:**
 
 - `packages/rendering/src/ffmpeg.ts`
 - `packages/rendering/src/ffmpeg.test.ts`
+- `packages/shared-types/src/render.ts` and focused schema or manifest tests
+- `packages/shared-types/src/persistence.ts`
+- `packages/persistence/src/migrations.ts`
+- `packages/persistence/src/renders.ts`
+- `packages/persistence/src/rowMappers.ts`
+- `packages/persistence/src/layoutSteps.ts`
+- `packages/persistence/src/index.test.ts`
+- `packages/persistence/src/dataDirectoryManifest.ts` and its focused test
 - `packages/application/src/artifacts.ts`
 - `packages/application/src/persistence.ts`
 - `packages/application/src/persistence.test.ts`
 - `packages/application/src/composition.ts`
+- `packages/application/src/composition.test.ts`
 - `packages/application/src/render.test.ts`
-- `e2e/web/render-execution.spec.ts`
+- `apps/server/src/routes/renders.ts`
 - `apps/server/src/app.test.ts`
-- focused Electron IPC or acceptance coverage if the shared project update needs
-  a native-boundary assertion
+- `apps/server/src/migrate.test.ts`
+- affected Web artifact and waveform consumers and tests
+- `e2e/web/render-execution.spec.ts`
+- focused Electron IPC or acceptance coverage when the shared project update
+  changes a native-boundary contract
+- `UPGRADE.md` for schema 13 and data-layout version 2
 
 **Work:**
 
-1. Pass the render snapshot project name and fixed StudyNarrator metadata to the
-   FFmpeg encoder from R01.
-2. Add a bounded-memory FFmpeg metadata remux operation that copies the existing
+1. Pass the render snapshot project name and the exact artist `StudyNarrator AI`
+   to the FFmpeg encoder from R01.
+2. Stop generating `render-manifest.json` and `checksums.txt`. Remove their
+   artifact types from shared schemas, REST and IPC responses, route content-type
+   handling, Web consumers, retention inventory, tests, and documentation.
+3. Append database migration 13. Rebuild `render_artifacts` without the
+   `checksum` column and without the `manifest` and `checksums` type values.
+   Preserve every remaining artifact row and index. Bump `DATABASE_SCHEMA_VERSION`
+   and the migration-command expectations in the same checkpoint. Do not edit
+   migrations 1 through 12.
+4. Add an idempotent post-database data-directory layout step and bump
+   `DATA_DIRECTORY_LAYOUT_VERSION` to 2. Run the new cleanup only after schema 13
+   succeeds; keep the existing pre-database steps in their current order.
+   Traverse only validated render directories under the managed `renders/` root
+   and delete the exact legacy files `render-manifest.json` and `checksums.txt`.
+   Reject symlinks and paths outside the managed root. Record the step only after
+   it succeeds, tolerate missing files, prove retry after partial failure, and
+   preserve too-new layouts without modification.
+5. Remove artifact checksum calculation, persistence, transport fields, and
+   download-time checksum comparison. Keep path containment, expected filename,
+   regular-file, symlink, positive-size, and media validation. Keep MP3 size and
+   duration metadata current after replacement.
+6. Remove `sourceChecksum` from the public waveform contract and stored
+   `waveform.json`. A waveform belongs to its immutable render ID; project-name
+   retagging preserves the MPEG audio frames and does not invalidate its peaks.
+   Keep bounded parsing and regenerate a missing, malformed, or invalid waveform.
+7. Keep Download Details as an on-demand archive containing the original script,
+   readable transcript, TTS transcript, and frozen project snapshot. Exclude the
+   MP3, segment audio, waveform cache, manifest, checksum list, and any new
+   provenance substitute. Do not persist the archive.
+8. Add a bounded-memory FFmpeg metadata remux operation that copies the existing
    MP3 audio stream without decoding or re-encoding it. Pass metadata through
    separate arguments, keep shell execution disabled, and preserve ID3v2.3.
-3. Detect a Project Name change in the application project-replacement use case.
+9. Detect a Project Name change in the application project-replacement use case.
    Reconcile every retained completed MP3 for that project before reporting the
    update as successful. A repeated save with the same name must retry an earlier
    failed reconciliation.
-4. Process MP3s one at a time. Write each result to a temporary sibling, verify
-   it, and replace the original with an atomic rename. Check free space first.
-   Peak temporary storage must stay at one source MP3, and the application must
-   not retain a second MP3 or cached details archive.
-5. Preserve the MPEG audio frames. Prove that the title changes while an audio
-   frame or decoded-audio hash, duration, sample rate, and channel count remain
-   unchanged.
-6. Update the MP3 artifact checksum and size plus the corresponding manifest and
-   `checksums.txt` entries after replacement. Keep the frozen project snapshot
-   and render-time script, voice, model, and transformation records unchanged.
-7. Use the current Project Name for the audio download filename without renaming
-   the stored artifact path. Keep Download Details as an on-demand diagnostics
-   archive of the small scripts, transcripts, snapshot, manifest, and
-   archive-local checksums. Exclude the MP3 and other audio files because they
-   have dedicated download actions. Do not persist the archive.
-8. Remove `refreshTitleForCurrentProject`, its Node byte-buffer replacement
-   helper, and every refresh call from playback, waveform, GET, HEAD, Range,
-   audio download, artifact download, and details download paths.
-9. Keep those read paths free of FFmpeg calls, filesystem writes, and artifact-row
-   updates. Concurrent downloads must stream the reconciled MP3 without locks or
-   mutations.
-10. Define a sanitized failure for a rename-time remux. Atomic replacement must
+10. Process MP3s one at a time. Write each result to a temporary sibling, verify
+    it, and replace the original with an atomic rename. Check free space first.
+    Peak temporary storage must stay at one source MP3, and the application must
+    not retain a second MP3 or cached details archive.
+11. Preserve the MPEG audio frames. Prove that the title changes while an audio
+    frame or decoded-audio hash, duration, sample rate, and channel count remain
+    unchanged. The comparison hash exists only in the disposable test.
+12. Use the current Project Name for the audio and details download filenames
+    without renaming stored artifact paths. Keep the frozen project snapshot and
+    render-time script, voice, model, and transformation records unchanged.
+13. Remove `refreshTitleForCurrentProject`, its Node byte-buffer replacement
+    helper, and every refresh call from playback, waveform, GET, HEAD, Range,
+    audio download, artifact download, and details download paths.
+14. Keep those read paths free of FFmpeg calls, filesystem writes, and artifact
+    row updates. Concurrent downloads must stream the reconciled MP3 without
+    locks or mutations.
+15. Define a sanitized failure for a rename-time remux. Atomic replacement must
     leave the prior MP3 playable, and retrying the same Project Name update must
     converge without a repair state machine.
-11. Keep the existing path, regular-file, symlink, size, and checksum validation.
 
 **Acceptance:**
 
-- Each render directory contains one MP3. Project renames create no persistent
-  download variant and no stored details archive.
+- Fresh renders create no manifest or checksum-list file, artifact type, database
+  column, transport field, or waveform source-checksum field.
+- An upgrade from schema 12 to 13 preserves projects, render jobs, segments, the
+  MP3, scripts, transcripts, snapshots, duration, size, and paths while removing
+  legacy manifest/checksum rows. Fresh creation, rollback on migration failure,
+  backup recovery, idempotent reopen, and newer-schema refusal pass.
+- The layout-2 step removes only legacy render provenance files. Fresh, upgraded,
+  interrupted, retried, missing-file, symlink, and too-new-layout cases pass.
+- Operational render-plan, silence, speech-cache, script-export, data-layout, and
+  release-installer hashes remain intact.
 - After a successful Project Name update, every retained completed MP3 for that
-  project reports the current title, while its audio content remains unchanged.
+  project reports the current title and `StudyNarrator AI` artist while its audio
+  content remains unchanged.
 - Audio Download and Download Details use filenames based on the current Project
-  Name. Download Details contains no MP3 or other audio duplicate, and the frozen
-  project snapshot still records the render-time name.
+  Name. Download Details contains only the four approved text/JSON artifacts, and
+  the frozen project snapshot still records the render-time name.
 - Clicking Download performs no retagging or preparation. GET, HEAD, Range,
   waveform, audio download, artifact download, and details download do not change
   persisted files or artifact rows.
 - HTTP Range playback returns the expected bytes, and concurrent downloads do
   not invoke FFmpeg or wait on a metadata lock.
-- The current artifact rows, render manifest, and `checksums.txt` match the
-  renamed MP3 after the Project Name update.
 - A failed retag leaves a playable MP3 and returns a stable sanitized error. A
   retry of the same Project Name update completes without corruption.
-- No metadata column, read-path mutex, permanent MP3 copy, or artifact repair
-  state machine is added.
+- No replacement provenance format, metadata column, read-path mutex, permanent
+  MP3 copy, or artifact repair state machine is added.
 
 **Focused verification:**
 
 ```sh
 npm test -- packages/rendering/src/ffmpeg.test.ts
-npm run test:api -- packages/application/src/persistence.test.ts
-npm run test:api -- packages/application/src/render.test.ts
-npm test -- apps/server/src/app.test.ts
+npm test -- packages/shared-types/src/index.test.ts
+npm test -- packages/persistence/src/index.test.ts packages/persistence/src/dataDirectoryManifest.test.ts
+npm run test:api -- packages/application/src/persistence.test.ts packages/application/src/render.test.ts packages/application/src/composition.test.ts
+npm run test:api -- apps/server/src/app.test.ts apps/server/src/migrate.test.ts
 npm run test:e2e:web -- e2e/web/render-execution.spec.ts
 npm run test:e2e:electron
 ```
 
-**Commit:** `fix(render): retag MP3s when projects are renamed`
+Run `npm run check:package-dependencies` if public imports change and
+`npm run audit:knip` after deleting the provenance paths.
+
+**Commit:** `refactor(render): remove provenance artifacts and retag on rename`
+
+**Completed 2026-09-01:** Implementation checkpoint `12d2550`. `npm run verify`
+passed all non-Docker gates: 539 default-suite tests, 156 API tests, coverage,
+30 Web/Electron acceptance tests, builds, and persistence smoke checks. Docker
+acceptance exposed a stale seven-artifact assertion; it now requires the exact
+five retained types and no checksum field. After that correction, formatting,
+lint, and type checks passed again, and `npm run verify:docker` passed both
+browsers, volume recreation, and cleanup. Verification used the pinned Node/npm
+versions with a local two-CPU test-concurrency cap; repository thresholds and
+worker settings were unchanged. The Docker security gate now enforces the
+[image-specific CVE-2026-52490 assessment](security/CVE-2026-52490.md), which
+expires on 2026-10-01 and retains the raw Scout finding.
 
 ### R03: Remove `node-id3` and its obsolete wrapper
 
