@@ -446,10 +446,9 @@ async function fixture(logger?: {
     contractVersion: 1 as const,
     id: artifactId,
     renderId,
-    type: "manifest" as const,
-    fileName: "package.json",
+    type: "projectSnapshot" as const,
+    fileName: "project-snapshot.json",
     sizeBytes: 1,
-    checksum: "d".repeat(64),
     durationMs: null,
     createdAt: renderFixture.createdAt,
   };
@@ -468,6 +467,7 @@ async function fixture(logger?: {
       ...renderJob(),
       pinned,
     }),
+    reconcileProjectName: async () => undefined,
     listArtifacts: async () => [artifact],
     exportArtifact: async () => ({
       disposition: "download" as const,

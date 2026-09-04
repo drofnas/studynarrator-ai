@@ -15,6 +15,7 @@ import {
   listPersistenceBackups,
   openStudyNarratorRepository,
   readDataDirectoryManifest,
+  removeLegacyRenderProvenance,
   restoreDatabaseFromBackup,
   runLayoutSteps,
   type DatabaseConstructor,
@@ -308,6 +309,7 @@ describe("createStudyNarratorServices", () => {
         "manifest",
         "layout",
         "open",
+        "layout",
         "speechCacheService",
       ]);
       expect(logger.info).toHaveBeenCalledTimes(1);
@@ -325,6 +327,12 @@ describe("createStudyNarratorServices", () => {
       expect(runLayoutSteps).toHaveBeenCalledWith(
         dataDirectory,
         expect.any(Array),
+        { logger },
+      );
+      expect(runLayoutSteps).toHaveBeenNthCalledWith(
+        2,
+        dataDirectory,
+        [removeLegacyRenderProvenance],
         { logger },
       );
       expect(openStudyNarratorRepository).toHaveBeenCalledWith({
@@ -540,6 +548,7 @@ describe("createStudyNarratorServices", () => {
         throw new SchemaTooNewError(databasePath, 9, 4, [backup]);
       });
       const services = await servicesIn(dataDirectory);
+      expect(runLayoutSteps).toHaveBeenCalledTimes(1);
       const status = await services.persistence.status();
       expect(status).toMatchObject({
         state: "unavailable",
@@ -585,6 +594,7 @@ describe("createStudyNarratorServices", () => {
         );
       });
       const services = await servicesIn(dataDirectory);
+      expect(runLayoutSteps).toHaveBeenCalledTimes(1);
       const status = await services.persistence.status();
       expect(status).toMatchObject({
         state: "unavailable",

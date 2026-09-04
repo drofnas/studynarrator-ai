@@ -253,8 +253,8 @@ export function createRenderRepository(dependencies: {
           .prepare("DELETE FROM render_artifacts WHERE render_id = ?")
           .run(renderId);
         const insert = database.prepare(`
-          INSERT INTO render_artifacts (id, render_id, artifact_type, file_name, path, size_bytes, checksum, duration_ms, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO render_artifacts (id, render_id, artifact_type, file_name, path, size_bytes, duration_ms, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `);
         for (const { artifact, path } of artifacts)
           insert.run(
@@ -264,7 +264,6 @@ export function createRenderRepository(dependencies: {
             artifact.fileName,
             path,
             artifact.sizeBytes,
-            artifact.checksum,
             artifact.durationMs,
             artifact.createdAt,
           );

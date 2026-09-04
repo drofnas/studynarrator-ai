@@ -383,8 +383,15 @@ test.describe("Electron acceptance", () => {
       )
       .toBeGreaterThan(0);
     expect(
-      Object.keys(unzipSync(await readFile(detailsDestination))),
-    ).toHaveLength(7);
+      Object.keys(unzipSync(await readFile(detailsDestination))).sort(),
+    ).toEqual(
+      [
+        "original-script.txt",
+        "project-snapshot.json",
+        "readable-transcript.txt",
+        "tts-transcript.txt",
+      ].sort(),
+    );
   });
 
   test("edits and saves independent prompts through native typed IPC without TTS", async ({

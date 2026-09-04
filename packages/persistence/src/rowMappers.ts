@@ -168,7 +168,6 @@ export interface RenderArtifactRow {
   file_name: string;
   path: string;
   size_bytes: number;
-  checksum: string;
   duration_ms: number | null;
   created_at: string;
 }
@@ -213,7 +212,6 @@ export function renderArtifactFromRow(row: RenderArtifactRow): RenderArtifact {
     type: row.artifact_type,
     fileName: row.file_name,
     sizeBytes: row.size_bytes,
-    checksum: row.checksum,
     durationMs: row.duration_ms,
     createdAt: row.created_at,
   });

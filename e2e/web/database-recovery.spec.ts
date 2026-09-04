@@ -178,7 +178,6 @@ test.describe("database recovery after a downgrade", () => {
     // Restarting the application against the same storage opens it normally:
     // the app renders and the persistence contract reports ready.
     await studyNarrator.restart();
-    await page.goto(`${studyNarrator.baseUrl}/#/projects`);
     await continueOffline(page, studyNarrator);
     await expect(
       page.getByRole("heading", { name: "Projects", exact: true }),

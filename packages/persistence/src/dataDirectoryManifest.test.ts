@@ -396,6 +396,35 @@ describe("runLayoutSteps", () => {
     });
   });
 
+  it("advances the layout version only after its versioned step succeeds", async () => {
+    const directory = await seededDirectory("steps-layout-version");
+    await writeDataDirectoryManifest(
+      directory,
+      baseManifest({ layoutVersion: 1 }),
+    );
+    let attempts = 0;
+    const versioned = {
+      id: "layout-two",
+      targetLayoutVersion: 2,
+      run: async () => {
+        attempts += 1;
+        if (attempts === 1) throw new Error("first attempt failed");
+      },
+    };
+
+    await runLayoutSteps(directory, [versioned]);
+    expect(await readManifestJson(directory)).toMatchObject({
+      layoutVersion: 1,
+      completedSteps: [],
+    });
+
+    await runLayoutSteps(directory, [versioned]);
+    expect(await readManifestJson(directory)).toMatchObject({
+      layoutVersion: 2,
+      completedSteps: ["layout-two"],
+    });
+  });
+
   it("refuses to run steps against a layout this build does not support", async () => {
     const directory = manifestDirectory("steps-too-new");
     await writeFileRaw(

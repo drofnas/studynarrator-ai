@@ -1,5 +1,5 @@
-import { readdir, rm, stat, unlink } from "node:fs/promises";
-import { isAbsolute, join, resolve } from "node:path";
+import { lstat, readdir, rm, stat, unlink } from "node:fs/promises";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { LayoutStep } from "./dataDirectoryManifest.js";
 
 /**
@@ -17,6 +17,75 @@ import type { LayoutStep } from "./dataDirectoryManifest.js";
 
 const RENDER_PLANS_DIRECTORY = "render-plans";
 const RENDER_JOBS_DIRECTORY = ".jobs";
+const RENDERS_DIRECTORY = "renders";
+const LEGACY_RENDER_PROVENANCE_FILES = new Set([
+  "render-manifest.json",
+  "checksums.txt",
+]);
+const RENDER_DIRECTORY_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+
+function isContainedPath(parent: string, child: string): boolean {
+  const pathFromParent = relative(parent, child);
+  return (
+    pathFromParent.length > 0 &&
+    pathFromParent !== ".." &&
+    !pathFromParent.startsWith(`..${sep}`) &&
+    !isAbsolute(pathFromParent)
+  );
+}
+
+/** Remove only R02's obsolete provenance files from managed render directories. */
+export const removeLegacyRenderProvenance: LayoutStep = {
+  id: "remove-legacy-render-provenance",
+  targetLayoutVersion: 2,
+  async run(dataDirectory: string) {
+    const root = resolve(dataDirectory, RENDERS_DIRECTORY);
+    const dataRoot = resolve(dataDirectory);
+    if (!isContainedPath(dataRoot, root))
+      throw new Error("The render provenance cleanup root is invalid.");
+    let entries;
+    try {
+      const rootDetails = await lstat(root);
+      if (rootDetails.isSymbolicLink() || !rootDetails.isDirectory())
+        throw new Error(
+          "The render provenance cleanup root must be a real directory.",
+        );
+      entries = await readdir(root, { withFileTypes: true });
+    } catch (error) {
+      if ((error as { code?: string }).code === "ENOENT") return;
+      throw error;
+    }
+    for (const entry of entries) {
+      if (!RENDER_DIRECTORY_PATTERN.test(entry.name)) continue;
+      const directory = resolve(root, entry.name);
+      if (!isContainedPath(root, directory))
+        throw new Error("The render provenance cleanup path is invalid.");
+      const details = await lstat(directory);
+      if (details.isSymbolicLink())
+        throw new Error(
+          "The render provenance cleanup does not follow symlinks.",
+        );
+      if (!details.isDirectory()) continue;
+      for (const fileName of LEGACY_RENDER_PROVENANCE_FILES) {
+        const path = resolve(directory, fileName);
+        if (!isContainedPath(directory, path))
+          throw new Error("The render provenance cleanup path is invalid.");
+        try {
+          const file = await lstat(path);
+          if (file.isSymbolicLink())
+            throw new Error(
+              "The render provenance cleanup does not follow symlinks.",
+            );
+          if (!file.isFile()) continue;
+          await unlink(path);
+        } catch (error) {
+          if ((error as { code?: string }).code !== "ENOENT") throw error;
+        }
+      }
+    }
+  },
+};
 
 /**
  * Delete legacy standalone render plan directories: everything in

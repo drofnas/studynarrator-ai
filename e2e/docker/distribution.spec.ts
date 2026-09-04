@@ -220,8 +220,17 @@ test("Docker Web remains authorable offline and renders after Speaches reconnect
     request,
     "get",
     `/api/renders/${started.id}/artifacts`,
-  )) as unknown[];
-  expect(artifacts).toHaveLength(7);
+  )) as Array<Record<string, unknown>>;
+  expect(artifacts.map((artifact) => artifact.type).sort()).toEqual([
+    "mp3",
+    "originalScript",
+    "projectSnapshot",
+    "readableTranscript",
+    "ttsTranscript",
+  ]);
+  for (const artifact of artifacts) {
+    expect(artifact).not.toHaveProperty("checksum");
+  }
 
   await page.goto("/#/diagnostics");
   await page.getByRole("button", { name: "Run self-test" }).click();

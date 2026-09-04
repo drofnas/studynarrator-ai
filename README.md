@@ -9,7 +9,7 @@ Use it to:
 - Maintain project and global pronunciation lexicons.
 - Test short passages in the Quick Scratchpad.
 - Freeze an immutable render plan before generating audio.
-- Render, review, and export MP3 audio, transcripts, manifests, checksums, and individual speech segments.
+- Render, review, and export MP3 audio, transcripts, frozen project snapshots, and individual speech segments.
 - Export prompt kits for creating or updating scripts with an external language model.
 - Continue authoring while the speech server is offline.
 
@@ -150,13 +150,13 @@ npm test
 npm run test:api
 ```
 
-The release-level verifier requires Node `26.7.0`, Playwright browser dependencies, Docker Buildx, Docker Compose, and Docker Scout:
+The release-level verifier requires the Node version in `.nvmrc`, the npm version in the root `packageManager`, Playwright browser dependencies, Docker Buildx, Docker Compose, and Docker Scout:
 
 ```sh
 npm run verify
 ```
 
-`npm run verify:docker` can run the Docker acceptance suite alone. It builds the image with an isolated disposable builder, produces a CycloneDX dependency inventory, applies the Docker Scout vulnerability policy, runs Chromium and Firefox against a disposable Compose deployment, and recreates the container to prove volume persistence. Before reporting success, it removes and audits all verification-owned images, containers, networks, volumes, builders, and build cache. The CycloneDX and Docker Scout reports remain available under `.tmp/verify-docker/`.
+`npm run verify:docker` can run the Docker acceptance suite alone. It builds the image with an isolated disposable builder, produces a CycloneDX dependency inventory, applies the Docker Scout vulnerability policy, runs Chromium and Firefox against a disposable Compose deployment, and recreates the container to prove volume persistence. Before reporting success, it removes and audits all verification-owned images, containers, networks, volumes, builders, and build cache. The CycloneDX, raw Docker Scout, and per-image applicability reports remain available under `.tmp/verify-docker/`. See the [CVE-2026-52490 assessment](docs/security/CVE-2026-52490.md) for the narrowly scoped, expiring vulnerable-code-absence check.
 
 ## Documentation
 

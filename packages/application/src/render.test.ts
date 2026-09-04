@@ -1,6 +1,14 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -39,6 +47,15 @@ function sha(value: string | Uint8Array): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
+async function decodedAudioHash(path: string): Promise<string> {
+  const { stdout } = await promisify(execFile)(
+    "ffmpeg",
+    ["-v", "error", "-i", path, "-map", "0:a:0", "-f", "s16le", "pipe:1"],
+    { encoding: "buffer", maxBuffer: 8_000_000 },
+  );
+  return createHash("sha256").update(stdout).digest("hex");
+}
+
 class MemoryRepository implements RenderRepository {
   jobs = new Map<string, RenderJob>();
   artifacts = new Map<string, RenderArtifact & { path: string }>();
@@ -49,6 +66,7 @@ class MemoryRepository implements RenderRepository {
   calibrationUpserts: VoiceTimingCalibration[] = [];
   calibrationReadFailure: Error | null = null;
   calibrationUpsertFailure: Error | null = null;
+  artifactReplacementFailure: Error | null = null;
   persistedSpeechAudioDurationMs: number | null | undefined;
   constructor(
     readonly connection: SpeechBackendConnection,
@@ -115,6 +133,11 @@ class MemoryRepository implements RenderRepository {
     renderId: string,
     values: Array<RenderArtifact & { path: string }>,
   ) {
+    if (this.artifactReplacementFailure) {
+      const failure = this.artifactReplacementFailure;
+      this.artifactReplacementFailure = null;
+      throw failure;
+    }
     values.forEach((item) => this.artifacts.set(item.id, item));
     return values
       .filter((item) => item.renderId === renderId)
@@ -934,8 +957,6 @@ describe("render coordinator", () => {
     const artifacts = await service.listArtifacts(started.id);
     expect(artifacts.map(({ type }) => type).sort()).toEqual(
       [
-        "checksums",
-        "manifest",
         "mp3",
         "originalScript",
         "projectSnapshot",
@@ -962,9 +983,9 @@ describe("render coordinator", () => {
     };
     expect(metadata.format?.tags).toMatchObject({
       title: "Render fixture",
-      artist: "Study Narrator AI",
+      artist: "StudyNarrator AI",
       date: "2026",
-      genre: "Audio Book",
+      genre: "Speech",
     });
     const [reviewSegment] = repository.listRenderSegments(started.id);
     expect(reviewSegment?.state).toBe("complete");
@@ -983,13 +1004,17 @@ describe("render coordinator", () => {
         join(dataDirectory, "renders", started.id, "waveform.json"),
         "utf8",
       ),
-    ) as { sourceChecksum: string; peaks: number[] };
-    expect(waveform.sourceChecksum).toBe(mp3.checksum);
+    ) as { peaks: number[] };
+    expect(waveform).not.toHaveProperty("sourceChecksum");
     expect(waveform.peaks.length).toBeGreaterThan(0);
     expect(waveform.peaks.length).toBeLessThanOrEqual(1_024);
+    const publishedFiles = await readdir(
+      join(dataDirectory, "renders", started.id),
+    );
+    expect(publishedFiles).not.toContain("render-manifest.json");
+    expect(publishedFiles).not.toContain("checksums.txt");
     await expect(service.getWaveform(started.id)).resolves.toMatchObject({
       status: "available",
-      sourceChecksum: mp3.checksum,
     });
     const [historySegment] = await service.listSegments(started.id);
     expect(historySegment?.type).toBe("speech");
@@ -1015,22 +1040,18 @@ describe("render coordinator", () => {
     await expect(service.resolveSegmentAudio(started.id, 1)).rejects.toThrow(
       "unavailable",
     );
-    const checksums = artifacts.find(({ type }) => type === "checksums")!;
-    expect(
-      await readFile(
-        (await service.resolveArtifact(checksums.id)).path,
-        "utf8",
-      ),
-    ).toContain(mp3.checksum);
     await expect(service.exportAudio!(started.id)).resolves.toEqual({
       disposition: "download",
       fileName: "render-fixture.mp3",
     });
     const details = await service.resolveDetailsArchive!(started.id);
     expect(details.fileName).toBe("render-fixture-render-details.zip");
-    expect(Object.keys(unzipSync(details.bytes)).sort()).toEqual(
-      artifacts.map(({ fileName }) => fileName).sort(),
-    );
+    expect(Object.keys(unzipSync(details.bytes)).sort()).toEqual([
+      "original-script.txt",
+      "project-snapshot.json",
+      "readable-transcript.txt",
+      "tts-transcript.txt",
+    ]);
     expect(
       Object.keys(unzipSync(details.bytes)).some(
         (name) => name.includes("segment") || name.includes("waveform"),
@@ -1040,195 +1061,163 @@ describe("render coordinator", () => {
       (await service.resolveArtifact(mp3.id)).path,
       Uint8Array.from([1, 2, 3]),
     );
-    await expect(service.resolveDetailsArchive!(started.id)).rejects.toThrow(
-      /integrity/iu,
-    );
+    await expect(
+      service.resolveDetailsArchive!(started.id),
+    ).resolves.toBeDefined();
     await service.close();
   });
 
-  it("refreshes renamed project titles and detail checksums during exports", async () => {
-    const { service, repository, projectId, dataDirectory } = await fixture();
+  it("regenerates missing, malformed, and invalid waveform caches", async () => {
+    const { service, dataDirectory, projectId } = await fixture();
     const started = await service.startProject(projectId);
     await terminal(service, started.id);
-    const originalMp3 = (await service.listArtifacts(started.id)).find(
-      ({ type }) => type === "mp3",
-    )!;
-
-    repository.project.name = "Renamed details fixture";
-    const details = await service.resolveDetailsArchive!(started.id);
-    const detailFiles = unzipSync(details.bytes);
-    const archiveMp3Path = join(dataDirectory, "details.mp3");
-    await writeFile(archiveMp3Path, detailFiles[originalMp3.fileName]!);
-    const { stdout: detailsMetadataOutput } = await promisify(execFile)(
-      "ffprobe",
-      [
-        "-v",
-        "error",
-        "-show_entries",
-        "format_tags=title",
-        "-of",
-        "json",
-        archiveMp3Path,
-      ],
+    const cachePath = join(
+      dataDirectory,
+      "renders",
+      started.id,
+      "waveform.json",
     );
-    expect(
-      (
-        JSON.parse(detailsMetadataOutput) as {
-          format?: { tags?: Record<string, string> };
-        }
-      ).format?.tags?.title,
-    ).toBe("Renamed details fixture");
-    const manifest = JSON.parse(
-      new TextDecoder().decode(detailFiles["render-manifest.json"]!),
-    ) as { artifacts: Array<{ fileName: string; checksum: string }> };
-    const checksums = new Map(
-      new TextDecoder()
-        .decode(detailFiles["checksums.txt"]!)
-        .trim()
-        .split("\n")
-        .map((line) => line.split("  ").reverse() as [string, string]),
-    );
-    for (const [fileName, bytes] of Object.entries(detailFiles)) {
-      if (fileName !== "checksums.txt")
-        expect(checksums.get(fileName)).toBe(sha(bytes));
-    }
-    expect(
-      manifest.artifacts.find(
-        ({ fileName }) => fileName === originalMp3.fileName,
-      )?.checksum,
-    ).toBe(sha(detailFiles[originalMp3.fileName]!));
+    await unlink(cachePath);
 
-    repository.project.name = "Renamed audio fixture";
-    await expect(service.exportAudio!(started.id)).resolves.toEqual({
-      disposition: "download",
-      fileName: originalMp3.fileName,
+    await expect(service.getWaveform(started.id)).resolves.toMatchObject({
+      status: "available",
+      renderId: started.id,
     });
-    const refreshedMp3 = (await service.listArtifacts(started.id)).find(
-      ({ type }) => type === "mp3",
-    )!;
-    expect(refreshedMp3.fileName).toBe(originalMp3.fileName);
-    const { stdout: audioMetadataOutput } = await promisify(execFile)(
-      "ffprobe",
-      [
-        "-v",
-        "error",
-        "-show_entries",
-        "format_tags=title",
-        "-of",
-        "json",
-        (await service.resolveArtifact(refreshedMp3.id)).path,
-      ],
+    await writeFile(cachePath, "not-json", "utf8");
+    await expect(service.getWaveform(started.id)).resolves.toMatchObject({
+      status: "available",
+      renderId: started.id,
+    });
+    await writeFile(
+      cachePath,
+      JSON.stringify({ durationMs: -1, sampleRate: 0, peaks: [999] }),
+      "utf8",
     );
-    expect(
-      (
-        JSON.parse(audioMetadataOutput) as {
-          format?: { tags?: Record<string, string> };
-        }
-      ).format?.tags?.title,
-    ).toBe("Renamed audio fixture");
-    await expect(service.resolveDetailsArchive!(started.id)).resolves.toEqual(
-      expect.objectContaining({ mimeType: "application/zip" }),
+    await expect(service.getWaveform(started.id)).resolves.toMatchObject({
+      status: "available",
+      renderId: started.id,
+    });
+    expect(JSON.parse(await readFile(cachePath, "utf8"))).not.toHaveProperty(
+      "sourceChecksum",
     );
-    for (const artifact of await service.listArtifacts(started.id))
-      await expect(service.resolveArtifact(artifact.id)).resolves.toBeDefined();
     await service.close();
   });
 
-  it("restores the rendered snapshot title after a temporary export", async () => {
-    const { service, repository, projectId, dataDirectory } = await fixture();
+  it("retags a completed MP3 on project rename without changing decoded audio or the frozen snapshot", async () => {
+    const { service, repository, dataDirectory, projectId } = await fixture();
     const started = await service.startProject(projectId);
     await terminal(service, started.id);
     const mp3 = (await service.listArtifacts(started.id)).find(
       ({ type }) => type === "mp3",
     )!;
+    const before = await service.resolveArtifact(mp3.id);
+    const beforeHash = await decodedAudioHash(before.path);
 
-    repository.project.name = "Temporary render fixture";
-    await service.exportAudio!(started.id);
-    repository.project.name = "Render fixture";
+    repository.project.name = "Renamed render fixture";
+    await service.reconcileProjectName(projectId, repository.project.name);
 
-    const details = unzipSync(
-      (await service.resolveDetailsArchive!(started.id)).bytes,
-    );
-    const archiveMp3Path = join(dataDirectory, "reverted-details.mp3");
-    await writeFile(archiveMp3Path, details[mp3.fileName]!);
-    const { stdout: metadataOutput } = await promisify(execFile)("ffprobe", [
+    const after = await service.resolveArtifact(mp3.id);
+    const { stdout } = await promisify(execFile)("ffprobe", [
       "-v",
       "error",
       "-show_entries",
-      "format_tags=title",
+      "format_tags=title,artist",
       "-of",
       "json",
-      archiveMp3Path,
+      after.path,
     ]);
-    expect(
-      (
-        JSON.parse(metadataOutput) as {
-          format?: { tags?: Record<string, string> };
-        }
-      ).format?.tags?.title,
-    ).toBe("Render fixture");
-
-    const manifest = JSON.parse(
-      new TextDecoder().decode(details["render-manifest.json"]!),
-    ) as { artifacts: Array<{ fileName: string; checksum: string }> };
-    const checksums = new Map(
-      new TextDecoder()
-        .decode(details["checksums.txt"]!)
-        .trim()
-        .split("\n")
-        .map((line) => line.split("  ").reverse() as [string, string]),
+    const metadata = JSON.parse(stdout) as {
+      format?: { tags?: Record<string, string> };
+    };
+    expect(metadata.format?.tags).toMatchObject({
+      title: "Renamed render fixture",
+      artist: "StudyNarrator AI",
+    });
+    expect(await decodedAudioHash(after.path)).toBe(beforeHash);
+    expect(after.artifact.sizeBytes).toBe((await stat(after.path)).size);
+    await expect(service.resolveRenderAudio(started.id)).resolves.toMatchObject(
+      { fileName: "renamed-render-fixture.mp3" },
     );
-    for (const [fileName, bytes] of Object.entries(details)) {
-      if (fileName !== "checksums.txt")
-        expect(checksums.get(fileName)).toBe(sha(bytes));
-    }
-    expect(
-      manifest.artifacts.find(({ fileName }) => fileName === mp3.fileName)
-        ?.checksum,
-    ).toBe(sha(details[mp3.fileName]!));
-    for (const artifact of await service.listArtifacts(started.id))
-      await expect(service.resolveArtifact(artifact.id)).resolves.toBeDefined();
+    const frozen = JSON.parse(
+      await readFile(
+        join(dataDirectory, "renders", started.id, "project-snapshot.json"),
+        "utf8",
+      ),
+    ) as { project?: { name?: string } };
+    expect(frozen.project?.name).toBe("Render fixture");
     await service.close();
   });
 
-  it("recovers a renamed export after MP3 replacement succeeds but manifest replacement fails", async () => {
-    const { service, repository, projectId } = await fixture({
-      // The job consumes ID 10 and publication consumes IDs 11 through 17.
-      // The MP3 replacement uses 18; fail the following manifest replacement.
-      createIdFailureAt: 19,
-    });
+  it("converges when artifact persistence fails after the atomic MP3 replacement", async () => {
+    const { service, repository, projectId } = await fixture();
     const started = await service.startProject(projectId);
     await terminal(service, started.id);
-    repository.project.name = "Recovered title fixture";
-
-    await expect(service.exportAudio!(started.id)).rejects.toThrow(
-      "The render artifact could not be updated.",
+    repository.project.name = "Retry metadata update";
+    repository.artifactReplacementFailure = new Error(
+      "sentinel-secret-artifact-row-failure",
     );
+
+    const failure = await service
+      .reconcileProjectName(projectId, repository.project.name)
+      .catch((error: unknown) => error);
+    expect(failure).toMatchObject({
+      message: "Final MP3 metadata could not be updated.",
+    });
+    expect(String(failure)).not.toContain(
+      "sentinel-secret-artifact-row-failure",
+    );
+    await expect(
+      service.reconcileProjectName(projectId, repository.project.name),
+    ).resolves.toBeUndefined();
     const mp3 = (await service.listArtifacts(started.id)).find(
       ({ type }) => type === "mp3",
     )!;
-    await expect(service.resolveArtifact(mp3.id)).resolves.toBeDefined();
-
-    await expect(service.exportAudio!(started.id)).resolves.toEqual({
-      disposition: "download",
-      fileName: mp3.fileName,
+    const resolved = await service.resolveArtifact(mp3.id);
+    const probe = await probeAudioFile({ inputPath: resolved.path });
+    expect(probe).toMatchObject({
+      decodable: true,
+      title: "Retry metadata update",
+      artist: "StudyNarrator AI",
     });
+    await service.close();
+  });
+
+  it("leaves the prior MP3 playable when rename-time free space is insufficient", async () => {
+    let freeSpaceBytes = 1_000_000_000n;
+    const { service, repository, projectId } = await fixture({
+      statfs: async () => ({ bavail: freeSpaceBytes, bsize: 1n }),
+    });
+    const started = await service.startProject(projectId);
+    await terminal(service, started.id);
+    const mp3 = (await service.listArtifacts(started.id)).find(
+      ({ type }) => type === "mp3",
+    )!;
+    const before = await service.resolveArtifact(mp3.id);
+    const beforeHash = await decodedAudioHash(before.path);
+    repository.project.name = "No space rename";
+    freeSpaceBytes = 0n;
+
+    await expect(
+      service.reconcileProjectName(projectId, repository.project.name),
+    ).rejects.toThrow("Final MP3 metadata could not be updated.");
+    expect(await decodedAudioHash(before.path)).toBe(beforeHash);
+    await expect(service.resolveArtifact(mp3.id)).resolves.toBeDefined();
+    await service.close();
+  });
+
+  it("creates details with only the frozen text and snapshot artifacts", async () => {
+    const { service, projectId } = await fixture();
+    const started = await service.startProject(projectId);
+    await terminal(service, started.id);
     const details = unzipSync(
       (await service.resolveDetailsArchive!(started.id)).bytes,
     );
-    const checksums = new Map(
-      new TextDecoder()
-        .decode(details["checksums.txt"]!)
-        .trim()
-        .split("\n")
-        .map((line) => line.split("  ").reverse() as [string, string]),
-    );
-    for (const [fileName, bytes] of Object.entries(details)) {
-      if (fileName !== "checksums.txt")
-        expect(checksums.get(fileName)).toBe(sha(bytes));
-    }
-    for (const artifact of await service.listArtifacts(started.id))
-      await expect(service.resolveArtifact(artifact.id)).resolves.toBeDefined();
+    expect(Object.keys(details).sort()).toEqual([
+      "original-script.txt",
+      "project-snapshot.json",
+      "readable-transcript.txt",
+      "tts-transcript.txt",
+    ]);
     await service.close();
   });
 

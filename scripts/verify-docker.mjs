@@ -12,6 +12,10 @@ import { createServer } from "node:net";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
 import {
+  assertScoutPolicy,
+  collectTiffEvidence,
+} from "./verify-docker-vulnerabilities.mjs";
+import {
   BUILDKIT_IMAGE,
   VERIFICATION_LABEL,
   VERIFICATION_RUN_LABEL,
@@ -255,71 +259,6 @@ function assertImageContract(inspect) {
   );
 }
 
-function parseScoutFinding(result) {
-  const message = result.message?.text ?? "";
-  const value = (label) =>
-    message.match(new RegExp(`${label}\\s*:([^\\n]+)`, "u"))?.[1]?.trim() ?? "";
-  return {
-    id: value("Vulnerability") || result.ruleId,
-    severity: value("Severity"),
-    package: value("Package"),
-    fixedVersion: value("Fixed version"),
-  };
-}
-
-function assertScoutPolicy(sarifPath) {
-  const report = JSON.parse(readFileSync(sarifPath, "utf8"));
-  const findings = report.runs
-    .flatMap((runResult) => runResult.results ?? [])
-    .map(parseScoutFinding);
-  const exceptionDocument = JSON.parse(
-    readFileSync(
-      resolve(repositoryRoot, "deploy/docker/scout-high-exceptions.json"),
-      "utf8",
-    ),
-  );
-  invariant(
-    exceptionDocument.schemaVersion === 1 &&
-      Array.isArray(exceptionDocument.exceptions),
-    "Scout exception document is invalid",
-  );
-  const used = new Set();
-  for (const finding of findings) {
-    if (finding.severity === "CRITICAL")
-      fail(`critical vulnerability ${finding.id} in ${finding.package}`);
-    if (finding.severity !== "HIGH") continue;
-    if (finding.fixedVersion && finding.fixedVersion !== "not fixed") {
-      fail(
-        `high vulnerability ${finding.id} has fix ${finding.fixedVersion} and must be remediated`,
-      );
-    }
-    const exception = exceptionDocument.exceptions.find(
-      (candidate) =>
-        candidate.id === finding.id &&
-        finding.package.startsWith(candidate.package),
-    );
-    invariant(
-      exception,
-      `high vulnerability ${finding.id} in ${finding.package} lacks a narrow exception`,
-    );
-    invariant(
-      typeof exception.reason === "string" && exception.reason.length >= 80,
-      `exception ${finding.id} needs a specific rationale`,
-    );
-    invariant(
-      Date.parse(`${exception.expiresAt}T00:00:00Z`) > Date.now(),
-      `exception ${finding.id} has expired`,
-    );
-    used.add(exception.id);
-  }
-  for (const exception of exceptionDocument.exceptions) {
-    invariant(
-      used.has(exception.id),
-      `Scout exception ${exception.id} is stale or no longer needed`,
-    );
-  }
-}
-
 async function redactedJson(baseUrl, path) {
   const deadline = Date.now() + 10_000;
   let lastError = "no response";
@@ -408,6 +347,7 @@ async function runDockerAcceptance({
   fakePort,
   sbomPath,
   scoutPath,
+  assessmentPath,
 }) {
   const config = JSON.parse(await composeOutput("config", "--format", "json"));
   assertComposeContract(config);
@@ -441,15 +381,10 @@ async function runDockerAcceptance({
     `STUDYNARRATOR_SOURCE_REVISION=${sourceRevision}`,
     ".",
   ]);
-  assertImageContract(
-    JSON.parse(
-      await commandOutput("docker", [
-        "image",
-        "inspect",
-        resourceNames.imageTag,
-      ]),
-    )[0],
-  );
+  const imageInspect = JSON.parse(
+    await commandOutput("docker", ["image", "inspect", resourceNames.imageTag]),
+  )[0];
+  assertImageContract(imageInspect);
   invariant(
     (await commandOutput(
       "docker",
@@ -507,7 +442,80 @@ async function runDockerAcceptance({
     scoutPath,
     `local://${resourceNames.imageTag}`,
   ]);
-  assertScoutPolicy(scoutPath);
+  const report = JSON.parse(readFileSync(scoutPath, "utf8"));
+  let evidence;
+  if (JSON.stringify(report).includes("CVE-2026-52490")) {
+    process.stdout.write(
+      "\n> Inspecting TIFF package and filesystem evidence in the scanned image\n",
+    );
+    const inspection = await executeProcess(
+      "docker",
+      [
+        "run",
+        "--rm",
+        "--name",
+        `${resourceNames.runId}-tiff-evidence`,
+        "--label",
+        verificationLabel,
+        "--label",
+        verificationRunLabel,
+        "--read-only",
+        "--network",
+        "none",
+        "--cap-drop",
+        "ALL",
+        "--cap-add",
+        "DAC_READ_SEARCH",
+        "--security-opt",
+        "no-new-privileges:true",
+        "--user",
+        "0:10001",
+        "--tmpfs",
+        "/data:rw,noexec,nosuid,size=16m",
+        "--entrypoint",
+        "/usr/local/bin/node",
+        imageInspect.Id,
+        "--input-type=module",
+        "-e",
+        `process.stdout.write(JSON.stringify(await (${collectTiffEvidence.toString()})()))`,
+      ],
+      {},
+      true,
+    );
+    if (inspection.status !== 0) {
+      const reason = inspection.stderr.match(
+        /TIFF image evidence could not be collected \((metadata|filesystem|library)\)/u,
+      );
+      fail(
+        `TIFF image evidence inspection failed${reason ? ` (${reason[1]})` : ""}`,
+      );
+    }
+    try {
+      evidence = JSON.parse(inspection.stdout);
+    } catch {
+      fail("TIFF image evidence is invalid");
+    }
+  }
+  const assessment = assertScoutPolicy({
+    report,
+    exceptions: JSON.parse(
+      readFileSync(
+        resolve(repositoryRoot, "deploy/docker/scout-high-exceptions.json"),
+        "utf8",
+      ),
+    ),
+    sbom,
+    evidence,
+    imageId: imageInspect.Id,
+  });
+  writeFileSync(assessmentPath, `${JSON.stringify(assessment, null, 2)}\n`, {
+    mode: 0o600,
+  });
+  if (assessment.assessments.length > 0) {
+    process.stdout.write(
+      "DOCKER VERIFY: CVE-2026-52490 not affected — vulnerable tiffcrop code is absent; raw Scout finding retained\n",
+    );
+  }
 
   fakeSpeaches = spawn(
     resolve(repositoryRoot, "node_modules/.bin/tsx"),
@@ -681,6 +689,7 @@ async function main() {
   let buildkitImageExistedBeforeRun = true;
   let sbomPath;
   let scoutPath;
+  let assessmentPath;
   try {
     await executeWithCleanup({
       execute: async () => {
@@ -737,6 +746,10 @@ async function main() {
         const verificationRun = mkdtempSync(resolve(verificationRoot, "run-"));
         sbomPath = resolve(verificationRun, "studynarrator.cdx.json");
         scoutPath = resolve(verificationRun, "docker-scout.sarif");
+        assessmentPath = resolve(
+          verificationRun,
+          "vulnerability-assessment.json",
+        );
         const hostPort = await reservePort();
         const fakePort = await reservePort();
         const baseUrl = `http://127.0.0.1:${hostPort}`;
@@ -757,6 +770,7 @@ async function main() {
           fakePort,
           sbomPath,
           scoutPath,
+          assessmentPath,
         });
       },
       cleanup: async () => {
@@ -819,7 +833,7 @@ async function main() {
   }
 
   process.stdout.write(
-    `\nDOCKER VERIFY: ALL CHECKS PASSED\nCycloneDX inventory: ${sbomPath}\nDocker Scout report: ${scoutPath}\n`,
+    `\nDOCKER VERIFY: ALL CHECKS PASSED\nCycloneDX inventory: ${sbomPath}\nDocker Scout report: ${scoutPath}\nVulnerability assessment: ${assessmentPath}\n`,
   );
 }
 

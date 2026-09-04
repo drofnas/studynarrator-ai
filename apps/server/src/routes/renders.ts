@@ -311,8 +311,7 @@ export function createRendersRouter(
           "content-type",
           artifact.type === "mp3"
             ? "audio/mpeg"
-            : artifact.type === "manifest" ||
-                artifact.type === "projectSnapshot"
+            : artifact.type === "projectSnapshot"
               ? "application/json"
               : "text/plain; charset=utf-8",
         );

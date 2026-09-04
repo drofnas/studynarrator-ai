@@ -259,7 +259,6 @@ const renderArtifact = {
   type: "mp3" as const,
   fileName: "audio.mp3",
   sizeBytes: 3,
-  checksum: "a".repeat(64),
   durationMs: 1,
   createdAt: "2026-08-12T12:00:00.000Z",
 };

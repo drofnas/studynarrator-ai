@@ -1,5 +1,4 @@
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import { strFromU8, unzipSync } from "fflate";
@@ -153,14 +152,14 @@ test.describe("render execution", () => {
     const audioDownload = page.waitForEvent("download");
     await page.getByRole("button", { name: "Download", exact: true }).click();
     const audio = await audioDownload;
-    expect(audio.suggestedFilename()).toBe("render-acceptance.mp3");
+    expect(audio.suggestedFilename()).toBe("renamed-render-acceptance.mp3");
     const audioPath = await audio.path();
     expect((await readFile(audioPath)).subarray(0, 3).toString()).toBe("ID3");
     const { stdout: audioMetadata } = await promisify(execFile)("ffprobe", [
       "-v",
       "error",
       "-show_entries",
-      "format_tags=title",
+      "format_tags=title,artist",
       "-of",
       "json",
       audioPath,
@@ -170,8 +169,11 @@ test.describe("render execution", () => {
         JSON.parse(audioMetadata) as {
           format?: { tags?: Record<string, string> };
         }
-      ).format?.tags?.title,
-    ).toBe(renamedProjectName);
+      ).format?.tags,
+    ).toMatchObject({
+      title: renamedProjectName,
+      artist: "StudyNarrator AI",
+    });
 
     const detailsDownload = page.waitForEvent("download");
     await page.getByRole("button", { name: "Download Details" }).click();
@@ -182,30 +184,15 @@ test.describe("render execution", () => {
     const files = unzipSync(await readFile(await details.path()));
     expect(Object.keys(files).sort()).toEqual(
       [
-        "checksums.txt",
         "original-script.txt",
         "project-snapshot.json",
         "readable-transcript.txt",
-        "render-acceptance.mp3",
-        "render-manifest.json",
         "tts-transcript.txt",
       ].sort(),
     );
     expect(strFromU8(files["tts-transcript.txt"]!)).toContain(
       "Render an edited sentence",
     );
-    const checksums = new Map(
-      strFromU8(files["checksums.txt"]!)
-        .trim()
-        .split("\n")
-        .map((line) => line.split("  ").reverse() as [string, string]),
-    );
-    for (const [fileName, bytes] of Object.entries(files)) {
-      if (fileName !== "checksums.txt")
-        expect(checksums.get(fileName)).toBe(
-          createHash("sha256").update(bytes).digest("hex"),
-        );
-    }
     expect(
       Object.keys(files).some(
         (name) => name.includes("segment") || name.includes("waveform"),

@@ -94,6 +94,7 @@ export interface RenderService extends Omit<
     renderId: string,
     ordinal: number,
   ): Promise<ResolvedRenderMedia>;
+  reconcileProjectName(projectId: string, projectName: string): Promise<void>;
   subscribe(renderId: string, callback: (job: RenderJob) => void): () => void;
   resolveDetailsArchive?(renderId: string): Promise<{
     bytes: Uint8Array;
@@ -132,6 +133,7 @@ export async function createRenderService(options: {
     ffprobePath: options.ffprobePath,
     now,
     createId,
+    readFileSystemStats,
   });
   const queue = createRenderQueue({
     repository: options.repository,
@@ -232,6 +234,8 @@ export async function createRenderService(options: {
       const media = await artifacts.resolveSegmentAudio(renderId, ordinal);
       return { disposition: "download" as const, fileName: media.fileName };
     },
+    reconcileProjectName: (projectId, projectName) =>
+      artifacts.reconcileProjectName(projectId, projectName),
     resolveRenderAudio: (renderId) => artifacts.resolveRenderAudio(renderId),
     resolveSegmentAudio: (renderId, ordinal) =>
       artifacts.resolveSegmentAudio(renderId, ordinal),

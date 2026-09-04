@@ -132,9 +132,11 @@ describe("persistence application service", () => {
       kind: "migration",
     });
     const retention = retentionProvider();
+    const reconcileProjectName = vi.fn(async () => undefined);
     const service = createPersistenceService(source, {
       backups: provider,
       retention,
+      reconcileProjectName,
     });
     const backups = requireBackups(service);
     const liveMethods = [
@@ -212,6 +214,7 @@ describe("persistence application service", () => {
     expect(source.createProject).toHaveBeenCalledOnce();
     expect(source.getProject).toHaveBeenCalledOnce();
     expect(source.replaceProject).toHaveBeenCalledOnce();
+    expect(reconcileProjectName).toHaveBeenCalledWith(project.id, project.name);
     expect(source.duplicateProject).toHaveBeenCalledOnce();
     expect(source.deleteProject).toHaveBeenCalledOnce();
     expect(source.getSystemPacing).toHaveBeenCalledOnce();
@@ -244,6 +247,38 @@ describe("persistence application service", () => {
       backupPath:
         "/tmp/backups/studynarrator-v0003-to-v0004-2026-08-12T12-00-00-000Z.sqlite",
     });
+  });
+
+  it("retries project-name reconciliation after a replacement already persisted", async () => {
+    const source = repository();
+    const reconcileProjectName = vi
+      .fn<(projectId: string, projectName: string) => Promise<void>>()
+      .mockRejectedValueOnce(
+        new Error("Final MP3 metadata could not be updated."),
+      )
+      .mockResolvedValue(undefined);
+    const service = createPersistenceService(source, { reconcileProjectName });
+    const replacement = {
+      name: project.name,
+      description: project.description,
+      scriptSource: project.scriptSource,
+      speakerMappings: [],
+      lexiconEntries: [],
+    };
+
+    await expect(
+      service.projects.replace(project.id, replacement),
+    ).rejects.toThrow("Final MP3 metadata could not be updated.");
+    await expect(
+      service.projects.replace(project.id, replacement),
+    ).resolves.toEqual(project);
+
+    expect(source.replaceProject).toHaveBeenCalledTimes(2);
+    expect(reconcileProjectName).toHaveBeenCalledTimes(2);
+    expect(reconcileProjectName).toHaveBeenLastCalledWith(
+      project.id,
+      project.name,
+    );
   });
 
   it("validates requests before invoking the repository", async () => {

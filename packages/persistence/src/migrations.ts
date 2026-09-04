@@ -797,6 +797,33 @@ export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
     name: "global-lexicon-pronunciation-reconciliation",
     up: reconcileV12GlobalLexicon,
   },
+  {
+    version: 13,
+    name: "remove-render-artifact-provenance",
+    up(database) {
+      database.exec(`
+        CREATE TABLE render_artifacts_v13 (
+          id TEXT PRIMARY KEY,
+          render_id TEXT NOT NULL REFERENCES render_jobs(id) ON DELETE CASCADE,
+          artifact_type TEXT NOT NULL CHECK (artifact_type IN ('mp3','originalScript','readableTranscript','ttsTranscript','projectSnapshot')),
+          file_name TEXT NOT NULL,
+          path TEXT NOT NULL,
+          size_bytes INTEGER NOT NULL CHECK (size_bytes > 0),
+          duration_ms INTEGER CHECK (duration_ms >= 0),
+          created_at TEXT NOT NULL,
+          UNIQUE (render_id, artifact_type)
+        );
+        INSERT INTO render_artifacts_v13 (
+          id, render_id, artifact_type, file_name, path, size_bytes, duration_ms, created_at
+        ) SELECT id, render_id, artifact_type, file_name, path, size_bytes, duration_ms, created_at
+          FROM render_artifacts
+          WHERE artifact_type IN ('mp3','originalScript','readableTranscript','ttsTranscript','projectSnapshot');
+        DROP TABLE render_artifacts;
+        ALTER TABLE render_artifacts_v13 RENAME TO render_artifacts;
+        CREATE INDEX render_artifacts_render_idx ON render_artifacts(render_id, artifact_type);
+      `);
+    },
+  },
 ]);
 
 interface VersionRow {
