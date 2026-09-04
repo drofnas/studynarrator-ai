@@ -52,19 +52,16 @@ Status values: `todo`, `in progress`, `blocked`, `deferred`, `complete`, `supers
 | R02 | Remove render provenance and retag MP3s on rename        | P0       | complete   | R01                                       |
 | R03 | Remove `node-id3` and its obsolete wrapper               | P1       | superseded | replaced by R24                           |
 | R04 | Reject redirects from every Speaches request             | P0       | todo       | none                                      |
-| R05 | Correct runtime documentation and the browser title      | P1       | todo       | none                                      |
+| R05 | Correct runtime documentation and the product title      | P1       | todo       | R02                                       |
 | R06 | Make Compose LAN allowlisting work from `.env`           | P1       | todo       | none                                      |
 | R07 | Enforce coverage and dead-code checks in pull-request CI | P1       | todo       | none                                      |
-| R08 | Add baseline Web security headers                        | P1       | todo       | none                                      |
+| R08 | Set explicit Web response security headers               | P1       | todo       | none                                      |
 | R09 | Add and verify a production Content Security Policy      | P1       | todo       | R08                                       |
-| R10 | Promote Docker verification from advisory to enforced    | P1       | deferred   | R07                                       |
+| R10 | Enforce Docker distribution verification in CI           | P1       | todo       | R07                                       |
 | R11 | Add contributor and vulnerability-reporting guides       | P1       | todo       | none                                      |
-| R15 | Add an in-application About and Credits page             | P2       | todo       | R13, R14                                  |
-| R17 | Add dependency-update automation and pin GitHub Actions  | P2       | todo       | R07                                       |
-| R18 | Set the public repository description and topics         | P2       | todo       | none                                      |
+| R17 | Pin CI actions and configure Dependabot updates          | P2       | todo       | R07                                       |
+| R18 | Set the public repository description and topics         | P2       | complete   | none                                      |
 | R19 | Validate the desktop release workflow with an RC tag     | P2       | deferred   | R10; R13 in [future work](FUTURE_WORK.md) |
-| R20 | Add a license-cleared sample MP3 to the project overview | P2       | deferred   | R14                                       |
-| R21 | Reassess optional community and code-scanning files      | P3       | deferred   | R19                                       |
 | R22 | Search the complete project script                       | P1       | todo       | none                                      |
 | R23 | Remove the completed-output pin action                   | P1       | complete   | none                                      |
 | R24 | Write final MP3 tags with an ID3 package                 | P1       | todo       | R02; supersedes R03                       |
@@ -329,10 +326,10 @@ npm test -- packages/speaches-adapter/src/index.test.ts
 
 **Commit:** `fix(speaches): reject redirected requests`
 
-### R05: Correct runtime documentation and the browser title
+### R05: Correct runtime documentation and the product title
 
-**Goal:** Make setup instructions agree with the checked-in toolchain and give
-the production browser tab the product name.
+**Goal:** Make setup instructions agree with the checked-in toolchain and set the
+Web and Electron document title to the exact product name `StudyNarrator AI`.
 
 **Release-scope addition (September 4, 2026):** Correct the README's removed
 freeze-plan workflow and reconcile the server build target with the Node runtime
@@ -348,27 +345,43 @@ the exact value `Study Narrator AI`; this task must not change it.
 **Expected files:**
 
 - `README.md`
+- `SETUP.md`
+- `UPGRADE.md`
 - `deploy/docker/README.md`
+- `apps/server/build.mjs`
+- `docs/study-narrator-prd-v1.3.md` for the superseded-guidance notice
+- `Dockerfile`
 - `apps/web/index.html`
+- `apps/desktop/electron-builder.yml`
 - one Web or Playwright test if no title assertion exists
 
 **Work:**
 
 1. Replace source-build and verifier references to Node 26.7.0 with the exact
-   version pinned by `.nvmrc`, or direct readers to `.nvmrc` when the patch value
-   should not appear twice.
+   version pinned by `.nvmrc`. Prefer directing readers to `.nvmrc` when the patch
+   version would otherwise be duplicated.
 2. Keep the npm version aligned with `packageManager` in `package.json`.
-3. Change `StudyNarrator · Runtime check` to a short production title.
-4. Add a title assertion to the smallest existing Web acceptance test.
-5. Leave test-fixture runtime strings alone unless they claim to represent the
-   pinned runtime.
+3. Use exactly `StudyNarrator AI` for the HTML document title, Electron
+   `productName`, Docker OCI image title, user-facing Web and Electron text,
+   documentation headings and prose. R24 owns MP3 artist metadata separately.
+4. Keep compatibility identifiers unchanged: the repository name, npm package
+   and workspace names, Electron `appId`, custom protocol, environment-variable
+   prefix, database filename, data paths, and source-code type or function names.
+5. Add an exact `document.title` assertion to the smallest existing Web test and
+   prove the packaged Electron renderer loads the same title. Inspect packaged
+   metadata to prove the installer product name and Docker label use the same
+   value.
+6. Leave test-fixture runtime strings alone unless they claim to represent the
+   pinned runtime or a user-facing product name.
 
 **Acceptance:**
 
 - `rg '26\.7\.0|Runtime check' README.md deploy/docker apps/web/index.html`
   returns no stale user-facing references.
 - A source-build user can follow the documented Node and npm setup.
-- The browser and Electron renderer display the product title.
+- Browser, Electron, installer, Docker, and documentation surfaces use
+  exactly `StudyNarrator AI`.
+- Stable internal identifiers do not change.
 
 **Focused verification:**
 
@@ -458,9 +471,14 @@ npm run test:coverage
 
 **Commit:** `ci(checks): enforce coverage and dead-code gates`
 
-### R08: Add baseline Web security headers
+### R08: Set explicit Web response security headers
 
-**Goal:** Add low-risk response headers before designing the CSP in R09.
+**Goal:** Apply a small, dependency-free response-header policy to every API,
+media, error, and production Web response before R09 adds the CSP.
+
+**Scope decision:** Keep this task. Docker Web is a supported HTTP application
+that can be exposed to a trusted LAN, so browser defense-in-depth is useful even
+though loopback remains the default. Do not add Helmet for this fixed policy.
 
 **Expected files:**
 
@@ -469,20 +487,29 @@ npm run test:coverage
 
 **Work:**
 
-1. Add one middleware before API routes and static files.
-2. Set `X-Content-Type-Options: nosniff`.
-3. Set `Referrer-Policy: no-referrer`.
-4. Block framing with `X-Frame-Options: DENY`; R09 will add the CSP equivalent.
-5. Consider `Permissions-Policy` only for browser capabilities the application
-   does not use. Do not copy a broad template without checking the UI.
-6. Assert headers on JSON, static HTML, media Range, error, and fallback route
-   responses.
+1. Add one Express middleware after Host validation and before every API router,
+   error boundary, and static-file handler.
+2. Set `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, and
+   `X-Frame-Options: DENY`.
+3. Set `Permissions-Policy` to exactly deny `camera`, `geolocation`, `microphone`,
+   `payment`, and `usb`. StudyNarrator AI uses none of those browser capabilities;
+   audio playback, downloads, workers, and the Speaches backend connection do not
+   require them.
+4. Set `X-XSS-Protection: 0` so obsolete browser filters cannot rewrite content.
+5. Do not set HSTS because StudyNarrator AI does not terminate TLS and supports
+   loopback and trusted-LAN HTTP. Do not add COOP, COEP, or CORP because the app
+   does not require cross-origin isolation. R09 owns CSP and `frame-ancestors`.
+6. Assert the exact header values on health and JSON APIs, SSE, successful and
+   unsatisfiable media Range responses, downloads, sanitized errors, static HTML,
+   immutable assets, and the single-page fallback.
 
 **Acceptance:**
 
-- Each supported Web response carries the selected headers.
+- Each supported Web response carries the exact selected headers once.
 - SSE, downloads, audio Range responses, and static caching still work.
 - Electron security preferences and navigation guards remain unchanged.
+- No security-header dependency, TLS assumption, or cross-origin-isolation policy
+  is introduced.
 
 **Focused verification:**
 
@@ -538,36 +565,88 @@ npm run verify:docker
 
 **Commit:** `feat(server): enforce the production Web CSP`
 
-### R10: Promote Docker verification from advisory to enforced
+### R10: Enforce Docker distribution verification in CI
 
-**Goal:** Fail protected main-branch builds when Docker distribution acceptance
-or vulnerability policy fails.
+**Goal:** Make the existing Docker distribution verifier an automatic release
+gate for the supported Docker Web distribution.
 
-**Status note:** Keep this task `deferred` until a hosted runner completes
-`npm run verify:docker` without a missing Docker Scout or browser dependency.
+**Scope decision:** Keep this task and do not defer it. `npm run verify:docker`
+already owns image hardening, SBOM generation, vulnerability policy, browser
+acceptance, persistence, offline recovery, cleanup, and leftover-resource audits.
+Replace Docker Scout with Trivy so contributors and forks can run the complete
+open-source verifier without a Docker account, Docker Hub entitlement, or
+repository-created credential. This task would become unnecessary only if Docker
+Web stopped being a supported distribution.
 
 **Expected files:**
 
 - `.github/workflows/ci.yml`
-- Docker verification scripts only when the hosted runner exposes a real defect
-- `deploy/docker/README.md` if runner requirements change
+- `.github/workflows/docker-verification.yml` for one reusable full-verification
+  workflow rather than duplicating provisioning and policy
+- `.github/workflows/release.yml`
+- `scripts/verify-docker.mjs` and its focused tests
+- rename `deploy/docker/scout-high-exceptions.json` to the scanner-neutral
+  `deploy/docker/container-high-exceptions.json`
+- `deploy/docker/README.md` and `README.md` when CI requirements or release gates
+  change
 
 **Work:**
 
-1. Inspect recent main-branch Docker job logs and separate infrastructure
-   failures from product failures.
-2. Install or configure the missing hosted-runner tools in the workflow.
-3. Keep Docker verification on main, scheduled runs, or an explicit maintainer
-   dispatch unless PR cost permits broader use.
-4. Remove `continue-on-error: true` after one green representative run.
-5. Preserve the cleanup audit and disposable resource ownership rules.
+1. Put the full Docker job in a reusable workflow that supports `workflow_call`,
+   every push to `main`, a weekly schedule, and `workflow_dispatch`. Have the tag
+   release workflow call that same workflow for the tagged revision and make all
+   packaging jobs depend on its success; do not infer release eligibility from a
+   mutable earlier branch run.
+2. Provision Node from `.nvmrc`, install with `npm ci`, install the Playwright
+   Chromium and Firefox system dependencies used by the verifier, confirm Docker
+   Buildx and Compose, and install an exact Trivy version with Aqua Security's
+   official setup action. Pin every added action to a full commit SHA even before
+   R17 runs. Cache Trivy's public vulnerability database through the action's
+   supported cache path without adding a long-lived credential.
+3. Keep the job secret-free. Scan the locally built image, do not log in to
+   Docker Hub or another registry, and do not publish, push, or attest the image.
+   A fork must need only its automatic GitHub Actions token, the public Internet,
+   and the tools provisioned by the workflow.
+4. Replace `docker scout sbom` and `docker scout cves` in
+   `scripts/verify-docker.mjs` with Trivy image scans. Produce a CycloneDX SBOM,
+   a machine-readable JSON vulnerability report for repository-owned policy
+   evaluation, and SARIF diagnostics. Pin the Trivy version in one maintained
+   location and keep local and CI execution on that version.
+5. Rename the exception file to `container-high-exceptions.json` and preserve the
+   existing policy: every critical finding fails; a high finding with a nonempty
+   fixed version fails; an unfixed high passes only through a package-and-CVE-
+   specific, justified, future-expiring exception; stale and unused exceptions
+   fail. Parse Trivy's documented fields and fail closed on malformed or unknown
+   report shapes.
+6. Remove `continue-on-error`. Treat a missing Trivy CLI or vulnerability
+   database, browser, Buildx, or Compose as a named provisioning failure, never
+   as an advisory success. Add focused fixtures for critical, fixable high,
+   excepted unfixed high, stale exception, unused exception, and malformed report
+   cases.
+7. Set a bounded job timeout and concurrency cancellation so an obsolete run
+   cannot consume a runner indefinitely. Preserve the verifier's targeted cleanup
+   and final leftover-resource audit; never add a global Docker prune.
+8. Upload the CycloneDX inventory, Trivy JSON report, and SARIF diagnostics with
+   short retention when the job fails. Do not upload application data, browser
+   traces, registry configuration, cache contents, or unredacted logs.
+9. Update release documentation so Docker distribution or release claims require
+   a green Docker job for the exact source revision.
 
 **Acceptance:**
 
-- A Docker product, persistence, cleanup, or vulnerability-policy failure fails
-  the workflow.
+- A Docker build, hardening, product, persistence, browser, cleanup, or
+  vulnerability-policy failure fails the workflow.
 - Runner provisioning failures show a named missing prerequisite.
+- A clean fork and a local contributor can run the complete verifier without a
+  Docker account, registry login, personal access token, or repository secret.
+- Trivy produces a valid CycloneDX inventory and deterministic vulnerability
+  evidence, and the repository-owned exception policy fails closed.
 - The job leaves no verification-owned Docker resources.
+- Scheduled, main-branch, manual, and tag-release runs invoke the same reusable
+  workflow and repository-owned command; no caller duplicates or weakens the
+  verifier.
+- No human approval or representative-run checkpoint is required to remove
+  advisory status.
 
 **Focused verification:** `npm run verify:docker` on the same runner image.
 
@@ -577,6 +656,12 @@ or vulnerability policy fails.
 
 **Goal:** Give public contributors a short path to build, test, and report a
 security issue without exposing it in a public issue.
+
+**Scope decision:** GitHub Private Vulnerability Reporting was verified enabled
+for `drofnas/studynarrator-ai` on August 31, 2026. Use it as the private reporting
+channel. Before the first published release, evaluate reports against the current
+`main` branch. After releases begin, support only the latest published release.
+Do not promise a response or remediation deadline.
 
 **Expected files:**
 
@@ -590,8 +675,8 @@ security issue without exposing it in a public issue.
    verifier, formatting ownership, architecture boundaries, and migration rule.
 2. Tell contributors to keep unrelated changes and generated artifacts out of
    commits.
-3. Name the supported release line and security-reporting channel. Use GitHub
-   private vulnerability reporting only after the owner confirms it is enabled.
+3. Link directly to the repository's private vulnerability report form. State
+   the approved pre-release and post-release support policy above.
 4. Tell reporters which version, distribution, and reproduction details help.
 5. Warn reporters not to include scripts, project names, private endpoints,
    tokens, or user data.
@@ -600,9 +685,10 @@ security issue without exposing it in a public issue.
 **Acceptance:**
 
 - A new contributor can reach the standard verification commands from one page.
-- A vulnerability reporter has a private contact path confirmed by the owner.
-- The documents make no promise about response time or supported release dates
-  that the maintainer has not accepted.
+- A vulnerability reporter can reach GitHub Private Vulnerability Reporting
+  without opening a public issue.
+- The documents state the approved support policy and make no response-time or
+  remediation-time promise.
 
 **Focused verification:**
 
@@ -612,52 +698,35 @@ npx prettier --check CONTRIBUTING.md SECURITY.md README.md
 
 **Commit:** `docs(project): add contribution and security guides`
 
-### R15: Add an in-application About and Credits page
-
-**Goal:** Give Web and Electron users access to application version, license,
-acknowledgments, and third-party notices.
-
-**Expected files:**
-
-- `apps/web/src/pages/about/AboutPage.tsx`
-- `apps/web/src/pages/about/AboutPage.module.css`
-- `apps/web/src/pages/about/AboutPage.test.tsx`
-- `apps/web/src/app/routes.tsx`
-- `apps/web/src/app/AppShell.tsx`
-- package or runtime descriptor files only when version data is unavailable
-
-**Work:**
-
-1. Add a lazy-loaded `/about` route and a clear navigation link in the sidebar
-   footer or settings area.
-2. Show StudyNarrator version, Apache-2.0, `ACKNOWLEDGMENTS.md`, and the generated
-   notice inventory from R13.
-3. Use validated external links and the established Electron external-link
-   policy. Do not give the renderer filesystem access.
-4. Keep the page usable offline.
-5. Add component coverage and Web/Electron navigation acceptance.
-
-**Acceptance:**
-
-- Users can find the page through visible navigation.
-- Web and Electron show the same first-party and third-party information.
-- External links use the existing approved navigation boundary.
-- The page remains readable on narrow and wide layouts.
-
-**Focused verification:**
-
-```sh
-npm test -- apps/web/src/pages/about/AboutPage.test.tsx apps/web/src/app/App.test.tsx
-npm run test:e2e:web
-npm run test:e2e:electron
-```
-
-**Commit:** `feat(web): add About and Credits`
-
-### R17: Add dependency-update automation and pin GitHub Actions
+### R17: Pin CI actions and configure Dependabot updates
 
 **Goal:** Reduce dependency and workflow supply-chain drift without adding a
 mandatory audit job that fails on advisory-service noise.
+
+**Scope decision:** Keep this task. The repository has npm dependencies across
+multiple workspaces, native Electron/server dependencies, and release-capable
+workflows, while every current GitHub Action reference uses a mutable major tag
+and no Dependabot configuration exists. GitHub's repository settings complement
+this task but do not replace its reviewed configuration. Do not add auto-merge or
+a second update bot.
+
+**Repository settings completion evidence (August 31, 2026):**
+
+The owner applied and verified the required repository settings:
+
+- Private vulnerability reporting, the dependency graph, Dependabot alerts,
+  Dependabot malware alerts, and Dependabot security updates are enabled.
+- Automatic dependency submission and repository-wide grouped security updates
+  are disabled. GitHub already parses this repository's npm manifests and root
+  lockfile, and broad security-update grouping would conflict with the focused
+  review policy below.
+- The only enabled Dependabot rule is GitHub's
+  **Dismiss low-impact alerts for development-scoped dependencies** preset. No
+  rule dismisses runtime alerts or high/critical alerts.
+- Dependabot version updates remain inactive until this task merges the reviewed
+  `.github/dependabot.yml`; the owner did not accept GitHub's starter file.
+
+No repository-settings action remains before R17 implementation.
 
 **Expected files:**
 
@@ -668,23 +737,49 @@ mandatory audit job that fails on advisory-service noise.
 
 **Work:**
 
-1. Configure monthly Dependabot updates for npm and GitHub Actions.
-2. Limit open pull requests and group compatible development-tool updates where
-   grouping keeps review clear.
-3. Resolve immutable commit SHAs for each GitHub Action from the official action
-   repository. Keep the release tag as an end-of-line comment for readability.
-4. Grant each workflow the smallest permissions it needs.
-5. Keep `npm audit` as a release or maintainer check. Do not make advisory
-   endpoint availability a pull-request gate.
-6. Document how maintainers review and merge generated update pull requests.
+1. Add Dependabot version 2 configuration for the root npm workspace and
+   `github-actions`. Set both schedules to `monthly` at `09:00` in
+   `America/Los_Angeles`; GitHub runs monthly schedules on the first day of each
+   month. Allow no more than five open pull requests per ecosystem.
+2. Group only compatible minor and patch updates for development tooling. Keep
+   runtime dependencies, major updates, Electron, Electron Builder,
+   `better-sqlite3`, Vite, esbuild, and Playwright separate because they affect
+   shipped behavior, native ABI, packaging, or acceptance infrastructure.
+3. Let Dependabot discover every npm workspace through the root lockfile. Do not
+   create one update block per workspace, change version ranges solely for the
+   bot, or allow it to rewrite the pinned Node/npm toolchain.
+4. Resolve every `uses:` entry in CI and release workflows to a full immutable
+   commit SHA from the official action repository. Preserve the corresponding
+   release tag as an end-of-line comment. Cover checkout, Node setup, artifact
+   upload/download, release publishing, and any Docker action added by R10.
+5. Keep workflow permissions explicit: CI and dependency updates use
+   `contents: read`; the release job retains only the write permission needed to
+   create a draft release. Do not grant Dependabot secrets or write access.
+6. Add `dependencies` labels and clear commit-message prefixes for generated PRs.
+   Do not configure auto-merge. Each update must pass the normal checks and be
+   reviewed before merge.
+7. Keep `npm audit --omit=dev` as an explicit release/maintainer signal rather
+   than a PR gate whose result depends on advisory-service availability. The
+   deterministic R12 license inventory and R10 image policy remain separate.
+8. Document the monthly update workflow: review release notes, treat grouped
+   failures by splitting the group, run native/package acceptance for Electron or
+   `better-sqlite3`, and never bypass a failing verifier to clear the queue.
 
 **Acceptance:**
 
 - Workflow actions use immutable SHAs.
-- Dependabot can update npm and action references.
+- Malware alerts and security updates are enabled; automatic dependency
+  submission and repository-wide grouped security updates remain disabled.
+- The only enabled auto-triage preset dismisses low-impact development-scoped npm
+  alerts; no rule dismisses runtime or high/critical alerts.
+- Dependabot can update the root npm workspace and pinned action references on
+  the first day of each month at `09:00 America/Los_Angeles` without duplicate
+  workspace PRs.
 - CI keeps read-only permissions; the release workflow keeps only the write
   permission needed for draft releases.
-- No generated update merges without tests and maintainer review.
+- Runtime, native, major, and packaging-risk updates remain individually
+  reviewable; only compatible development-tool minor/patch updates are grouped.
+- No generated update merges automatically or without the standard checks.
 
 **Focused verification:** YAML validation plus the standard CI command set.
 
@@ -694,20 +789,22 @@ mandatory audit job that fails on advisory-service noise.
 
 **Goal:** Make the GitHub project discoverable and describe its supported scope.
 
-**Repository change:** This task changes GitHub metadata and may produce no file
-diff. Ask the owner for approval before calling `gh repo edit`.
+**Completion evidence (August 31, 2026):** The owner applied the metadata to the
+public `drofnas/studynarrator-ai` repository. A read-back confirmed:
 
-**Work:**
+- Description:
 
-1. Draft a one-sentence description that says local-first, script-to-audio, and
-   external Speaches without claiming bundled speech models.
-2. Propose a short topic list such as `text-to-speech`, `audiobook`, `electron`,
-   `react`, `typescript`, `self-hosted`, `local-first`, and `speaches`.
-3. Confirm the project name and URL before changing metadata.
-4. Apply the approved description and topics.
-5. Read the repository metadata back and record the result in the task notes.
+  > Local-first script-to-audio authoring and rendering for external Speaches
+  > text-to-speech servers.
 
-**Acceptance:** The public repository shows the approved description and topics.
+- Topics: `audio-ai`, `audio-generation`, `electron`, `local-first`, `react`,
+  `self-hosted`, `speaches`, `text-to-speech`, and `typescript`.
+
+The selected topics use established functional terms and one focused AI topic;
+they do not add redundant low-use `-ai` variants for every capability.
+
+**Acceptance:** Complete. The public repository shows the approved description
+and topics, and the read-back matches the values above.
 
 **Commit:** none unless a repository profile document also changes.
 
@@ -749,69 +846,6 @@ release deletion require owner approval.
 - No release claims support for an untested platform or architecture.
 
 **Commit:** use a scoped fix commit only when the RC run exposes a defect.
-
-### R20: Add a license-cleared sample MP3 to the project overview
-
-**Goal:** Let a prospective user hear a short representative output before
-installing the application.
-
-**Status note:** Keep this task `deferred` until R14 confirms the text, model,
-voice, and output rights.
-
-**Expected files:**
-
-- `docs/assets/` for a small committed sample, or release assets when repository
-  size argues against committing audio
-- `README.md`
-- a source script and provenance note beside the sample
-
-**Work:**
-
-1. Write a short first-party script that demonstrates two speakers, one pause,
-   and one pronunciation rule without third-party text.
-2. Render it through a documented Speaches, model, and voice version.
-3. Keep the MP3 short and compressed. Record its checksum and duration.
-4. Store the source script, render settings, model and voice identifiers, license
-   links, and generation date with the sample.
-5. Link the sample near the README introduction with a text description.
-6. Verify the link works on GitHub and does not depend on a private host.
-
-**Acceptance:**
-
-- The maintainer can account for rights in the source text, model, voice, and
-  generated file.
-- The sample plays from the public project page.
-- The repository or release asset remains small enough for normal clones.
-- A user can reproduce the sample from the checked-in script and settings.
-
-**Commit:** `docs(demo): add a reproducible audio sample`
-
-### R21: Reassess optional community and code-scanning files
-
-**Goal:** Add maintenance systems when public contribution or release activity
-creates a need for them.
-
-**Status note:** This task remains `deferred` through the first RC. The files
-below do not block the core script-to-audio product.
-
-**Work:**
-
-1. Review issue volume, contributor count, and release cadence after the first
-   RC.
-2. Add issue forms and a pull-request template when repeated reports omit the
-   same required information.
-3. Adopt a code of conduct when the project starts accepting community
-   participation. Name the enforcement contact and process.
-4. Add a changelog when releases need a maintained compatibility history;
-   otherwise use complete GitHub release notes.
-5. Enable GitHub CodeQL default setup for JavaScript and TypeScript when the
-   owner accepts its alert and update workflow.
-6. Record each accepted or rejected item in this section with a date and reason.
-
-**Acceptance:** Each added system has an owner, a maintenance path, and evidence
-that it solves a recurring project need.
-
-**Commit:** one focused commit per accepted file or scanning configuration.
 
 ### R22: Search the complete project script
 
