@@ -1,8 +1,14 @@
 # StudyNarrator remediation tasks
 
-This plan turns the August 26, 2026 architecture and release review into small,
-ordered checkpoints. It starts from `main` commit `ed6879d` on branch
-`feature/feedback-remediation-tasks`.
+This file tracks the current release workload. The original remediation plan
+started from `main` commit `ed6879d`; the September 4, 2026 task refresh starts
+from `e6be799` on `feature/release-task-refresh`.
+
+Deferred licensing and documentation work lives in [FUTURE_WORK.md](FUTURE_WORK.md).
+R22–R27 record the September 4 product requests. R23 is already implemented;
+R24 supersedes R03 and the completed tasks' older MP3 tagging approach.
+Implementation entries below describe planned work, not changes made by this
+documentation checkpoint.
 
 ## Execution rules
 
@@ -38,35 +44,40 @@ ordered checkpoints. It starts from `main` commit `ed6879d` on branch
 
 ## Current state
 
-Status values: `todo`, `in progress`, `blocked`, `deferred`, `complete`.
+Status values: `todo`, `in progress`, `blocked`, `deferred`, `complete`, `superseded`.
 
-| ID  | Task                                                     | Priority | Status   | Depends on |
-| --- | -------------------------------------------------------- | -------- | -------- | ---------- |
-| R01 | Add MP3 metadata to the FFmpeg encoder                   | P0       | complete | none       |
-| R02 | Remove render provenance and retag MP3s on rename        | P0       | complete | R01        |
-| R03 | Remove `node-id3` and its obsolete wrapper               | P0       | todo     | R02        |
-| R04 | Reject redirects from every Speaches request             | P0       | todo     | none       |
-| R05 | Correct runtime documentation and the browser title      | P1       | todo     | none       |
-| R06 | Make Compose LAN allowlisting work from `.env`           | P1       | todo     | none       |
-| R07 | Enforce coverage and dead-code checks in pull-request CI | P1       | todo     | none       |
-| R08 | Add baseline Web security headers                        | P1       | todo     | none       |
-| R09 | Add and verify a production Content Security Policy      | P1       | todo     | R08        |
-| R10 | Promote Docker verification from advisory to enforced    | P1       | deferred | R07        |
-| R11 | Add contributor and vulnerability-reporting guides       | P1       | todo     | none       |
-| R12 | Generate the npm third-party license inventory           | P1       | todo     | R03        |
-| R13 | Add bundled-runtime notices to each distribution         | P1       | todo     | R12        |
-| R14 | Document Speaches, model, voice, and output licensing    | P1       | todo     | R13        |
-| R15 | Add an in-application About and Credits page             | P2       | todo     | R13, R14   |
-| R16 | Replace stale planning documents with a current roadmap  | P2       | todo     | none       |
-| R17 | Add dependency-update automation and pin GitHub Actions  | P2       | todo     | R07        |
-| R18 | Set the public repository description and topics         | P2       | todo     | none       |
-| R19 | Validate the desktop release workflow with an RC tag     | P2       | deferred | R10, R13   |
-| R20 | Add a license-cleared sample MP3 to the project overview | P2       | deferred | R14        |
-| R21 | Reassess optional community and code-scanning files      | P3       | deferred | R19        |
+| ID  | Task                                                     | Priority | Status     | Depends on                                |
+| --- | -------------------------------------------------------- | -------- | ---------- | ----------------------------------------- |
+| R01 | Add MP3 metadata to the FFmpeg encoder                   | P0       | complete   | none                                      |
+| R02 | Remove render provenance and retag MP3s on rename        | P0       | complete   | R01                                       |
+| R03 | Remove `node-id3` and its obsolete wrapper               | P1       | superseded | replaced by R24                           |
+| R04 | Reject redirects from every Speaches request             | P0       | todo       | none                                      |
+| R05 | Correct runtime documentation and the browser title      | P1       | todo       | none                                      |
+| R06 | Make Compose LAN allowlisting work from `.env`           | P1       | todo       | none                                      |
+| R07 | Enforce coverage and dead-code checks in pull-request CI | P1       | todo       | none                                      |
+| R08 | Add baseline Web security headers                        | P1       | todo       | none                                      |
+| R09 | Add and verify a production Content Security Policy      | P1       | todo       | R08                                       |
+| R10 | Promote Docker verification from advisory to enforced    | P1       | deferred   | R07                                       |
+| R11 | Add contributor and vulnerability-reporting guides       | P1       | todo       | none                                      |
+| R15 | Add an in-application About and Credits page             | P2       | todo       | R13, R14                                  |
+| R17 | Add dependency-update automation and pin GitHub Actions  | P2       | todo       | R07                                       |
+| R18 | Set the public repository description and topics         | P2       | todo       | none                                      |
+| R19 | Validate the desktop release workflow with an RC tag     | P2       | deferred   | R10; R13 in [future work](FUTURE_WORK.md) |
+| R20 | Add a license-cleared sample MP3 to the project overview | P2       | deferred   | R14                                       |
+| R21 | Reassess optional community and code-scanning files      | P3       | deferred   | R19                                       |
+| R22 | Search the complete project script                       | P1       | todo       | none                                      |
+| R23 | Remove the completed-output pin action                   | P1       | complete   | none                                      |
+| R24 | Write final MP3 tags with an ID3 package                 | P1       | todo       | R02; supersedes R03                       |
+| R25 | Show project-render storage in General settings          | P1       | todo       | none                                      |
+| R26 | Update built-in Global Lexicon pronunciations            | P1       | todo       | none                                      |
+| R27 | Track active and unviewed renders in the sidebar         | P1       | todo       | none                                      |
 
 ## Detailed tasks
 
 ### R01: Add MP3 metadata to the FFmpeg encoder
+
+**Historical completion:** R24 now owns changes to the metadata writer and tag
+values. Preserve this task's other completed behavior.
 
 **Goal:** Write MP3 metadata during encoding so FFmpeg produces the final file
 without a second whole-file rewrite.
@@ -106,6 +117,9 @@ npm run test:api -- packages/application/src/render.test.ts
 **Commit:** `feat(rendering): write MP3 metadata during encoding`
 
 ### R02: Remove render provenance and retag MP3s on rename
+
+**Historical completion:** R24 now owns changes to the metadata writer and tag
+values. Preserve this task's other completed behavior.
 
 **Goal:** Remove the completed-render manifest and checksum subsystem, then move
 MP3 title refresh from read paths to the explicit Project Name update. Completed
@@ -265,46 +279,14 @@ expires on 2026-10-01 and retains the raw Scout finding.
 
 ### R03: Remove `node-id3` and its obsolete wrapper
 
-**Goal:** Remove the synchronous whole-file tag writer after R02 moves initial
-and rename-time MP3 metadata work to FFmpeg.
+**Status:** Superseded by [R24](#r24-write-the-requested-final-mp3-tags-with-an-id3-package)
+on September 4, 2026. Do not execute the former package-removal plan.
 
-**Expected files:**
+The owner now requires a third-party ID3 package for final MP3 metadata.
+`node-id3` and its wrapper remain available for R24 to review and reuse.
+Any obsolete-code cleanup must follow R24's selected implementation.
 
-- `packages/rendering/src/id3.ts`
-- `packages/rendering/src/id3.test.ts`
-- `packages/rendering/src/index.ts`
-- `packages/rendering/package.json`
-- `package-lock.json`
-
-**Work:**
-
-1. Prove `writeFinalMp3Metadata` has no callers.
-2. Delete the ID3 wrapper and its unit test.
-3. Remove the public export and `node-id3` dependency.
-4. Update the root lockfile through npm. Do not hand-edit resolved dependency
-   sections.
-5. Search the repository for `node-id3`, `writeFinalMp3Metadata`, and the old
-   sanitized ID3 error messages.
-
-**Acceptance:**
-
-- The application produces the same required MP3 tags through FFmpeg during
-  initial encoding and Project Name updates.
-- The lockfile contains no `node-id3` package.
-- Knip reports no new findings.
-- The production dependency audit reports no known vulnerabilities.
-
-**Focused verification:**
-
-```sh
-npm run audit:knip
-npm run check:package-dependencies
-npm test
-npm run test:api
-npm audit --omit=dev
-```
-
-**Commit:** `refactor(rendering): remove the ID3 rewrite dependency`
+**Commit:** none for the superseded removal task.
 
 ### R04: Reject redirects from every Speaches request
 
@@ -351,6 +333,17 @@ npm test -- packages/speaches-adapter/src/index.test.ts
 
 **Goal:** Make setup instructions agree with the checked-in toolchain and give
 the production browser tab the product name.
+
+**Release-scope addition (September 4, 2026):** Correct the README's removed
+freeze-plan workflow and reconcile the server build target with the Node runtime
+in `.nvmrc`. Remove the active README link that presents the historical PRD as
+current architecture, and mark its obsolete reset guidance as superseded by
+`UPGRADE.md`. Preserve accurate schema/layout documentation. The full architecture
+and roadmap rewrite belongs to [future work](FUTURE_WORK.md).
+
+The product title remains `StudyNarrator AI`. MP3 artist metadata is an explicit
+exception: [R24](#r24-write-the-requested-final-mp3-tags-with-an-id3-package) owns
+the exact value `Study Narrator AI`; this task must not change it.
 
 **Expected files:**
 
@@ -619,126 +612,6 @@ npx prettier --check CONTRIBUTING.md SECURITY.md README.md
 
 **Commit:** `docs(project): add contribution and security guides`
 
-### R12: Generate the npm third-party license inventory
-
-**Goal:** Generate deterministic notices for production npm dependencies before
-adding operating-system and bundled-binary notices in R13.
-
-**Expected files:**
-
-- `THIRD_PARTY_NOTICES.md` or an npm-specific generated input to it
-- a repository-owned generation script
-- the generation script's focused test
-- `package.json`
-
-**Work:**
-
-1. Derive the Web server and Electron production dependency sets from the root
-   lockfile and workspace manifests.
-2. Record package name, version, license identifier, source URL, and required
-   notice text. Flag unknown or custom licenses for human review.
-3. Sort output by package name and version with byte-stable formatting.
-4. Fail on missing license metadata instead of guessing.
-5. Add a test for deterministic output, workspace ownership, duplicate package
-   versions, and an unknown license.
-6. Do not copy complete license texts when the license requires only a notice
-   and source link; include full text when the license requires it.
-
-**Acceptance:**
-
-- The npm inventory matches the current lockfile and workspace manifests.
-- Regeneration produces no diff when inputs do not change.
-- A missing, unknown, or prohibited license stops generation with a package name
-  but no private filesystem path.
-- The task does not attempt to inventory Debian packages, FFmpeg, Node, or
-  Electron runtime binaries; R13 owns those inputs.
-
-**Focused verification:**
-
-Run the generator test, regenerate notices, run `git diff --check`, and run
-`npm run audit:knip`.
-
-**Commit:** `docs(licenses): generate npm dependency notices`
-
-### R13: Add bundled-runtime notices to each distribution
-
-**Goal:** Add notices for non-npm components that Docker and desktop packages
-ship, then prove each package contains the complete notice set.
-
-**Expected files:**
-
-- `THIRD_PARTY_NOTICES.md` or the generator inputs created by R12
-- Docker packaging files
-- Electron packaging configuration
-- `scripts/verify-docker.mjs`
-- focused Electron package or acceptance coverage
-
-**Work:**
-
-1. Inventory bundled Node, Electron, FFmpeg, FFprobe, `better-sqlite3` native
-   binaries, and operating-system packages that require notices.
-2. Use package-manager metadata and official upstream license files. Do not infer
-   a binary's license from its project name.
-3. Add reviewed runtime entries to the generated notice output from R12.
-4. Include `LICENSE`, `ACKNOWLEDGMENTS.md`, and third-party notices in Docker and
-   desktop packages.
-5. Inspect actual package contents in Docker and Electron verification.
-6. Fail verification when a required notice is absent.
-
-**Acceptance:**
-
-- Each shipped distribution contains the Apache license, acknowledgments, and
-  third-party notices.
-- The inventory names each bundled runtime component and its source.
-- Docker and Electron tests inspect packaged files instead of source-tree files.
-- A maintainer reviews unknown, custom, weak-copyleft, or copyleft terms.
-
-**Focused verification:**
-
-```sh
-npm run verify:docker
-npm run test:e2e:electron
-```
-
-**Commit:** `docs(licenses): package bundled runtime notices`
-
-### R14: Document Speaches, model, voice, and output licensing
-
-**Goal:** Explain the license boundary between StudyNarrator, the external speech
-stack, source material, and generated audio.
-
-**Expected files:**
-
-- `SETUP.md`
-- `README.md`
-- `ACKNOWLEDGMENTS.md`
-- `docs/baselines/speaches.md`
-- `THIRD_PARTY_NOTICES.md` only for software the application ships
-
-**Work:**
-
-1. Verify the current Speaches repository license from its primary source.
-2. Verify the recommended Kokoro ONNX model card and each recommended voice
-   asset license from primary sources.
-3. Verify FFmpeg distribution terms for the Docker image and supported desktop
-   package path.
-4. State that StudyNarrator's Apache license does not grant rights to imported
-   text, model weights, voice assets, or generated output.
-5. Link users to upstream license and model-card pages without copying setup
-   instructions that will drift.
-6. Record the review date and exact upstream version or revision.
-
-**Acceptance:**
-
-- Every recommended external component has a primary-source license link.
-- Documentation separates shipped components from user-installed components.
-- The text makes no claim that generated audio has a universal license.
-- A maintainer reviews any voice or model restriction before R20 begins.
-
-**Focused verification:** Prettier plus a manual link and version check.
-
-**Commit:** `docs(licenses): clarify speech stack and output rights`
-
 ### R15: Add an in-application About and Credits page
 
 **Goal:** Give Web and Electron users access to application version, license,
@@ -780,48 +653,6 @@ npm run test:e2e:electron
 ```
 
 **Commit:** `feat(web): add About and Credits`
-
-### R16: Replace stale planning documents with a current roadmap
-
-**Goal:** Stop presenting completed implementation instructions as current
-contributor guidance.
-
-**Expected files:**
-
-- `docs/IMPLEMENTATION_PLAN_V2.md`
-- `docs/study-narrator-prd-v1.3.md`
-- `docs/ROADMAP.md`
-- `docs/ARCHITECTURE.md` only if the README and current PRD cannot explain the
-  implemented boundaries in a short form
-- `README.md`
-
-**Work:**
-
-1. Extract unfinished, deferred, and release-blocking work from the implementation
-   plan. Verify each item against current source and manifests.
-2. Write a concise roadmap with `now`, `next`, and `later` sections. Link to
-   GitHub issues when they exist.
-3. Remove the completed implementation plan from active documentation. Git
-   history already preserves it; archive it only when a maintainer wants the
-   historical file in the working tree.
-4. Mark the PRD as a dated pre-release baseline. State that source, manifests,
-   tests, accepted ADRs, and current operations docs define shipped behavior.
-5. Correct stale section statuses, including sections 25 and 27, if the PRD or
-   plan remains in the tree.
-6. Update README links so contributors land on current material.
-
-**Acceptance:**
-
-- No active document tells an agent to execute completed tasks.
-- The roadmap contains only verified unfinished work.
-- Contributor-facing architecture text matches package boundaries and runtime
-  behavior.
-- The change keeps useful design rationale available without a 2,000-line task
-  script in the main documentation path.
-
-**Focused verification:** Prettier, link checking, and claim-to-source review.
-
-**Commit:** `docs(roadmap): retire completed implementation plans`
 
 ### R17: Add dependency-update automation and pin GitHub Actions
 
@@ -885,7 +716,8 @@ diff. Ask the owner for approval before calling `gh repo edit`.
 **Goal:** Prove macOS, Windows, and Linux packaging before advertising desktop
 installers.
 
-**Status note:** Keep this task `deferred` until R10 and R13 pass. Tag pushes and
+**Status note:** Keep this task `deferred` until R10 and deferred R13 in
+[FUTURE_WORK.md](FUTURE_WORK.md) pass. Tag pushes and
 release deletion require owner approval.
 
 **Expected files:**
@@ -980,6 +812,240 @@ below do not block the core script-to-audio product.
 that it solves a recurring project need.
 
 **Commit:** one focused commit per accepted file or scanning configuration.
+
+### R22: Search the complete project script
+
+**Goal:** Find text anywhere in a project script, including lines outside the
+CodeMirror viewport.
+
+**Current evidence:** `ScriptSourceEditor.tsx` uses CodeMirror `minimalSetup`
+without a search extension. Browser Find cannot reliably search virtualized lines.
+
+**Expected files:**
+
+- `apps/web/src/features/projects/ScriptSourceEditor.tsx` and its tests/styles
+- `apps/web/src/pages/projects/ProjectScriptPanel.tsx`
+- `apps/web/package.json` and root lockfile if a direct CodeMirror search dependency is needed
+- focused Web acceptance coverage in `e2e/web/`
+
+**Work and acceptance:**
+
+1. Add an accessible **Search Script** control and the editor's standard
+   Ctrl+F / Cmd+F shortcut while the editor has focus. Search the entire editor
+   document with the existing CodeMirror search facilities.
+2. Let users move to the next and previous match, reveal and highlight the match,
+   see when there are no matches, and close search with Escape. Keep the script,
+   selection behavior, undo history, and autosave intact.
+3. Keep Browser Find available outside the editor. Search-and-replace is outside
+   this request.
+4. Test a long script with a match initially outside the rendered viewport,
+   repeated matches, no matches, edits while searching, and keyboard navigation.
+   Playwright must prove that an offscreen match becomes visible and selected.
+
+**Focused verification:** Editor component tests and `npm run test:e2e:web`.
+
+**Commit:** `feat(editor): search the complete project script`
+
+### R23: Remove the completed-output pin action from the website
+
+**Status:** Complete before this planning update; no implementation remains.
+
+**Completion evidence:** Commit `1008570` removed the action. Current
+`ProjectsPage.test.tsx` contains **offers completed render controls without a pin
+action**, which asserts that Download and Download Details remain available,
+that no pin button exists, and that the UI does not call `setPinned`.
+
+The underlying persisted pin state and transport operation remain for
+compatibility. Removing those is outside this website-only request. R25 must
+respect existing pinned files when describing reclaimable storage.
+
+**Verification note:** Source and existing regression assertions inspected on
+September 4, 2026; the test was not rerun for this documentation-only update.
+
+**Commit:** none; preserve the existing regression coverage.
+
+### R24: Write the requested final MP3 tags with an ID3 package
+
+**Goal:** Use a third-party ID3 package to tag the final project MP3 with exactly:
+
+| Tag    | Value                              |
+| ------ | ---------------------------------- |
+| title  | Project Name                       |
+| artist | `Study Narrator AI`                |
+| year   | Current year at final MP3 creation |
+| genre  | `Audio Book`                       |
+
+**Scope decision:** This September 4 request supersedes R03's package-removal
+plan and the metadata implementation/values described in completed R01/R02.
+Keep R01/R02's completed history. R05's product branding does not override the
+explicit MP3 artist above.
+
+**Current evidence:** `packages/rendering/src/id3.ts` already wraps `node-id3`
+and supplies the requested artist/genre, but production does not call it.
+`packages/application/src/artifacts.ts` currently uses FFmpeg for tags with
+artist `StudyNarrator AI` and genre `Speech`. Reuse the installed ID3 package and
+review its wrapper before considering a replacement.
+
+**Expected files:**
+
+- `packages/rendering/src/id3.ts`, its tests, and the public rendering export
+- `packages/application/src/artifacts.ts` and `render.test.ts`
+- `packages/rendering/package.json` and root lockfile only if the dependency changes
+- existing MP3 assertions in Web, Electron, and Docker acceptance
+
+**Work and acceptance:**
+
+1. Apply all four tags through the ID3 package after encoding and before atomic
+   publication of the single final MP3. Verify the written file before marking
+   the render complete; handle the package's failure return values and exceptions.
+2. Preserve R02's rename behavior: changing Project Name updates the existing
+   completed MP3 title without changing audio frames or the frozen snapshot.
+   Preserve the creation year on rename and keep artist/genre consistent with
+   this task. Reads and downloads must not initiate metadata rewrites.
+3. Perform updates on temporary files and atomically replace the managed file.
+   Keep the package in rendering infrastructure; no filesystem access in React.
+   Assess the existing wrapper's whole-file memory and blocking cost with a
+   representative long MP3 before adopting it in production.
+4. Test actual tags with an independent reader, Unicode project names, year
+   boundaries via the injected clock, rename, failed writes, temporary-file
+   cleanup, and sentinel-secret redaction. A tag failure must not publish an
+   incomplete output or destroy the previous valid MP3.
+5. Update existing FFmpeg-only/tag-value assertions to the intended final
+   behavior without reintroducing provenance files or download-time copies.
+
+**Focused verification:** Rendering unit tests, application render API tests,
+relevant Web/Electron acceptance, and `npm run verify:docker`.
+
+**Commit:** `fix(render): write the requested MP3 tags with an ID3 package`
+
+### R25: Show project-render storage in General settings
+
+**Goal:** Add a **Product Renders** callout alongside the Speech cache statistics
+so users can see project-audio storage and the space reclaimable through
+**Include Rendered Project Clips**.
+
+**Current evidence:** General settings shows Stored, This session, and Activity.
+Retention already inventories render-artifact bytes, but clip cleanup excludes
+pinned/nonterminal jobs and rejects active or recoverable rendering. Its current
+`bytesFreed` result counts only speech-cache bytes, not the removed render files.
+
+**Expected files:**
+
+- `apps/web/src/pages/settings/GeneralSettingsPage.tsx` and its tests/styles
+- `packages/application/src/retention.ts`, `cachedSpeech.ts`, and affected tests
+- shared schemas, manifests, REST/IPC handlers, and typed Web adapters only where
+  existing storage contracts cannot express the required values
+- General settings Web acceptance coverage
+
+**Work and acceptance:**
+
+1. Show the total managed project-render storage with a readable byte value,
+   including an explicit zero, loading state, and unavailable state.
+2. Derive the reclaimable amount from the same eligibility and file inventory as
+   the checkbox's cleanup operation. If total and reclaimable storage differ,
+   show both; do not promise that pinned output or protected work will be freed.
+3. Refresh the values after rendering, deletion, cleanup, and the existing
+   Refresh action. Checking the box must not delete anything by itself.
+4. Ensure the cleanup confirmation and result accurately account for removed
+   project-render files as well as cache files, without double counting. Keep
+   the existing maintenance guards and protect projects and snapshots.
+5. Test empty storage, existing render files, protected files, active rendering,
+   a successful clear with the checkbox, and an unchecked cache-only clear.
+   Assert the resulting bytes and remaining files, not just the button click.
+
+**Focused verification:** General settings component tests, affected application
+API/contract tests, and Web acceptance; IPC acceptance if its contract changes.
+
+**Commit:** `feat(settings): show project-render storage and reclaimable bytes`
+
+### R26: Update the built-in Global Lexicon pronunciations
+
+**Goal:** Supply these exact built-in mappings:
+
+| Input       | Spoken replacement |
+| ----------- | ------------------ |
+| `redis`     | `red.is`           |
+| `postgres`  | `post.gress`       |
+| `retryable` | `retry.uble`       |
+
+**Current evidence:** The current `globalLexicon.json` has a PostgreSQL entry,
+but no exact entries for these three requested inputs. Preserve PostgreSQL's
+separate entry when adding `postgres`.
+
+**Expected files:**
+
+- `packages/shared-types/src/globalLexicon.json` and catalog tests
+- `packages/persistence/src/migrations.ts` and migration tests
+- `packages/shared-types/src/persistence.ts`
+- `apps/server/src/migrate.test.ts`
+- applicable lexicon/transformer tests and Web acceptance
+- `UPGRADE.md` for the new schema version
+
+**Work and acceptance:**
+
+1. Add or reconcile the three mappings through the established built-in catalog
+   mechanism, with the existing case and word-boundary rules.
+2. Append the next migration at implementation time; do not rewrite historical
+   migration seeds. Update the schema constant and version-check test together.
+3. Apply the mappings to fresh installs and upgrades. Preserve custom/project
+   entries and existing enable/disable choices when updating a matching built-in.
+   Built-in reimport must restore these mappings without erasing custom entries.
+4. Test the exact transformed speech, word boundaries, case handling, fresh
+   creation, upgrade, rollback, idempotent reopen, and user-data preservation.
+   Verify the entries in the Global Lexicon UI and preview path.
+
+**Focused verification:** Shared-types, persistence, and transformer tests,
+applicable API tests, and lexicon Web acceptance. Regenerate golden fixtures only
+if this intended catalog change affects them, and review the complete diff.
+
+**Commit:** `feat(lexicon): add Redis Postgres and retryable pronunciations`
+
+### R27: Track active and unviewed project renders in the sidebar
+
+**Goal:** Let users start project renders, work elsewhere in the app, and return
+from the left sidebar to queued, running, and recently completed work.
+
+**Current evidence:** The application already owns a render queue and typed
+per-project history/progress clients. AppShell has no render activity widget.
+Project navigation already accepts `?tab=render`. A second start on a project
+with active work returns that job; preserve this behavior and the current queue.
+
+**Expected files:**
+
+- `apps/web/src/app/AppShell.tsx`, its styles, and shell tests
+- a render activity provider/hook and widget under `apps/web/src/features/`
+- `apps/web/src/pages/projects/useProjectsPageController.ts` and workspace tests
+- `apps/web/src/services/renders/renderClient.ts` if adapter changes are needed
+- shared/application/REST/IPC contracts only if existing operations are insufficient
+- Web acceptance for sidebar navigation and multiple project renders
+
+**Work and acceptance:**
+
+1. Show each queued/running project render with its project name, phase, and
+   meaningful progress. Track work above route containers so navigating to
+   Settings or another project does not stop updates.
+2. Keep recent completed renders visible as unviewed until the user opens that
+   completed result from the widget. Clicking an active item must not suppress
+   its later completion notification. Show failures/cancellations distinctly.
+3. Clicking an item must open that project's Render tab and reveal the associated
+   result, including an older render when a project has multiple results.
+4. Reconcile job status from existing typed clients and reuse subscriptions with
+   bounded polling fallback. Restore tracked/unviewed state after reload through
+   a small service-owned local record of IDs; avoid storing scripts or audio.
+   Mark viewed state per client, without a new cross-device notification system.
+5. Keep active and unviewed entries available in a scrollable sidebar list.
+   Prune viewed entries and stale references to deleted projects or removed
+   artifacts. Preserve keyboard access and the mobile navigation drawer.
+6. Test queued work across at least two projects, progress while off-route,
+   successful completion, failure, reconnect/reload, viewed-state persistence,
+   removed results, and click-through to the correct project/result. Use the
+   existing fake Speaches server and observable state transitions.
+
+**Focused verification:** Shell, activity hook, and project component tests;
+typed adapter/contract tests when changed; Web acceptance and Electron acceptance
+when bridge behavior changes.
+
+**Commit:** `feat(sidebar): track active and unviewed project renders`
 
 ## Decisions that are not tasks
 
