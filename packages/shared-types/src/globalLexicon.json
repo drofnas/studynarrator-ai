@@ -351,6 +351,27 @@
       "displayText": "solr",
       "spokenText": "solar",
       "enabled": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000056",
+      "entryType": "exactTerm",
+      "displayText": "redis",
+      "spokenText": "red.is",
+      "enabled": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000057",
+      "entryType": "exactTerm",
+      "displayText": "postgres",
+      "spokenText": "post.gress",
+      "enabled": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000058",
+      "entryType": "exactTerm",
+      "displayText": "retryable",
+      "spokenText": "retry.uble",
+      "enabled": true
     }
   ]
 }

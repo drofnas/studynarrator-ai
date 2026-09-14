@@ -14,6 +14,7 @@ import {
   V10_GLOBAL_EXACT_TERM_LEXICON,
   V11_GLOBAL_EXACT_TERM_COLLISION_RECONCILIATION,
   V12_GLOBAL_LEXICON_RECONCILIATION,
+  V14_GLOBAL_LEXICON_RECONCILIATION,
   V3_GLOBAL_NAMED_SENSE_LEXICON,
 } from "./migrationSeeds.js";
 
@@ -568,7 +569,13 @@ function reconcileV11GlobalBuiltInCollisions(database: DatabaseLike): void {
   }
 }
 
-function reconcileV12GlobalLexicon(database: DatabaseLike): void {
+type GlobalLexiconReconciliationEntry =
+  (typeof V12_GLOBAL_LEXICON_RECONCILIATION)[number];
+
+function reconcileGlobalLexiconEntries(
+  database: DatabaseLike,
+  entries: readonly GlobalLexiconReconciliationEntry[],
+): void {
   const timestamp = new Date().toISOString();
   const entryExists = database.prepare(
     "SELECT id FROM lexicon_entries WHERE id = ?",
@@ -594,8 +601,9 @@ function reconcileV12GlobalLexicon(database: DatabaseLike): void {
     return id;
   };
 
-  for (const entry of V12_GLOBAL_LEXICON_RECONCILIATION) {
-    const senseId = entry.entryType === "namedSense" ? entry.senseId : null;
+  for (const entry of entries) {
+    const senseId =
+      entry.entryType === "namedSense" ? (entry.senseId ?? null) : null;
     const values = [
       entry.ordinal,
       entry.entryType,
@@ -795,7 +803,12 @@ export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
   {
     version: 12,
     name: "global-lexicon-pronunciation-reconciliation",
-    up: reconcileV12GlobalLexicon,
+    up(database) {
+      reconcileGlobalLexiconEntries(
+        database,
+        V12_GLOBAL_LEXICON_RECONCILIATION,
+      );
+    },
   },
   {
     version: 13,
@@ -822,6 +835,16 @@ export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
         ALTER TABLE render_artifacts_v13 RENAME TO render_artifacts;
         CREATE INDEX render_artifacts_render_idx ON render_artifacts(render_id, artifact_type);
       `);
+    },
+  },
+  {
+    version: 14,
+    name: "global-lexicon-requested-pronunciations",
+    up(database) {
+      reconcileGlobalLexiconEntries(
+        database,
+        V14_GLOBAL_LEXICON_RECONCILIATION,
+      );
     },
   },
 ]);

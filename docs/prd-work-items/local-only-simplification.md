@@ -78,7 +78,7 @@ Every row is a proposed new issue in `drofnas/studynarrator-ai`, subject to the 
 | R24  | Task  | MP3 rendering                 | P1       | Decision needed | D1                                     | R12b      |
 | R25a | Task  | Storage service and contracts | P1       | In progress     | —                                      | R25b      |
 | R25b | Story | General settings              | P1       | Waiting         | R25a                                   | —         |
-| R26  | Task  | Lexicon and persistence       | P1       | Ready           | —                                      | —         |
+| R26  | Task  | Lexicon and persistence       | P1       | In progress     | —                                      | —         |
 | R27a | Story | Render activity               | P1       | Ready           | —                                      | R27b      |
 | R27b | Story | Render results                | P1       | Waiting         | R27a                                   | —         |
 | R12a | Spike | npm inventory                 | P3       | Deferred        | —                                      | R12b      |

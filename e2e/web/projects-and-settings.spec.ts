@@ -343,7 +343,20 @@ test.describe("Settings and connection diagnostics", () => {
     const custom = page.getByRole("region", { name: "Custom lexicon" });
     await expect(globals).toBeVisible();
     await expect(custom).toBeVisible();
-    await expect(globals.getByText("45 entries")).toBeVisible();
+    await expect(globals.getByText("48 entries")).toBeVisible();
+
+    for (const [input, spoken] of [
+      ["redis", "red.is"],
+      ["postgres", "post.gress"],
+      ["retryable", "retry.uble"],
+    ] as const) {
+      const entry = globals.getByRole("article", {
+        name: `Lexicon entry ${input}`,
+        exact: true,
+      });
+      await expect(entry.getByLabel("Alias")).toHaveValue(input);
+      await expect(entry.getByLabel("Spoken Text")).toHaveValue(spoken);
+    }
 
     const seeded = globals.getByRole("article", {
       name: "Lexicon entry resume/cv",

@@ -6,8 +6,10 @@ import {
   test,
 } from "../support/studyNarratorTest.js";
 
-const original = "Review resume/cv before the interview.";
-const transformed = "Review rez.oo.may before the interview.";
+const original =
+  "Review resume/cv, Redis, postgres, and RETRYABLE; keep rediscover, postgres2, and retryables unchanged.";
+const transformed =
+  "Review rez.oo.may, red.is, post.gress, and retry.uble; keep rediscover, postgres2, and retryables unchanged.";
 
 test.describe("Quick Scratchpad", () => {
   test("transforms, synthesizes, recovers from failures, and never mutates projects", async ({

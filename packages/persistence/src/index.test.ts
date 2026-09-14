@@ -169,6 +169,7 @@ describe("migration 13", () => {
     const migrated = await migrateDatabase({
       Database: DatabaseAdapter,
       databasePath,
+      migrations: STUDYNARRATOR_MIGRATIONS.slice(0, 13),
     });
     expect(migrated.appliedVersions).toEqual([13]);
     expect(
@@ -241,6 +242,137 @@ describe("migration 13", () => {
   });
 });
 
+describe("migration 14", () => {
+  it("reconciles requested pronunciations while preserving user data and enablement", async () => {
+    const databasePath = await temporaryDatabase(
+      "studynarrator-v14-global-lexicon-",
+    );
+    const v13 = await migrateDatabase({
+      Database: DatabaseAdapter,
+      databasePath,
+      migrations: STUDYNARRATOR_MIGRATIONS.slice(0, 13),
+    });
+    const timestamp = "2026-09-14T00:00:00.000Z";
+    v13.database
+      .prepare(
+        "UPDATE lexicon_entries SET spoken_text = ?, enabled = 0 WHERE id = ?",
+      )
+      .run("obsolete", "10000000-0000-4000-8000-000000000056");
+    v13.database
+      .prepare("DELETE FROM lexicon_entries WHERE id IN (?, ?)")
+      .run(
+        "10000000-0000-4000-8000-000000000057",
+        "10000000-0000-4000-8000-000000000058",
+      );
+    v13.database
+      .prepare(
+        `INSERT INTO lexicon_entries (
+          id, scope, project_id, entry_kind, ordinal, entry_type, display_text, sense_id,
+          spoken_text, case_sensitive, whole_word, priority, enabled, notes, created_at, updated_at
+        ) VALUES (?, 'global', NULL, 'custom', 48, 'exactTerm', 'redis', NULL,
+          'custom.redis', 1, 1, 7, 0, 'preserve custom', ?, ?)`,
+      )
+      .run("10000000-0000-4000-8000-000000000057", timestamp, timestamp);
+    v13.database
+      .prepare(
+        `INSERT INTO projects (
+          id, name, description, script_source, script_hash, created_at, updated_at
+        ) VALUES (?, 'Preserve project', '', '', ?, ?, ?)`,
+      )
+      .run(projectId, "a".repeat(64), timestamp, timestamp);
+    v13.database
+      .prepare(
+        `INSERT INTO lexicon_entries (
+          id, scope, project_id, entry_kind, ordinal, entry_type, display_text, sense_id,
+          spoken_text, case_sensitive, whole_word, priority, enabled, notes, created_at, updated_at
+        ) VALUES (?, 'project', ?, 'custom', 0, 'exactTerm', 'retryable', NULL,
+          'custom.retryable', 1, 1, 7, 0, 'preserve project', ?, ?)`,
+      )
+      .run(lexiconId, projectId, timestamp, timestamp);
+    v13.database.close();
+
+    const upgraded = await migrateDatabase({
+      Database: DatabaseAdapter,
+      databasePath,
+    });
+    expect(upgraded.appliedVersions).toEqual([14]);
+    expect(upgraded.databaseSchemaVersion).toBe(14);
+    expect(upgraded.backupPath).toContain("-v0013-to-v0014-");
+    expect(
+      upgraded.database
+        .prepare(
+          `SELECT id, display_text, spoken_text, enabled
+           FROM lexicon_entries WHERE id IN (?, ?, ?) ORDER BY id`,
+        )
+        .all(
+          "10000000-0000-4000-8000-000000000056",
+          "10000000-0000-4000-8000-000000000057",
+          "10000000-0000-4000-8000-000000000058",
+        ),
+    ).toEqual([
+      {
+        id: "10000000-0000-4000-8000-000000000056",
+        display_text: "redis",
+        spoken_text: "red.is",
+        enabled: 0,
+      },
+      {
+        id: "10000000-0000-4000-8000-000000000057",
+        display_text: "postgres",
+        spoken_text: "post.gress",
+        enabled: 1,
+      },
+      {
+        id: "10000000-0000-4000-8000-000000000058",
+        display_text: "retryable",
+        spoken_text: "retry.uble",
+        enabled: 1,
+      },
+    ]);
+    const custom = upgraded.database
+      .prepare(
+        "SELECT id, entry_kind, spoken_text, enabled, notes FROM lexicon_entries WHERE spoken_text = 'custom.redis'",
+      )
+      .get() as { id: string } & Record<string, unknown>;
+    expect(custom).toEqual({
+      id: custom.id,
+      entry_kind: "custom",
+      spoken_text: "custom.redis",
+      enabled: 0,
+      notes: "preserve custom",
+    });
+    expect(custom.id).not.toBe("10000000-0000-4000-8000-000000000057");
+    expect(
+      upgraded.database
+        .prepare(
+          "SELECT scope, project_id, spoken_text, enabled, notes FROM lexicon_entries WHERE id = ?",
+        )
+        .get(lexiconId),
+    ).toEqual({
+      scope: "project",
+      project_id: projectId,
+      spoken_text: "custom.retryable",
+      enabled: 0,
+      notes: "preserve project",
+    });
+    upgraded.database.close();
+
+    const reopened = await migrateDatabase({
+      Database: DatabaseAdapter,
+      databasePath,
+    });
+    expect(reopened.appliedVersions).toEqual([]);
+    expect(
+      reopened.database
+        .prepare(
+          "SELECT count(*) AS count FROM lexicon_entries WHERE scope = 'global' AND entry_kind = 'builtIn'",
+        )
+        .get(),
+    ).toEqual({ count: 48 });
+    reopened.database.close();
+  });
+});
+
 describe("database baseline", () => {
   it("applies current migrations, seeds singleton defaults, and reopens idempotently", async () => {
     const databasePath = await temporaryDatabase("studynarrator-v1-baseline-");
@@ -264,11 +396,12 @@ describe("database baseline", () => {
       { version: 11, name: "global-lexicon-collision-deduplication" },
       { version: 12, name: "global-lexicon-pronunciation-reconciliation" },
       { version: 13, name: "remove-render-artifact-provenance" },
+      { version: 14, name: "global-lexicon-requested-pronunciations" },
     ]);
     expect(first.appliedVersions).toEqual([
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14,
     ]);
-    expect(first.databaseSchemaVersion).toBe(13);
+    expect(first.databaseSchemaVersion).toBe(14);
     expect(first.backupPath).toBeNull();
     expect(
       first.database.prepare("SELECT version FROM schema_migrations").all(),
@@ -286,6 +419,7 @@ describe("database baseline", () => {
       { version: 11 },
       { version: 12 },
       { version: 13 },
+      { version: 14 },
     ]);
     expect(
       first.database
@@ -313,7 +447,7 @@ describe("database baseline", () => {
           "SELECT display_text, sense_id, spoken_text FROM lexicon_entries WHERE scope = 'global' ORDER BY ordinal",
         )
         .all(),
-    ).toHaveLength(45);
+    ).toHaveLength(48);
     expect(
       first.database
         .prepare(
@@ -399,7 +533,7 @@ describe("database baseline", () => {
       Database: DatabaseAdapter,
       databasePath,
     });
-    expect(upgraded.appliedVersions).toEqual([8, 9, 10, 11, 12, 13]);
+    expect(upgraded.appliedVersions).toEqual([8, 9, 10, 11, 12, 13, 14]);
     expect(
       upgraded.database
         .prepare(
@@ -611,8 +745,8 @@ describe("database baseline", () => {
       Database: DatabaseAdapter,
       databasePath,
     });
-    expect(upgraded.appliedVersions).toEqual([11, 12, 13]);
-    expect(upgraded.databaseSchemaVersion).toBe(13);
+    expect(upgraded.appliedVersions).toEqual([11, 12, 13, 14]);
+    expect(upgraded.databaseSchemaVersion).toBe(14);
     expect(
       upgraded.database
         .prepare(
@@ -718,10 +852,10 @@ describe("database baseline", () => {
         )
         .get(),
     ).toEqual({
-      count: 44,
-      distinct_ordinals: 44,
+      count: 47,
+      distinct_ordinals: 47,
       minimum_ordinal: 0,
-      maximum_ordinal: 44,
+      maximum_ordinal: 47,
     });
     v9.database.close();
 
@@ -729,7 +863,7 @@ describe("database baseline", () => {
       Database: DatabaseAdapter,
       databasePath,
     });
-    expect(upgraded.appliedVersions).toEqual([10, 11, 12, 13]);
+    expect(upgraded.appliedVersions).toEqual([10, 11, 12, 13, 14]);
     expect(
       upgraded.database
         .prepare(
@@ -802,10 +936,10 @@ describe("database baseline", () => {
         )
         .get(),
     ).toEqual({
-      count: 45,
-      distinct_ordinals: 45,
+      count: 48,
+      distinct_ordinals: 48,
       minimum_ordinal: 0,
-      maximum_ordinal: 44,
+      maximum_ordinal: 47,
     });
     upgraded.database.close();
   });
@@ -856,8 +990,8 @@ describe("database baseline", () => {
       Database: DatabaseAdapter,
       databasePath,
     });
-    expect(upgraded.appliedVersions).toEqual([12, 13]);
-    expect(upgraded.databaseSchemaVersion).toBe(13);
+    expect(upgraded.appliedVersions).toEqual([12, 13, 14]);
+    expect(upgraded.databaseSchemaVersion).toBe(14);
     expect(
       upgraded.database
         .prepare(
@@ -1201,10 +1335,10 @@ describe("database baseline", () => {
       logger,
     });
     expect(upgraded.appliedVersions).toEqual([
-      3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
+      3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14,
     ]);
-    expect(upgraded.databaseSchemaVersion).toBe(13);
-    expect(upgraded.backupPath).toContain("-v0002-to-v0013-");
+    expect(upgraded.databaseSchemaVersion).toBe(14);
+    expect(upgraded.backupPath).toContain("-v0002-to-v0014-");
     if (upgraded.backupPath === null)
       throw new Error("Expected the migration backup path.");
     expect(logger.info).toHaveBeenNthCalledWith(
@@ -1213,7 +1347,7 @@ describe("database baseline", () => {
         event: "database-migration-backup-created",
         backupPath: upgraded.backupPath,
         fromDatabaseSchemaVersion: 2,
-        toDatabaseSchemaVersion: 13,
+        toDatabaseSchemaVersion: 14,
       },
       "Database migration backup created",
     );
@@ -1319,6 +1453,15 @@ describe("database baseline", () => {
     expect(logger.info).toHaveBeenNthCalledWith(
       13,
       {
+        event: "database-migration-applied",
+        migrationVersion: 14,
+        migrationName: "global-lexicon-requested-pronunciations",
+      },
+      "Database migration applied",
+    );
+    expect(logger.info).toHaveBeenNthCalledWith(
+      14,
+      {
         event: "database-backups-pruned",
         removedCount: 0,
         retainedCount: 1,
@@ -1418,9 +1561,9 @@ describe("database baseline", () => {
       databasePath,
     });
     expect(upgraded.appliedVersions).toEqual([
-      4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
+      4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14,
     ]);
-    expect(upgraded.databaseSchemaVersion).toBe(13);
+    expect(upgraded.databaseSchemaVersion).toBe(14);
     expect(
       upgraded.database
         .prepare(
@@ -1503,7 +1646,7 @@ describe("database baseline", () => {
     migrated.database.close();
   });
 
-  it.each([1, 14])(
+  it.each([1, 15])(
     "rejects an unsupported pre-release schema %d database without deleting it",
     async (version) => {
       const databasePath = await temporaryDatabase(
@@ -1524,7 +1667,7 @@ describe("database baseline", () => {
         .run("keep-me");
       old.close();
 
-      if (version > 13) {
+      if (version > 14) {
         await expect(
           migrateDatabase({ Database: DatabaseAdapter, databasePath }),
         ).rejects.toBeInstanceOf(SchemaTooNewError);
@@ -1562,7 +1705,7 @@ describe("database baseline", () => {
       .run();
     baseline.database.close();
     const failing: Migration = {
-      version: 14,
+      version: 15,
       name: "intentional-test-failure",
       up(database) {
         database.exec(
@@ -1582,7 +1725,7 @@ describe("database baseline", () => {
       failure = error as MigrationFailureError;
     }
     expect(failure).toBeInstanceOf(MigrationFailureError);
-    expect(failure?.backupPath).toContain("-v0013-to-v0014-");
+    expect(failure?.backupPath).toContain("-v0014-to-v0015-");
     expect((await stat(failure!.backupPath!)).mode & 0o777).toBe(0o600);
     expect((await readFile(failure!.backupPath!)).byteLength).toBeGreaterThan(
       0,
@@ -1652,15 +1795,15 @@ describe("StudyNarratorRepository", () => {
       ]),
     ).toThrow(/another lexicon collection/u);
     first.setBuiltInGlobalLexiconEnabled({
-      id: "10000000-0000-4000-8000-000000000009",
+      id: "10000000-0000-4000-8000-000000000056",
       enabled: false,
     });
     const reimported = first.reimportBuiltInGlobalLexicon();
     expect(
       reimported.builtIns.find(
-        ({ id }) => id === "10000000-0000-4000-8000-000000000009",
+        ({ id }) => id === "10000000-0000-4000-8000-000000000056",
       ),
-    ).toMatchObject({ spokenText: "rez.oo.may", enabled: true });
+    ).toMatchObject({ spokenText: "red.is", enabled: true });
     expect(reimported.custom).toMatchObject([
       { id: lexiconId, spokenText: "custom résumé", enabled: false },
     ]);
@@ -1679,7 +1822,7 @@ describe("StudyNarratorRepository", () => {
       },
     ]);
     expect(reopened.replaceCustomGlobalLexicon([]).custom).toEqual([]);
-    expect(reopened.listGlobalLexicon()).toHaveLength(45);
+    expect(reopened.listGlobalLexicon()).toHaveLength(48);
     reopened.close();
   });
 
@@ -1742,7 +1885,7 @@ describe("StudyNarratorRepository", () => {
     });
     expect(first.status()).toMatchObject({
       contractVersion: 1,
-      databaseSchemaVersion: 13,
+      databaseSchemaVersion: 14,
     });
     const created = first.createProject({
       name: "Persistence restart proof",
@@ -2071,7 +2214,7 @@ describe("StudyNarratorRepository", () => {
     });
     expect(repository.runMarker()).toMatchObject({
       markerKey: "runtime.storage-self-test",
-      migrationVersion: 13,
+      migrationVersion: 14,
     });
     const project = repository.createProject({ name: "Rendered" });
     repository.replaceProject(project.id, {
