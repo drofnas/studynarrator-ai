@@ -55,7 +55,7 @@ Status values: `todo`, `in progress`, `blocked`, `deferred`, `complete`, `supers
 | R05 | Correct runtime documentation and the product title      | P1       | in progress | R02                                       |
 | R06 | Keep the Docker Web launcher local                       | P1       | in progress | none                                      |
 | R07 | Enforce coverage and dead-code checks in pull-request CI | P1       | in progress | none                                      |
-| R08 | Set explicit Web response security headers               | P1       | todo        | none                                      |
+| R08 | Set explicit Web response security headers               | P1       | in progress | none                                      |
 | R09 | Add and verify a production Content Security Policy      | P1       | todo        | R08                                       |
 | R10 | Enforce Docker distribution verification in CI           | P1       | todo        | R07                                       |
 | R11 | Add contributor and vulnerability-reporting guides       | P1       | todo        | none                                      |

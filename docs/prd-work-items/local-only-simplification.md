@@ -68,7 +68,7 @@ Every row is a proposed new issue in `drofnas/studynarrator-ai`, subject to the 
 | R06  | Task  | Local Docker launcher         | P1       | In progress     | —                                      | —         |
 | R07a | Task  | CI                            | P1       | In progress     | —                                      | R10b, R17 |
 | R07b | Task  | Local verification            | P1       | In progress     | —                                      | —         |
-| R08  | Task  | HTTP boundary                 | P1       | Ready           | —                                      | R09       |
+| R08  | Task  | HTTP boundary                 | P1       | In progress     | —                                      | R09       |
 | R09  | Task  | Production Web                | P1       | Waiting         | R08                                    | —         |
 | R10a | Task  | Docker scanner                | P1       | Ready           | —                                      | R10b      |
 | R10b | Task  | Docker CI                     | P1       | Waiting         | R10a, R07a                             | —         |

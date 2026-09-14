@@ -128,6 +128,17 @@ export function createExpressApp(options: {
     ),
   );
   app.use((_request, response, next) => {
+    response.set({
+      "X-Content-Type-Options": "nosniff",
+      "Referrer-Policy": "no-referrer",
+      "X-Frame-Options": "DENY",
+      "Permissions-Policy":
+        "camera=(), geolocation=(), microphone=(), payment=(), usb=()",
+      "X-XSS-Protection": "0",
+    });
+    next();
+  });
+  app.use((_request, response, next) => {
     const requestId = randomUUID();
     response.locals.requestId = requestId;
     response.setHeader("X-Request-Id", requestId);

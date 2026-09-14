@@ -60,6 +60,21 @@ const context: DiagnosticsContext = {
   sourceRevision: "test-revision",
 };
 
+const WEB_SECURITY_HEADERS = {
+  "x-content-type-options": "nosniff",
+  "referrer-policy": "no-referrer",
+  "x-frame-options": "DENY",
+  "permissions-policy":
+    "camera=(), geolocation=(), microphone=(), payment=(), usb=()",
+  "x-xss-protection": "0",
+} as const;
+
+function expectWebSecurityHeaders(
+  headers: Record<string, string | string[] | undefined>,
+): void {
+  expect(headers).toMatchObject(WEB_SECURITY_HEADERS);
+}
+
 const openServers = new Set<Server>();
 const openServices = new Set<{ close(): void }>();
 
@@ -669,6 +684,8 @@ describe("Express boundary logging", () => {
     });
 
     const responses = [known, pathValidation, validation, unknown];
+    for (const response of responses)
+      expectWebSecurityHeaders(response.headers);
     const requestIds = responses.map(
       ({ headers }) => headers["x-request-id"] as string,
     );
@@ -747,15 +764,23 @@ describe("production Web application", () => {
     attachStaticWebApplication(application, distributionDirectory);
     const server = await listen(application);
 
+    const root = await request(server).get("/").expect(200);
+    expect(root.text).toContain("StudyNarrator AI production");
+    expect(root.headers["cache-control"]).toBe("no-cache");
+    expectWebSecurityHeaders(root.headers);
     const entry = await request(server).get("/projects/example").expect(200);
     expect(entry.text).toContain("StudyNarrator AI production");
     expect(entry.headers["cache-control"]).toBe("no-cache");
-    expect(
-      (await request(server).get("/application.js").expect(200)).headers[
-        "cache-control"
-      ],
-    ).toBe("public, max-age=31536000, immutable");
-    await request(server).get("/api/not-a-route").expect(404);
+    expectWebSecurityHeaders(entry.headers);
+    const asset = await request(server).get("/application.js").expect(200);
+    expect(asset.headers["cache-control"]).toBe(
+      "public, max-age=31536000, immutable",
+    );
+    expectWebSecurityHeaders(asset.headers);
+    const missingApi = await request(server)
+      .get("/api/not-a-route")
+      .expect(404);
+    expectWebSecurityHeaders(missingApi.headers);
   });
 });
 
@@ -1066,21 +1091,24 @@ describe("Express render review media", () => {
     expect(full.headers["accept-ranges"]).toBe("bytes");
     expect(full.headers["content-type"]).toMatch(/^audio\/mpeg/u);
     expect(JSON.stringify(full.headers)).not.toContain(import.meta.dirname);
-    await request(app)
+    const head = await request(app)
       .head(`/api/renders/${renderId}/audio`)
       .expect(200)
       .expect("content-length", "1");
-    await request(app)
+    expectWebSecurityHeaders(head.headers);
+    const partial = await request(app)
       .get(`/api/renders/${renderId}/segments/1/audio`)
       .set("range", "bytes=0-0")
       .expect(206)
       .expect("content-range", "bytes 0-0/1")
       .expect("content-length", "1");
-    await request(app)
+    expectWebSecurityHeaders(partial.headers);
+    const unsatisfiable = await request(app)
       .get(`/api/renders/${renderId}/audio`)
       .set("range", "bytes=2-3")
       .expect(416)
       .expect("content-range", "bytes */1");
+    expectWebSecurityHeaders(unsatisfiable.headers);
     await request(app)
       .post(`/api/renders/${renderId}/segments/1/export`)
       .expect(200)
@@ -1119,6 +1147,9 @@ describe("Express render progress events", () => {
       expect(stream.response.headers.get("cache-control")).toBe("no-cache");
       expect(stream.response.headers.get("connection")).toBe("keep-alive");
       expect(stream.response.headers.get("x-accel-buffering")).toBe("no");
+      expectWebSecurityHeaders(
+        Object.fromEntries(stream.response.headers.entries()),
+      );
       await stream.readUntil('"state":"queued"');
 
       const intervalCallIndex = intervalSpy.mock.calls.findIndex(
@@ -1331,7 +1362,9 @@ describe("REST API operation manifest", () => {
       );
       const agent = request(app)[method.toLowerCase() as "get"](path);
       if (body !== undefined) agent.send(body);
-      return await agent.expect(expected);
+      const response = await agent.expect(expected);
+      expectWebSecurityHeaders(response.headers);
+      return response;
     };
 
     await call("GET", "/api/health", 200);
