@@ -54,7 +54,7 @@ Status values: `todo`, `in progress`, `blocked`, `deferred`, `complete`, `supers
 | R04 | Reject redirects from every Speaches request             | P0       | complete    | none                                      |
 | R05 | Correct runtime documentation and the product title      | P1       | in progress | R02                                       |
 | R06 | Keep the Docker Web launcher local                       | P1       | in progress | none                                      |
-| R07 | Enforce coverage and dead-code checks in pull-request CI | P1       | in progress | none                                      |
+| R07 | Enforce coverage and dead-code checks in pull-request CI | P1       | complete    | none                                      |
 | R08 | Set explicit Web response security headers               | P1       | in progress | none                                      |
 | R09 | Add and verify a production Content Security Policy      | P1       | todo        | R08                                       |
 | R10 | Enforce Docker distribution verification in CI           | P1       | in progress | R07                                       |
@@ -445,7 +445,8 @@ npm run verify:docker
 **Slice status (2026-09-14):** R07a is complete: CI runs Knip and combined
 coverage, and the active default-branch ruleset requires the GitHub Actions
 `check` job. [Completion evidence](implement-prd-stories/r07a-ci-coverage-knip.md).
-R07 remains in progress until R07b's local-verifier slice is reviewed and closed.
+R07b's local-verifier slice also passed its completion review and full verifier;
+R07 is complete. [R07b completion evidence](implement-prd-stories/r07b-local-verification.md).
 
 **Goal:** Make pull-request CI enforce checks already required by the repository.
 

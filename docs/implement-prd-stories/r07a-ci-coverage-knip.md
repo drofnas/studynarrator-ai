@@ -78,7 +78,8 @@ or owner decision. Its local state moved **Waiting → Ready**; canonical `todo`
 is the available-work equivalent. R10b remains **Waiting** because R10a remains
 In progress. No cross-repository dependent appears in the accepted table.
 
-The parent R07 stays In progress pending R07b's separate completion review.
+At this checkpoint, R07 remained In progress pending R07b's separate completion
+review. [R07b has since passed that review and completed R07](r07b-local-verification.md).
 Only this story and its dependency-driven R17 readiness records are changed.
 The four-file checkpoint contains documentation only; no source or workflow
 change was needed beyond the prior R07a implementation in `ea1e60a`.
