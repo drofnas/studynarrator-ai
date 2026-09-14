@@ -66,14 +66,14 @@ Every row is a proposed new issue in `drofnas/studynarrator-ai`, subject to the 
 | R04  | Task  | Speaches adapter              | P0       | Complete        | —                                      | —         |
 | R05  | Task  | Setup and product identity    | P1       | In progress     | —                                      | —         |
 | R06  | Task  | Local Docker launcher         | P1       | In progress     | —                                      | —         |
-| R07a | Task  | CI                            | P1       | In progress     | —                                      | R10b, R17 |
+| R07a | Task  | CI                            | P1       | Complete        | —                                      | R10b, R17 |
 | R07b | Task  | Local verification            | P1       | In progress     | —                                      | —         |
 | R08  | Task  | HTTP boundary                 | P1       | In progress     | —                                      | R09       |
 | R09  | Task  | Production Web                | P1       | Waiting         | R08                                    | —         |
 | R10a | Task  | Docker scanner                | P1       | In progress     | —                                      | R10b      |
 | R10b | Task  | Docker CI                     | P1       | Waiting         | R10a, R07a                             | —         |
 | R11  | Task  | Contributor documentation     | P1       | Complete        | —                                      | —         |
-| R17  | Task  | Dependency maintenance        | P2       | Waiting         | R07a                                   | —         |
+| R17  | Task  | Dependency maintenance        | P2       | Ready           | R07a                                   | —         |
 | R22  | Story | Script editor                 | P1       | In progress     | —                                      | —         |
 | R24  | Task  | MP3 rendering                 | P1       | Decision needed | D1                                     | R12b      |
 | R25a | Task  | Storage service and contracts | P1       | In progress     | —                                      | R25b      |

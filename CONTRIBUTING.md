@@ -42,6 +42,10 @@ The full verifier also requires the Docker and Trivy prerequisites listed in the
 [README](README.md#development-and-verification). Run `npm run verify:docker`
 when changing the Docker distribution.
 
+Pull requests targeting the default branch must pass the GitHub Actions `check`
+job. It runs Knip, formatting, lint, typechecking, and both Vitest suites together
+with coverage thresholds. Web end-to-end tests remain a separate `e2e` job.
+
 ## Keep changes within the existing architecture
 
 - Put deterministic domain logic in `packages/core`, orchestration in

@@ -59,7 +59,7 @@ Status values: `todo`, `in progress`, `blocked`, `deferred`, `complete`, `supers
 | R09 | Add and verify a production Content Security Policy      | P1       | todo        | R08                                       |
 | R10 | Enforce Docker distribution verification in CI           | P1       | in progress | R07                                       |
 | R11 | Add contributor and vulnerability-reporting guides       | P1       | complete    | none                                      |
-| R17 | Pin CI actions and configure Dependabot updates          | P2       | todo        | R07                                       |
+| R17 | Pin CI actions and configure Dependabot updates          | P2       | todo        | R07a (complete)                           |
 | R18 | Set the public repository description and topics         | P2       | complete    | none                                      |
 | R19 | Validate the desktop release workflow with an RC tag     | P2       | deferred    | R10; R13 in [future work](FUTURE_WORK.md) |
 | R22 | Search the complete project script                       | P1       | in progress | none                                      |
@@ -442,6 +442,11 @@ npm run verify:docker
 
 ### R07: Enforce coverage and dead-code checks in pull-request CI
 
+**Slice status (2026-09-14):** R07a is complete: CI runs Knip and combined
+coverage, and the active default-branch ruleset requires the GitHub Actions
+`check` job. [Completion evidence](implement-prd-stories/r07a-ci-coverage-knip.md).
+R07 remains in progress until R07b's local-verifier slice is reviewed and closed.
+
 **Goal:** Make pull-request CI enforce checks already required by the repository.
 
 **Expected files:**
@@ -705,6 +710,9 @@ npx prettier --check CONTRIBUTING.md SECURITY.md README.md
 **Commit:** `docs(project): add contribution and security guides`
 
 ### R17: Pin CI actions and configure Dependabot updates
+
+**Readiness (2026-09-14):** Ready under the accepted local dependency table:
+its sole prerequisite, R07a, is complete. R07b is not a prerequisite.
 
 **Goal:** Reduce dependency and workflow supply-chain drift without adding a
 mandatory audit job that fails on advisory-service noise.
