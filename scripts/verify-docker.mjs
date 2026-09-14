@@ -11,10 +11,8 @@ import {
 import { createServer } from "node:net";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
-import {
-  assertTrivyPolicy,
-  collectTiffEvidence,
-} from "./verify-docker-vulnerabilities.mjs";
+import { collectAudioEvidence } from "./verify-docker-audio.mjs";
+import { assertTrivyPolicy } from "./verify-docker-vulnerabilities.mjs";
 import {
   BUILDKIT_IMAGE,
   VERIFICATION_LABEL,
@@ -397,7 +395,12 @@ async function runDockerAcceptance({
   invariant(
     (await commandOutput(
       "docker",
-      smokeContainerArgs("id", "/usr/bin/id", "-u"),
+      smokeContainerArgs(
+        "id",
+        "/nodejs/bin/node",
+        "-e",
+        "process.stdout.write(String(process.getuid()))",
+      ),
     )) === "10001",
     "runtime process is not non-root",
   );
@@ -412,15 +415,11 @@ async function runDockerAcceptance({
   );
   await run(
     "docker",
-    smokeContainerArgs("license", "/usr/bin/test", "-s", "/app/LICENSE"),
-  );
-  await run(
-    "docker",
     smokeContainerArgs(
-      "acknowledgments",
-      "/usr/bin/test",
-      "-s",
-      "/app/ACKNOWLEDGMENTS.md",
+      "notices",
+      "/nodejs/bin/node",
+      "-e",
+      "for (const path of ['/app/LICENSE', '/app/ACKNOWLEDGMENTS.md']) if (!require('node:fs').statSync(path).size) process.exit(1)",
     ),
   );
 
@@ -469,58 +468,45 @@ async function runDockerAcceptance({
     sarif.version === "2.1.0" && Array.isArray(sarif.runs),
     "Trivy SARIF diagnostics are invalid",
   );
-  let evidence;
-  if (JSON.stringify(report).includes("CVE-2026-52490")) {
-    process.stdout.write(
-      "\n> Inspecting TIFF package and filesystem evidence in the scanned image\n",
-    );
-    const inspection = await executeProcess(
-      "docker",
-      [
-        "run",
-        "--rm",
-        "--name",
-        `${resourceNames.runId}-tiff-evidence`,
-        "--label",
-        verificationLabel,
-        "--label",
-        verificationRunLabel,
-        "--read-only",
-        "--network",
-        "none",
-        "--cap-drop",
-        "ALL",
-        "--cap-add",
-        "DAC_READ_SEARCH",
-        "--security-opt",
-        "no-new-privileges:true",
-        "--user",
-        "0:10001",
-        "--tmpfs",
-        "/data:rw,noexec,nosuid,size=16m",
-        "--entrypoint",
-        "/usr/local/bin/node",
-        imageInspect.Id,
-        "--input-type=module",
-        "-e",
-        `process.stdout.write(JSON.stringify(await (${collectTiffEvidence.toString()})()))`,
-      ],
-      {},
-      true,
-    );
-    if (inspection.status !== 0) {
-      const reason = inspection.stderr.match(
-        /TIFF image evidence could not be collected \((metadata|filesystem|library)\)/u,
-      );
-      fail(
-        `TIFF image evidence inspection failed${reason ? ` (${reason[1]})` : ""}`,
-      );
-    }
-    try {
-      evidence = JSON.parse(inspection.stdout);
-    } catch {
-      fail("TIFF image evidence is invalid");
-    }
+  const audioInspection = await executeProcess(
+    "docker",
+    [
+      "run",
+      "--rm",
+      "--name",
+      `${resourceNames.runId}-audio-evidence`,
+      "--label",
+      verificationLabel,
+      "--label",
+      verificationRunLabel,
+      "--read-only",
+      "--network",
+      "none",
+      "--cap-drop",
+      "ALL",
+      "--security-opt",
+      "no-new-privileges:true",
+      "--user",
+      "10001:10001",
+      "--tmpfs",
+      "/data:rw,noexec,nosuid,size=16m",
+      "--entrypoint",
+      "/nodejs/bin/node",
+      imageInspect.Id,
+      "--input-type=module",
+      "-e",
+      `process.stdout.write(JSON.stringify(await (${collectAudioEvidence.toString()})()))`,
+    ],
+    {},
+    true,
+  );
+  if (audioInspection.status !== 0)
+    fail("audio build evidence inspection failed");
+  let audioEvidence;
+  try {
+    audioEvidence = JSON.parse(audioInspection.stdout);
+  } catch {
+    fail("audio build evidence is invalid");
   }
   const assessment = assertTrivyPolicy({
     report,
@@ -531,7 +517,7 @@ async function runDockerAcceptance({
       ),
     ),
     sbom,
-    evidence,
+    audioEvidence,
     imageId: imageInspect.Id,
   });
   writeFileSync(assessmentPath, `${JSON.stringify(assessment, null, 2)}\n`, {
@@ -539,7 +525,7 @@ async function runDockerAcceptance({
   });
   if (assessment.assessments.length > 0) {
     process.stdout.write(
-      "DOCKER VERIFY: CVE-2026-52490 not affected — vulnerable tiffcrop code is absent; raw Trivy finding retained\n",
+      `DOCKER VERIFY: ${assessment.assessments.length} findings assessed against this image; raw Trivy findings retained\n`,
     );
   }
 

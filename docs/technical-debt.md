@@ -6,7 +6,9 @@
   same-machine Speaches service pending a compatible FFmpeg update. App-managed
   Speaches inside the Electron distribution is planned, not implemented.
 - Potential exploit impact remains significant; remote or untrusted endpoints
-  are outside this acceptance. Scanner severity and Docker gates are unchanged.
+  are outside this acceptance. The restricted Docker audio build excludes CFHD;
+  its separate [code-absence assessment](security/docker-audio-build.md) does not
+  assess native host-installed FFmpeg. Scanner severity is unchanged.
 - Follow up on compatible upstream/Debian fixes and review by 2026-10-14 or on
   changed exposure evidence. A daily package-fix monitor is active in the task
   that recorded this decision.

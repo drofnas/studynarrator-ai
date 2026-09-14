@@ -105,6 +105,12 @@ The checked-in [.env.example](.env.example) documents the complete Compose-facin
 
 The Compose package fixes `STUDYNARRATOR_DATA_DIR` to `/data`, the only persistent container path. Direct Node and Electron runs can set `STUDYNARRATOR_DATA_DIR` to another writable directory. Set `STUDYNARRATOR_FFMPEG_PATH` only when FFmpeg is not discoverable on `PATH`.
 
+The Docker runtime uses a minimal Debian 13 Node image and an FFmpeg build limited
+to the application's WAV/MP3 audio operations. It contains no shell or package
+manager. Speech-service HTTP/HTTPS connections remain supported by the app.
+See the [audio build and security assessment](docs/security/docker-audio-build.md)
+for source, licenses, package inventory, and update validation.
+
 ## Troubleshooting
 
 ### StudyNarrator AI opens but reports Disconnected

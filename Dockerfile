@@ -1,6 +1,11 @@
 # syntax=docker/dockerfile:1.7
 
 ARG NODE_IMAGE=node:24-trixie-slim
+ARG RUNTIME_IMAGE=gcr.io/distroless/nodejs24-debian13:nonroot@sha256:bb6b03d81066993293a10feda7250e8e1cc034035fe9b61cfceededa7c8bf04d
+
+FROM ${NODE_IMAGE} AS audio
+COPY deploy/docker/build-audio.sh /build-audio.sh
+RUN sh /build-audio.sh
 
 FROM ${NODE_IMAGE} AS build
 WORKDIR /workspace
@@ -30,7 +35,7 @@ COPY packages packages
 RUN npm run build --workspace @studynarrator/web \
   && npm run build --workspace @studynarrator/server
 
-FROM ${NODE_IMAGE} AS runtime
+FROM ${RUNTIME_IMAGE} AS runtime
 
 ARG STUDYNARRATOR_VERSION=0.1.0
 ARG STUDYNARRATOR_SOURCE_REVISION=unknown
@@ -43,15 +48,7 @@ LABEL org.opencontainers.image.title="StudyNarrator AI" \
   org.opencontainers.image.source="${STUDYNARRATOR_SOURCE_URL}" \
   org.opencontainers.image.licenses="Apache-2.0"
 
-RUN apt-get update \
-  && apt-get install --yes --no-install-recommends ca-certificates ffmpeg tini \
-  && rm -rf /var/lib/apt/lists/* \
-  && dpkg --remove --force-depends --force-remove-essential perl-base \
-  && rm -rf /usr/local/lib/node_modules/npm \
-  && rm -f /usr/local/bin/npm /usr/local/bin/npx \
-  && groupadd --system --gid 10001 studynarrator \
-  && useradd --system --uid 10001 --gid 10001 --home-dir /nonexistent --shell /usr/sbin/nologin studynarrator \
-  && install --directory --owner=10001 --group=10001 --mode=0750 /data /app/apps/server/node_modules
+COPY --from=audio /runtime/ /
 
 WORKDIR /app
 COPY --from=build --chown=10001:10001 /workspace/apps/server/dist apps/server/dist
@@ -61,6 +58,7 @@ COPY --from=build --chown=10001:10001 /workspace/apps/server/node_modules/better
 COPY --chown=10001:10001 LICENSE ACKNOWLEDGMENTS.md ./
 
 ENV NODE_ENV=production \
+  PATH=/nodejs/bin:/usr/bin:/bin \
   STUDYNARRATOR_DATA_DIR=/data \
   STUDYNARRATOR_DISTRIBUTION=docker-web \
   STUDYNARRATOR_LISTEN_HOST=0.0.0.0 \

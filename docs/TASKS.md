@@ -1042,8 +1042,10 @@ if this intended catalog change affects them, and review the complete diff.
 from the left sidebar to queued, running, and recently completed work.
 
 **Current evidence:** The application already owns a render queue and typed
-per-project history/progress clients. AppShell has no render activity widget.
-Project navigation already accepts `?tab=render`. A second start on a project
+per-project history/progress clients. R27a now supplies global active-render
+activity and has passed the full Docker gate. R27b is Ready to add persistent
+unviewed results and exact-result navigation. Project navigation accepts
+`?tab=render`. A second start on a project
 with active work returns that job; preserve this behavior and the current queue.
 
 **Expected files:**
