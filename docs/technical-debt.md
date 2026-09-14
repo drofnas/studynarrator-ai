@@ -1,5 +1,18 @@
 # Technical debt register
 
+## CVE-2026-70632 — accepted low risk for trusted local speech
+
+- Owner decision on 2026-09-14: accept low contextual risk for a trusted,
+  same-machine Speaches service pending a compatible FFmpeg update. App-managed
+  Speaches inside the Electron distribution is planned, not implemented.
+- Potential exploit impact remains significant; remote or untrusted endpoints
+  are outside this acceptance. Scanner severity and Docker gates are unchanged.
+- Follow up on compatible upstream/Debian fixes and review by 2026-10-14 or on
+  changed exposure evidence. A daily package-fix monitor is active in the task
+  that recorded this decision.
+- Evidence, limits, and update requirements:
+  [CVE-2026-70632 risk decision](security/CVE-2026-70632.md).
+
 ## `render_jobs.plan_id` — vestigial column
 
 - Since the frozen-plan removal, `render_jobs.plan_id` is unused: each render
