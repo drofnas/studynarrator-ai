@@ -2,7 +2,7 @@
 import "@testing-library/jest-dom/vitest";
 import "@/test/domGeometry.js";
 import { EditorView } from "@codemirror/view";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { createRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -81,6 +81,67 @@ describe("ScriptSourceEditor", () => {
       from: 6,
       to: 12,
     });
+  });
+
+  it("searches the complete document with repeated keyboard navigation", () => {
+    const onChange = vi.fn();
+    const source = "First distant target\nSecond distant target";
+    render(<ScriptSourceEditor value={source} onChange={onChange} />);
+    const content = screen.getByRole("textbox", { name: "Script source" });
+
+    fireEvent.keyDown(content, { key: "f", code: "KeyF", ctrlKey: true });
+    const panel = screen.getByRole("search", { name: "Search script" });
+    const input = screen.getByRole("textbox", { name: "Find in script" });
+    fireEvent.input(input, { target: { value: "distant target" } });
+    expect(panel).toHaveTextContent("Matches found.");
+
+    fireEvent.click(screen.getByRole("button", { name: "Next match" }));
+    const firstMatch = editorView().state.selection.main;
+    expect(editorView().state.sliceDoc(firstMatch.from, firstMatch.to)).toBe(
+      "distant target",
+    );
+    expect(editorView().state.selection.main.from).toBe(
+      source.indexOf("distant target"),
+    );
+
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(editorView().state.selection.main.from).toBe(
+      source.lastIndexOf("distant target"),
+    );
+    fireEvent.keyDown(input, { key: "Enter", shiftKey: true });
+    expect(editorView().state.selection.main.from).toBe(
+      source.indexOf("distant target"),
+    );
+    expect(onChange).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(
+      screen.queryByRole("search", { name: "Search script" }),
+    ).not.toBeInTheDocument();
+    expect(content).toHaveFocus();
+  });
+
+  it("updates the no-match result when the script changes", () => {
+    const onChange = vi.fn();
+    const ref = createRef<ScriptSourceEditorHandle>();
+    render(
+      <ScriptSourceEditor
+        ref={ref}
+        value="Original script"
+        onChange={onChange}
+      />,
+    );
+    ref.current?.openSearch();
+    const input = screen.getByRole("textbox", { name: "Find in script" });
+    fireEvent.input(input, { target: { value: "new match" } });
+    expect(screen.getByRole("status")).toHaveTextContent("No matches.");
+
+    const view = editorView();
+    view.dispatch({
+      changes: { from: view.state.doc.length, insert: "\nNew match" },
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("Matches found.");
+    expect(onChange).toHaveBeenLastCalledWith("Original script\nNew match");
   });
 
   it("hands vertical wheel deltas to the page", () => {

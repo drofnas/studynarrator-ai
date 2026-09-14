@@ -56,6 +56,33 @@
 .root :global(.cm-selectionBackground) {
   background: #3b697a !important;
 }
+.root :global(.cm-panel.cm-search) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 10px;
+  color: #eaf6f5;
+  background: #10293f;
+  border-bottom: 1px solid #38546a;
+}
+.root :global(.cm-search .cm-textfield) {
+  flex: 1 1 14rem;
+  min-width: 0;
+  padding: 7px 9px;
+  color: var(--ink);
+  background: white;
+  border: 1px solid #6f94a5;
+}
+.root :global(.cm-searchStatus) {
+  min-width: 7.5rem;
+  font-size: 0.72rem;
+}
+.root :global(.cm-search button) {
+  min-height: 32px;
+  padding: 0 9px;
+  font-size: 0.68rem;
+}
 
 @media (max-width: 560px) {
   .root :global(.cm-gutters) {

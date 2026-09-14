@@ -421,6 +421,64 @@ test.describe("Settings and connection diagnostics", () => {
 });
 
 test.describe("Projects connected authoring", () => {
+  test("finds and selects repeated script text beyond the rendered viewport", async ({
+    page,
+    studyNarrator,
+  }) => {
+    await continueOffline(page, studyNarrator);
+    await createProject(page, "Searchable script");
+    const script = [
+      ...Array.from(
+        { length: 120 },
+        (_value, index) =>
+          `[speaker_teacher] Opening line ${String(index + 1)}.`,
+      ),
+      "[speaker_teacher] First distant target.",
+      ...Array.from(
+        { length: 120 },
+        (_value, index) =>
+          `[speaker_teacher] Closing line ${String(index + 1)}.`,
+      ),
+      "[speaker_teacher] Second distant target.",
+    ].join("\n");
+    const source = page.getByRole("textbox", { name: "Script source" });
+    await source.fill(script);
+    await page.getByRole("button", { name: "Search Script" }).click();
+
+    const search = page.getByRole("search", { name: "Search script" });
+    const find = search.getByRole("textbox", { name: "Find in script" });
+    await find.fill("distant target");
+    await expect(search.getByRole("status")).toHaveText("Matches found.");
+    await search.getByRole("button", { name: "Next match" }).click();
+
+    const selected = page.locator(".cm-searchMatch-selected");
+    await expect(selected).toHaveText("distant target");
+    await expect
+      .poll(async () => {
+        const box = await selected.boundingBox();
+        return box !== null && box.y >= 0 && box.y + box.height <= 800;
+      })
+      .toBe(true);
+    await search.getByRole("button", { name: "Next match" }).click();
+    await expect(
+      selected.locator("xpath=ancestor::*[contains(@class, 'cm-line')][1]"),
+    ).toContainText("Second distant target");
+    await search.getByRole("button", { name: "Previous match" }).click();
+    await expect(
+      selected.locator("xpath=ancestor::*[contains(@class, 'cm-line')][1]"),
+    ).toContainText("First distant target");
+
+    await find.press("Escape");
+    await expect(
+      page.getByRole("search", { name: "Search script" }),
+    ).toHaveCount(0);
+    await source.focus();
+    await page.keyboard.press(
+      `${process.platform === "darwin" ? "Meta" : "Control"}+f`,
+    );
+    await expect(find).toBeFocused();
+  });
+
   test("defaults and persists catalog voices while Details uses document scrolling without requesting TTS", async ({
     page,
     studyNarrator,

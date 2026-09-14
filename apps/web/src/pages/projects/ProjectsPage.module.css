@@ -348,6 +348,14 @@
 .sectionHeading .sourceMetrics {
   justify-content: flex-end;
 }
+.scriptTools {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  align-items: center;
+}
+.scriptTools button,
 .sourceActions button {
   min-height: 34px;
   padding: 0 10px;

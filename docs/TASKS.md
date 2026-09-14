@@ -62,7 +62,7 @@ Status values: `todo`, `in progress`, `blocked`, `deferred`, `complete`, `supers
 | R17 | Pin CI actions and configure Dependabot updates          | P2       | todo        | R07                                       |
 | R18 | Set the public repository description and topics         | P2       | complete    | none                                      |
 | R19 | Validate the desktop release workflow with an RC tag     | P2       | deferred    | R10; R13 in [future work](FUTURE_WORK.md) |
-| R22 | Search the complete project script                       | P1       | todo        | none                                      |
+| R22 | Search the complete project script                       | P1       | in progress | none                                      |
 | R23 | Remove the completed-output pin action                   | P1       | complete    | none                                      |
 | R24 | Write final MP3 tags with an ID3 package                 | P1       | todo        | R02; supersedes R03                       |
 | R25 | Show project-render storage in General settings          | P1       | todo        | none                                      |
