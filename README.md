@@ -160,6 +160,8 @@ npm run verify
 
 - [Setup (Speaches, model, first-run connection)](SETUP.md)
 - [Upgrading, downgrading, and your data](UPGRADE.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security policy and private vulnerability reporting](SECURITY.md)
 - [Docker Web operations](deploy/docker/README.md)
 - [Script grammar](docs/script-grammar-v1.md)
 - [Speaches compatibility baseline](docs/baselines/speaches.md)

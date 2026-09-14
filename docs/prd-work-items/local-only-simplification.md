@@ -72,7 +72,7 @@ Every row is a proposed new issue in `drofnas/studynarrator-ai`, subject to the 
 | R09  | Task  | Production Web                | P1       | Waiting         | R08                                    | —         |
 | R10a | Task  | Docker scanner                | P1       | In progress     | —                                      | R10b      |
 | R10b | Task  | Docker CI                     | P1       | Waiting         | R10a, R07a                             | —         |
-| R11  | Task  | Contributor documentation     | P1       | Ready           | —                                      | —         |
+| R11  | Task  | Contributor documentation     | P1       | Complete        | —                                      | —         |
 | R17  | Task  | Dependency maintenance        | P2       | Waiting         | R07a                                   | —         |
 | R22  | Story | Script editor                 | P1       | Ready           | —                                      | —         |
 | R24  | Task  | MP3 rendering                 | P1       | Decision needed | D1                                     | R12b      |
