@@ -67,7 +67,7 @@ Status values: `todo`, `in progress`, `blocked`, `deferred`, `complete`, `supers
 | R24 | Write final MP3 tags with an ID3 package                 | P1       | todo        | R02; supersedes R03                       |
 | R25 | Show project-render storage in General settings          | P1       | in progress | none                                      |
 | R26 | Update built-in Global Lexicon pronunciations            | P1       | in progress | none                                      |
-| R27 | Track active and unviewed renders in the sidebar         | P1       | in progress | none                                      |
+| R27 | Track active and unviewed renders in the sidebar         | P1       | complete    | none                                      |
 
 ## Detailed tasks
 
@@ -1042,10 +1042,10 @@ if this intended catalog change affects them, and review the complete diff.
 from the left sidebar to queued, running, and recently completed work.
 
 **Current evidence:** The application already owns a render queue and typed
-per-project history/progress clients. R27a now supplies global active-render
-activity and has passed the full Docker gate. R27b is Ready to add persistent
-unviewed results and exact-result navigation. Project navigation accepts
-`?tab=render`. A second start on a project
+per-project history/progress clients. R27a supplies global active-render
+activity and a verified restricted Docker audio runtime. R27b retains unviewed
+results across reloads and opens exact results with `?tab=render&render=<job ID>`.
+Both slices passed the full verifier; see the [R27b completion report](implement-prd-stories/r27b-render-results.md). A second start on a project
 with active work returns that job; preserve this behavior and the current queue.
 
 **Expected files:**

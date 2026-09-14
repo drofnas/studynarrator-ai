@@ -278,8 +278,12 @@ test.describe("Electron acceptance", () => {
     await expect(
       page.getByRole("heading", { name: "Projects", exact: true }),
     ).toBeVisible();
-    await openProject(page, "Desktop current render");
-    await page.getByRole("tab", { name: "Render" }).click();
+    await page
+      .getByRole("link", { name: /Desktop current render: Render complete/u })
+      .click();
+    await expect(page).toHaveURL(
+      new RegExp(`render=${firstRenders[0]!.id}$`, "u"),
+    );
     await expect(
       page.getByLabel(/Audio player for Completed project render/u),
     ).toBeVisible();
@@ -308,6 +312,20 @@ test.describe("Electron acceptance", () => {
     expect(
       studyNarrator.fakeSpeaches.getState().counters["/v1/audio/speech"] ?? 0,
     ).toBe(2);
+    page = await electronStudyNarrator.relaunch();
+    await expect(
+      page.getByRole("heading", { name: "Projects", exact: true }),
+    ).toBeVisible();
+    await openProject(page, "Desktop current render");
+    await page.getByRole("tab", { name: "Render" }).click();
+    await expect(
+      page.getByLabel("Audio player for Completed project render"),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", {
+        name: /Desktop current render: Render complete/u,
+      }),
+    ).toHaveCount(0);
   });
 
   test("auto-resumes an interrupted render and saves a validated artifact through native IPC", async ({

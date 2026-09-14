@@ -23,6 +23,7 @@ import {
 } from "@studynarrator/core";
 import {
   ProjectReplaceInputSchema,
+  RenderIdSchema,
   DEFAULT_SYSTEM_TIMING,
   RENDER_DISK_HARD_RESERVE_PERCENT,
   RENDER_DISK_SOFT_RESERVE_PERCENT,
@@ -36,7 +37,6 @@ import {
   type ProjectPreviewClient,
   type ProjectReplaceInput,
   type RenderEstimateContextResult,
-  type RenderJob,
   type RenderStartOptions,
   type RenderWaveform,
   type VoiceCatalog,
@@ -240,7 +240,10 @@ export function useProjectsPageController({
     stop: stopSegmentAudition,
   } = useAudioAudition<number>();
   const [previewError, setPreviewError] = useState("");
-  const [completedRenderJob, setCompletedRenderJob] = useState<RenderJob>();
+  const [checkedRender, setCheckedRender] = useState<{
+    id: string;
+    available: boolean;
+  }>();
   const [renderStarting, setRenderStarting] = useState(false);
   const [diskSpaceCheckEnabled, setDiskSpaceCheckEnabled] = useState(
     storedDiskSpaceCheckEnabled,
@@ -429,23 +432,52 @@ export function useProjectsPageController({
   const voiceDefaultId =
     selectedConnection?.defaultVoiceId ?? GLOBAL_VOICE_CATALOG_DEFAULT_VOICE_ID;
   const speechCatalogState = connections.catalog;
-  const projectRenderJobs = projectId
-    ? (renderActivity.projects[projectId]?.jobs ?? [])
-    : [];
-  const selectedRenderJob = projectRenderJobs[0];
-  const completedRenderCandidate = projectRenderJobs.find(
-    ({ state }) => state === "complete",
+  const projectActivity = projectId
+    ? renderActivity.projects[projectId]
+    : undefined;
+  const projectRenderJobs = projectActivity?.jobs ?? [];
+  const requestedRender = searchParams.get("render");
+  const requestedRenderId = RenderIdSchema.safeParse(requestedRender);
+  const selectedRenderJob =
+    requestedRender !== null
+      ? projectRenderJobs.find(
+          ({ id }) =>
+            requestedRenderId.success && id === requestedRenderId.data,
+        )
+      : projectRenderJobs[0];
+  const activeRenderJob = projectRenderJobs.find(
+    ({ state }) => !terminalRenderStates.has(state),
   );
-  const renderActive =
-    renderStarting ||
-    Boolean(
-      selectedRenderJob && !terminalRenderStates.has(selectedRenderJob.state),
-    );
+  const completedRenderCandidate =
+    requestedRender !== null
+      ? selectedRenderJob?.state === "complete"
+        ? selectedRenderJob
+        : undefined
+      : projectRenderJobs.find(({ state }) => state === "complete");
+  const candidateId = completedRenderCandidate?.id;
+  const candidateUnavailable =
+    candidateId !== undefined &&
+    projectActivity?.unavailable.includes(candidateId);
+  const completedRenderJob =
+    checkedRender?.id === candidateId &&
+    checkedRender?.available &&
+    !candidateUnavailable
+      ? completedRenderCandidate
+      : undefined;
+  const completedRenderId = completedRenderJob?.id;
+  const requestedRenderUnavailable =
+    requestedRender !== null &&
+    Boolean(projectActivity) &&
+    (!selectedRenderJob ||
+      candidateUnavailable ||
+      (checkedRender?.id === candidateId &&
+        checkedRender?.available === false));
+  const renderActive = renderStarting || Boolean(activeRenderJob);
 
   useEffect(() => {
     renderStartOperationRef.current += 1;
     setRenderStarting(false);
-    setCompletedRenderJob(undefined);
+    setCheckedRender(undefined);
     setRenderWaveform(undefined);
   }, [projectId]);
 
@@ -582,7 +614,7 @@ export function useProjectsPageController({
     draftRef.current = undefined;
     setAnalysis(undefined);
     setConfiguration({ speakers: [], pauses: [], sections: [] });
-    setCompletedRenderJob(undefined);
+    setCheckedRender(undefined);
     setRenderStarting(false);
     setRenderWaveform(undefined);
   }, [clearAutosave, projectId]);
@@ -610,17 +642,18 @@ export function useProjectsPageController({
   }, [clearAutosave, projectId, projectQuery.data, sharedPersistenceDataReady]);
 
   useEffect(() => {
-    if (!renderClient || !completedRenderCandidate) {
-      setCompletedRenderJob(undefined);
-      return;
-    }
+    setCheckedRender(undefined);
+    setRenderError("");
+    if (!renderClient || !candidateId) return;
     let active = true;
-    setCompletedRenderJob(undefined);
     void renderClient
-      .listArtifacts(completedRenderCandidate.id)
+      .listArtifacts(candidateId)
       .then((artifacts) => {
-        if (active && artifacts.some(({ type }) => type === "mp3"))
-          setCompletedRenderJob(completedRenderCandidate);
+        if (active)
+          setCheckedRender({
+            id: candidateId,
+            available: artifacts.some(({ type }) => type === "mp3"),
+          });
       })
       .catch((error: unknown) => {
         if (active) setRenderError(message(error));
@@ -628,17 +661,14 @@ export function useProjectsPageController({
     return () => {
       active = false;
     };
-  }, [completedRenderCandidate, renderClient]);
+  }, [candidateId, renderClient]);
 
   useEffect(() => {
-    if (!renderClient || !completedRenderJob) {
-      setRenderWaveform(undefined);
-      return;
-    }
-    let active = true;
     setRenderWaveform(undefined);
+    if (!renderClient || !completedRenderId) return;
+    let active = true;
     void renderClient
-      .getWaveform(completedRenderJob.id)
+      .getWaveform(completedRenderId)
       .then((waveform) => {
         if (active) setRenderWaveform(waveform);
       })
@@ -648,7 +678,7 @@ export function useProjectsPageController({
     return () => {
       active = false;
     };
-  }, [completedRenderJob, renderClient]);
+  }, [completedRenderId, renderClient]);
 
   const updateDraft = useCallback(
     (updater: (current: ProjectDraft) => ProjectDraft, autosave = true) => {
@@ -1270,6 +1300,7 @@ export function useProjectsPageController({
       });
       renderActivity.track(job, project.name);
       if (!isCurrentRenderStart()) return;
+      setSearchParams({ tab: "render" });
       setNotice(startNotice);
     } catch (error) {
       if (isCurrentRenderStart()) setRenderError(message(error));
@@ -1356,8 +1387,9 @@ export function useProjectsPageController({
     setDiskSpaceCheckEnabled,
     renderError,
     setRenderError,
-    renderStarting,
     selectedRenderJob,
+    activeRenderJob,
+    requestedRenderUnavailable,
     completedRenderJob,
     renderWaveform,
   };

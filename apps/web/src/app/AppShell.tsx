@@ -144,7 +144,7 @@ export function AppShell() {
 
   useEffect(() => {
     setDrawerOpen(false);
-  }, [location.pathname]);
+  }, [location.key]);
 
   useEffect(() => {
     if (!mobile || !drawerOpen) return;

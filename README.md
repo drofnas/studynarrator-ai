@@ -111,6 +111,19 @@ manager. Speech-service HTTP/HTTPS connections remain supported by the app.
 See the [audio build and security assessment](docs/security/docker-audio-build.md)
 for source, licenses, package inventory, and update validation.
 
+## Render activity
+
+The sidebar keeps queued/running renders and unviewed completed, failed, or
+canceled results available while you work elsewhere. Open a result there to view
+its exact Render tab output and remove its notification. Opening active work
+keeps its later completion unviewed. Older results remain selectable until their
+audio is removed by retention or cleanup.
+
+Viewed state is stored locally for this browser or desktop profile using only
+render IDs. It survives reloads and desktop restarts; clearing browser storage
+resets it. If local storage is unavailable, viewed state lasts for the current
+session. The app periodically reconciles activity with existing render history.
+
 ## Troubleshooting
 
 ### StudyNarrator AI opens but reports Disconnected

@@ -124,7 +124,10 @@ export function createRestRenderClient(
 
       source.addEventListener("progress", (event) => {
         const job = parse(event as MessageEvent<string>);
-        if (job) onJob(job);
+        if (job) {
+          dropped = false;
+          onJob(job);
+        }
       });
       source.addEventListener("terminal", (event) => {
         const job = parse(event as MessageEvent<string>);

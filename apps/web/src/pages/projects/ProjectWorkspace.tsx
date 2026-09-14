@@ -15,10 +15,7 @@ import {
   storeDiskSpaceCheckEnabled,
   type ProjectPageController,
 } from "./useProjectsPageController.js";
-import {
-  renderProgressLabel,
-  terminalRenderStates,
-} from "@/features/renders/RenderActivityProvider.js";
+import { renderProgressLabel } from "@/features/renders/RenderActivityProvider.js";
 
 export function ProjectWorkspace({
   controller,
@@ -58,8 +55,9 @@ export function ProjectWorkspace({
     setDiskSpaceCheckEnabled,
     renderError,
     setRenderError,
-    renderStarting,
     selectedRenderJob,
+    activeRenderJob,
+    requestedRenderUnavailable,
     completedRenderJob,
     renderWaveform,
   } = controller;
@@ -268,36 +266,30 @@ export function ProjectWorkspace({
                   <div className={styles.renderProgress} aria-live="polite">
                     <div>
                       <strong>
-                        {renderStarting &&
-                        (!selectedRenderJob ||
-                          terminalRenderStates.has(selectedRenderJob.state))
-                          ? "Preparing render…"
-                          : selectedRenderJob
-                            ? renderProgressLabel(selectedRenderJob)
-                            : "Preparing render…"}
+                        {activeRenderJob
+                          ? renderProgressLabel(activeRenderJob)
+                          : "Preparing render…"}
                       </strong>
-                      {selectedRenderJob &&
-                      !terminalRenderStates.has(selectedRenderJob.state) &&
-                      selectedRenderJob.progress.totalChunks > 0 ? (
+                      {activeRenderJob &&
+                      activeRenderJob.progress.totalChunks > 0 ? (
                         <span>
-                          {selectedRenderJob.progress.completedChunks.toLocaleString()}{" "}
+                          {activeRenderJob.progress.completedChunks.toLocaleString()}{" "}
                           of{" "}
-                          {selectedRenderJob.progress.totalChunks.toLocaleString()}{" "}
+                          {activeRenderJob.progress.totalChunks.toLocaleString()}{" "}
                           chunks complete
                         </span>
                       ) : null}
                     </div>
-                    {selectedRenderJob &&
-                    !terminalRenderStates.has(selectedRenderJob.state) &&
-                    selectedRenderJob.progress.totalChunks > 0 ? (
+                    {activeRenderJob &&
+                    activeRenderJob.progress.totalChunks > 0 ? (
                       <progress
                         aria-label="Render chunk progress"
-                        max={selectedRenderJob.progress.totalChunks}
-                        value={selectedRenderJob.progress.completedChunks}
+                        max={activeRenderJob.progress.totalChunks}
+                        value={activeRenderJob.progress.completedChunks}
                       >
                         {Math.floor(
-                          (selectedRenderJob.progress.completedChunks /
-                            selectedRenderJob.progress.totalChunks) *
+                          (activeRenderJob.progress.completedChunks /
+                            activeRenderJob.progress.totalChunks) *
                             100,
                         )}
                         %
@@ -309,6 +301,14 @@ export function ProjectWorkspace({
                     )}
                   </div>
                 ) : null}
+                {requestedRenderUnavailable ? (
+                  <p role="status">
+                    This render result is no longer available.
+                  </p>
+                ) : null}
+                {selectedRenderJob?.state === "canceled" ? (
+                  <p role="status">This render was canceled.</p>
+                ) : null}
                 {selectedRenderJob?.error ? (
                   <p className={styles.fieldError} role="alert">
                     {selectedRenderJob.error.message}
@@ -316,6 +316,20 @@ export function ProjectWorkspace({
                 ) : null}
                 {renderClient && completedRenderJob ? (
                   <div className={styles.renderResult}>
+                    <p>
+                      Rendered{" "}
+                      <time
+                        dateTime={
+                          completedRenderJob.finishedAt ??
+                          completedRenderJob.createdAt
+                        }
+                      >
+                        {new Date(
+                          completedRenderJob.finishedAt ??
+                            completedRenderJob.createdAt,
+                        ).toLocaleString()}
+                      </time>
+                    </p>
                     <SharedAudioPlayer
                       label="Completed project render"
                       src={renderClient.renderAudioSource(

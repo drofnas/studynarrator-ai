@@ -82,11 +82,118 @@ test.describe("render execution", () => {
       .toBeGreaterThan(initialProgress);
     await page.getByRole("link", { name: /Network activity: /u }).click();
     await expect(page).toHaveURL(
-      new RegExp(`/projects/${second.id}\\?tab=render$`, "u"),
+      new RegExp(`/projects/${second.id}\\?tab=render&render=[a-f0-9-]+$`, "u"),
     );
     await expect(
       page.getByRole("heading", { name: "Render and listen" }),
     ).toBeVisible();
+  });
+
+  test("restores unviewed results and opens an older exact result through the mobile drawer", async ({
+    page,
+    request,
+    studyNarrator,
+  }) => {
+    await configureConnection(page, studyNarrator);
+    const created = await request.post(
+      `${studyNarrator.baseUrl}/api/projects`,
+      { data: { name: "Persistent results" } },
+    );
+    const project = (await created.json()) as { id: string };
+    const input = {
+      name: "Persistent results",
+      description: "Result navigation fixture.",
+      scriptSource: "[speaker_teacher] First result.",
+      speakerMappings: [
+        {
+          speakerId: "teacher",
+          displayName: "Teacher",
+          voiceId: "af_heart",
+          speed: 1,
+          gainDb: 0,
+          roleDescription: "",
+          sampleText: "",
+        },
+      ],
+      lexiconEntries: [],
+    };
+    const start = async (scriptSource: string) => {
+      const updated = await request.put(
+        `${studyNarrator.baseUrl}/api/projects/${project.id}`,
+        { data: { ...input, scriptSource } },
+      );
+      expect(updated.ok()).toBe(true);
+      await openRoute(
+        page,
+        studyNarrator,
+        `/projects/${project.id}?tab=render`,
+      );
+      await page.reload();
+      const response = page.waitForResponse(
+        (response) =>
+          response.request().method() === "POST" &&
+          response.url().endsWith(`/api/projects/${project.id}/renders`),
+      );
+      await page.getByRole("button", { name: "Render", exact: true }).click();
+      const rendered = (await (await response).json()) as { id: string };
+      await expect(
+        page.locator(
+          `a[href="#/projects/${project.id}?tab=render&render=${rendered.id}"]`,
+        ),
+      ).toContainText("Render complete");
+      return rendered.id;
+    };
+    const older = await start(input.scriptSource);
+    const newer = await start("[speaker_teacher] Second distinct result.");
+    expect(newer).not.toBe(older);
+    await page.reload();
+    await expect(
+      page.getByRole("link", { name: /Persistent results: Render complete/u }),
+    ).toHaveCount(2);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole("button", { name: "Open navigation" }).click();
+    const olderLink = page.locator(
+      `a[href="#/projects/${project.id}?tab=render&render=${older}"]`,
+    );
+    await page.screenshot({
+      path: test.info().outputPath("mobile-results.png"),
+    });
+    await olderLink.focus();
+    await olderLink.press("Enter");
+    await expect(page).toHaveURL(
+      `${studyNarrator.baseUrl}/#/projects/${project.id}?tab=render&render=${older}`,
+    );
+    await expect(
+      page.getByRole("button", { name: "Open navigation" }),
+    ).toHaveAttribute("aria-expanded", "false");
+    await expect(
+      page
+        .getByLabel("Audio player for Completed project render")
+        .locator("audio"),
+    ).toHaveAttribute("src", `/api/renders/${older}/audio`);
+    await page.reload();
+    await expect(
+      page
+        .getByLabel("Audio player for Completed project render")
+        .locator("audio"),
+    ).toHaveAttribute("src", `/api/renders/${older}/audio`);
+    await page.getByRole("button", { name: "Open navigation" }).click();
+    await expect(olderLink).toHaveCount(0);
+    const newerLink = page.locator(
+      `a[href="#/projects/${project.id}?tab=render&render=${newer}"]`,
+    );
+    await expect(newerLink).toBeVisible();
+    await newerLink.click();
+    await expect(
+      page
+        .getByLabel("Audio player for Completed project render")
+        .locator("audio"),
+    ).toHaveAttribute("src", `/api/renders/${newer}/audio`);
+    await page.reload();
+    await page.getByRole("button", { name: "Open navigation" }).click();
+    await expect(
+      page.getByRole("region", { name: "Render activity" }),
+    ).toHaveCount(0);
   });
 
   test("renders, reuses unchanged edits, downloads MP3 and the exact evidence package, and restores the latest render", async ({

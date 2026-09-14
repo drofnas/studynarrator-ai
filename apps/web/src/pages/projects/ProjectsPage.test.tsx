@@ -351,8 +351,14 @@ function renderClientFixture(
     setPinned: vi.fn(async () => fallbackJob),
     listArtifacts: vi.fn(async (renderId: string) => [mp3Artifact(renderId)]),
     exportArtifact: vi.fn(),
-    exportAudio: vi.fn(),
-    exportDetails: vi.fn(),
+    exportAudio: vi.fn(async () => ({
+      disposition: "download" as const,
+      fileName: "render.mp3",
+    })),
+    exportDetails: vi.fn(async () => ({
+      disposition: "download" as const,
+      fileName: "details.zip",
+    })),
     listSegments: vi.fn(async () => []),
     getWaveform: vi.fn(async () => ({
       status: "unavailable" as const,
@@ -2788,6 +2794,127 @@ describe("Projects workbench", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Pin completed output" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens an older exact result and keeps a newer active render separate", async () => {
+    const { client, analyze } = fixture();
+    const older = renderJobFixture(
+      "00000000-0000-4000-8000-000000000093",
+      "complete",
+    );
+    const newer = {
+      ...renderJobFixture("00000000-0000-4000-8000-000000000094", "complete"),
+      createdAt: "2026-08-13T14:00:00.000Z",
+    };
+    const active = {
+      ...renderJobFixture(
+        "00000000-0000-4000-8000-000000000095",
+        "synthesizing",
+        2,
+      ),
+      createdAt: "2026-08-14T14:00:00.000Z",
+    };
+    const renderClient = renderClientFixture(
+      [active, newer, older],
+      async () => active,
+      () => () => undefined,
+    );
+    const renderAudioSource = vi.spyOn(renderClient, "renderAudioSource");
+    const getWaveform = vi.spyOn(renderClient, "getWaveform");
+    renderPage(client, analyze, {
+      renderClient,
+      path: `/projects/${project.id}?tab=render&render=${older.id}`,
+    });
+    const player = await screen.findByLabelText(
+      "Audio player for Completed project render",
+    );
+    expect(renderAudioSource).toHaveBeenLastCalledWith(older.id);
+    expect(getWaveform).toHaveBeenCalledWith(older.id);
+    expect(screen.getByText("2 of 4 chunks complete")).toBeInTheDocument();
+    expect(player).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("button", { name: "Rendering…" })).toBeDisabled();
+  });
+
+  it("downloads the selected older result and its exact details", async () => {
+    const { client, analyze } = fixture();
+    const older = renderJobFixture(
+      "00000000-0000-4000-8000-000000000093",
+      "complete",
+    );
+    const newer = {
+      ...renderJobFixture("00000000-0000-4000-8000-000000000094", "complete"),
+      createdAt: "2026-08-13T14:00:00.000Z",
+    };
+    const renderClient = renderClientFixture([newer, older], async () => newer);
+    const exportAudio = vi.spyOn(renderClient, "exportAudio");
+    const exportDetails = vi.spyOn(renderClient, "exportDetails");
+    renderPage(client, analyze, {
+      renderClient,
+      path: `/projects/${project.id}?tab=render&render=${older.id}`,
+    });
+    await screen.findByLabelText("Audio player for Completed project render");
+    await userEvent.click(screen.getByRole("button", { name: "Download" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Download Details" }),
+    );
+    expect(exportAudio).toHaveBeenCalledWith(older.id);
+    expect(exportDetails).toHaveBeenCalledWith(older.id);
+  });
+
+  it.each([
+    "invalid-sentinel-private-input",
+    "00000000-0000-4000-8000-000000000099",
+  ])(
+    "does not substitute the latest audio for an unavailable result: %s",
+    async (renderId) => {
+      const { client, analyze } = fixture();
+      const latest = renderJobFixture(
+        "00000000-0000-4000-8000-000000000094",
+        "complete",
+      );
+      const renderClient = renderClientFixture([latest], async () => latest);
+      const renderAudioSource = vi.spyOn(renderClient, "renderAudioSource");
+      renderPage(client, analyze, {
+        renderClient,
+        path: `/projects/${project.id}?tab=render&render=${renderId}`,
+      });
+      expect(
+        await screen.findByText("This render result is no longer available."),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByLabelText("Audio player for Completed project render"),
+      ).not.toBeInTheDocument();
+      expect(renderAudioSource).not.toHaveBeenCalled();
+      expect(document.body.textContent).not.toContain(
+        "invalid-sentinel-private-input",
+      );
+    },
+  );
+
+  it("shows cancellation for the selected job without offering a different result", async () => {
+    const { client, analyze } = fixture();
+    const canceled = renderJobFixture(
+      "00000000-0000-4000-8000-000000000093",
+      "canceled",
+    );
+    const latest = renderJobFixture(
+      "00000000-0000-4000-8000-000000000094",
+      "complete",
+    );
+    const renderClient = renderClientFixture(
+      [latest, canceled],
+      async () => canceled,
+    );
+    renderPage(client, analyze, {
+      renderClient,
+      path: `/projects/${project.id}?tab=render&render=${canceled.id}`,
+    });
+    expect(
+      await screen.findByText("This render was canceled."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Download" }),
     ).not.toBeInTheDocument();
   });
 

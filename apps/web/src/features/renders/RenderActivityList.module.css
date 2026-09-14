@@ -49,7 +49,8 @@
 }
 
 .activity strong,
-.activity a span {
+.activity a span,
+.activity time {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -59,7 +60,8 @@
   font-size: 0.78rem;
 }
 
-.activity a span {
+.activity a span,
+.activity time {
   color: #557080;
   font-size: 0.7rem;
 }

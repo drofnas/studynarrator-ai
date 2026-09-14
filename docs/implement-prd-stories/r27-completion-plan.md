@@ -61,3 +61,12 @@ behavior for R27b. Generated artifacts remain uncommitted under `.tmp/`.
 Do not bundle Speaches, alter supported external endpoints, change database
 semantics, weaken unrelated gates, implement other backlog items, push, or
 publish. Keep a truthful non-Complete status if a required gate cannot pass.
+
+## Completion
+
+Both authorized slices passed their full repository verifiers and review fixes.
+R27a is checkpoint `ea9d2e4`; R27b is the subsequent validated local checkpoint.
+See the [R27a report](r27a-render-activity.md) and
+[R27b report](r27b-render-results.md) for exact outcomes and validation evidence.
+The local work-item table and canonical R27 now record completion; R27b has no
+dependency-linked successors. No remote submission was requested.
