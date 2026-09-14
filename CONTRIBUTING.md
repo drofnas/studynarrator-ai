@@ -46,6 +46,38 @@ Pull requests targeting the default branch must pass the GitHub Actions `check`
 job. It runs Knip, formatting, lint, typechecking, and both Vitest suites together
 with coverage thresholds. Web end-to-end tests remain a separate `e2e` job.
 
+## Review dependency updates
+
+After `.github/dependabot.yml` reaches the default branch, Dependabot checks the
+root npm workspace and GitHub Actions on the first day of each month at 09:00
+America/Los_Angeles. Each ecosystem allows five open version-update PRs. The root
+lockfile covers all npm workspaces; do not add duplicate per-workspace schedules.
+Security updates remain enabled independently of the monthly schedule.
+
+The `development-tools` group includes only minor and patch updates to the listed
+development tools. Runtime dependencies, major updates, Electron, Electron
+Builder, `better-sqlite3`, Vite, esbuild, and Playwright remain separate. A package
+used at runtime anywhere in the repository must stay out of the group, even if
+another workspace lists it as a development dependency.
+
+Review release notes and the full manifest and lockfile diff before merging.
+Preserve the Node.js pin in `.nvmrc` and npm pin in `packageManager`; toolchain
+changes require a separate reviewed task. If a grouped update fails, split it
+into individual updates to isolate the failure. Electron or `better-sqlite3`
+updates also require the affected native rebuilds, Electron acceptance, and
+installer/package validation. Run the full verifier and never bypass failing
+checks to clear the update queue. Updates require review; auto-merge is disabled.
+
+Keep action references pinned to full commit SHAs from their owning repositories,
+with the exact release tag in a comment. Verify both when reviewing action
+updates. CI, including Dependabot PRs, uses a read-only token and no secrets;
+only the draft-release job has `contents: write`.
+
+Run `npm audit --omit=dev` as an explicit maintainer or release check when needed.
+It is not a required PR gate: advisory-service availability must not determine
+whether deterministic checks pass. License inventory and the Docker image policy
+remain separate checks.
+
 ## Keep changes within the existing architecture
 
 - Put deterministic domain logic in `packages/core`, orchestration in

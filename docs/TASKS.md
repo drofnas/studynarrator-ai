@@ -59,7 +59,7 @@ Status values: `todo`, `in progress`, `blocked`, `deferred`, `complete`, `supers
 | R09 | Add and verify a production Content Security Policy      | P1       | todo        | R08                                       |
 | R10 | Enforce Docker distribution verification in CI           | P1       | in progress | R07                                       |
 | R11 | Add contributor and vulnerability-reporting guides       | P1       | complete    | none                                      |
-| R17 | Pin CI actions and configure Dependabot updates          | P2       | todo        | R07a (complete)                           |
+| R17 | Pin CI actions and configure Dependabot updates          | P2       | complete    | R07a (complete)                           |
 | R18 | Set the public repository description and topics         | P2       | complete    | none                                      |
 | R19 | Validate the desktop release workflow with an RC tag     | P2       | deferred    | R10; R13 in [future work](FUTURE_WORK.md) |
 | R22 | Search the complete project script                       | P1       | in progress | none                                      |
@@ -711,18 +711,22 @@ npx prettier --check CONTRIBUTING.md SECURITY.md README.md
 
 ### R17: Pin CI actions and configure Dependabot updates
 
-**Readiness (2026-09-14):** Ready under the accepted local dependency table:
-its sole prerequisite, R07a, is complete. R07b is not a prerequisite.
+**Completion evidence (2026-09-14):** Implemented monthly reviewed Dependabot
+updates, pinned all 12 workflow action references, and restricted release write
+access to the draft-release job. YAML checks, Actionlint, Ponytail review, and
+the full repository verifier passed. See the
+[R17 implementation report](implement-prd-stories/r17-dependency-maintenance.md).
+Version-update scheduling activates when the configuration reaches the default
+branch; this checkpoint completes the authorized local implementation.
 
 **Goal:** Reduce dependency and workflow supply-chain drift without adding a
 mandatory audit job that fails on advisory-service noise.
 
-**Scope decision:** Keep this task. The repository has npm dependencies across
-multiple workspaces, native Electron/server dependencies, and release-capable
-workflows, while every current GitHub Action reference uses a mutable major tag
-and no Dependabot configuration exists. GitHub's repository settings complement
-this task but do not replace its reviewed configuration. Do not add auto-merge or
-a second update bot.
+**Scope decision:** Keep this task. At the task baseline, the repository had npm
+dependencies across multiple workspaces, native Electron/server dependencies,
+and release-capable workflows, but all action references used mutable major tags
+and no Dependabot configuration existed. GitHub's repository settings complement
+the reviewed configuration. Do not add auto-merge or a second update bot.
 
 **Repository settings completion evidence (August 31, 2026):**
 
