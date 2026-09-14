@@ -15,18 +15,7 @@ Requirements: Docker Engine or Docker Desktop with Docker Compose.
 3. Open <http://127.0.0.1:8080> and enter the separately installed Speaches address during onboarding.
 4. Load the catalog, review the selected model and default voice, then choose **Save and Test**.
 
-The supplied Compose package binds to loopback by default. Change `STUDYNARRATOR_BIND_ADDRESS` only when browser access from another device is intentional and the surrounding network is trusted.
-
-StudyNarrator also validates every HTTP `Host` header. By default it accepts only `localhost`, `127.0.0.1`, and `[::1]` (with or without a port), plus its configured listen host. For intentional LAN or reverse-proxy exposure, use a custom Compose override to pass the additional comma-separated hosts into the container:
-
-```yaml
-services:
-  study-narrator:
-    environment:
-      STUDYNARRATOR_ALLOWED_HOSTS: study.example.test,192.168.1.50
-```
-
-Do not treat the Compose `.env` file as container environment configuration: the supplied Compose file uses it only for host binding, ports, and image metadata. Keep the allowlist narrow; this setting does not add authentication.
+The supplied Compose package publishes the Web UI on `127.0.0.1` only. Its `.env` file configures the host port and image metadata; Speaches connection settings are entered inside StudyNarrator.
 
 ## Connect to Speaches
 
@@ -63,7 +52,7 @@ The default named volume inherits the image's non-root ownership. For a bind mou
 
 The image contains Node.js, the compiled StudyNarrator Web/server application, FFmpeg, CA certificates, the Apache-2.0 `LICENSE`, and `ACKNOWLEDGMENTS.md`. It runs as UID/GID 10001, drops Linux capabilities, prevents privilege escalation, uses a read-only root filesystem, and writes persistent application state only under `/data`.
 
-StudyNarrator supports unauthenticated Speaches servers. Connection settings are stored in the application data volume and are not supplied through Compose environment variables.
+StudyNarrator supports unauthenticated Speaches servers. Connection settings are stored in the application data volume and are not supplied through Compose environment variables. The local-only boundary applies to the StudyNarrator Web UI; Speaches may run on the Docker host or another private-network machine.
 
 ## Release verification
 

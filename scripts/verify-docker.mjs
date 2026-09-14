@@ -757,7 +757,6 @@ async function main() {
         const fakeApplicationUrl = `http://host.docker.internal:${fakePort}`;
 
         composeEnvironment = {
-          STUDYNARRATOR_BIND_ADDRESS: "127.0.0.1",
           STUDYNARRATOR_HOST_PORT: String(hostPort),
           STUDYNARRATOR_IMAGE_TAG: resourceNames.imageVersionTag,
           STUDYNARRATOR_SOURCE_REVISION: sourceRevision,

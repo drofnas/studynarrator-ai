@@ -53,7 +53,7 @@ Status values: `todo`, `in progress`, `blocked`, `deferred`, `complete`, `supers
 | R03 | Remove `node-id3` and its obsolete wrapper               | P1       | superseded  | replaced by R24                           |
 | R04 | Reject redirects from every Speaches request             | P0       | todo        | none                                      |
 | R05 | Correct runtime documentation and the product title      | P1       | todo        | R02                                       |
-| R06 | Make Compose LAN allowlisting work from `.env`           | P1       | todo        | none                                      |
+| R06 | Keep the Docker Web launcher local                       | P1       | in progress | none                                      |
 | R07 | Enforce coverage and dead-code checks in pull-request CI | P1       | in progress | none                                      |
 | R08 | Set explicit Web response security headers               | P1       | todo        | none                                      |
 | R09 | Add and verify a production Content Security Policy      | P1       | todo        | R08                                       |
@@ -392,38 +392,40 @@ npm test -- apps/web/src/app/App.test.tsx
 
 **Commit:** `docs(setup): align runtime requirements and product title`
 
-### R06: Make Compose LAN allowlisting work from `.env`
+### R06: Keep the Docker Web launcher local
 
-**Goal:** Let a user opt into LAN binding with the supplied Compose file while
-keeping loopback as the default.
+**Goal:** Keep the supported Docker Web launcher available to one person on the
+local machine without adding LAN access, accounts, or authentication.
 
 **Expected files:**
 
 - `compose.yaml`
 - `.env.example`
 - `README.md`
+- `SETUP.md`
 - `deploy/docker/README.md`
-- `e2e/docker/distribution.spec.ts` or `scripts/verify-docker.mjs`
+- `scripts/verify-docker.mjs`
 
 **Work:**
 
-1. Forward `STUDYNARRATOR_ALLOWED_HOSTS` from Compose interpolation into the
-   container environment.
-2. Keep an unset or empty value equivalent to the current loopback allowlist.
-3. Update `.env.example` so a user can set the bind address and allowlist in the
-   same file without a custom override.
-4. State that LAN exposure has no application authentication and belongs on a
-   trusted network.
-5. Add Docker verification for an allowed custom Host header and a rejected Host
-   header. Keep the default loopback case.
+1. Use the existing `docker compose up --build --detach` command as the local
+   launcher; do not add a wrapper script.
+2. Fix the Compose port publication to `127.0.0.1` while retaining the
+   configurable host port.
+3. Remove the bind-address and LAN-allowlist knobs and their guidance from the
+   supported Docker configuration.
+4. State that Docker Web is opened locally. Preserve supported external
+   Speaches endpoints, including Docker-to-host and private-network addresses.
+5. Keep Docker verification on the loopback URL and remove obsolete verifier
+   configuration for the bind address.
 
 **Acceptance:**
 
-- Default Compose startup still binds to `127.0.0.1`.
-- A configured LAN host passes the Host-header middleware.
-- An unlisted host returns the current sanitized rejection.
-- Documentation gives one supported path instead of an `.env` plus override
-  sequence.
+- Rendered Compose configuration publishes the Web UI on `127.0.0.1` only.
+- `.env.example` exposes no StudyNarrator bind-address or Host-allowlist setting.
+- Documentation gives one local launch path and does not present LAN access as a
+  supported product mode.
+- Docker Web can still connect to an external Speaches server.
 
 **Focused verification:**
 
@@ -432,7 +434,7 @@ docker compose config
 npm run verify:docker
 ```
 
-**Commit:** `fix(docker): forward the LAN host allowlist`
+**Commit:** `fix(docker): keep web access local`
 
 ### R07: Enforce coverage and dead-code checks in pull-request CI
 

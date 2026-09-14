@@ -98,12 +98,11 @@ If the data directory was created by a newer version of this application, a reco
 
 The checked-in [.env.example](.env.example) documents the complete Compose-facing configuration. Common settings are:
 
-| Variable                        | Default     | Purpose                                                                                   |
-| ------------------------------- | ----------- | ----------------------------------------------------------------------------------------- |
-| `STUDYNARRATOR_BIND_ADDRESS`    | `127.0.0.1` | Host interface that publishes the Web UI. Keep loopback unless LAN access is intentional. |
-| `STUDYNARRATOR_HOST_PORT`       | `8080`      | Host port for Docker Web.                                                                 |
-| `STUDYNARRATOR_IMAGE_TAG`       | `0.1.0`     | Local image version and OCI version label.                                                |
-| `STUDYNARRATOR_SOURCE_REVISION` | `local`     | Revision reported by runtime diagnostics and the OCI image label.                         |
+| Variable                        | Default | Purpose                                                           |
+| ------------------------------- | ------- | ----------------------------------------------------------------- |
+| `STUDYNARRATOR_HOST_PORT`       | `8080`  | Host port for Docker Web, published on `127.0.0.1` only.          |
+| `STUDYNARRATOR_IMAGE_TAG`       | `0.1.0` | Local image version and OCI version label.                        |
+| `STUDYNARRATOR_SOURCE_REVISION` | `local` | Revision reported by runtime diagnostics and the OCI image label. |
 
 The Compose package fixes `STUDYNARRATOR_DATA_DIR` to `/data`, the only persistent container path. Direct Node and Electron runs can set `STUDYNARRATOR_DATA_DIR` to another writable directory. Set `STUDYNARRATOR_FFMPEG_PATH` only when FFmpeg is not discoverable on `PATH`.
 

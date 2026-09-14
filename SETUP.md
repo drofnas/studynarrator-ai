@@ -102,7 +102,7 @@ cd studynarrator-ai
 cp .env.example .env
 ```
 
-The checked-in environment template configures only the StudyNarrator Web binding and image metadata. Speaches is configured inside the application.
+The checked-in environment template configures the local StudyNarrator Web port and image metadata. Speaches is configured inside the application.
 
 Build and start StudyNarrator:
 
@@ -130,7 +130,7 @@ git pull --ff-only
 docker compose up --build --detach
 ```
 
-The `studynarrator-data` named volume persists the SQLite database, speech cache, and render artifacts. Do not run `docker compose down --volumes` unless you intend to delete that data. See the [Docker operations guide](deploy/docker/README.md) for backup, restore, LAN access, and bind-mount permissions.
+The `studynarrator-data` named volume persists the SQLite database, speech cache, and render artifacts. Do not run `docker compose down --volumes` unless you intend to delete that data. See the [Docker operations guide](deploy/docker/README.md) for backup, restore, and bind-mount permissions.
 
 ## Connecting to Speaches from each runtime
 
