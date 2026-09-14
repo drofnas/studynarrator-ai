@@ -848,7 +848,17 @@ export async function diagnoseSpeaches(
         );
       }
     }
-  } catch {
+  } catch (error) {
+    if (isRedirectRejection(error)) {
+      const failure = errorFailure(error, "voice-list-unavailable");
+      stages.push(
+        stage("voice", "fail", failure.code, failure.message, elapsed(started)),
+      );
+      return {
+        normalizedUrl: normalized,
+        summary: result("disconnected", testedAt, null, stages, models, voices),
+      };
+    }
     stages.push(
       stage(
         "voice",

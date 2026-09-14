@@ -51,7 +51,7 @@ Status values: `todo`, `in progress`, `blocked`, `deferred`, `complete`, `supers
 | R01 | Add MP3 metadata to the FFmpeg encoder                   | P0       | complete    | none                                      |
 | R02 | Remove render provenance and retag MP3s on rename        | P0       | complete    | R01                                       |
 | R03 | Remove `node-id3` and its obsolete wrapper               | P1       | superseded  | replaced by R24                           |
-| R04 | Reject redirects from every Speaches request             | P0       | todo        | none                                      |
+| R04 | Reject redirects from every Speaches request             | P0       | complete    | none                                      |
 | R05 | Correct runtime documentation and the product title      | P1       | in progress | R02                                       |
 | R06 | Keep the Docker Web launcher local                       | P1       | in progress | none                                      |
 | R07 | Enforce coverage and dead-code checks in pull-request CI | P1       | in progress | none                                      |
@@ -286,6 +286,10 @@ Any obsolete-code cleanup must follow R24's selected implementation.
 **Commit:** none for the superseded removal task.
 
 ### R04: Reject redirects from every Speaches request
+
+**Completion:** Validated on 2026-09-14, including optional voice-catalog
+diagnostics, all request-family redirect tests, browser acceptance, and the full
+Docker gate. See the [R04 report](implement-prd-stories/r04-speaches-redirects.md).
 
 **Goal:** Keep URL validation effective after the first HTTP response.
 

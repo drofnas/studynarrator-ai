@@ -1,5 +1,6 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { ConnectionTestSummarySchema } from "@studynarrator/shared-types";
 import { describe, expect, it, vi } from "vitest";
 import {
   diagnoseSpeaches,
@@ -34,12 +35,8 @@ async function close(server: Server): Promise<void> {
 
 async function redirectFixture(
   status: (typeof REDIRECT_STATUSES)[number],
-): Promise<{
-  baseUrl: string;
-  redirectRequests: () => number;
-  targetRequests: () => number;
-  close: () => Promise<void>;
-}> {
+  redirectPath?: string,
+) {
   let targetRequests = 0;
   const target = createServer((_request, response) => {
     targetRequests += 1;
@@ -47,7 +44,31 @@ async function redirectFixture(
   });
   const targetUrl = await listen(target);
   let redirectRequests = 0;
-  const redirect = createServer((_request, response) => {
+  const requests: string[] = [];
+  const redirect = createServer((request, response) => {
+    requests.push(`${request.method} ${request.url}`);
+    if (redirectPath && request.url !== redirectPath) {
+      if (
+        redirectPath === "/v1/audio/voices" &&
+        request.url === "/v1/audio/models"
+      ) {
+        response.writeHead(404).end();
+      } else if (request.url === "/v1/audio/speech") {
+        response
+          .writeHead(200, { "Content-Type": "audio/wav" })
+          .end(new Uint8Array([1]));
+      } else {
+        response.setHeader("Content-Type", "application/json");
+        response.end(
+          JSON.stringify({
+            data: [{ id: "model" }],
+            models: [{ id: "model", voices: [{ id: "voice" }] }],
+            voices: [{ id: "voice" }],
+          }),
+        );
+      }
+      return;
+    }
     redirectRequests += 1;
     response.writeHead(status, { Location: `${targetUrl}/private-target` });
     response.end();
@@ -55,6 +76,7 @@ async function redirectFixture(
   const baseUrl = await listen(redirect);
   return {
     baseUrl,
+    requests,
     redirectRequests: () => redirectRequests,
     targetRequests: () => targetRequests,
     close: async () => {
@@ -116,6 +138,71 @@ describe("probeAudioWithFfprobe", () => {
 });
 
 describe("diagnoseSpeaches failure boundaries", () => {
+  describe.each([
+    ["/health", "http"],
+    ["/v1/models", "authentication"],
+    ["/v1/audio/models", "voice"],
+    ["/v1/audio/voices", "voice"],
+    ["/v1/audio/speech", "audio"],
+  ])("redirects from %s", (path, failedStage) => {
+    it.each(REDIRECT_STATUSES)(
+      "reports a sanitized failure for HTTP %i",
+      async (status) => {
+        const fixture = await redirectFixture(status, path);
+        const apiKey = "diagnostic-secret-must-not-appear";
+        try {
+          const output = await diagnoseSpeaches(
+            {
+              baseUrl: fixture.baseUrl,
+              modelId: "model",
+              voiceId: "voice",
+              apiKey,
+              timeoutSeconds: 2,
+            },
+            {
+              probeAudio: vi.fn(async () => ({
+                decodable: true,
+                formatName: "wav",
+              })),
+            },
+          );
+          expect(
+            ConnectionTestSummarySchema.parse(output.summary),
+          ).toMatchObject({
+            overall: "disconnected",
+            httpStatus: null,
+          });
+          const failureIndex = output.summary.stages.findIndex(
+            ({ status }) => status === "fail",
+          );
+          expect(output.summary.stages[failureIndex]).toMatchObject({
+            stage: failedStage,
+            status: "fail",
+            code: "redirect-rejected",
+            message: "The endpoint attempted a redirect, which is not allowed.",
+          });
+          expect(
+            output.summary.stages
+              .slice(failureIndex + 1)
+              .every(({ status }) => status === "skipped"),
+          ).toBe(true);
+          expect(JSON.stringify(output.summary)).not.toContain(apiKey);
+          expect(JSON.stringify(output.summary)).not.toContain(fixture.baseUrl);
+          expect(JSON.stringify(output.summary)).not.toContain(
+            "private-target",
+          );
+          expect(fixture.requests.at(-1)).toBe(
+            `${path === "/v1/audio/speech" ? "POST" : "GET"} ${path}`,
+          );
+          expect(fixture.redirectRequests()).toBe(1);
+          expect(fixture.targetRequests()).toBe(0);
+        } finally {
+          await fixture.close();
+        }
+      },
+    );
+  });
+
   it("uses model-scoped voices and parses the top-level voices fallback", async () => {
     const scopedResponses = [
       new Response("{}", { status: 200 }),

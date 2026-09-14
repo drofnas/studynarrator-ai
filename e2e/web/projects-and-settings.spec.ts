@@ -109,8 +109,10 @@ test.describe("Settings and connection diagnostics", () => {
       ["invalid-content-type", "invalidAudio"],
       ["corrupt-audio", "invalidAudio"],
       ["timeout", "disconnected"],
+      ["redirected-voice-catalog", "disconnected"],
     ];
     for (const [scenario, expected] of scenarios) {
+      studyNarrator.fakeSpeaches.reset();
       studyNarrator.fakeSpeaches.setScenario(scenario);
       await testButton.click();
       await expect(page.getByText(`Connection test: ${expected}.`)).toBeVisible(
@@ -120,6 +122,18 @@ test.describe("Settings and connection diagnostics", () => {
       );
       await expect(page.getByText("Signal path")).toBeVisible();
       await expect(page.getByRole("heading", { name: expected })).toBeVisible();
+      if (scenario === "redirected-voice-catalog") {
+        await expect(
+          page.getByText(
+            "The endpoint attempted a redirect, which is not allowed.",
+          ),
+        ).toBeVisible();
+        expect(studyNarrator.fakeSpeaches.getState().counters).toEqual({
+          "/health": 1,
+          "/v1/models": 1,
+          "/v1/audio/models": 1,
+        });
+      }
     }
 
     const downloadPromise = page.waitForEvent("download");
@@ -133,6 +147,8 @@ test.describe("Settings and connection diagnostics", () => {
     expect(exported).toContain('"endpointClass": "loopback"');
     expect(exported).not.toContain("127.0.0.1");
     expect(exported).not.toContain("authorization");
+    expect(exported).toContain("redirect-rejected");
+    expect(exported).not.toContain("private-redirect-target");
 
     studyNarrator.fakeSpeaches.setScenario("healthy");
     await testButton.click();

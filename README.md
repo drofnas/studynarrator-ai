@@ -56,6 +56,11 @@ Open <http://127.0.0.1:5173>. Vite proxies `/api` requests to the Node server on
 
 Enter the Speaches address during onboarding. Authenticated Speaches servers are not supported by the application connection flow.
 
+Use the final Speaches address directly: catalog discovery, connection checks,
+and speech synthesis reject redirects. A redirect during any connection-check
+stage stops the check with a sanitized `redirect-rejected` failure, including
+redirects from optional voice catalogs.
+
 ### Production Web server without Docker
 
 Build the React application and Node server, then serve both from port `4310`:

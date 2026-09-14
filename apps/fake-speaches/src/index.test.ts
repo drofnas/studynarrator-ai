@@ -96,6 +96,7 @@ describe("fake Speaches diagnostic scenarios", () => {
     ["empty-body", "invalidAudio", "audio-empty"],
     ["invalid-content-type", "invalidAudio", "audio-content-type-invalid"],
     ["corrupt-audio", "invalidAudio", "audio-undecodable"],
+    ["redirected-voice-catalog", "disconnected", "redirect-rejected"],
   ] as const)("classifies %s", async (scenario, overall, code) => {
     current = await startFakeSpeachesServer({ scenario });
     const output = await diagnose(current.baseUrl);
@@ -105,6 +106,16 @@ describe("fake Speaches diagnostic scenarios", () => {
     ).toBe(true);
     expect(JSON.stringify(output)).not.toContain("test-secret-must-not-appear");
     expect(current.getState().requests.length).toBeGreaterThan(0);
+    if (scenario === "redirected-voice-catalog") {
+      expect(current.getState().counters).toEqual({
+        "/health": 1,
+        "/v1/models": 1,
+        "/v1/audio/models": 1,
+      });
+      expect(JSON.stringify(output.summary)).not.toContain(
+        "private-redirect-target",
+      );
+    }
     for (const request of current.getState().requests) {
       expect(Object.keys(request).sort()).toEqual(
         [
