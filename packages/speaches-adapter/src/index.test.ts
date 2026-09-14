@@ -1,3 +1,5 @@
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { describe, expect, it, vi } from "vitest";
 import {
   diagnoseSpeaches,
@@ -8,6 +10,59 @@ import {
   synthesizeSpeech,
 } from "./index.js";
 import type { SpeachesSynthesisError } from "./index.js";
+
+const REDIRECT_STATUSES = [301, 302, 307, 308] as const;
+
+async function listen(server: Server): Promise<string> {
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", reject);
+      resolve();
+    });
+  });
+  const address = server.address() as AddressInfo;
+  return `http://127.0.0.1:${String(address.port)}`;
+}
+
+async function close(server: Server): Promise<void> {
+  server.closeAllConnections();
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => (error ? reject(error) : resolve()));
+  });
+}
+
+async function redirectFixture(
+  status: (typeof REDIRECT_STATUSES)[number],
+): Promise<{
+  baseUrl: string;
+  redirectRequests: () => number;
+  targetRequests: () => number;
+  close: () => Promise<void>;
+}> {
+  let targetRequests = 0;
+  const target = createServer((_request, response) => {
+    targetRequests += 1;
+    response.end("unexpected target response");
+  });
+  const targetUrl = await listen(target);
+  let redirectRequests = 0;
+  const redirect = createServer((_request, response) => {
+    redirectRequests += 1;
+    response.writeHead(status, { Location: `${targetUrl}/private-target` });
+    response.end();
+  });
+  const baseUrl = await listen(redirect);
+  return {
+    baseUrl,
+    redirectRequests: () => redirectRequests,
+    targetRequests: () => targetRequests,
+    close: async () => {
+      await close(redirect);
+      await close(target);
+    },
+  };
+}
 
 describe("normalizeSpeachesUrl", () => {
   it.each([
@@ -78,6 +133,10 @@ describe("diagnoseSpeaches failure boundaries", () => {
         headers: { "content-type": "audio/wav" },
       }),
     ];
+    const scopedFetch = vi.fn(
+      async (_url: string | URL | Request, _init?: RequestInit) =>
+        scopedResponses.shift() ?? new Response(null, { status: 500 }),
+    );
     const scoped = await diagnoseSpeaches(
       {
         baseUrl: "http://127.0.0.1:8000",
@@ -87,10 +146,7 @@ describe("diagnoseSpeaches failure boundaries", () => {
       },
       {
         connect: vi.fn().mockResolvedValue(undefined),
-        fetch: vi.fn(
-          async () =>
-            scopedResponses.shift() ?? new Response(null, { status: 500 }),
-        ),
+        fetch: scopedFetch,
         probeAudio: vi.fn(async () => ({ decodable: true, formatName: "wav" })),
       },
     );
@@ -98,6 +154,9 @@ describe("diagnoseSpeaches failure boundaries", () => {
     expect(scoped.summary.stages[6]).toMatchObject({
       code: "voice-listed-for-model",
     });
+    expect(
+      scopedFetch.mock.calls.every(([, init]) => init?.redirect === "error"),
+    ).toBe(true);
 
     const responses = [
       new Response("{}", { status: 200 }),
@@ -113,6 +172,10 @@ describe("diagnoseSpeaches failure boundaries", () => {
         headers: { "content-type": "audio/wav" },
       }),
     ];
+    const fallbackFetch = vi.fn(
+      async (_url: string | URL | Request, _init?: RequestInit) =>
+        responses.shift() ?? new Response(null, { status: 500 }),
+    );
     const fallback = await diagnoseSpeaches(
       {
         baseUrl: "http://127.0.0.1:8000",
@@ -122,13 +185,14 @@ describe("diagnoseSpeaches failure boundaries", () => {
       },
       {
         connect: vi.fn().mockResolvedValue(undefined),
-        fetch: vi.fn(
-          async () => responses.shift() ?? new Response(null, { status: 500 }),
-        ),
+        fetch: fallbackFetch,
         probeAudio: vi.fn(async () => ({ decodable: true, formatName: "wav" })),
       },
     );
     expect(fallback.summary.availableVoiceIds).toEqual(["voice"]);
+    expect(
+      fallbackFetch.mock.calls.every(([, init]) => init?.redirect === "error"),
+    ).toBe(true);
   });
   it("classifies DNS failures and skips later stages", async () => {
     const output = await diagnoseSpeaches(
@@ -323,9 +387,32 @@ describe("discoverSpeachesSpeechCatalog", () => {
     });
     expect(fetchInput).toHaveBeenCalledWith(
       "http://127.0.0.1:8000/v1/audio/models",
-      expect.any(Object),
+      expect.objectContaining({ redirect: "error" }),
     );
   });
+
+  it.each(REDIRECT_STATUSES)(
+    "rejects a %i redirect without retrying or contacting its target",
+    async (status) => {
+      const fixture = await redirectFixture(status);
+      try {
+        const failure = await discoverSpeachesSpeechCatalog({
+          ...input,
+          baseUrl: fixture.baseUrl,
+        }).catch((error: unknown) => error);
+        expect(failure).toMatchObject({
+          code: "invalidResponse",
+          retryable: false,
+        });
+        expect(String(failure)).not.toContain("private-target");
+        expect(String(failure)).not.toContain(input.apiKey);
+        expect(fixture.redirectRequests()).toBe(1);
+        expect(fixture.targetRequests()).toBe(0);
+      } finally {
+        await fixture.close();
+      }
+    },
+  );
 
   it("retries transient failures but not authentication or invalid metadata", async () => {
     const transient = vi
@@ -444,9 +531,33 @@ describe("synthesizeSpeech", () => {
     });
     expect(fetchInput).toHaveBeenCalledWith(
       "http://127.0.0.1:8000/v1/audio/speech",
-      expect.any(Object),
+      expect.objectContaining({ redirect: "error" }),
     );
   });
+
+  it.each(REDIRECT_STATUSES)(
+    "rejects a %i speech redirect without retrying or forwarding script text",
+    async (status) => {
+      const fixture = await redirectFixture(status);
+      try {
+        const failure = await synthesizeSpeech({
+          ...input,
+          baseUrl: fixture.baseUrl,
+        }).catch((error: unknown) => error);
+        expect(failure).toMatchObject({
+          code: "selectionRejected",
+          retryable: false,
+        });
+        expect(String(failure)).not.toContain(input.text);
+        expect(String(failure)).not.toContain("private-target");
+        expect(String(failure)).not.toContain(input.apiKey);
+        expect(fixture.redirectRequests()).toBe(1);
+        expect(fixture.targetRequests()).toBe(0);
+      } finally {
+        await fixture.close();
+      }
+    },
+  );
 
   it("retries transient failures and does not retry rejected selections", async () => {
     const transient = vi

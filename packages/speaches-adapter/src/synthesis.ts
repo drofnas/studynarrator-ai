@@ -5,6 +5,7 @@ import {
   MAX_AUDIO_BYTES,
   defaultSleep,
   headers,
+  isRedirectRejection,
   normalizeSpeachesUrl,
   probeAudioWithFfprobe,
   readBoundedBody,
@@ -53,6 +54,12 @@ function synthesisFailure(
   externalSignal?: AbortSignal,
 ): SpeachesSynthesisError {
   if (error instanceof SpeachesSynthesisError) return error;
+  if (isRedirectRejection(error))
+    return new SpeachesSynthesisError(
+      "selectionRejected",
+      "Speaches attempted a redirect, which is not allowed.",
+      false,
+    );
   if (externalSignal?.aborted) {
     return new SpeachesSynthesisError(
       "aborted",
@@ -142,6 +149,7 @@ export async function synthesizeSpeech(
         `${normalized.rootUrl}/v1/audio/speech`,
         {
           method: "POST",
+          redirect: "error",
           headers: {
             ...headers(input.apiKey),
             "Content-Type": "application/json",
