@@ -101,6 +101,7 @@ describe("General settings", () => {
         sessionWrites: 2,
         sessionCorruptMisses: 1,
         inFlight: 0,
+        projectRenders: null,
       })
       .mockResolvedValueOnce({
         contractVersion: 1,
@@ -112,11 +113,13 @@ describe("General settings", () => {
         sessionWrites: 2,
         sessionCorruptMisses: 1,
         inFlight: 0,
+        projectRenders: null,
       });
     const clearAll = vi.fn(async () => ({
       contractVersion: 1 as const,
       entriesRemoved: 2,
       bytesFreed: 2048,
+      renderedProjectClips: { entriesRemoved: 0, bytesFreed: 0 },
     }));
     vi.spyOn(window, "confirm").mockReturnValue(true);
     renderPage(
@@ -155,6 +158,7 @@ describe("General settings", () => {
       contractVersion: 1 as const,
       entriesRemoved: 0,
       bytesFreed: 0,
+      renderedProjectClips: { entriesRemoved: 0, bytesFreed: 0 },
     }));
     vi.spyOn(window, "confirm").mockReturnValue(true);
     renderPage(
@@ -174,6 +178,7 @@ describe("General settings", () => {
               sessionWrites: 0,
               sessionCorruptMisses: 0,
               inFlight: 0,
+              projectRenders: null,
             })),
             clearAll,
             clearProject: vi.fn(),

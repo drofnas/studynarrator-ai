@@ -78,6 +78,10 @@ describe("preview and speech cache contracts", () => {
         sessionWrites: 2,
         sessionCorruptMisses: 0,
         inFlight: 0,
+        projectRenders: {
+          totalBytes: 300,
+          reclaimableBytes: 200,
+        },
       }).entryCount,
     ).toBe(2);
     expect(
@@ -85,7 +89,13 @@ describe("preview and speech cache contracts", () => {
         contractVersion: 1,
         entriesRemoved: 2,
         bytesFreed: 100,
+        renderedProjectClips: { entriesRemoved: 1, bytesFreed: 40 },
       }),
-    ).toEqual({ contractVersion: 1, entriesRemoved: 2, bytesFreed: 100 });
+    ).toEqual({
+      contractVersion: 1,
+      entriesRemoved: 2,
+      bytesFreed: 100,
+      renderedProjectClips: { entriesRemoved: 1, bytesFreed: 40 },
+    });
   });
 });

@@ -68,8 +68,17 @@ describe("preview REST clients", () => {
       sessionWrites: 0,
       sessionCorruptMisses: 0,
       inFlight: 0,
+      projectRenders: {
+        totalBytes: 8,
+        reclaimableBytes: 8,
+      },
     };
-    const cleanup = { contractVersion: 1, entriesRemoved: 1, bytesFreed: 3 };
+    const cleanup = {
+      contractVersion: 1,
+      entriesRemoved: 1,
+      bytesFreed: 3,
+      renderedProjectClips: { entriesRemoved: 0, bytesFreed: 0 },
+    };
     const fetchInput = vi.fn(
       async (_path: string, init?: RequestInit) =>
         new Response(

@@ -65,7 +65,7 @@ Status values: `todo`, `in progress`, `blocked`, `deferred`, `complete`, `supers
 | R22 | Search the complete project script                       | P1       | in progress | none                                      |
 | R23 | Remove the completed-output pin action                   | P1       | complete    | none                                      |
 | R24 | Write final MP3 tags with an ID3 package                 | P1       | todo        | R02; supersedes R03                       |
-| R25 | Show project-render storage in General settings          | P1       | todo        | none                                      |
+| R25 | Show project-render storage in General settings          | P1       | in progress | none                                      |
 | R26 | Update built-in Global Lexicon pronunciations            | P1       | todo        | none                                      |
 | R27 | Track active and unviewed renders in the sidebar         | P1       | todo        | none                                      |
 

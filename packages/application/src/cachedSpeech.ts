@@ -6,6 +6,7 @@ import {
   SpeechCacheKeyInputSchema,
   SpeechCacheCleanupResultSchema,
   SpeechCacheStatusSchema,
+  type ProjectRenderStorageStatus,
   type SpeechCacheClient,
 } from "@studynarrator/shared-types";
 import {
@@ -173,9 +174,14 @@ export function createCachedSpeechSynthesis(dependencies: {
 export function createSpeechCacheService(
   cache: SpeechCache,
   options: {
+    projectRenderStorage?: () => Promise<ProjectRenderStorageStatus>;
     clearCacheAndRenderedProjectClips?: () => Promise<{
       entriesRemoved: number;
       bytesFreed: number;
+      renderedProjectClips: {
+        entriesRemoved: number;
+        bytesFreed: number;
+      };
     }>;
   } = {},
 ): SpeechCacheClient {
@@ -183,12 +189,16 @@ export function createSpeechCacheService(
     SpeechCacheCleanupResultSchema.parse({
       contractVersion: SPEECH_CACHE_CONTRACT_VERSION,
       ...result,
+      renderedProjectClips: { entriesRemoved: 0, bytesFreed: 0 },
     });
   return {
     async status() {
       return SpeechCacheStatusSchema.parse({
         contractVersion: SPEECH_CACHE_CONTRACT_VERSION,
         ...(await cache.status()),
+        projectRenders: options.projectRenderStorage
+          ? await options.projectRenderStorage()
+          : null,
       });
     },
     async clearAll(input) {
@@ -197,7 +207,10 @@ export function createSpeechCacheService(
       if (includeRenderedProjectClips) {
         if (!options.clearCacheAndRenderedProjectClips)
           throw new Error("Rendered project clip cleanup is unavailable.");
-        return cleanup(await options.clearCacheAndRenderedProjectClips());
+        return SpeechCacheCleanupResultSchema.parse({
+          contractVersion: SPEECH_CACHE_CONTRACT_VERSION,
+          ...(await options.clearCacheAndRenderedProjectClips()),
+        });
       }
       return cleanup(await cache.clearAll());
     },

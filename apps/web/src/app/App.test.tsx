@@ -95,6 +95,7 @@ const unusedSpeechCache = {
     sessionWrites: 0,
     sessionCorruptMisses: 0,
     inFlight: 0,
+    projectRenders: null,
   })),
   clearAll: vi.fn(),
   clearProject: vi.fn(),

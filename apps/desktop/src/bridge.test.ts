@@ -208,11 +208,16 @@ const cacheStatus = {
   sessionWrites: 0,
   sessionCorruptMisses: 0,
   inFlight: 0,
+  projectRenders: {
+    totalBytes: 8,
+    reclaimableBytes: 8,
+  },
 };
 const cleanupResult = {
   contractVersion: 1 as const,
   entriesRemoved: 1,
   bytesFreed: 3,
+  renderedProjectClips: { entriesRemoved: 0, bytesFreed: 0 },
 };
 const speechCache = {
   status: vi.fn(async () => cacheStatus),

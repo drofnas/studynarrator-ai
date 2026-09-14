@@ -400,21 +400,28 @@ async function fixture(logger?: {
       sessionWrites: 0,
       sessionCorruptMisses: 0,
       inFlight: 0,
+      projectRenders: {
+        totalBytes: 8,
+        reclaimableBytes: 8,
+      },
     }),
     clearAll: async () => ({
       contractVersion: 1 as const,
       entriesRemoved: 1,
       bytesFreed: 3,
+      renderedProjectClips: { entriesRemoved: 0, bytesFreed: 0 },
     }),
     clearProject: async (_projectId: string) => ({
       contractVersion: 1 as const,
       entriesRemoved: 1,
       bytesFreed: 3,
+      renderedProjectClips: { entriesRemoved: 0, bytesFreed: 0 },
     }),
     clearEntry: async (_cacheKey: string) => ({
       contractVersion: 1 as const,
       entriesRemoved: 1,
       bytesFreed: 3,
+      renderedProjectClips: { entriesRemoved: 0, bytesFreed: 0 },
     }),
   };
   const renderPlanId = "00000000-0000-4000-8000-000000000002";

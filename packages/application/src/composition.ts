@@ -189,6 +189,7 @@ export async function createStudyNarratorServices(options: {
       dataDirectory: descriptor.dataDirectory,
     });
     speechCache = createSpeechCacheService(cache, {
+      projectRenderStorage: retentionMaintenance.projectRenderStorage,
       clearCacheAndRenderedProjectClips:
         retentionMaintenance.clearCacheAndRenderedProjectClips,
     });

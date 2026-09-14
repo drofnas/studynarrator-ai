@@ -160,7 +160,11 @@ describe("retention maintenance", () => {
 
     await expect(
       maintenance.clearCacheAndRenderedProjectClips(),
-    ).resolves.toEqual({ entriesRemoved: 1, bytesFreed: 7 });
+    ).resolves.toEqual({
+      entriesRemoved: 1,
+      bytesFreed: 15,
+      renderedProjectClips: { entriesRemoved: 1, bytesFreed: 8 },
+    });
     await expect(cache.status()).resolves.toMatchObject({ entryCount: 0 });
     await expect(
       readFile(join(dataDirectory, "renders", renderId, "audio.mp3")),
@@ -186,7 +190,11 @@ describe("retention maintenance", () => {
 
     await expect(
       maintenance.clearCacheAndRenderedProjectClips(),
-    ).resolves.toEqual({ entriesRemoved: 1, bytesFreed: 7 });
+    ).resolves.toEqual({
+      entriesRemoved: 1,
+      bytesFreed: 7,
+      renderedProjectClips: { entriesRemoved: 0, bytesFreed: 0 },
+    });
     await expect(cache.status()).resolves.toMatchObject({ entryCount: 0 });
     await expect(
       readFile(join(dataDirectory, "renders", renderId, "audio.mp3")),
@@ -207,6 +215,22 @@ describe("retention maintenance", () => {
       readFile(join(dataDirectory, "renders", renderId, "audio.mp3")),
     ).resolves.toEqual(Buffer.from("artifact"));
     expect(cleared).toEqual([]);
+  });
+
+  it("reports total and reclaimable project-render storage", async () => {
+    const available = await fixture();
+    await expect(available.maintenance.projectRenderStorage()).resolves.toEqual(
+      {
+        totalBytes: 8,
+        reclaimableBytes: 8,
+      },
+    );
+
+    const pinned = await fixture({ pinned: true });
+    await expect(pinned.maintenance.projectRenderStorage()).resolves.toEqual({
+      totalBytes: 8,
+      reclaimableBytes: 0,
+    });
   });
 
   it("honors saved TTLs for cache, job snapshots, and render artifacts", async () => {
@@ -326,6 +350,10 @@ describe("retention maintenance", () => {
       speechCache: { entries: 1, bytes: 7 },
       jobSnapshots: { entries: 0, bytes: 0 },
       renderArtifacts: { entries: 0, bytes: 0 },
+    });
+    await expect(maintenance.projectRenderStorage()).resolves.toEqual({
+      totalBytes: 0,
+      reclaimableBytes: 0,
     });
     await expect(maintenance.reclaim({ confirm: false })).rejects.toThrow();
   });
