@@ -45,6 +45,7 @@ import { GLOBAL_VOICE_CATALOG_MODEL_ID } from "@/features/projects/projectAuthor
 import type { RenderProgressClient } from "@/services/renders/renderClient.js";
 import { ProjectsPage } from "./ProjectsPage.js";
 import { ConnectionProvider } from "@/features/connections/ConnectionProvider.js";
+import { RenderActivityProvider } from "@/features/renders/RenderActivityProvider.js";
 
 const project: ProjectDetail = {
   contractVersion: 1,
@@ -563,16 +564,23 @@ function renderPage(
           connectionClient={connections}
           voiceCatalog={voiceCatalog}
         >
-          <MemoryRouter
-            initialEntries={[options.path ?? `/projects/${project.id}`]}
+          <RenderActivityProvider
+            persistence={client}
+            {...(options.renderClient
+              ? { renderClient: options.renderClient }
+              : {})}
           >
-            <Link to="/settings">Settings test link</Link>
-            <Routes>
-              <Route path="/projects" element={page} />
-              <Route path="/projects/:projectId" element={page} />
-              <Route path="/settings" element={<p>Settings destination</p>} />
-            </Routes>
-          </MemoryRouter>
+            <MemoryRouter
+              initialEntries={[options.path ?? `/projects/${project.id}`]}
+            >
+              <Link to="/settings">Settings test link</Link>
+              <Routes>
+                <Route path="/projects" element={page} />
+                <Route path="/projects/:projectId" element={page} />
+                <Route path="/settings" element={<p>Settings destination</p>} />
+              </Routes>
+            </MemoryRouter>
+          </RenderActivityProvider>
         </ConnectionProvider>
       </QueryClientProvider>,
     ),
@@ -2404,7 +2412,7 @@ describe("Projects workbench", () => {
     expect(unsubscribe).not.toHaveBeenCalled();
   });
 
-  it("discards a delayed render start after navigating to another project", async () => {
+  it("keeps a delayed render globally tracked without replacing the current project", async () => {
     const { client, analyze } = fixture();
     const nextProject: ProjectDetail = {
       ...project,
@@ -2485,7 +2493,7 @@ describe("Projects workbench", () => {
     expect(
       screen.queryByText("1 of 4 chunks complete"),
     ).not.toBeInTheDocument();
-    expect(subscribe).not.toHaveBeenCalledWith(
+    expect(subscribe).toHaveBeenCalledWith(
       staleProjectJob.id,
       expect.any(Function),
       expect.any(Function),
@@ -2498,7 +2506,7 @@ describe("Projects workbench", () => {
     expect(
       await screen.findByText("2 of 4 chunks complete"),
     ).toBeInTheDocument();
-    expect(subscribe).toHaveBeenCalledOnce();
+    expect(subscribe).toHaveBeenCalledTimes(2);
     expect(subscribe).toHaveBeenCalledWith(
       activeProjectJob.id,
       expect.any(Function),

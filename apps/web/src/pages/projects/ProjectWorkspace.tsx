@@ -12,11 +12,13 @@ import {
   diagnosticKey,
   message,
   projectTabs,
-  renderProgressLabel,
   storeDiskSpaceCheckEnabled,
-  terminalRenderStates,
   type ProjectPageController,
 } from "./useProjectsPageController.js";
+import {
+  renderProgressLabel,
+  terminalRenderStates,
+} from "@/features/renders/RenderActivityProvider.js";
 
 export function ProjectWorkspace({
   controller,

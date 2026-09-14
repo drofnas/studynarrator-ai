@@ -15,6 +15,80 @@ function formatAudioDuration(durationMs: number): string {
 }
 
 test.describe("render execution", () => {
+  test("keeps queued and running project renders visible across routes", async ({
+    page,
+    request,
+    studyNarrator,
+  }) => {
+    await configureConnection(page, studyNarrator);
+    const createProject = async (name: string) => {
+      const created = (await (
+        await request.post(`${studyNarrator.baseUrl}/api/projects`, {
+          data: { name },
+        })
+      ).json()) as { id: string; name: string };
+      await request.put(`${studyNarrator.baseUrl}/api/projects/${created.id}`, {
+        data: {
+          name,
+          description: "Sidebar activity acceptance fixture.",
+          scriptSource: Array.from(
+            { length: 6 },
+            (_, index) =>
+              `[speaker_teacher] ${name} section ${String(index + 1)}.`,
+          ).join("\n\n"),
+          speakerMappings: [
+            {
+              speakerId: "teacher",
+              displayName: "Teacher",
+              voiceId: "af_heart",
+              speed: 1,
+              gainDb: 0,
+              roleDescription: "",
+              sampleText: "",
+            },
+          ],
+          lexiconEntries: [],
+        },
+      });
+      return created;
+    };
+    const first = await createProject("Database activity");
+    const second = await createProject("Network activity");
+    await page.reload();
+    studyNarrator.fakeSpeaches.setScenario("slow");
+
+    await openRoute(page, studyNarrator, `/projects/${first.id}?tab=render`);
+    await page.getByRole("button", { name: "Render" }).click();
+    await expect(
+      page.getByRole("link", { name: /Database activity: /u }),
+    ).toBeVisible();
+
+    await page.getByRole("link", { name: "Projects", exact: true }).click();
+    await page.getByRole("link", { name: second.name }).click();
+    await page.getByRole("tab", { name: "Render" }).click();
+    await page.getByRole("button", { name: "Render" }).click();
+    await expect(
+      page.getByRole("link", { name: "Network activity: Queued…" }),
+    ).toBeVisible();
+
+    await page.getByRole("link", { name: "General" }).click();
+    const firstProgress = page.getByRole("progressbar", {
+      name: "Database activity render progress",
+    });
+    await expect(firstProgress).toBeVisible();
+    const initialProgress = Number(await firstProgress.getAttribute("value"));
+    await expect
+      .poll(async () => Number(await firstProgress.getAttribute("value")))
+      .toBeGreaterThan(initialProgress);
+    await page.getByRole("link", { name: /Network activity: /u }).click();
+    await expect(page).toHaveURL(
+      new RegExp(`/projects/${second.id}\\?tab=render$`, "u"),
+    );
+    await expect(
+      page.getByRole("heading", { name: "Render and listen" }),
+    ).toBeVisible();
+  });
+
   test("renders, reuses unchanged edits, downloads MP3 and the exact evidence package, and restores the latest render", async ({
     page,
     request,

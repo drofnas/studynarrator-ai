@@ -12,6 +12,7 @@ import {
   useConnections,
   type ShellConnectionState,
 } from "@/features/connections/ConnectionProvider.js";
+import { RenderActivityList } from "@/features/renders/RenderActivityList.js";
 import styles from "./AppShell.module.css";
 
 type NavigationIcon =
@@ -332,6 +333,8 @@ export function AppShell() {
             )}
           </div>
         </nav>
+
+        <RenderActivityList />
 
         <div className={styles.sidebarFooter}>
           <Link

@@ -1,0 +1,71 @@
+.activity {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.activity h2 {
+  margin: 0 8px;
+  color: #557080;
+  font:
+    800 0.65rem/1 ui-monospace,
+    "SFMono-Regular",
+    Consolas,
+    monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.activity ul {
+  display: grid;
+  max-height: min(32vh, 260px);
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.activity a {
+  display: grid;
+  gap: 5px;
+  padding: 9px 10px;
+  color: var(--ink);
+  background: var(--mist);
+  border-left: 3px solid var(--signal);
+  border-radius: 2px;
+  text-decoration: none;
+}
+
+.activity a:hover {
+  background: var(--signal-pale);
+}
+
+.activity a:focus-visible {
+  outline: 3px solid var(--copper);
+  outline-offset: 2px;
+}
+
+.activity strong,
+.activity a span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity strong {
+  font-size: 0.78rem;
+}
+
+.activity a span {
+  color: #557080;
+  font-size: 0.7rem;
+}
+
+.activity progress {
+  width: 100%;
+  height: 4px;
+  accent-color: var(--signal);
+}

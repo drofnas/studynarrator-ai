@@ -62,6 +62,10 @@ import type { LexiconEditorValue } from "@/features/lexicon/LexiconEditor.js";
 import { useAudioAudition } from "@/shared/audio/useAudioAudition.js";
 import type { ScriptSourceEditorHandle } from "@/features/projects/ScriptSourceEditor.js";
 import type { RenderProgressClient } from "@/services/renders/renderClient.js";
+import {
+  terminalRenderStates,
+  useRenderActivity,
+} from "@/features/renders/RenderActivityProvider.js";
 
 export interface ProjectsPageProps {
   client: PersistenceClient;
@@ -144,34 +148,6 @@ export function countWords(source: string): number {
   const trimmed = source.trim();
   return trimmed === "" ? 0 : trimmed.split(/\s+/u).length;
 }
-export const terminalRenderStates = new Set<RenderJob["state"]>([
-  "complete",
-  "failed",
-  "canceled",
-]);
-const renderPhaseLabels: Record<RenderJob["state"], string> = {
-  queued: "Queued…",
-  validating: "Validating render…",
-  synthesizing: "Synthesizing audio…",
-  assembling: "Assembling audio…",
-  normalizing: "Normalizing audio…",
-  encoding: "Encoding MP3…",
-  writing_artifacts: "Writing render files…",
-  complete: "Render complete",
-  failed: "Render failed",
-  canceled: "Render canceled",
-};
-
-export function renderProgressLabel(job: RenderJob): string {
-  if (job.state !== "synthesizing" || job.progress.totalChunks === 0)
-    return renderPhaseLabels[job.state];
-  const current = Math.min(
-    job.progress.totalChunks,
-    job.progress.completedChunks + 1,
-  );
-  return `Processing chunk ${String(current)} of ${String(job.progress.totalChunks)}`;
-}
-
 export function useProjectsPageController({
   client,
   analyzer,
@@ -179,6 +155,7 @@ export function useProjectsPageController({
   renderClient,
 }: ProjectsPageProps) {
   const connections = useConnections();
+  const renderActivity = useRenderActivity();
   const { projectId } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -263,9 +240,6 @@ export function useProjectsPageController({
     stop: stopSegmentAudition,
   } = useAudioAudition<number>();
   const [previewError, setPreviewError] = useState("");
-  const [selectedRenderJob, setSelectedRenderJob] = useState<RenderJob>();
-  const [completedRenderCandidate, setCompletedRenderCandidate] =
-    useState<RenderJob>();
   const [completedRenderJob, setCompletedRenderJob] = useState<RenderJob>();
   const [renderStarting, setRenderStarting] = useState(false);
   const [diskSpaceCheckEnabled, setDiskSpaceCheckEnabled] = useState(
@@ -288,7 +262,6 @@ export function useProjectsPageController({
   const revisionRef = useRef(0);
   const savedRevisionRef = useRef(0);
   const analysisRevisionRef = useRef(0);
-  const renderStartRevisionRef = useRef(0);
   const renderStartOperationRef = useRef(0);
   const currentRouteProjectIdRef = useRef(projectId);
   const loadedProjectIdRef = useRef<string | undefined>(undefined);
@@ -456,6 +429,13 @@ export function useProjectsPageController({
   const voiceDefaultId =
     selectedConnection?.defaultVoiceId ?? GLOBAL_VOICE_CATALOG_DEFAULT_VOICE_ID;
   const speechCatalogState = connections.catalog;
+  const projectRenderJobs = projectId
+    ? (renderActivity.projects[projectId]?.jobs ?? [])
+    : [];
+  const selectedRenderJob = projectRenderJobs[0];
+  const completedRenderCandidate = projectRenderJobs.find(
+    ({ state }) => state === "complete",
+  );
   const renderActive =
     renderStarting ||
     Boolean(
@@ -465,8 +445,6 @@ export function useProjectsPageController({
   useEffect(() => {
     renderStartOperationRef.current += 1;
     setRenderStarting(false);
-    setSelectedRenderJob(undefined);
-    setCompletedRenderCandidate(undefined);
     setCompletedRenderJob(undefined);
     setRenderWaveform(undefined);
   }, [projectId]);
@@ -604,8 +582,6 @@ export function useProjectsPageController({
     draftRef.current = undefined;
     setAnalysis(undefined);
     setConfiguration({ speakers: [], pauses: [], sections: [] });
-    setSelectedRenderJob(undefined);
-    setCompletedRenderCandidate(undefined);
     setCompletedRenderJob(undefined);
     setRenderStarting(false);
     setRenderWaveform(undefined);
@@ -632,100 +608,6 @@ export function useProjectsPageController({
     setNotice(`Opened ${projectQuery.data.name}.`);
     setErrors([]);
   }, [clearAutosave, projectId, projectQuery.data, sharedPersistenceDataReady]);
-
-  useEffect(() => {
-    if (!projectId || !renderClient) return;
-    let active = true;
-    const renderStartRevision = renderStartRevisionRef.current;
-    setRenderError("");
-    void renderClient
-      .list(projectId)
-      .then((jobs) => {
-        if (!active || renderStartRevisionRef.current !== renderStartRevision)
-          return;
-        setSelectedRenderJob(jobs[0]);
-        setCompletedRenderCandidate(
-          jobs.find(({ state }) => state === "complete"),
-        );
-      })
-      .catch((error: unknown) => {
-        if (active) setRenderError(message(error));
-      });
-    return () => {
-      active = false;
-    };
-  }, [projectId, renderClient]);
-
-  const activeRenderId =
-    selectedRenderJob &&
-    selectedRenderJob.projectId === projectId &&
-    !terminalRenderStates.has(selectedRenderJob.state)
-      ? selectedRenderJob.id
-      : undefined;
-
-  useEffect(() => {
-    if (!renderClient || !activeRenderId) return;
-    let active = true;
-    const applyJob = (job: RenderJob) => {
-      if (!active) return;
-      setSelectedRenderJob(job);
-      if (job.state === "complete") setCompletedRenderCandidate(job);
-    };
-
-    if (renderClient.subscribe) {
-      let reconciled = false;
-      let streamedUpdateRevision = 0;
-      const applyStreamedJob = (job: RenderJob) => {
-        streamedUpdateRevision += 1;
-        applyJob(job);
-      };
-      const unsubscribe = renderClient.subscribe(
-        activeRenderId,
-        applyStreamedJob,
-        () => {
-          if (!active || reconciled) return;
-          reconciled = true;
-          const reconciliationRevision = streamedUpdateRevision;
-          void renderClient
-            .get(activeRenderId)
-            .then((job) => {
-              if (streamedUpdateRevision === reconciliationRevision)
-                applyJob(job);
-            })
-            .catch((error: unknown) => {
-              if (active && streamedUpdateRevision === reconciliationRevision)
-                setRenderError(message(error));
-            });
-        },
-      );
-      return () => {
-        active = false;
-        unsubscribe();
-      };
-    }
-
-    let timer: number | undefined;
-    const stopPolling = () => {
-      if (timer === undefined) return;
-      window.clearInterval(timer);
-      timer = undefined;
-    };
-    timer = window.setInterval(() => {
-      void renderClient
-        .get(activeRenderId)
-        .then((job) => {
-          applyJob(job);
-          if (terminalRenderStates.has(job.state)) stopPolling();
-        })
-        .catch((error: unknown) => {
-          if (active) setRenderError(message(error));
-        });
-    }, 500);
-    return () => {
-      active = false;
-      stopPolling();
-    };
-  }, [activeRenderId, renderClient]);
 
   useEffect(() => {
     if (!renderClient || !completedRenderCandidate) {
@@ -1386,10 +1268,8 @@ export function useProjectsPageController({
         projectId: renderProjectId,
         options: { diskSpaceCheckEnabled },
       });
+      renderActivity.track(job, project.name);
       if (!isCurrentRenderStart()) return;
-      renderStartRevisionRef.current += 1;
-      setSelectedRenderJob(job);
-      if (job.state === "complete") setCompletedRenderCandidate(job);
       setNotice(startNotice);
     } catch (error) {
       if (isCurrentRenderStart()) setRenderError(message(error));
