@@ -574,7 +574,8 @@ describe("Express diagnostics API", () => {
     expect(response.body).toEqual({
       error: {
         code: "DIAGNOSTICS_BOUNDARY_ERROR",
-        message: "StudyNarrator could not validate the diagnostics response.",
+        message:
+          "StudyNarrator AI could not validate the diagnostics response.",
       },
     });
     expect(JSON.stringify(response.body)).not.toContain("must-not-leak");
@@ -662,7 +663,8 @@ describe("Express boundary logging", () => {
     expect(unknown.body).toEqual({
       error: {
         code: "PERSISTENCE_BOUNDARY_ERROR",
-        message: "StudyNarrator could not complete the persistence operation.",
+        message:
+          "StudyNarrator AI could not complete the persistence operation.",
       },
     });
 
@@ -735,7 +737,7 @@ describe("production Web application", () => {
     );
     writeFileSync(
       join(distributionDirectory, "index.html"),
-      "<!doctype html><title>StudyNarrator production</title>",
+      "<!doctype html><title>StudyNarrator AI production</title>",
     );
     writeFileSync(
       join(distributionDirectory, "application.js"),
@@ -746,7 +748,7 @@ describe("production Web application", () => {
     const server = await listen(application);
 
     const entry = await request(server).get("/projects/example").expect(200);
-    expect(entry.text).toContain("StudyNarrator production");
+    expect(entry.text).toContain("StudyNarrator AI production");
     expect(entry.headers["cache-control"]).toBe("no-cache");
     expect(
       (await request(server).get("/application.js").expect(200)).headers[

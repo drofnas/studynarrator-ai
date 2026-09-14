@@ -73,7 +73,7 @@ function readSessionSettings(): ScratchpadSessionSettings {
 function message(error: unknown): string {
   return error instanceof Error
     ? error.message
-    : "StudyNarrator could not complete speech synthesis.";
+    : "StudyNarrator AI could not complete speech synthesis.";
 }
 
 export function ScratchpadPage({

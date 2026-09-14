@@ -31,7 +31,8 @@ function handleBoundaryError(
 ): void {
   let status = 500;
   let code = "PERSISTENCE_BOUNDARY_ERROR";
-  let message = "StudyNarrator could not complete the persistence operation.";
+  let message =
+    "StudyNarrator AI could not complete the persistence operation.";
   let issues: Array<{ path: string; message: string }> | undefined;
   const errorRecord =
     error && typeof error === "object"
@@ -104,7 +105,7 @@ function handleBoundaryError(
     message =
       typeof errorRecord.message === "string"
         ? errorRecord.message
-        : "StudyNarrator could not discover supported speech models and voices.";
+        : "StudyNarrator AI could not discover supported speech models and voices.";
   } else if (
     typeof errorRecord?.code === "string" &&
     errorRecord.code.startsWith("SCRATCHPAD_")
@@ -122,7 +123,7 @@ function handleBoundaryError(
     message =
       typeof errorRecord.message === "string"
         ? errorRecord.message
-        : "StudyNarrator could not complete speech synthesis.";
+        : "StudyNarrator AI could not complete speech synthesis.";
   } else if (
     typeof errorRecord?.code === "string" &&
     errorRecord.code.startsWith("PROJECT_PREVIEW_")
@@ -141,7 +142,7 @@ function handleBoundaryError(
     message =
       typeof errorRecord.message === "string"
         ? errorRecord.message
-        : "StudyNarrator could not complete the project preview.";
+        : "StudyNarrator AI could not complete the project preview.";
   } else if (
     typeof errorRecord?.code === "string" &&
     errorRecord.code.startsWith("RENDER_PLAN_")
@@ -157,7 +158,7 @@ function handleBoundaryError(
     message =
       typeof errorRecord.message === "string"
         ? errorRecord.message
-        : "StudyNarrator could not complete the render plan operation.";
+        : "StudyNarrator AI could not complete the render plan operation.";
   } else if (errorRecord?.code === "RENDER_DISK_SPACE_INSUFFICIENT") {
     status = 507;
     code = "RENDER_DISK_SPACE_INSUFFICIENT";
@@ -178,7 +179,7 @@ function handleBoundaryError(
     message =
       typeof errorRecord.message === "string"
         ? errorRecord.message
-        : "StudyNarrator could not generate the requested export.";
+        : "StudyNarrator AI could not generate the requested export.";
   }
   const causeName = safeCauseField(errorRecord?.name);
   const causeCode = safeCauseField(errorRecord?.code);

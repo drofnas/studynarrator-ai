@@ -51,7 +51,7 @@ export class LayoutTooNewError extends Error {
     readonly supportedLayoutVersion: number,
   ) {
     super(
-      `This data was created by a newer version of StudyNarrator (data layout ${String(manifestLayoutVersion)}). ` +
+      `This data was created by a newer version of StudyNarrator AI (data layout ${String(manifestLayoutVersion)}). ` +
         `This version supports data layout ${String(supportedLayoutVersion)}.`,
     );
   }

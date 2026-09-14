@@ -54,7 +54,7 @@ function createRequest(fetchInput: typeof fetch) {
       }
       throw new PreviewClientError(
         boundary?.error.message ??
-          "StudyNarrator returned an invalid preview or cache response.",
+          "StudyNarrator AI returned an invalid preview or cache response.",
         boundary?.error.code ?? "INVALID_BOUNDARY_RESPONSE",
         response.status,
       );

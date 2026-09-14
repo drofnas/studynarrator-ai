@@ -12,6 +12,7 @@ test.describe("shell, onboarding, and runtime routes", () => {
   }) => {
     await openRoute(page, studyNarrator, "/projects");
 
+    await expect(page).toHaveTitle("StudyNarrator AI");
     await expect(
       page.getByRole("heading", { name: "Connect the voice workshop" }),
     ).toBeVisible();
@@ -72,7 +73,7 @@ test.describe("shell, onboarding, and runtime routes", () => {
   }) => {
     await continueOffline(page, studyNarrator);
     const navigation = page.getByRole("navigation", {
-      name: "StudyNarrator tools",
+      name: "StudyNarrator AI tools",
     });
 
     await expect(

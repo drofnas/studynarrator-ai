@@ -36,7 +36,7 @@ ARG STUDYNARRATOR_VERSION=0.1.0
 ARG STUDYNARRATOR_SOURCE_REVISION=unknown
 ARG STUDYNARRATOR_SOURCE_URL=https://github.com/drofnas/studynarrator-ai
 
-LABEL org.opencontainers.image.title="StudyNarrator" \
+LABEL org.opencontainers.image.title="StudyNarrator AI" \
   org.opencontainers.image.description="Local study-guide authoring and speech rendering Web application" \
   org.opencontainers.image.version="${STUDYNARRATOR_VERSION}" \
   org.opencontainers.image.revision="${STUDYNARRATOR_SOURCE_REVISION}" \

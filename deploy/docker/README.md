@@ -1,6 +1,6 @@
-# StudyNarrator Docker Web
+# StudyNarrator AI Docker Web
 
-This package runs StudyNarrator only. It does not install, start, update, or otherwise manage Speaches, model files, Python, or GPU drivers.
+This package runs StudyNarrator AI only. It does not install, start, update, or otherwise manage Speaches, model files, Python, or GPU drivers.
 
 ## Distribution support
 
@@ -15,7 +15,7 @@ Requirements: Docker Engine or Docker Desktop with Docker Compose.
 3. Open <http://127.0.0.1:8080> and enter the separately installed Speaches address during onboarding.
 4. Load the catalog, review the selected model and default voice, then choose **Save and Test**.
 
-The supplied Compose package publishes the Web UI on `127.0.0.1` only. Its `.env` file configures the host port and image metadata; Speaches connection settings are entered inside StudyNarrator.
+The supplied Compose package publishes the Web UI on `127.0.0.1` only. Its `.env` file configures the host port and image metadata; Speaches connection settings are entered inside StudyNarrator AI.
 
 ## Connect to Speaches
 
@@ -23,17 +23,17 @@ The supplied Compose package publishes the Web UI on `127.0.0.1` only. Its `.env
 - Private server: `http://192.168.1.50:8000`
 - Private DNS: `http://speaches.home.arpa:8000`
 
-`localhost` inside the StudyNarrator container refers to StudyNarrator's container, not the Docker host. The Compose file supplies the Linux `host-gateway` mapping used by `host.docker.internal`.
+`localhost` inside the StudyNarrator AI container refers to StudyNarrator AI's container, not the Docker host. The Compose file supplies the Linux `host-gateway` mapping used by `host.docker.internal`.
 
 Follow the official [Speaches installation guide](https://speaches.ai/installation/) and [text-to-speech guide](https://speaches.ai/usage/text-to-speech/) for Speaches installation, hardware, model, and voice setup.
 
-StudyNarrator starts and remains healthy while Speaches is offline. Project editing, parsing, lexicon work, dry runs, and prompt exports remain available. Preview and rendering recover after the configured Speaches endpoint becomes reachable; the StudyNarrator container does not need to restart.
+StudyNarrator AI starts and remains healthy while Speaches is offline. Project editing, parsing, lexicon work, dry runs, and prompt exports remain available. Preview and rendering recover after the configured Speaches endpoint becomes reachable; the StudyNarrator AI container does not need to restart.
 
 ## Data and upgrades
 
 The named `studynarrator-data` volume is mounted at `/data` and contains the SQLite database, cache, render artifacts, and generated exports. Recreating or upgrading the application container leaves this volume intact.
 
-Before an upgrade, stop StudyNarrator and back up the volume:
+Before an upgrade, stop StudyNarrator AI and back up the volume:
 
 ```sh
 docker compose stop study-narrator
@@ -42,7 +42,7 @@ docker run --rm --volume studynarrator_studynarrator-data:/data:ro --volume "$PW
 docker compose start study-narrator
 ```
 
-Restore only into an empty replacement volume while StudyNarrator is stopped. Confirm the actual Compose volume name with `docker volume ls`; a custom Compose project name changes the prefix.
+Restore only into an empty replacement volume while StudyNarrator AI is stopped. Confirm the actual Compose volume name with `docker volume ls`; a custom Compose project name changes the prefix.
 
 The default named volume inherits the image's non-root ownership. For a bind mount, create the host directory for container UID/GID `10001:10001` and grant only that identity read/write access. Do not make the directory world-writable.
 
@@ -50,9 +50,9 @@ The default named volume inherits the image's non-root ownership. For a bind mou
 
 ## Distribution contents and security
 
-The image contains Node.js, the compiled StudyNarrator Web/server application, FFmpeg, CA certificates, the Apache-2.0 `LICENSE`, and `ACKNOWLEDGMENTS.md`. It runs as UID/GID 10001, drops Linux capabilities, prevents privilege escalation, uses a read-only root filesystem, and writes persistent application state only under `/data`.
+The image contains Node.js, the compiled StudyNarrator AI Web/server application, FFmpeg, CA certificates, the Apache-2.0 `LICENSE`, and `ACKNOWLEDGMENTS.md`. It runs as UID/GID 10001, drops Linux capabilities, prevents privilege escalation, uses a read-only root filesystem, and writes persistent application state only under `/data`.
 
-StudyNarrator supports unauthenticated Speaches servers. Connection settings are stored in the application data volume and are not supplied through Compose environment variables. The local-only boundary applies to the StudyNarrator Web UI; Speaches may run on the Docker host or another private-network machine.
+StudyNarrator AI supports unauthenticated Speaches servers. Connection settings are stored in the application data volume and are not supplied through Compose environment variables. The local-only boundary applies to the StudyNarrator AI Web UI; Speaches may run on the Docker host or another private-network machine.
 
 ## Release verification
 

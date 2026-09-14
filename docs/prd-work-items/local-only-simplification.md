@@ -12,7 +12,7 @@ This is a review and ticket-creation artifact. [TASKS.md](../TASKS.md) and [FUTU
 ## Decisions and boundaries
 
 - The supported product runs for one person on their local machine. Keep local Web/Docker and source Electron workflows. Remove the proposed LAN product feature; add no accounts, authentication service, cloud hosting, remote collaboration, or multi-device notification system.
-- The local-only boundary concerns access to StudyNarrator. Preserve its existing external Speaches integration, including Docker-to-host connectivity; do not silently bundle a speech server or prohibit already supported backend endpoints.
+- The local-only boundary concerns access to StudyNarrator AI. Preserve its existing external Speaches integration, including Docker-to-host connectivity; do not silently bundle a speech server or prohibit already supported backend endpoints.
 - Retain protections that safeguard a local user's scripts, files, and browser session: redirect rejection, Host validation, a small header policy, CSP, atomic writes, migration recovery, and narrow Electron IPC.
 - **D1 — pending owner decision:** R24 currently explicitly requires an ID3 package. Ponytail recommended using the existing FFmpeg writer and deleting the unused `node-id3` wrapper. The FFmpeg branch below remains conditional until that earlier requirement is revised. Exact requested tags and safe rename behavior remain required either way.
 - Desktop installers remain deferred. Docker scanning gates Docker distribution claims; it must not become an unrelated prerequisite for native desktop packaging. The existing release workflow has no such Docker dependency; avoid adding the proposed one.
@@ -64,7 +64,7 @@ Every row is a proposed new issue in `drofnas/studynarrator-ai`, subject to the 
 | ID   | Type  | Area                          | Priority | Planning state  | Blocked by                             | Blocks    |
 | ---- | ----- | ----------------------------- | -------- | --------------- | -------------------------------------- | --------- |
 | R04  | Task  | Speaches adapter              | P0       | In progress     | —                                      | —         |
-| R05  | Task  | Setup and product identity    | P1       | Ready           | —                                      | —         |
+| R05  | Task  | Setup and product identity    | P1       | In progress     | —                                      | —         |
 | R06  | Task  | Local Docker launcher         | P1       | In progress     | —                                      | —         |
 | R07a | Task  | CI                            | P1       | In progress     | —                                      | R10b, R17 |
 | R07b | Task  | Local verification            | P1       | In progress     | —                                      | —         |

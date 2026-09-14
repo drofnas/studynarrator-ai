@@ -237,6 +237,10 @@ function assertImageContract(inspect) {
     "image must run as fixed UID/GID 10001",
   );
   invariant(
+    labels["org.opencontainers.image.title"] === "StudyNarrator AI",
+    "OCI title label is incorrect",
+  );
+  invariant(
     labels["org.opencontainers.image.version"] === "verify",
     "OCI version label is incorrect",
   );

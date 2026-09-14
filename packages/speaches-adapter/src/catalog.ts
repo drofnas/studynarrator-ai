@@ -27,7 +27,7 @@ import {
   withAbort,
 } from "./httpClient.js";
 
-const DIAGNOSTIC_TEXT = "StudyNarrator connection check.";
+const DIAGNOSTIC_TEXT = "StudyNarrator AI connection check.";
 
 const MAX_ERROR_LENGTH = 280;
 const STAGE_NAMES = [
@@ -648,7 +648,7 @@ export async function diagnoseSpeaches(
         response.status === 401
           ? "authentication-required"
           : "authentication-forbidden",
-        "This Speaches server requires authentication, which StudyNarrator does not support.",
+        "This Speaches server requires authentication, which StudyNarrator AI does not support.",
         elapsed(started),
       ),
     );

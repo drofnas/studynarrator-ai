@@ -18,7 +18,7 @@ import { resolveRenderClient } from "@/services/renders/renderClient.js";
 import { resolveScriptGenerationClient } from "@/services/scriptGeneration/scriptGenerationClient.js";
 
 const root = document.getElementById("root");
-if (!root) throw new Error("StudyNarrator root element is missing");
+if (!root) throw new Error("StudyNarrator AI root element is missing");
 
 createRoot(root).render(
   <StrictMode>

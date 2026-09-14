@@ -1,5 +1,5 @@
 appId: io.github.drofnas.studynarrator
-productName: StudyNarrator
+productName: StudyNarrator AI
 electronVersion: 43.3.0
 directories:
   output: release

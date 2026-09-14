@@ -1,4 +1,4 @@
-# StudyNarrator remediation tasks
+# StudyNarrator AI remediation tasks
 
 This file tracks the current release workload. The original remediation plan
 started from `main` commit `ed6879d`; the September 4, 2026 task refresh starts
@@ -52,7 +52,7 @@ Status values: `todo`, `in progress`, `blocked`, `deferred`, `complete`, `supers
 | R02 | Remove render provenance and retag MP3s on rename        | P0       | complete    | R01                                       |
 | R03 | Remove `node-id3` and its obsolete wrapper               | P1       | superseded  | replaced by R24                           |
 | R04 | Reject redirects from every Speaches request             | P0       | todo        | none                                      |
-| R05 | Correct runtime documentation and the product title      | P1       | todo        | R02                                       |
+| R05 | Correct runtime documentation and the product title      | P1       | in progress | R02                                       |
 | R06 | Keep the Docker Web launcher local                       | P1       | in progress | none                                      |
 | R07 | Enforce coverage and dead-code checks in pull-request CI | P1       | in progress | none                                      |
 | R08 | Set explicit Web response security headers               | P1       | todo        | none                                      |
@@ -422,7 +422,7 @@ local machine without adding LAN access, accounts, or authentication.
 **Acceptance:**
 
 - Rendered Compose configuration publishes the Web UI on `127.0.0.1` only.
-- `.env.example` exposes no StudyNarrator bind-address or Host-allowlist setting.
+- `.env.example` exposes no StudyNarrator AI bind-address or Host-allowlist setting.
 - Documentation gives one local launch path and does not present LAN access as a
   supported product mode.
 - Docker Web can still connect to an external Speaches server.

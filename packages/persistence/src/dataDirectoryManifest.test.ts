@@ -147,7 +147,7 @@ describe("readDataDirectoryManifest", () => {
       tooNew.layoutVersion,
       DATA_DIRECTORY_LAYOUT_VERSION,
     );
-    expect(failure.message).toContain("newer version of StudyNarrator");
+    expect(failure.message).toContain("newer version of StudyNarrator AI");
     expect(await readManifestJson(directory)).toEqual(tooNew);
     const leftover = await lstat(join(directory, "manifest.json.tmp")).catch(
       () => null,

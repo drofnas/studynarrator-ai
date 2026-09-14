@@ -46,7 +46,7 @@ test.describe("external-LLM script generation", () => {
       name: "Create a script prompt editor",
     });
     await expect(creationEditor).toContainText(
-      "# StudyNarrator Script Creation Instructions",
+      "# StudyNarrator AI Script Creation Instructions",
     );
     await expect(
       page.getByText(
@@ -145,7 +145,7 @@ test.describe("external-LLM script generation", () => {
       name: "Update a script prompt editor",
     });
     await expect(updateEditor).toContainText(
-      "# StudyNarrator Script Update Instructions",
+      "# StudyNarrator AI Script Update Instructions",
     );
     await expect(
       page.getByText(

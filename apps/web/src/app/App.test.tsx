@@ -105,14 +105,14 @@ const promptDocuments = {
     kind: "creation" as const,
     fileName: "studynarrator-creation-prompt.md",
     mimeType: "text/markdown; charset=utf-8" as const,
-    content: "# StudyNarrator Script Creation Instructions",
+    content: "# StudyNarrator AI Script Creation Instructions",
     checksum: "a".repeat(64),
   },
   update: {
     kind: "update" as const,
     fileName: "studynarrator-update-prompt.md",
     mimeType: "text/markdown; charset=utf-8" as const,
-    content: "# StudyNarrator Script Update Instructions",
+    content: "# StudyNarrator AI Script Update Instructions",
     checksum: "b".repeat(64),
   },
 };

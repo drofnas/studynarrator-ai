@@ -168,7 +168,7 @@ export async function synthesizeSpeech(
       if (response.status === 401 || response.status === 403) {
         throw new SpeachesSynthesisError(
           "authenticationRequired",
-          "This Speaches server requires authentication, which StudyNarrator does not support.",
+          "This Speaches server requires authentication, which StudyNarrator AI does not support.",
           false,
           response.status,
         );

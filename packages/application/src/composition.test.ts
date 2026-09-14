@@ -463,7 +463,7 @@ describe("createStudyNarratorServices", () => {
       await expect(
         services.persistence.backups?.restore({ backupPath: backup.path }),
       ).rejects.toThrow(
-        "Close StudyNarrator before restoring a backup; the database must not be open.",
+        "Close StudyNarrator AI before restoring a backup; the database must not be open.",
       );
       expect(vi.mocked(restoreDatabaseFromBackup)).not.toHaveBeenCalled();
     });

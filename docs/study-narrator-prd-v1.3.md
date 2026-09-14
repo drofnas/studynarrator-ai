@@ -1,5 +1,11 @@
 # Product Requirements Document: StudyNarrator
 
+> **Historical planning document:** Current source, [README](../README.md),
+> [setup](../SETUP.md), and [upgrade guidance](../UPGRADE.md) are authoritative.
+> The current product name is **StudyNarrator AI**. The pre-release reset
+> instructions in section 17.7 are superseded by `UPGRADE.md` and must not be
+> used as current upgrade guidance.
+
 **Product name:** StudyNarrator  
 **Document status:** Pre-release v1 baseline
 **Date:** August 15, 2026

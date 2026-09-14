@@ -25,7 +25,7 @@ async function failure(response: Response): Promise<Error> {
   return new Error(
     parsed.success
       ? parsed.data.error.message
-      : "StudyNarrator could not complete the script generation operation.",
+      : "StudyNarrator AI could not complete the script generation operation.",
   );
 }
 

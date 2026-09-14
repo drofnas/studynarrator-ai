@@ -1202,7 +1202,7 @@ export async function migrateDatabase(options: {
         ? ""
         : ` The failure occurred while applying migration ${String(failedMigrationInfo.version)} (${failedMigrationInfo.name}).`;
     throw new MigrationFailureError(
-      `StudyNarrator could not migrate its database. The previous data remains recoverable from the protected backup.${detail}`,
+      `StudyNarrator AI could not migrate its database. The previous data remains recoverable from the protected backup.${detail}`,
       options.databasePath,
       backupPath,
       currentVersion,

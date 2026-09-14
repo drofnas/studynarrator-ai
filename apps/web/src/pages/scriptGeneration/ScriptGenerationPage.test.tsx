@@ -82,7 +82,7 @@ function fixture() {
     fileName: "caching-creation-prompt.md",
     mimeType: "text/markdown; charset=utf-8" as const,
     content:
-      "# StudyNarrator Script Creation Instructions\n[speaker_narrator]\n`resume/cv`\n# USER INPUT\n## Topic or material to teach\n[WHAT SHOULD THE SCRIPT TEACH?]\n## Source material\n[PASTE SOURCE MATERIAL HERE AND/OR ATTACH RELEVANT FILES TO THE CONVERSATION.]",
+      "# StudyNarrator AI Script Creation Instructions\n[speaker_narrator]\n`resume/cv`\n# USER INPUT\n## Topic or material to teach\n[WHAT SHOULD THE SCRIPT TEACH?]\n## Source material\n[PASTE SOURCE MATERIAL HERE AND/OR ATTACH RELEVANT FILES TO THE CONVERSATION.]",
     checksum: "a".repeat(64),
   };
   const update = {
@@ -90,7 +90,7 @@ function fixture() {
     fileName: "caching-update-prompt.md",
     mimeType: "text/markdown; charset=utf-8" as const,
     content:
-      "# StudyNarrator Script Update Instructions\n[speaker_narrator]\n[pause_short]\n[section: Topic]\n# USER INPUT\n## Requested changes\n[DESCRIBE WHAT SHOULD BE ADDED, REMOVED, CORRECTED, EXPANDED, OR REORGANIZED.]\n## Current StudyNarrator script\n[PASTE THE CURRENT SCRIPT HERE AND/OR ATTACH IT TO THE CONVERSATION.]",
+      "# StudyNarrator AI Script Update Instructions\n[speaker_narrator]\n[pause_short]\n[section: Topic]\n# USER INPUT\n## Requested changes\n[DESCRIBE WHAT SHOULD BE ADDED, REMOVED, CORRECTED, EXPANDED, OR REORGANIZED.]\n## Current StudyNarrator AI script\n[PASTE THE CURRENT SCRIPT HERE AND/OR ATTACH IT TO THE CONVERSATION.]",
     checksum: "b".repeat(64),
   };
   const exportPrompt = vi.fn(
@@ -196,7 +196,7 @@ describe("script prompt kit", () => {
     expect(updateTab).toHaveAttribute("aria-selected", "false");
     expect(
       (await editorView("Create a script prompt editor")).state.doc.toString(),
-    ).toContain("# StudyNarrator Script Creation Instructions");
+    ).toContain("# StudyNarrator AI Script Creation Instructions");
     expect(
       (await editorView("Create a script prompt editor")).state.doc.toString(),
     ).toContain("[WHAT SHOULD THE SCRIPT TEACH?]");

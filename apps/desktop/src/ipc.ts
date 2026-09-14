@@ -273,7 +273,7 @@ function safePersistenceError(record?: Record<string, unknown>): Error {
     );
   }
   return new Error(
-    "StudyNarrator could not complete the persistence operation.",
+    "StudyNarrator AI could not complete the persistence operation.",
   );
 }
 
@@ -317,7 +317,7 @@ export function registerConnectionHandlers(
         if (record?.code === "PERSISTENCE_NOT_FOUND")
           throw new Error("The Speaches connection does not exist.");
         throw new Error(
-          "StudyNarrator could not complete the connection operation.",
+          "StudyNarrator AI could not complete the connection operation.",
         );
         /* eslint-enable preserve-caught-error */
       }
@@ -391,7 +391,7 @@ export function registerScratchpadHandlers(
       ) {
         throw new Error(record.message);
       }
-      throw new Error("StudyNarrator could not complete speech synthesis.");
+      throw new Error("StudyNarrator AI could not complete speech synthesis.");
       /* eslint-enable preserve-caught-error */
     }
   });
@@ -425,7 +425,9 @@ export function registerProjectPreviewHandlers(
       ) {
         throw new Error(record.message);
       }
-      throw new Error("StudyNarrator could not complete the project preview.");
+      throw new Error(
+        "StudyNarrator AI could not complete the project preview.",
+      );
       /* eslint-enable preserve-caught-error */
     }
   });
@@ -454,7 +456,7 @@ export function registerSpeechCacheHandlers(
             "The request does not match the speech cache contract.",
           );
         throw new Error(
-          "StudyNarrator could not complete the speech cache operation.",
+          "StudyNarrator AI could not complete the speech cache operation.",
         );
         /* eslint-enable preserve-caught-error */
       }
@@ -513,7 +515,7 @@ export function registerRenderHandlers(
         )
           throw new Error(record.message);
         throw new Error(
-          "StudyNarrator could not complete the render operation.",
+          "StudyNarrator AI could not complete the render operation.",
         );
         /* eslint-enable preserve-caught-error */
       }
@@ -656,7 +658,7 @@ export function registerScriptGenerationHandlers(
         return await listener(input);
       } catch {
         throw new Error(
-          "StudyNarrator could not complete the script generation operation.",
+          "StudyNarrator AI could not complete the script generation operation.",
         );
       }
     });

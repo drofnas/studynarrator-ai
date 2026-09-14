@@ -86,7 +86,7 @@ function safeError(error: unknown): ScriptGenerationServiceError {
   }
   return new ScriptGenerationServiceError(
     "SCRIPT_GENERATION_STORAGE",
-    "StudyNarrator could not generate the requested export.",
+    "StudyNarrator AI could not generate the requested export.",
   );
 }
 
@@ -103,7 +103,7 @@ function generationContext(
 ): ScriptGenerationContext {
   return ScriptGenerationContextSchema.parse({
     schemaVersion: SCRIPT_GENERATION_SCHEMA_VERSION,
-    projectName: project?.name ?? "StudyNarrator",
+    projectName: project?.name ?? "StudyNarrator AI",
     speakers:
       project && project.speakerMappings.length > 0
         ? project.speakerMappings.map(

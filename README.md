@@ -1,6 +1,6 @@
-# StudyNarrator
+# StudyNarrator AI
 
-StudyNarrator is a local-first authoring and text-to-speech application for turning structured study scripts into narrated audio. It provides a React Web interface and an Electron desktop development client backed by the same TypeScript parser, persistence, connection, and rendering services.
+StudyNarrator AI is a local-first authoring and text-to-speech application for turning structured study scripts into narrated audio. It provides a React Web interface and an Electron desktop development client backed by the same TypeScript parser, persistence, connection, and rendering services.
 
 Use it to:
 
@@ -8,18 +8,17 @@ Use it to:
 - Map speakers to text-to-speech models and voices.
 - Maintain project and global pronunciation lexicons.
 - Test short passages in the Quick Scratchpad.
-- Freeze an immutable render plan before generating audio.
-- Render, review, and export MP3 audio, transcripts, frozen project snapshots, and individual speech segments.
+- Render, review, and export MP3 audio, transcripts, project snapshots, and individual speech segments.
 - Export prompt kits for creating or updating scripts with an external language model.
 - Continue authoring while the speech server is offline.
 
-StudyNarrator does not bundle a speech engine. It sends synthesis requests to an external [Speaches](https://speaches.ai/) server through the OpenAI-compatible text-to-speech API.
+StudyNarrator AI does not bundle a speech engine. It sends synthesis requests to an external [Speaches](https://speaches.ai/) server through the OpenAI-compatible text-to-speech API.
 
 > **Beta distribution status:** Docker Web is a supported single-user distribution. Its supported Docker upgrade path retains the `studynarrator-data` named volume mounted at `/data`; application migrations run at startup. Electron is available from source only; unsigned desktop installers are not published, and cross-target native verification remains deferred.
 
 ## Quick start: Docker Web
 
-See [SETUP.md](SETUP.md) for the full setup: Speaches installation, the speech model download, starting StudyNarrator, and connecting them. In short, with Docker Engine and the Compose plugin available:
+See [SETUP.md](SETUP.md) for the full setup: Speaches installation, the speech model download, starting StudyNarrator AI, and connecting them. In short, with Docker Engine and the Compose plugin available:
 
 ```sh
 git clone https://github.com/drofnas/studynarrator-ai.git
@@ -34,7 +33,7 @@ Open <http://127.0.0.1:8080> and complete the onboarding connection to Speaches.
 
 All source-based modes require:
 
-- Node.js `26.7.0` (`.nvmrc` pins this version).
+- Node.js (use the version pinned by `.nvmrc`).
 - npm `11.19.0` (the version declared in `package.json`).
 - FFmpeg and FFprobe on `PATH` for diagnostics and rendering.
 - A reachable Speaches server for preview and render operations. Authoring works without it.
@@ -88,7 +87,7 @@ New installations include built-in Global Lexicon defaults for common acronyms a
 
 ## Data upgrades and backups
 
-StudyNarrator migrates the database forward automatically when it starts. Before any schema upgrade it takes a full backup of the current database in the `backups/` directory next to the database file, for example `<dataDir>/backups/`.
+StudyNarrator AI migrates the database forward automatically when it starts. Before any schema upgrade it takes a full backup of the current database in the `backups/` directory next to the database file, for example `<dataDir>/backups/`.
 
 Old backups are pruned automatically: the newest backup for each source schema version, plus the three most recent backup files, plus the two most recent pre-restore safety copies always survive.
 
@@ -108,7 +107,7 @@ The Compose package fixes `STUDYNARRATOR_DATA_DIR` to `/data`, the only persiste
 
 ## Troubleshooting
 
-### StudyNarrator opens but reports Disconnected
+### StudyNarrator AI opens but reports Disconnected
 
 1. Run `curl --fail http://127.0.0.1:8000/health` on the Speaches host.
 2. Confirm the Speaches container is running with `docker compose ps` in its directory.
@@ -127,11 +126,11 @@ SPEACHES_BASE_URL=http://127.0.0.1:8000 \
   uvx speaches-cli model ls --task text-to-speech
 ```
 
-Choose that same model in the StudyNarrator connection or project settings.
+Choose that same model in the StudyNarrator AI connection or project settings.
 
 ### Diagnostics report that FFmpeg is unavailable
 
-Install FFmpeg and ensure `ffmpeg -version` and `ffprobe -version` work in the shell that launches StudyNarrator. The Docker Web image includes FFmpeg.
+Install FFmpeg and ensure `ffmpeg -version` and `ffprobe -version` work in the shell that launches StudyNarrator AI. The Docker Web image includes FFmpeg.
 
 ### Docker Web cannot write `/data`
 
@@ -163,7 +162,6 @@ npm run verify
 - [Upgrading, downgrading, and your data](UPGRADE.md)
 - [Docker Web operations](deploy/docker/README.md)
 - [Script grammar](docs/script-grammar-v1.md)
-- [Product requirements and architecture](docs/study-narrator-prd-v1.3.md)
 - [Speaches compatibility baseline](docs/baselines/speaches.md)
 - [Permissive script recovery ADR](docs/adr/0001-permissive-script-recovery.md)
 - [Official Speaches installation](https://speaches.ai/installation/)
@@ -171,4 +169,4 @@ npm run verify
 
 ## License and acknowledgments
 
-StudyNarrator is licensed under the [Apache License 2.0](LICENSE). See [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md) for project and workflow acknowledgments. Speaches, FFmpeg, models, voices, Electron, and other dependencies retain their own licenses.
+StudyNarrator AI is licensed under the [Apache License 2.0](LICENSE). See [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md) for project and workflow acknowledgments. Speaches, FFmpeg, models, voices, Electron, and other dependencies retain their own licenses.

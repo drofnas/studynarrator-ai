@@ -72,7 +72,7 @@ function safePreviewError(error: unknown): ProjectPreviewServiceError {
       case "authenticationRequired":
         return new ProjectPreviewServiceError(
           "PROJECT_PREVIEW_AUTHENTICATION",
-          "This Speaches server requires authentication, which StudyNarrator does not support.",
+          "This Speaches server requires authentication, which StudyNarrator AI does not support.",
         );
       case "configurationError":
         return new ProjectPreviewServiceError(
@@ -82,7 +82,7 @@ function safePreviewError(error: unknown): ProjectPreviewServiceError {
       case "invalidAudio":
         return new ProjectPreviewServiceError(
           "PROJECT_PREVIEW_INVALID_AUDIO",
-          "Speaches returned WAV audio that StudyNarrator could not validate.",
+          "Speaches returned WAV audio that StudyNarrator AI could not validate.",
         );
       case "selectionRejected":
         return new ProjectPreviewServiceError(
@@ -108,7 +108,7 @@ function safePreviewError(error: unknown): ProjectPreviewServiceError {
   }
   return new ProjectPreviewServiceError(
     "PROJECT_PREVIEW_UNAVAILABLE",
-    "StudyNarrator could not complete the project preview.",
+    "StudyNarrator AI could not complete the project preview.",
   );
 }
 

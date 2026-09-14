@@ -1,4 +1,4 @@
-# StudyNarrator Script Grammar v1
+# StudyNarrator AI Script Grammar v1
 
 `SCRIPT_GRAMMAR_VERSION = 1` is deterministic. Sections and paragraph boundaries are line-oriented; speaker and pause control tokens are recognized anywhere in speech.
 

@@ -223,7 +223,7 @@ export function AppShell() {
   return (
     <div className={styles.shell}>
       <header className={styles.mobileBar}>
-        <span className={styles.mobileBrand}>StudyNarrator</span>
+        <span className={styles.mobileBrand}>StudyNarrator AI</span>
         <button
           ref={menuButtonRef}
           className={styles.menuButton}
@@ -258,7 +258,7 @@ export function AppShell() {
           <Link
             className={styles.brand}
             to={APP_PATHS.projects}
-            aria-label="StudyNarrator home"
+            aria-label="StudyNarrator AI home"
           >
             <span className={styles.brandMark} aria-hidden="true">
               <i />
@@ -267,7 +267,7 @@ export function AppShell() {
               <i />
             </span>
             <span>
-              <strong>StudyNarrator</strong>
+              <strong>StudyNarrator AI</strong>
               <small>Authoring room</small>
             </span>
           </Link>
@@ -282,7 +282,7 @@ export function AppShell() {
           </button>
         </div>
 
-        <nav className={styles.navigation} aria-label="StudyNarrator tools">
+        <nav className={styles.navigation} aria-label="StudyNarrator AI tools">
           <Link
             className={styles.promptAction}
             data-active={promptActive}

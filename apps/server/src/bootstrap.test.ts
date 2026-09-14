@@ -139,7 +139,7 @@ describe("server data directory manifest", () => {
         );
         if (status.state !== "unavailable")
           throw new Error("expected the unavailable persistence status");
-        expect(status.message).toContain("newer version of StudyNarrator");
+        expect(status.message).toContain("newer version of StudyNarrator AI");
         await expect(services.persistence.projects.list()).rejects.toThrow(
           "Persistence is unavailable",
         );

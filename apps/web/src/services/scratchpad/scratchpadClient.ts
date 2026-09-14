@@ -44,7 +44,7 @@ export function createRestScratchpadClient(
         }
         throw new ScratchpadClientError(
           boundary?.error.message ??
-            "StudyNarrator returned an invalid synthesis response.",
+            "StudyNarrator AI returned an invalid synthesis response.",
           boundary?.error.code ?? "INVALID_BOUNDARY_RESPONSE",
           response.status,
         );

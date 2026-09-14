@@ -47,6 +47,7 @@ test.describe("Electron acceptance", () => {
     studyNarrator,
   }) => {
     const { page } = electronStudyNarrator;
+    await expect(page).toHaveTitle("StudyNarrator AI");
     await configureElectronConnection(page, studyNarrator);
     const bridgeShape = await page.evaluate(() => {
       const renderer = window as typeof window & {
@@ -409,7 +410,7 @@ test.describe("Electron acceptance", () => {
       name: "Create a script prompt editor",
     });
     await expect(creationEditor).toContainText(
-      "# StudyNarrator Script Creation Instructions",
+      "# StudyNarrator AI Script Creation Instructions",
     );
     await expect(
       page.getByText(

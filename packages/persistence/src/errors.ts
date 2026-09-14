@@ -35,7 +35,7 @@ export class SchemaTooNewError extends Error {
     }[],
   ) {
     super(
-      `This data was created by a newer version of StudyNarrator (database format ${String(databaseSchemaVersion)}). ` +
+      `This data was created by a newer version of StudyNarrator AI (database format ${String(databaseSchemaVersion)}). ` +
         `This version supports format ${String(supportedSchemaVersion)}.`,
     );
   }

@@ -80,12 +80,12 @@ describe("fake Speaches diagnostic scenarios", () => {
       model: FAKE_SPEACHES_MODEL_ID,
       voice: FAKE_SPEACHES_VOICE_ID,
       speed: null,
-      inputLength: 31,
+      inputLength: 34,
     });
     expect(state.requests.at(-1)?.inputHash).toMatch(/^[a-f0-9]{64}$/u);
     expect(JSON.stringify(state)).not.toContain("test-secret-must-not-appear");
     expect(JSON.stringify(state)).not.toContain(
-      "StudyNarrator connection check",
+      "StudyNarrator AI connection check",
     );
   });
 
