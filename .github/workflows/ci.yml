@@ -27,16 +27,16 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg
+      - name: Check for dead code
+        run: npm run audit:knip
       - name: Check formatting
         run: npm run format:check
       - name: Lint
         run: npm run lint
       - name: Typecheck
         run: npm run typecheck
-      - name: Run unit tests
-        run: npm test
-      - name: Run API tests
-        run: npm run test:api
+      - name: Run tests with coverage
+        run: npm run test:coverage
 
   # The Electron e2e project is intentionally not run here: it requires a
   # native rebuild of better-sqlite3 and a display server, which the hosted

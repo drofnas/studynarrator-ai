@@ -46,28 +46,28 @@ documentation checkpoint.
 
 Status values: `todo`, `in progress`, `blocked`, `deferred`, `complete`, `superseded`.
 
-| ID  | Task                                                     | Priority | Status     | Depends on                                |
-| --- | -------------------------------------------------------- | -------- | ---------- | ----------------------------------------- |
-| R01 | Add MP3 metadata to the FFmpeg encoder                   | P0       | complete   | none                                      |
-| R02 | Remove render provenance and retag MP3s on rename        | P0       | complete   | R01                                       |
-| R03 | Remove `node-id3` and its obsolete wrapper               | P1       | superseded | replaced by R24                           |
-| R04 | Reject redirects from every Speaches request             | P0       | todo       | none                                      |
-| R05 | Correct runtime documentation and the product title      | P1       | todo       | R02                                       |
-| R06 | Make Compose LAN allowlisting work from `.env`           | P1       | todo       | none                                      |
-| R07 | Enforce coverage and dead-code checks in pull-request CI | P1       | todo       | none                                      |
-| R08 | Set explicit Web response security headers               | P1       | todo       | none                                      |
-| R09 | Add and verify a production Content Security Policy      | P1       | todo       | R08                                       |
-| R10 | Enforce Docker distribution verification in CI           | P1       | todo       | R07                                       |
-| R11 | Add contributor and vulnerability-reporting guides       | P1       | todo       | none                                      |
-| R17 | Pin CI actions and configure Dependabot updates          | P2       | todo       | R07                                       |
-| R18 | Set the public repository description and topics         | P2       | complete   | none                                      |
-| R19 | Validate the desktop release workflow with an RC tag     | P2       | deferred   | R10; R13 in [future work](FUTURE_WORK.md) |
-| R22 | Search the complete project script                       | P1       | todo       | none                                      |
-| R23 | Remove the completed-output pin action                   | P1       | complete   | none                                      |
-| R24 | Write final MP3 tags with an ID3 package                 | P1       | todo       | R02; supersedes R03                       |
-| R25 | Show project-render storage in General settings          | P1       | todo       | none                                      |
-| R26 | Update built-in Global Lexicon pronunciations            | P1       | todo       | none                                      |
-| R27 | Track active and unviewed renders in the sidebar         | P1       | todo       | none                                      |
+| ID  | Task                                                     | Priority | Status      | Depends on                                |
+| --- | -------------------------------------------------------- | -------- | ----------- | ----------------------------------------- |
+| R01 | Add MP3 metadata to the FFmpeg encoder                   | P0       | complete    | none                                      |
+| R02 | Remove render provenance and retag MP3s on rename        | P0       | complete    | R01                                       |
+| R03 | Remove `node-id3` and its obsolete wrapper               | P1       | superseded  | replaced by R24                           |
+| R04 | Reject redirects from every Speaches request             | P0       | todo        | none                                      |
+| R05 | Correct runtime documentation and the product title      | P1       | todo        | R02                                       |
+| R06 | Make Compose LAN allowlisting work from `.env`           | P1       | todo        | none                                      |
+| R07 | Enforce coverage and dead-code checks in pull-request CI | P1       | in progress | none                                      |
+| R08 | Set explicit Web response security headers               | P1       | todo        | none                                      |
+| R09 | Add and verify a production Content Security Policy      | P1       | todo        | R08                                       |
+| R10 | Enforce Docker distribution verification in CI           | P1       | todo        | R07                                       |
+| R11 | Add contributor and vulnerability-reporting guides       | P1       | todo        | none                                      |
+| R17 | Pin CI actions and configure Dependabot updates          | P2       | todo        | R07                                       |
+| R18 | Set the public repository description and topics         | P2       | complete    | none                                      |
+| R19 | Validate the desktop release workflow with an RC tag     | P2       | deferred    | R10; R13 in [future work](FUTURE_WORK.md) |
+| R22 | Search the complete project script                       | P1       | todo        | none                                      |
+| R23 | Remove the completed-output pin action                   | P1       | complete    | none                                      |
+| R24 | Write final MP3 tags with an ID3 package                 | P1       | todo        | R02; supersedes R03                       |
+| R25 | Show project-render storage in General settings          | P1       | todo        | none                                      |
+| R26 | Update built-in Global Lexicon pronunciations            | P1       | todo        | none                                      |
+| R27 | Track active and unviewed renders in the sidebar         | P1       | todo        | none                                      |
 
 ## Detailed tasks
 
