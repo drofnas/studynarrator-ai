@@ -12,7 +12,7 @@ import { createServer } from "node:net";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
 import {
-  assertScoutPolicy,
+  assertTrivyPolicy,
   collectTiffEvidence,
 } from "./verify-docker-vulnerabilities.mjs";
 import {
@@ -30,6 +30,10 @@ import {
 } from "./verify-docker-cleanup.mjs";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
+const requiredTrivyVersion = readFileSync(
+  resolve(repositoryRoot, ".trivy-version"),
+  "utf8",
+).trim();
 const verificationRoot = resolve(repositoryRoot, ".tmp", "verify-docker");
 const buildkitOwnershipMarker = resolve(
   verificationRoot,
@@ -350,7 +354,8 @@ async function runDockerAcceptance({
   fakeApplicationUrl,
   fakePort,
   sbomPath,
-  scoutPath,
+  trivyPath,
+  sarifPath,
   assessmentPath,
 }) {
   const config = JSON.parse(await composeOutput("config", "--format", "json"));
@@ -419,14 +424,30 @@ async function runDockerAcceptance({
     ),
   );
 
-  await run("docker", [
-    "scout",
-    "sbom",
+  await run("trivy", [
+    "image",
+    "--scanners",
+    "vuln",
+    "--severity",
+    "CRITICAL,HIGH",
+    "--image-src",
+    "docker",
+    "--format",
+    "json",
+    "--output",
+    trivyPath,
+    "--no-progress",
+    "--skip-version-check",
+    resourceNames.imageTag,
+  ]);
+  const report = JSON.parse(readFileSync(trivyPath, "utf8"));
+  await run("trivy", [
+    "convert",
     "--format",
     "cyclonedx",
     "--output",
     sbomPath,
-    `local://${resourceNames.imageTag}`,
+    trivyPath,
   ]);
   const sbom = JSON.parse(readFileSync(sbomPath, "utf8"));
   invariant(
@@ -435,18 +456,19 @@ async function runDockerAcceptance({
       sbom.components.length > 0,
     "CycloneDX image inventory is invalid",
   );
-  await run("docker", [
-    "scout",
-    "cves",
-    "--only-severity",
-    "critical,high",
+  await run("trivy", [
+    "convert",
     "--format",
     "sarif",
     "--output",
-    scoutPath,
-    `local://${resourceNames.imageTag}`,
+    sarifPath,
+    trivyPath,
   ]);
-  const report = JSON.parse(readFileSync(scoutPath, "utf8"));
+  const sarif = JSON.parse(readFileSync(sarifPath, "utf8"));
+  invariant(
+    sarif.version === "2.1.0" && Array.isArray(sarif.runs),
+    "Trivy SARIF diagnostics are invalid",
+  );
   let evidence;
   if (JSON.stringify(report).includes("CVE-2026-52490")) {
     process.stdout.write(
@@ -500,11 +522,11 @@ async function runDockerAcceptance({
       fail("TIFF image evidence is invalid");
     }
   }
-  const assessment = assertScoutPolicy({
+  const assessment = assertTrivyPolicy({
     report,
     exceptions: JSON.parse(
       readFileSync(
-        resolve(repositoryRoot, "deploy/docker/scout-high-exceptions.json"),
+        resolve(repositoryRoot, "deploy/docker/container-high-exceptions.json"),
         "utf8",
       ),
     ),
@@ -517,7 +539,7 @@ async function runDockerAcceptance({
   });
   if (assessment.assessments.length > 0) {
     process.stdout.write(
-      "DOCKER VERIFY: CVE-2026-52490 not affected — vulnerable tiffcrop code is absent; raw Scout finding retained\n",
+      "DOCKER VERIFY: CVE-2026-52490 not affected — vulnerable tiffcrop code is absent; raw Trivy finding retained\n",
     );
   }
 
@@ -692,7 +714,8 @@ async function main() {
 
   let buildkitImageExistedBeforeRun = true;
   let sbomPath;
-  let scoutPath;
+  let trivyPath;
+  let sarifPath;
   let assessmentPath;
   try {
     await executeWithCleanup({
@@ -733,6 +756,13 @@ async function main() {
         }
 
         await commandOutput("docker", ["buildx", "version"]);
+        const trivyVersion = (
+          await commandOutput("trivy", ["--version"])
+        ).match(/^Version:\s*(\S+)$/mu)?.[1];
+        invariant(
+          trivyVersion === requiredTrivyVersion,
+          `Trivy ${requiredTrivyVersion} is required; found ${trivyVersion ?? "an unknown version"}`,
+        );
         buildkitImageExistedBeforeRun = await buildkitImageExists();
         if (!buildkitImageExistedBeforeRun) {
           writeFileSync(
@@ -749,7 +779,8 @@ async function main() {
 
         const verificationRun = mkdtempSync(resolve(verificationRoot, "run-"));
         sbomPath = resolve(verificationRun, "studynarrator.cdx.json");
-        scoutPath = resolve(verificationRun, "docker-scout.sarif");
+        trivyPath = resolve(verificationRun, "trivy.json");
+        sarifPath = resolve(verificationRun, "trivy.sarif");
         assessmentPath = resolve(
           verificationRun,
           "vulnerability-assessment.json",
@@ -772,7 +803,8 @@ async function main() {
           fakeApplicationUrl,
           fakePort,
           sbomPath,
-          scoutPath,
+          trivyPath,
+          sarifPath,
           assessmentPath,
         });
       },
@@ -836,7 +868,7 @@ async function main() {
   }
 
   process.stdout.write(
-    `\nDOCKER VERIFY: ALL CHECKS PASSED\nCycloneDX inventory: ${sbomPath}\nDocker Scout report: ${scoutPath}\nVulnerability assessment: ${assessmentPath}\n`,
+    `\nDOCKER VERIFY: ALL CHECKS PASSED\nCycloneDX inventory: ${sbomPath}\nTrivy JSON report: ${trivyPath}\nTrivy SARIF diagnostics: ${sarifPath}\nVulnerability assessment: ${assessmentPath}\n`,
   );
 }
 

@@ -15,7 +15,7 @@ export function collectTiffEvidence(root?: string): Promise<{
   librarySha256: string;
 }>;
 
-export function assertScoutPolicy(options: {
+export function assertTrivyPolicy(options: {
   report: unknown;
   exceptions: unknown;
   sbom?: unknown;

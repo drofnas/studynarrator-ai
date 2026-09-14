@@ -57,7 +57,7 @@ Status values: `todo`, `in progress`, `blocked`, `deferred`, `complete`, `supers
 | R07 | Enforce coverage and dead-code checks in pull-request CI | P1       | in progress | none                                      |
 | R08 | Set explicit Web response security headers               | P1       | in progress | none                                      |
 | R09 | Add and verify a production Content Security Policy      | P1       | todo        | R08                                       |
-| R10 | Enforce Docker distribution verification in CI           | P1       | todo        | R07                                       |
+| R10 | Enforce Docker distribution verification in CI           | P1       | in progress | R07                                       |
 | R11 | Add contributor and vulnerability-reporting guides       | P1       | todo        | none                                      |
 | R17 | Pin CI actions and configure Dependabot updates          | P2       | todo        | R07                                       |
 | R18 | Set the public repository description and topics         | P2       | complete    | none                                      |

@@ -100,11 +100,12 @@ export async function collectTiffEvidence(root = "/") {
 }
 
 function assessTiffcrop({ finding, sbom, evidence, imageId, now }) {
-  const purl = (name) =>
-    `pkg:deb/debian/${name}@4.7.0-3%2Bdeb13u3?os_distro=trixie&os_name=debian&os_version=13`;
+  const packagePurl = "pkg:deb/debian/libtiff6@4.7.0-3%2Bdeb13u3";
   requireEvidence(
-    finding.package === purl("tiff") &&
-      finding.fixedVersion === "not fixed" &&
+    finding.name === "libtiff6" &&
+      finding.installedVersion === assessedVersion &&
+      finding.package.split("?")[0] === packagePurl &&
+      finding.fixedVersion === "" &&
       now >= Date.parse("2026-09-01T00:00:00Z") &&
       now < Date.parse(expiresAt),
     "TIFF assessment scope changed or expired; review CVE-2026-52490",
@@ -112,7 +113,11 @@ function assessTiffcrop({ finding, sbom, evidence, imageId, now }) {
   requireEvidence(
     /^sha256:[a-f0-9]{64}$/u.test(imageId ?? "") &&
       sbom?.bomFormat === "CycloneDX" &&
-      sbom.metadata?.component?.purl?.split("@")[1]?.split("?")[0] === imageId,
+      sbom.metadata?.component?.properties?.some(
+        (property) =>
+          property?.name === "aquasecurity:trivy:ImageID" &&
+          property.value === imageId,
+      ),
     "TIFF assessment needs the SBOM for this exact image ID",
   );
   const components = [];
@@ -132,8 +137,7 @@ function assessTiffcrop({ finding, sbom, evidence, imageId, now }) {
   };
   visit(sbom.components);
   requireEvidence(
-    components.some((item) => item.purl === purl("tiff")) &&
-      components.some((item) => item.purl === purl("libtiff6")) &&
+    components.some((item) => item.purl?.split("?")[0] === packagePurl) &&
       !components.some((item) =>
         /tiffcrop|libtiff-tools/iu.test(JSON.stringify(item)),
       ),
@@ -158,7 +162,7 @@ function assessTiffcrop({ finding, sbom, evidence, imageId, now }) {
     id: assessedCve,
     status: "not_affected",
     justification: "vulnerable_code_not_present",
-    package: purl("tiff"),
+    package: finding.package,
     imageId,
     architecture: pkg.architecture,
     librarySha256: evidence.librarySha256,
@@ -170,7 +174,7 @@ function assessTiffcrop({ finding, sbom, evidence, imageId, now }) {
   };
 }
 
-export function assertScoutPolicy({
+export function assertTrivyPolicy({
   report,
   exceptions,
   sbom,
@@ -179,42 +183,70 @@ export function assertScoutPolicy({
   now = Date.now(),
 }) {
   requireEvidence(
-    report?.version === "2.1.0" &&
-      Array.isArray(report.runs) &&
-      report.runs.length > 0,
-    "Scout SARIF report is invalid",
+    report?.SchemaVersion === 2 &&
+      report.ArtifactType === "container_image" &&
+      typeof report.Metadata?.ImageID === "string" &&
+      Array.isArray(report.Results),
+    "Trivy JSON report is invalid",
+  );
+  requireEvidence(
+    report.Metadata.ImageID === imageId,
+    "Trivy report needs this exact image ID",
   );
   requireEvidence(
     exceptions?.schemaVersion === 1 && Array.isArray(exceptions.exceptions),
-    "Scout exception document is invalid",
+    "container exception document is invalid",
   );
+  for (const exception of exceptions.exceptions) {
+    requireEvidence(
+      exception &&
+        typeof exception.id === "string" &&
+        /^CVE-\d{4}-\d+$/u.test(exception.id) &&
+        typeof exception.package === "string" &&
+        exception.package.startsWith("pkg:") &&
+        typeof exception.reason === "string" &&
+        exception.reason.length >= 80 &&
+        /^\d{4}-\d{2}-\d{2}$/u.test(exception.expiresAt) &&
+        Number.isFinite(Date.parse(`${exception.expiresAt}T00:00:00Z`)),
+      "container exception entry is invalid",
+    );
+  }
   const used = new Set();
   const assessments = [];
-  for (const run of report.runs) {
+  for (const result of report.Results) {
     requireEvidence(
-      Array.isArray(run.results),
-      "Scout SARIF results are missing",
+      result &&
+        typeof result.Target === "string" &&
+        typeof result.Class === "string" &&
+        typeof result.Type === "string" &&
+        (result.Vulnerabilities === undefined ||
+          Array.isArray(result.Vulnerabilities)),
+      "Trivy result is invalid",
     );
-    for (const result of run.results) {
-      const message = result?.message?.text;
-      requireEvidence(typeof message === "string", "Scout finding is invalid");
-      const value = (label) =>
-        message
-          .match(new RegExp(`^${label}\\s*:([^\\n]+)`, "m"))?.[1]
-          ?.trim() ?? "";
+    for (const vulnerability of result.Vulnerabilities ?? []) {
       const finding = {
-        id: value("Vulnerability") || result.ruleId,
-        severity: value("Severity"),
-        package: value("Package"),
-        fixedVersion: value("Fixed version"),
+        id: vulnerability?.VulnerabilityID,
+        severity: vulnerability?.Severity,
+        name: vulnerability?.PkgName,
+        package: vulnerability?.PkgIdentifier?.PURL,
+        installedVersion: vulnerability?.InstalledVersion,
+        fixedVersion:
+          vulnerability?.FixedVersion === undefined
+            ? ""
+            : vulnerability.FixedVersion,
       };
       requireEvidence(
         typeof finding.id === "string" &&
           /^CVE-\d{4}-\d+$/u.test(finding.id) &&
           ["CRITICAL", "HIGH"].includes(finding.severity) &&
+          typeof finding.name === "string" &&
+          finding.name.length > 0 &&
+          typeof finding.installedVersion === "string" &&
+          finding.installedVersion.length > 0 &&
+          typeof finding.package === "string" &&
           finding.package.startsWith("pkg:") &&
-          finding.fixedVersion.length > 0,
-        "Scout finding fields are missing or unexpected",
+          typeof finding.fixedVersion === "string",
+        "Trivy finding fields are missing or unexpected",
       );
       if (finding.id === assessedCve) {
         assessments.push(
@@ -224,11 +256,11 @@ export function assertScoutPolicy({
       }
       requireEvidence(
         finding.severity !== "CRITICAL",
-        "unassessed critical vulnerability; see the raw Scout report",
+        "unassessed critical vulnerability; see the raw Trivy report",
       );
       requireEvidence(
-        finding.fixedVersion === "not fixed",
-        "high vulnerability has a fix and must be remediated; see the raw Scout report",
+        finding.fixedVersion === "",
+        "high vulnerability has a fix and must be remediated; see the raw Trivy report",
       );
       const exception = exceptions.exceptions.find(
         (candidate) =>
@@ -236,24 +268,20 @@ export function assertScoutPolicy({
           finding.package.startsWith(candidate.package),
       );
       requireEvidence(
-        exception &&
-          typeof exception.package === "string" &&
-          exception.package.startsWith("pkg:") &&
-          typeof exception.reason === "string" &&
-          exception.reason.length >= 80,
+        exception,
         "high vulnerability lacks a narrow documented exception",
       );
       requireEvidence(
         Date.parse(`${exception.expiresAt}T00:00:00Z`) > now,
         "high vulnerability exception has expired",
       );
-      used.add(exception.id);
+      used.add(exception);
     }
   }
   for (const exception of exceptions.exceptions) {
     requireEvidence(
-      used.has(exception.id),
-      "Scout high exception is stale or no longer needed",
+      used.has(exception),
+      "container high exception is stale or no longer needed",
     );
   }
   return { schemaVersion: 1, assessments };

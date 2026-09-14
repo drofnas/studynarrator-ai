@@ -10,31 +10,49 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
-  assertScoutPolicy,
+  assertTrivyPolicy,
   collectTiffEvidence,
 } from "./verify-docker-vulnerabilities.mjs";
 
 const sentinel = "sentinel-private-endpoint-secret";
 const imageId = `sha256:${"a".repeat(64)}`;
 const purl = (name: string): string =>
-  `pkg:deb/debian/${name}@4.7.0-3%2Bdeb13u3?os_distro=trixie&os_name=debian&os_version=13`;
+  `pkg:deb/debian/${name}@4.7.0-3%2Bdeb13u3?arch=arm64&distro=debian-13`;
 function finding(
   id = "CVE-2026-52490",
   severity = "CRITICAL",
-  pkg = purl("tiff"),
-  fixed = "not fixed",
-): { ruleId: string; message: { text: string } } {
+  pkg = purl("libtiff6"),
+  fixed = "",
+): {
+  FixedVersion?: string;
+  InstalledVersion: string;
+  PkgIdentifier: { PURL: string };
+  PkgName: string;
+  Severity: string;
+  VulnerabilityID: string;
+} {
   return {
-    ruleId: id,
-    message: {
-      text: `Vulnerability    :${id}\nSeverity :${severity}\nPackage :${pkg}\nFixed version :${fixed}\n`,
-    },
+    VulnerabilityID: id,
+    Severity: severity,
+    PkgName: pkg.includes("libtiff6") ? "libtiff6" : "cjson",
+    PkgIdentifier: { PURL: pkg },
+    InstalledVersion: pkg.includes("libtiff6")
+      ? "4.7.0-3+deb13u3"
+      : "1.7.18-3.1+deb13u1",
+    ...(fixed ? { FixedVersion: fixed } : {}),
   };
 }
-function options(): Parameters<typeof assertScoutPolicy>[0] & {
+function options(): Parameters<typeof assertTrivyPolicy>[0] & {
   report: {
-    version: string;
-    runs: { results: ReturnType<typeof finding>[] }[];
+    SchemaVersion: number;
+    ArtifactType: string;
+    Metadata: { ImageID: string };
+    Results: {
+      Target: string;
+      Class: string;
+      Type: string;
+      Vulnerabilities: ReturnType<typeof finding>[];
+    }[];
   };
   exceptions: {
     schemaVersion: number;
@@ -47,7 +65,11 @@ function options(): Parameters<typeof assertScoutPolicy>[0] & {
   };
   sbom: {
     bomFormat: string;
-    metadata: { component: { purl: string } };
+    metadata: {
+      component: {
+        properties: { name: string; value: string }[];
+      };
+    };
     components: {
       purl?: string;
       name?: string;
@@ -59,14 +81,28 @@ function options(): Parameters<typeof assertScoutPolicy>[0] & {
   return {
     now: Date.parse("2026-09-01T12:00:00Z"),
     imageId,
-    report: { version: "2.1.0", runs: [{ results: [finding()] }] },
+    report: {
+      SchemaVersion: 2,
+      ArtifactType: "container_image",
+      Metadata: { ImageID: imageId },
+      Results: [
+        {
+          Target: "studynarrator:verify (debian 13)",
+          Class: "os-pkgs",
+          Type: "debian",
+          Vulnerabilities: [finding()],
+        },
+      ],
+    },
     exceptions: { schemaVersion: 1, exceptions: [] },
     sbom: {
       bomFormat: "CycloneDX",
       metadata: {
-        component: { purl: `pkg:oci/studynarrator@${imageId}?tag=verify` },
+        component: {
+          properties: [{ name: "aquasecurity:trivy:ImageID", value: imageId }],
+        },
       },
-      components: [{ purl: purl("tiff") }, { purl: purl("libtiff6") }],
+      components: [{ purl: purl("libtiff6") }],
     },
     evidence: {
       os: { id: "debian", version: "13", codename: "trixie" },
@@ -89,7 +125,7 @@ describe("Docker vulnerability applicability policy", () => {
   it("records exact-image vulnerable-code absence without changing the raw critical finding", () => {
     const input = options();
     const original = JSON.stringify(input.report);
-    const result = assertScoutPolicy(input);
+    const result = assertTrivyPolicy(input);
     expect(result.assessments).toEqual([
       expect.objectContaining({
         id: "CVE-2026-52490",
@@ -140,12 +176,12 @@ describe("Docker vulnerability applicability policy", () => {
     ],
     [
       (input) => {
-        input.sbom.metadata.component.purl = `pkg:oci/other@sha256:${"c".repeat(64)}`;
+        input.sbom.metadata.component.properties[0]!.value = `sha256:${"c".repeat(64)}`;
       },
     ],
     [
       (input) => {
-        input.sbom.components = [{ purl: purl("tiff") }];
+        input.sbom.components = [];
       },
     ],
     [
@@ -172,55 +208,58 @@ describe("Docker vulnerability applicability policy", () => {
     ],
     [
       (input) => {
-        input.report.runs[0]!.results = [
-          finding(undefined, undefined, purl("libtiff6")),
-        ];
+        input.report.Results[0]!.Vulnerabilities[0]!.PkgName = "tiff";
       },
     ],
     [
       (input) => {
-        input.report.runs[0]!.results = [
-          finding(undefined, undefined, undefined, "4.7.2-1"),
-        ];
+        input.report.Results[0]!.Vulnerabilities[0]!.FixedVersion = "4.7.2-1";
       },
     ],
   ])("fails closed when reviewed scope or evidence changes (%#)", (mutate) => {
     const input = options();
     mutate(input);
-    expect(() => assertScoutPolicy(input)).toThrow(/DOCKER VERIFY:/u);
+    expect(() => assertTrivyPolicy(input)).toThrow(/DOCKER VERIFY:/u);
   });
 
   it("requires fresh runtime evidence and an image identity", () => {
     expect(() =>
-      assertScoutPolicy({ ...options(), evidence: undefined }),
+      assertTrivyPolicy({ ...options(), evidence: undefined }),
     ).toThrow(/evidence/u);
     const withoutImage = options();
     delete withoutImage.imageId;
-    expect(() => assertScoutPolicy(withoutImage)).toThrow(/exact image/u);
+    expect(() => assertTrivyPolicy(withoutImage)).toThrow(/exact image/u);
   });
 
   it("does not exempt any other critical finding, even alongside an assessed one", () => {
     const input = options();
-    input.report.runs[0]!.results.push(finding("CVE-2026-99999"));
-    expect(() => assertScoutPolicy(input)).toThrow(/unassessed critical/u);
+    input.report.Results[0]!.Vulnerabilities.push(finding("CVE-2026-99999"));
+    expect(() => assertTrivyPolicy(input)).toThrow(/unassessed critical/u);
   });
 
   it.each([
     {},
-    { version: "2.1.0", runs: [] },
-    { version: "2.1.0", runs: [{}] },
+    { SchemaVersion: 2, ArtifactType: "container_image", Results: [{}] },
     {
-      version: "2.1.0",
-      runs: [{ results: [{ message: { text: sentinel } }] }],
+      SchemaVersion: 2,
+      ArtifactType: "container_image",
+      Results: [
+        {
+          Target: sentinel,
+          Class: "os-pkgs",
+          Type: "debian",
+          Vulnerabilities: [{}],
+        },
+      ],
     },
   ])(
     "rejects malformed scan reports without exposing their content",
     (report) => {
-      expect(() => assertScoutPolicy({ ...options(), report })).toThrow(
+      expect(() => assertTrivyPolicy({ ...options(), report })).toThrow(
         /DOCKER VERIFY:/u,
       );
       try {
-        assertScoutPolicy({ ...options(), report });
+        assertTrivyPolicy({ ...options(), report });
       } catch (error) {
         expect(String(error)).not.toContain(sentinel);
       }
@@ -229,31 +268,31 @@ describe("Docker vulnerability applicability policy", () => {
 
   it("exports only reviewed fields and sanitizes failures", () => {
     const input = options();
-    const result = assertScoutPolicy({
+    const result = assertTrivyPolicy({
       ...input,
       evidence: { ...input.evidence, privateEndpoint: sentinel },
     });
     expect(JSON.stringify(result)).not.toContain(sentinel);
-    input.report.runs[0]!.results = [
+    input.report.Results[0]!.Vulnerabilities = [
       finding("CVE-2026-99999", "CRITICAL", `pkg:${sentinel}`),
     ];
-    expect(() => assertScoutPolicy(input)).toThrow(
-      "DOCKER VERIFY: unassessed critical vulnerability; see the raw Scout report",
+    expect(() => assertTrivyPolicy(input)).toThrow(
+      "DOCKER VERIFY: unassessed critical vulnerability; see the raw Trivy report",
     );
   });
 
   it("preserves the narrow, expiring unfixed-high policy and stale-entry rejection", () => {
     const input = options();
     const id = "CVE-2026-67216";
-    const pkg = "pkg:deb/debian/cjson@1.7.18-3.1%2Bdeb13u1";
-    input.report.runs[0]!.results = [finding(id, "HIGH", pkg)];
-    expect(() => assertScoutPolicy(input)).toThrow(
+    const pkg = "pkg:deb/debian/libcjson1@1.7.18-3.1%2Bdeb13u1";
+    input.report.Results[0]!.Vulnerabilities = [finding(id, "HIGH", pkg)];
+    expect(() => assertTrivyPolicy(input)).toThrow(
       /narrow documented exception/u,
     );
     input.exceptions.exceptions = [
       {
         id,
-        package: "pkg:deb/debian/cjson@",
+        package: "pkg:deb/debian/libcjson1@",
         reason:
           "Reviewed FFmpeg dependency with a documented, specific risk rationale. ".repeat(
             2,
@@ -261,22 +300,24 @@ describe("Docker vulnerability applicability policy", () => {
         expiresAt: "2026-11-13",
       },
     ];
-    expect(assertScoutPolicy(input).assessments).toEqual([]);
-    input.report.runs[0]!.results = [finding(id, "HIGH", pkg, "1.8.0")];
-    expect(() => assertScoutPolicy(input)).toThrow(/has a fix/u);
-    input.report.runs[0]!.results = [finding(id, "HIGH", pkg)];
+    expect(assertTrivyPolicy(input).assessments).toEqual([]);
+    input.report.Results[0]!.Vulnerabilities = [
+      finding(id, "HIGH", pkg, "1.8.0"),
+    ];
+    expect(() => assertTrivyPolicy(input)).toThrow(/has a fix/u);
+    input.report.Results[0]!.Vulnerabilities = [finding(id, "HIGH", pkg)];
     expect(() =>
-      assertScoutPolicy({ ...input, now: Date.parse("2026-11-13") }),
+      assertTrivyPolicy({ ...input, now: Date.parse("2026-11-13") }),
     ).toThrow(/expired/u);
-    input.report.runs[0]!.results = [];
-    expect(() => assertScoutPolicy(input)).toThrow(/stale/u);
+    input.report.Results[0]!.Vulnerabilities = [];
+    expect(() => assertTrivyPolicy(input)).toThrow(/stale/u);
   });
 
   it("needs no TIFF assessment if the scanner no longer reports this CVE", () => {
     const input = options();
-    input.report.runs[0]!.results = [];
+    input.report.Results[0]!.Vulnerabilities = [];
     expect(
-      assertScoutPolicy({
+      assertTrivyPolicy({
         ...input,
         evidence: undefined,
         now: Date.parse("2027-01-01"),
