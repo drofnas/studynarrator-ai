@@ -46,5 +46,22 @@ DOCKER_BUILDKIT=0 docker compose -f compose.development.yaml build verify
 docker compose -f compose.development.yaml up --abort-on-container-exit --exit-code-from verify verify
 ```
 
-The remaining PR gate-name mismatch (`check` versus `check / check`) is separate
-from this Compose parser correction; branch protection stays enforced.
+## Required-check alignment
+
+On September 15, the owner explicitly authorized correcting the separate
+required-check mismatch and committing the supporting documentation. The
+active [protect_default ruleset](https://github.com/drofnas/studynarrator-ai/rules/20906646)
+required the obsolete `check` context, while the reusable workflow reports
+`check / check` from GitHub Actions integration `15368`.
+
+Changed only the required context to `check / check`. Refetched the ruleset
+and effective `main` rules to verify the change. Active enforcement, the
+default-branch scope, GitHub Actions identity, deletion and force-push
+protections, PR requirements, and empty bypass list were preserved exactly.
+
+Before the documentation commit, `gh pr checks 28 --required` recognized the
+successful check for head `a1425dc9059023040de4d24fd4e5002329ba6e8f`.
+The commit updates contributor guidance and this record; application source,
+workflow configuration, and dependency versions are unchanged. Validate
+Markdown formatting, links, command references, and diff hygiene locally,
+then monitor the required check on the newly pushed revision.

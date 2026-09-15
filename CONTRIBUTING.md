@@ -36,9 +36,13 @@ image, vulnerability, browser, persistence, and cleanup checks. It returns a
 nonzero exit code if any gate fails. Real macOS/Windows release checks stay in
 native CI; they are not prerequisites on a contributor's workstation.
 
-Pull requests must pass the GitHub Actions `check` job, which uses this same
-Docker command. Generated reports can be copied from the stopped verification
-container before cleaning up; see the development guide.
+Pull requests must pass the GitHub Actions `check / check` status, emitted by
+the `CI` workflow's `check` caller and the reusable workflow's `check` job.
+It uses this same Docker command. After changing job names or reusable workflow
+calls, compare the actual PR check name with the default branch's required
+status; an obsolete name leaves GitHub waiting indefinitely. Generated reports
+can be copied from the stopped verification container before cleaning up; see
+the development guide.
 
 ## Review dependency updates
 
