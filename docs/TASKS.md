@@ -981,10 +981,18 @@ relevant Web/Electron acceptance, and `npm run verify:docker`.
 so users can see project-audio storage and the space reclaimable through
 **Include Rendered Project Clips**.
 
+**Execution slices:** R25a (storage service and contracts) is complete after its
+2026-09-15 acceptance and full verification; see the
+[completion report](implement-prd-stories/r25a-project-render-storage.md).
+R25b (General settings callout and cleanup feedback) is Ready because R25a is its
+only dependency. The parent R25 remains in progress for that UI slice.
+
 **Current evidence:** General settings shows Stored, This session, and Activity.
-Retention already inventories render-artifact bytes, but clip cleanup excludes
-pinned/nonterminal jobs and rejects active or recoverable rendering. Its current
-`bytesFreed` result counts only speech-cache bytes, not the removed render files.
+The storage service now reports total and reclaimable render bytes. Clip cleanup
+excludes pinned/nonterminal jobs and rejects active or recoverable rendering.
+Its `bytesFreed` result includes cache and removed render bytes, with the render
+directory count and bytes also provided as a nested breakdown. R25b must consume
+those values without adding the render bytes to the total a second time.
 
 **Expected files:**
 
