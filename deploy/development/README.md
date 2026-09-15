@@ -2,7 +2,7 @@
 
 ## Requirements
 
-Use Docker Engine or Docker Desktop with Compose 2.32.2 or newer and Buildx.
+Use Docker Engine or Docker Desktop with Compose 2.38.2 or newer and Buildx.
 Keep your editor and browser on the workstation. All application tooling runs
 inside containers: Node, npm, native compilers, FFmpeg, Trivy, Playwright, and
 Linux Electron. Run the following commands from the repository root.
@@ -109,7 +109,7 @@ then rebuild and verify. Never copy container `node_modules` onto the workstatio
 ## Live Web development
 
 ```sh
-docker compose -f compose.development.yaml up --build --watch web
+docker compose -f compose.development.yaml up --build --force-recreate --watch web
 ```
 
 Open <http://127.0.0.1:5173>. Set `STUDYNARRATOR_DEV_PORT` in the command environment
@@ -117,6 +117,10 @@ to choose another host port. Only Vite's port is published, always on loopback;
 the API stays inside the container and Vite proxies requests to it.
 
 Compose Watch syncs source changes and rebuilds for dependency/toolchain inputs.
+Keep `--build --force-recreate` when starting each watch session. The rebuilt
+image supplies the initial source snapshot; recreating the container discards
+edits synchronized during an earlier session, even when Docker reuses a cached
+image. Development projects remain in the named volume.
 It honors `.dockerignore`, keeping host dependencies, private environment files,
 Git metadata, and generated artifacts out of the image and sync. Development
 projects live in the `web-data` Docker volume, separate from the production data

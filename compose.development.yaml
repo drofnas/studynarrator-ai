@@ -70,7 +70,6 @@ services:
         - action: sync
           path: .
           target: /workspace
-          initial_sync: true
           ignore: &build-inputs
             - "**/package.json"
             - package-lock.json

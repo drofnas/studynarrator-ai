@@ -38,7 +38,7 @@ separate tooling image. No application toolchain is required on your workstation
 Start the live Web development server:
 
 ```sh
-docker compose -f compose.development.yaml up --build --watch web
+docker compose -f compose.development.yaml up --build --force-recreate --watch web
 ```
 
 Open <http://127.0.0.1:5173>. Compose Watch syncs source edits into the container;
