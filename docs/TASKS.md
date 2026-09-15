@@ -62,7 +62,7 @@ Status values: `todo`, `in progress`, `blocked`, `deferred`, `complete`, `supers
 | R17 | Pin CI actions and configure Dependabot updates          | P2       | complete    | R07a (complete)                                                     |
 | R18 | Set the public repository description and topics         | P2       | complete    | none                                                                |
 | R19 | Validate the desktop release workflow with an RC tag     | P2       | deferred    | R13 in [future work](FUTURE_WORK.md); RC authorization/native hosts |
-| R22 | Search the complete project script                       | P1       | in progress | none                                                                |
+| R22 | Search the complete project script                       | P1       | complete    | none                                                                |
 | R23 | Remove the completed-output pin action                   | P1       | complete    | none                                                                |
 | R24 | Write final MP3 tags with an ID3 package                 | P1       | todo        | R02; supersedes R03                                                 |
 | R25 | Show project-render storage in General settings          | P1       | complete    | none                                                                |
@@ -881,8 +881,15 @@ of native packaging. Tag pushes and release deletion require owner approval.
 **Goal:** Find text anywhere in a project script, including lines outside the
 CodeMirror viewport.
 
-**Current evidence:** `ScriptSourceEditor.tsx` uses CodeMirror `minimalSetup`
-without a search extension. Browser Find cannot reliably search virtualized lines.
+**Status:** Complete — 2026-09-15.
+
+**Current evidence:** `ScriptSourceEditor.tsx` uses CodeMirror's search extension
+and keymap. **Search Script** and the editor shortcut open its accessible search
+panel; next/previous reveal and select matches throughout the document. Current
+editor/project-page and browser checks pass, including offscreen matches,
+editing, undo, and autosave. The original Docker vulnerability blocker is
+resolved, and the unchanged application retains current full-verifier evidence.
+See the [R22 completion report](implement-prd-stories/r22-script-search.md#current-completion-evidence).
 
 **Expected files:**
 
