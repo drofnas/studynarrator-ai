@@ -265,6 +265,37 @@ test.describe("render execution", () => {
       /Audio player for Completed project render/u,
     );
     await expect(completedPlayer).toBeVisible({ timeout: 20_000 });
+    await completedPlayer
+      .getByRole("button", { name: "Play", exact: true })
+      .click();
+    await expect
+      .poll(() =>
+        completedPlayer
+          .locator("audio")
+          .evaluate((audio: HTMLAudioElement) => audio.currentTime),
+      )
+      .toBeGreaterThan(0);
+    await completedPlayer
+      .getByRole("button", { name: "Stop", exact: true })
+      .click();
+    const seek = completedPlayer.getByRole("slider", { name: "Seek playback" });
+    await seek.press("End");
+    await expect(seek).toHaveValue((await seek.getAttribute("max")) ?? "");
+    await expect
+      .poll(() =>
+        completedPlayer
+          .getByRole("group", { name: "Playback waveform" })
+          .evaluate((signal) => {
+            const played = signal.querySelector("span");
+            return played
+              ? Math.round(
+                  (played.getBoundingClientRect().width / signal.clientWidth) *
+                    100,
+                )
+              : 0;
+          }),
+      )
+      .toBe(100);
     expect(
       studyNarrator.fakeSpeaches
         .getState()

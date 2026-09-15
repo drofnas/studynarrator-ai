@@ -748,6 +748,15 @@ describe("Express boundary logging", () => {
 });
 
 describe("production Web application", () => {
+  const contentSecurityPolicy =
+    "default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; style-src-elem 'self' 'unsafe-inline'; style-src-attr 'none'";
+
+  it("keeps API-only development responses free of the production CSP", async () => {
+    const { app } = await fixture();
+    const response = await request(app).get("/api/health").expect(200);
+    expect(response.headers).not.toHaveProperty("content-security-policy");
+  });
+
   it("serves assets and SPA routes without turning unknown API routes into HTML", async () => {
     const { service } = await fixture();
     const distributionDirectory = mkdtempSync(
@@ -765,7 +774,9 @@ describe("production Web application", () => {
     attachStaticWebApplication(application, distributionDirectory);
     const server = await listen(application);
 
-    const root = await request(server).get("/").expect(200);
+    const secret = "csp-private-query-must-not-leak";
+    const root = await request(server).get(`/?secret=${secret}`).expect(200);
+    expect(JSON.stringify(root.headers)).not.toContain(secret);
     expect(root.text).toContain("StudyNarrator AI production");
     expect(root.headers["cache-control"]).toBe("no-cache");
     expect(root.headers).toMatchObject(WEB_SECURITY_HEADERS);
@@ -782,6 +793,15 @@ describe("production Web application", () => {
       .get("/api/not-a-route")
       .expect(404);
     expect(missingApi.headers).toMatchObject(WEB_SECURITY_HEADERS);
+    // Express's final 404 handler keeps its stricter policy for error HTML.
+    expect(missingApi.headers["content-security-policy"]).toBe(
+      "default-src 'none'",
+    );
+    for (const response of [root, entry, asset]) {
+      expect(response.headers["content-security-policy"]).toBe(
+        contentSecurityPolicy,
+      );
+    }
   });
 });
 

@@ -1,5 +1,23 @@
 # Technical debt register
 
+## Production CSP — inline style elements for CodeMirror
+
+- The production Web policy permits inline style elements because CodeMirror
+  generates its editor stylesheet at runtime. This exception is limited to
+  `style-src-elem`; inline scripts and markup style attributes stay blocked.
+  Resource requests from CSS still follow the same-origin default policy.
+- React's playback widths use direct DOM style properties, so they do not need
+  an inline-style-attribute exception. Browser acceptance verifies playback and
+  progress rendering with `style-src-attr 'none'`.
+- Revisit when changing the editor or HTML delivery. CodeMirror supports a
+  [stylesheet nonce](https://codemirror.net/docs/ref/#view.EditorView^cspNonce),
+  but removing this exception would require a fresh response nonce in both HTML
+  and the CSP header, plus passing it to each editor instance. Keep that delivery
+  change scoped separately; never broaden script or network permissions to fix
+  an editor style violation.
+- Policy semantics: [CSP style directives](https://www.w3.org/TR/CSP3/#directive-style-src-attr).
+  Inventory and validation: [R09 report](implement-prd-stories/r09-production-csp.md).
+
 ## CVE-2026-70632 — accepted low risk for trusted local speech
 
 - Owner decision on 2026-09-14: accept low contextual risk for a trusted,

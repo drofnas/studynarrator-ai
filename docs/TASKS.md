@@ -56,7 +56,7 @@ Status values: `todo`, `in progress`, `blocked`, `deferred`, `complete`, `supers
 | R06 | Keep the Docker Web launcher local                       | P1       | complete    | none                                      |
 | R07 | Enforce coverage and dead-code checks in pull-request CI | P1       | complete    | none                                      |
 | R08 | Set explicit Web response security headers               | P1       | complete    | none                                      |
-| R09 | Add and verify a production Content Security Policy      | P1       | todo        | R08                                       |
+| R09 | Add and verify a production Content Security Policy      | P1       | complete    | R08                                       |
 | R10 | Enforce Docker distribution verification in CI           | P1       | in progress | R07                                       |
 | R11 | Add contributor and vulnerability-reporting guides       | P1       | complete    | none                                      |
 | R17 | Pin CI actions and configure Dependabot updates          | P2       | complete    | R07a (complete)                           |
@@ -546,9 +546,10 @@ npm run test:e2e:web
 
 ### R09: Add and verify a production Content Security Policy
 
-**Readiness:** Ready on 2026-09-14 after R08's complete verification. R08 is
-the sole dependency; the existing acceptance criteria and Docker tooling are
-available. Implementation remains `todo`.
+**Completion:** Validated on 2026-09-14 with the full Docker-based verifier,
+including Chromium and Firefox acceptance without unexpected CSP violations.
+[Implementation, resource inventory, and validation evidence](implement-prd-stories/r09-production-csp.md).
+R08 remains the historical prerequisite; R09 has no dependents.
 
 **Goal:** Restrict the production Web application to resources it needs.
 

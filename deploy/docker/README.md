@@ -50,6 +50,13 @@ The default named volume inherits the image's non-root ownership. For a bind mou
 
 ## Distribution contents and security
 
+The compiled Web application carries a Content Security Policy that restricts
+resource loads to its own origin, blocks plugins and framing, and rejects inline
+scripts and markup style attributes. CodeMirror's generated stylesheet has a
+documented [style-element exception](../../docs/technical-debt.md#production-csp--inline-style-elements-for-codemirror).
+Speaches requests still run through the server. Vite and Electron development
+loading do not receive this production Web policy.
+
 The image contains Node.js, the compiled StudyNarrator AI Web/server application, FFmpeg, CA certificates, the Apache-2.0 `LICENSE`, and `ACKNOWLEDGMENTS.md`. It runs as UID/GID 10001, drops Linux capabilities, prevents privilege escalation, uses a read-only root filesystem, and writes persistent application state only under `/data`.
 
 StudyNarrator AI supports unauthenticated Speaches servers. Connection settings are stored in the application data volume and are not supplied through Compose environment variables. The local-only boundary applies to the StudyNarrator AI Web UI; Speaches may run on the Docker host or another private-network machine.

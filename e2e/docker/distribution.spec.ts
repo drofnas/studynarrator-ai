@@ -1,9 +1,5 @@
-import {
-  expect,
-  test,
-  type APIRequestContext,
-  type Page,
-} from "@playwright/test";
+import { expect, type APIRequestContext, type Page } from "@playwright/test";
+import { test } from "../support/cspTest.js";
 
 const secret =
   process.env.STUDYNARRATOR_DOCKER_TEST_SECRET ??
