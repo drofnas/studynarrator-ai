@@ -68,8 +68,8 @@ Every row is a proposed new issue in `drofnas/studynarrator-ai`, subject to the 
 | R06  | Task  | Local Docker launcher         | P1       | Complete        | —                                      | —         |
 | R07a | Task  | CI                            | P1       | Complete        | —                                      | R10b, R17 |
 | R07b | Task  | Local verification            | P1       | Complete        | —                                      | —         |
-| R08  | Task  | HTTP boundary                 | P1       | In progress     | —                                      | R09       |
-| R09  | Task  | Production Web                | P1       | Waiting         | R08                                    | —         |
+| R08  | Task  | HTTP boundary                 | P1       | Complete        | —                                      | R09       |
+| R09  | Task  | Production Web                | P1       | Ready           | R08                                    | —         |
 | R10a | Task  | Docker scanner                | P1       | In progress     | —                                      | R10b      |
 | R10b | Task  | Docker CI                     | P1       | Waiting         | R10a, R07a                             | —         |
 | R11  | Task  | Contributor documentation     | P1       | Complete        | —                                      | —         |
@@ -98,7 +98,7 @@ The only non-issue blockers are D1 and eventual R19 release authorization/native
 Use the toolchain pinned by `.nvmrc` and root `packageManager` (at this baseline Node 24.19.0/npm 11.19.0) and `npm ci`. These are existing root commands, verified against `package.json`:
 
 - Source/configuration work: `npm run format:check`, `npm run lint`, `npm run typecheck`, affected tests, `npm run test:coverage`, and `npm run verify`. The full verifier still includes Docker; this draft does not waive the current repository gate. Report unavailable gates precisely.
-- Default-suite work: `npm test -- <test-file>`. Application/server/Electron bridge work: `npm run test:api -- <test-file>`. The existing R08/R09 examples incorrectly use the default suite for server tests; use `test:api` instead.
+- Default-suite work: `npm test -- <test-file>`. Application/server/Electron bridge work: `npm run test:api -- <test-file>`.
 - Use `npm run test:e2e:web`, `npm run test:e2e:electron`, and `npm run verify:docker` for affected browser, native, and container behavior. Native package inspection is additional to Electron development acceptance where packaging changes.
 - Run `npm run check:package-dependencies` after import/workspace changes and `npm run audit:knip` after removals or structural changes. R07b removes redundant invocations inside the full verifier, not these available commands or their checks.
 - Documentation-only work: Prettier on intended Markdown, `git diff --check`, link/anchor checks, and referenced-command/claim verification. No full application test run solely for documentation.

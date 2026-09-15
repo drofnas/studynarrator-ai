@@ -55,7 +55,7 @@ Status values: `todo`, `in progress`, `blocked`, `deferred`, `complete`, `supers
 | R05 | Correct runtime documentation and the product title      | P1       | in progress | R02                                       |
 | R06 | Keep the Docker Web launcher local                       | P1       | complete    | none                                      |
 | R07 | Enforce coverage and dead-code checks in pull-request CI | P1       | complete    | none                                      |
-| R08 | Set explicit Web response security headers               | P1       | in progress | none                                      |
+| R08 | Set explicit Web response security headers               | P1       | complete    | none                                      |
 | R09 | Add and verify a production Content Security Policy      | P1       | todo        | R08                                       |
 | R10 | Enforce Docker distribution verification in CI           | P1       | in progress | R07                                       |
 | R11 | Add contributor and vulnerability-reporting guides       | P1       | complete    | none                                      |
@@ -489,12 +489,17 @@ npm run test:coverage
 
 ### R08: Set explicit Web response security headers
 
+**Completion:** Validated on 2026-09-14. The focused server tests and full
+Docker-hosted verifier passed, including coverage, Web/Electron acceptance,
+Docker vulnerability policy, persistence, and cleanup. Ponytail's assertion
+simplification is applied. See the [R08 report](implement-prd-stories/r08-web-security-headers.md).
+
 **Goal:** Apply a small, dependency-free response-header policy to every API,
 media, error, and production Web response before R09 adds the CSP.
 
-**Scope decision:** Keep this task. Docker Web is a supported HTTP application
-that can be exposed to a trusted LAN, so browser defense-in-depth is useful even
-though loopback remains the default. Do not add Helmet for this fixed policy.
+**Scope decision:** Keep this task to protect the local user's browser session.
+The supported Web/Docker workflow is local-only. Do not add Helmet for this
+fixed policy.
 
 **Expected files:**
 
@@ -513,8 +518,8 @@ though loopback remains the default. Do not add Helmet for this fixed policy.
    require them.
 4. Set `X-XSS-Protection: 0` so obsolete browser filters cannot rewrite content.
 5. Do not set HSTS because StudyNarrator AI does not terminate TLS and supports
-   loopback and trusted-LAN HTTP. Do not add COOP, COEP, or CORP because the app
-   does not require cross-origin isolation. R09 owns CSP and `frame-ancestors`.
+   loopback HTTP. Do not add COOP, COEP, or CORP because the app does not require
+   cross-origin isolation. R09 owns CSP and `frame-ancestors`.
 6. Assert the exact header values on health and JSON APIs, SSE, successful and
    unsatisfiable media Range responses, downloads, sanitized errors, static HTML,
    immutable assets, and the single-page fallback.
@@ -529,14 +534,21 @@ though loopback remains the default. Do not add Helmet for this fixed policy.
 
 **Focused verification:**
 
+Run these commands inside the Docker tooling environment described in
+[the development guide](../deploy/development/README.md):
+
 ```sh
-npm test -- apps/server/src/app.test.ts
+npm run test:api -- apps/server/src/app.test.ts
 npm run test:e2e:web
 ```
 
 **Commit:** `feat(server): add baseline Web security headers`
 
 ### R09: Add and verify a production Content Security Policy
+
+**Readiness:** Ready on 2026-09-14 after R08's complete verification. R08 is
+the sole dependency; the existing acceptance criteria and Docker tooling are
+available. Implementation remains `todo`.
 
 **Goal:** Restrict the production Web application to resources it needs.
 
@@ -574,7 +586,7 @@ npm run test:e2e:web
 **Focused verification:**
 
 ```sh
-npm test -- apps/server/src/app.test.ts
+npm run test:api -- apps/server/src/app.test.ts
 npm run test:e2e:web
 npm run verify:docker
 ```
