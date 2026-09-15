@@ -26,6 +26,15 @@ Upgrading is automatic. StudyNarrator AI migrates the database forward when it s
 
 To upgrade a Docker Web deployment, pull the new revision and rebuild the application container. The `studynarrator-data` volume is left intact, so projects, renders, caches, and backups survive the upgrade.
 
+### MP3 metadata
+
+New project MP3s use the project name as title, artist `Study Narrator AI`, genre
+`Audio Book`, and the year the final audio was created. Renaming a project updates
+the title and normalizes artist/genre without re-encoding audio. A valid existing
+year tag is retained; older files with a missing or invalid year use the artifact's
+recorded creation year. Existing MP3s are not rewritten merely by reading or
+downloading them. The metadata writer uses the existing FFmpeg installation.
+
 ## Downgrading
 
 An older application cannot read a newer database. There are no down migrations and there cannot be any: a version that shipped before a migration has no code to reverse it, and StudyNarrator AI never converts data in place.

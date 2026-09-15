@@ -387,7 +387,7 @@ test.describe("render execution", () => {
       "-v",
       "error",
       "-show_entries",
-      "format_tags=title,artist",
+      "format_tags=title,artist,date,genre",
       "-of",
       "json",
       audioPath,
@@ -400,7 +400,9 @@ test.describe("render execution", () => {
       ).format?.tags,
     ).toMatchObject({
       title: renamedProjectName,
-      artist: "StudyNarrator AI",
+      artist: "Study Narrator AI",
+      date: String(new Date().getFullYear()),
+      genre: "Audio Book",
     });
 
     const detailsDownload = page.waitForEvent("download");

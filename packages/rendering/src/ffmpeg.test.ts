@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
-import { encodeMp3, remuxMp3Metadata } from "./ffmpeg.js";
+import { encodeMp3, probeAudioFile, remuxMp3Metadata } from "./ffmpeg.js";
 
 const runFile = promisify(execFile);
 const directories: string[] = [];
@@ -103,6 +103,10 @@ describe("encodeMp3", () => {
     await writeFile(inputPath, pcmWav());
     await encodeMp3({ inputPath, outputPath: sourcePath });
     const sourceAudioHash = await decodedAudioHash(sourcePath);
+    expect(await probeAudioFile({ inputPath: sourcePath })).toMatchObject({
+      year: null,
+      genre: null,
+    });
     const { stdout: sourceProbeOutput } = await runFile("ffprobe", [
       "-v",
       "error",
@@ -117,16 +121,16 @@ describe("encodeMp3", () => {
       outputPath,
       metadata: {
         title: "Renamed",
-        artist: "StudyNarrator AI",
+        artist: "Study Narrator AI",
         year: 2026,
-        genre: "Speech",
+        genre: "Audio Book",
       },
     });
     const { stdout } = await runFile("ffprobe", [
       "-v",
       "error",
       "-show_entries",
-      "format_tags=title,artist:format=duration:stream=sample_rate,channels",
+      "format_tags=title,artist,date,genre:format=duration:stream=sample_rate,channels",
       "-of",
       "json",
       outputPath,
@@ -137,7 +141,9 @@ describe("encodeMp3", () => {
     };
     expect(result.format?.tags).toMatchObject({
       title: "Renamed",
-      artist: "StudyNarrator AI",
+      artist: "Study Narrator AI",
+      date: "2026",
+      genre: "Audio Book",
     });
     expect(await decodedAudioHash(outputPath)).toBe(sourceAudioHash);
     const sourceProbe = JSON.parse(sourceProbeOutput) as {

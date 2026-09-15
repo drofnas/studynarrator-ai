@@ -1,6 +1,8 @@
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { resolve } from "node:path";
+import { promisify } from "node:util";
 import { unzipSync } from "fflate";
 import type { Page } from "@playwright/test";
 import type { StudyNarratorBridge } from "@studynarrator/shared-types";
@@ -410,6 +412,25 @@ test.describe("Electron acceptance", () => {
             .catch(() => 0),
       )
       .toBeGreaterThan(0);
+
+    const { stdout: metadata } = await promisify(execFile)("ffprobe", [
+      "-v",
+      "error",
+      "-show_entries",
+      "format_tags=title,artist,date,genre",
+      "-of",
+      "json",
+      destination,
+    ]);
+    expect(
+      (JSON.parse(metadata) as { format: { tags: Record<string, string> } })
+        .format.tags,
+    ).toMatchObject({
+      title: "Desktop render recovery",
+      artist: "Study Narrator AI",
+      date: String(new Date().getFullYear()),
+      genre: "Audio Book",
+    });
 
     const detailsDestination = resolve(
       electronStudyNarrator.dataDirectory,

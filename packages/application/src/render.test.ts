@@ -4,6 +4,7 @@ import {
   mkdtemp,
   readFile,
   readdir,
+  rename,
   rm,
   stat,
   unlink,
@@ -14,6 +15,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { unzipSync } from "fflate";
+import * as rendering from "@studynarrator/rendering";
 import type {
   SpeechBackendConnection,
   ProjectDetail,
@@ -38,6 +40,7 @@ import { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
 
 const roots: string[] = [];
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(
     roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
   );
@@ -184,6 +187,8 @@ async function fixture(
     cloneGate?: Promise<void>;
     onCompute?: () => void;
     onClone?: () => void;
+    now?: () => Date;
+    projectName?: string;
     createIdFailureAt?: number;
   } = {},
 ) {
@@ -196,7 +201,7 @@ async function fixture(
   const project = {
     contractVersion: 1 as const,
     id: projectId,
-    name: "Render fixture",
+    name: options.projectName ?? "Render fixture",
     description: "",
     scriptSource: "narrator: Render me.",
     scriptHash: sha("narrator: Render me."),
@@ -380,7 +385,7 @@ async function fixture(
         throw new Error("injected artifact replacement failure");
       return `00000000-0000-4000-8000-${String(id).padStart(12, "0")}`;
     },
-    now: () => new Date(timestamp),
+    now: options.now ?? (() => new Date(timestamp)),
     logger,
     ...(options.activityGate ? { activityGate: options.activityGate } : {}),
     ...(options.statfs ? { statfs: options.statfs } : {}),
@@ -983,9 +988,9 @@ describe("render coordinator", () => {
     };
     expect(metadata.format?.tags).toMatchObject({
       title: "Render fixture",
-      artist: "StudyNarrator AI",
+      artist: "Study Narrator AI",
       date: "2026",
-      genre: "Speech",
+      genre: "Audio Book",
     });
     const [reviewSegment] = repository.listRenderSegments(started.id);
     expect(reviewSegment?.state).toBe("complete");
@@ -1104,7 +1109,10 @@ describe("render coordinator", () => {
   });
 
   it("retags a completed MP3 on project rename without changing decoded audio or the frozen snapshot", async () => {
-    const { service, repository, dataDirectory, projectId } = await fixture();
+    let now = new Date("2026-12-31T23:59:59");
+    const { service, repository, dataDirectory, projectId } = await fixture({
+      now: () => now,
+    });
     const started = await service.startProject(projectId);
     await terminal(service, started.id);
     const mp3 = (await service.listArtifacts(started.id)).find(
@@ -1112,7 +1120,24 @@ describe("render coordinator", () => {
     )!;
     const before = await service.resolveArtifact(mp3.id);
     const beforeHash = await decodedAudioHash(before.path);
+    const packetHash = async () =>
+      (
+        await promisify(execFile)("ffprobe", [
+          "-v",
+          "error",
+          "-show_packets",
+          "-show_entries",
+          "packet=data_hash",
+          "-show_data_hash",
+          "sha256",
+          "-of",
+          "json",
+          before.path,
+        ])
+      ).stdout;
+    const beforePackets = await packetHash();
 
+    now = new Date("2027-01-01T00:00:01");
     repository.project.name = "Renamed render fixture";
     await service.reconcileProjectName(projectId, repository.project.name);
 
@@ -1121,7 +1146,7 @@ describe("render coordinator", () => {
       "-v",
       "error",
       "-show_entries",
-      "format_tags=title,artist",
+      "format_tags=title,artist,date,genre",
       "-of",
       "json",
       after.path,
@@ -1131,9 +1156,17 @@ describe("render coordinator", () => {
     };
     expect(metadata.format?.tags).toMatchObject({
       title: "Renamed render fixture",
-      artist: "StudyNarrator AI",
+      artist: "Study Narrator AI",
+      date: "2026",
+      genre: "Audio Book",
     });
     expect(await decodedAudioHash(after.path)).toBe(beforeHash);
+    expect(await packetHash()).toBe(beforePackets);
+    const unchanged = await stat(after.path);
+    await service.resolveArtifact(mp3.id);
+    await service.resolveRenderAudio(started.id);
+    await service.reconcileProjectName(projectId, repository.project.name);
+    expect((await stat(after.path)).mtimeMs).toBe(unchanged.mtimeMs);
     expect(after.artifact.sizeBytes).toBe((await stat(after.path)).size);
     await expect(service.resolveRenderAudio(started.id)).resolves.toMatchObject(
       { fileName: "renamed-render-fixture.mp3" },
@@ -1147,6 +1180,153 @@ describe("render coordinator", () => {
     expect(frozen.project?.name).toBe("Render fixture");
     await service.close();
   });
+
+  it("writes Unicode titles with the creation year supplied by the clock", async () => {
+    const title = "Café 学習 – $HOME; [chapter 1]";
+    const { service, projectId } = await fixture({
+      projectName: title,
+      now: () => new Date("2027-01-01T00:00:01"),
+    });
+    const completed = await terminal(
+      service,
+      (await service.startProject(projectId)).id,
+    );
+    expect(completed.state).toBe("complete");
+    const audio = await service.resolveRenderAudio(completed.id);
+    expect(await probeAudioFile({ inputPath: audio.path })).toMatchObject({
+      title,
+      artist: "Study Narrator AI",
+      year: 2027,
+      genre: "Audio Book",
+    });
+    await service.close();
+  });
+
+  it.each(["title", "artist", "year", "genre"] as const)(
+    "refuses publication when the encoded %s tag fails verification",
+    async (tag) => {
+      const originalProbe = rendering.probeAudioFile;
+      vi.spyOn(rendering, "probeAudioFile").mockImplementation(
+        async (options) => {
+          const result = await originalProbe(options);
+          return options.inputPath.endsWith(".mp3")
+            ? { ...result, [tag]: null }
+            : result;
+        },
+      );
+      const { service, projectId, dataDirectory, logger } = await fixture();
+      const failed = await terminal(
+        service,
+        (await service.startProject(projectId)).id,
+      );
+      expect(failed).toMatchObject({
+        state: "failed",
+        error: { code: "RENDER_ENCODING_FAILED" },
+      });
+      expect(await service.listArtifacts(failed.id)).toEqual([]);
+      expect(await readdir(join(dataDirectory, "renders", ".staging"))).toEqual(
+        [],
+      );
+      expect(await readdir(join(dataDirectory, "renders"))).not.toContain(
+        failed.id,
+      );
+      expect(JSON.stringify(logger.error.mock.calls)).not.toContain(
+        "Render fixture",
+      );
+      await service.close();
+    },
+  );
+
+  it.each(["write failure", "invalid tags", "probe failure"])(
+    "preserves the prior MP3 and cleans temporary output after %s",
+    async (failureMode) => {
+      const { service, repository, projectId, dataDirectory } = await fixture();
+      const completed = await terminal(
+        service,
+        (await service.startProject(projectId)).id,
+      );
+      const audio = await service.resolveRenderAudio(completed.id);
+      const prior = await readFile(audio.path);
+      const sentinel = "sentinel-secret-tag-failure";
+      if (failureMode === "write failure") {
+        vi.spyOn(rendering, "remuxMp3Metadata").mockImplementation(
+          async ({ outputPath }) => {
+            await writeFile(outputPath, sentinel);
+            throw new Error(sentinel);
+          },
+        );
+      } else if (failureMode === "probe failure") {
+        vi.spyOn(rendering, "probeAudioFile").mockRejectedValue(
+          new Error(sentinel),
+        );
+      } else {
+        const originalProbe = rendering.probeAudioFile;
+        vi.spyOn(rendering, "probeAudioFile").mockImplementation(
+          async (options) => {
+            const probe = await originalProbe(options);
+            return options.inputPath.endsWith(".tmp.mp3")
+              ? { ...probe, genre: sentinel }
+              : probe;
+          },
+        );
+      }
+      repository.project.name = "Changed title";
+      const failure: unknown = await service
+        .reconcileProjectName(projectId, repository.project.name)
+        .catch((error: unknown) => error);
+      expect(failure).toMatchObject({
+        message: "Final MP3 metadata could not be updated.",
+      });
+      expect(String(failure)).not.toContain(sentinel);
+      expect(await readFile(audio.path)).toEqual(prior);
+      expect(
+        (await readdir(join(dataDirectory, "renders", completed.id))).filter(
+          (name) => name.endsWith(".tmp.mp3"),
+        ),
+      ).toEqual([]);
+      await service.close();
+    },
+  );
+
+  it.each(["", "invalid", "0000"])(
+    "uses recorded artifact creation for legacy date %j",
+    async (date) => {
+      let now = new Date("2026-12-31T23:59:59");
+      const { service, repository, projectId, dataDirectory } = await fixture({
+        now: () => now,
+      });
+      const completed = await terminal(
+        service,
+        (await service.startProject(projectId)).id,
+      );
+      const audio = await service.resolveRenderAudio(completed.id);
+      const legacy = join(dataDirectory, "legacy.mp3");
+      await promisify(execFile)("ffmpeg", [
+        "-v",
+        "error",
+        "-i",
+        audio.path,
+        "-c:a",
+        "copy",
+        "-metadata",
+        "date=" + date,
+        "-metadata",
+        "artist=StudyNarrator AI",
+        "-metadata",
+        "genre=Speech",
+        legacy,
+      ]);
+      await rename(legacy, audio.path);
+      now = new Date("2027-01-01T00:00:01");
+      await service.reconcileProjectName(projectId, repository.project.name);
+      expect(await probeAudioFile({ inputPath: audio.path })).toMatchObject({
+        year: 2026,
+        artist: "Study Narrator AI",
+        genre: "Audio Book",
+      });
+      await service.close();
+    },
+  );
 
   it("converges when artifact persistence fails after the atomic MP3 replacement", async () => {
     const { service, repository, projectId } = await fixture();
@@ -1177,7 +1357,7 @@ describe("render coordinator", () => {
     expect(probe).toMatchObject({
       decodable: true,
       title: "Retry metadata update",
-      artist: "StudyNarrator AI",
+      artist: "Study Narrator AI",
     });
     await service.close();
   });

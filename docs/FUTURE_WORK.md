@@ -37,7 +37,8 @@ their scope and dependencies when resumed. Paths refer to the repository root.
 Use [TASKS.md](TASKS.md) for the execution rules and current release workload;
 use this file for deferred roadmap inputs. R24's exact MP3 artist
 `Study Narrator AI` takes precedence over R16's broader product-name consistency
-proposal. Future R12 must inventory the ID3 package that R24 actually uses.
+proposal. D1 selects FFmpeg reuse and removal of `node-id3`; future R12 must
+inventory the resulting shipped npm dependencies. R13 owns FFmpeg notices.
 
 ### R12: Generate the shipped npm license inventory
 

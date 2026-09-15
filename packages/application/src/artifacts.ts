@@ -117,6 +117,21 @@ function slug(value: string): string {
   return normalized.slice(0, 80) || "study-narration";
 }
 
+function isFinalMp3(
+  probe: Awaited<ReturnType<typeof probeAudioFile>>,
+  title: string,
+  year: number,
+): boolean {
+  return (
+    probe.decodable &&
+    probe.formatName?.includes("mp3") === true &&
+    probe.title === title &&
+    probe.artist === "Study Narrator AI" &&
+    probe.year === year &&
+    probe.genre === "Audio Book"
+  );
+}
+
 function transcript(
   plan: { entries: RenderPlanEntry[] },
   kind: "readable" | "tts",
@@ -327,7 +342,10 @@ export async function createRenderArtifacts(options: {
     const existing = await probeAudioFile({
       inputPath: path,
       ...(ffprobePath ? { ffprobePath } : {}),
+    }).catch(() => {
+      throw new Error("Final MP3 metadata could not be updated.");
     });
+    const year = existing.year ?? new Date(mp3.createdAt).getFullYear();
     const persistCurrentMetadata = (sizeBytes: number, durationMs: number) => {
       options.repository.replaceRenderArtifacts(
         renderId,
@@ -341,12 +359,7 @@ export async function createRenderArtifacts(options: {
         })),
       );
     };
-    if (
-      existing.decodable &&
-      existing.formatName?.includes("mp3") &&
-      existing.title === projectName &&
-      existing.artist === "StudyNarrator AI"
-    ) {
+    if (isFinalMp3(existing, projectName, year)) {
       if (
         mp3.sizeBytes !== sourceDetails.size ||
         mp3.durationMs !== existing.durationMs
@@ -371,9 +384,9 @@ export async function createRenderArtifacts(options: {
         outputPath: temporary,
         metadata: {
           title: projectName,
-          artist: "StudyNarrator AI",
-          year: options.now().getFullYear(),
-          genre: "Speech",
+          artist: "Study Narrator AI",
+          year,
+          genre: "Audio Book",
         },
         ...(options.ffmpegPath ? { ffmpegPath: options.ffmpegPath } : {}),
       });
@@ -382,17 +395,11 @@ export async function createRenderArtifacts(options: {
         ...(ffprobePath ? { ffprobePath } : {}),
       });
       const sizeBytes = await regularFileSizeAt(temporary);
-      if (
-        !probe.decodable ||
-        !probe.formatName?.includes("mp3") ||
-        probe.title !== projectName ||
-        probe.artist !== "StudyNarrator AI"
-      )
-        throw new Error();
+      if (!isFinalMp3(probe, projectName, year)) throw new Error();
       await rename(temporary, path);
       persistCurrentMetadata(sizeBytes, probe.durationMs);
     } catch {
-      await rm(temporary, { force: true });
+      await rm(temporary, { force: true }).catch(() => undefined);
       throw new Error("Final MP3 metadata could not be updated.");
     }
   }
@@ -634,15 +641,16 @@ export async function createRenderArtifacts(options: {
     async encodeAudio(stage, projectName, combined, signal) {
       const mp3Name = `${slug(projectName)}.mp3`;
       const mp3Path = join(stage, mp3Name);
+      const year = options.now().getFullYear();
       await encodeMp3({
         inputPath: combined,
         outputPath: mp3Path,
         ...(options.ffmpegPath ? { ffmpegPath: options.ffmpegPath } : {}),
         metadata: {
           title: projectName,
-          artist: "StudyNarrator AI",
-          year: options.now().getFullYear(),
-          genre: "Speech",
+          artist: "Study Narrator AI",
+          year,
+          genre: "Audio Book",
         },
         signal,
       });
@@ -652,7 +660,7 @@ export async function createRenderArtifacts(options: {
         ...(ffprobePath ? { ffprobePath } : {}),
         signal,
       });
-      if (!mp3Probe.decodable || !mp3Probe.formatName?.includes("mp3"))
+      if (!isFinalMp3(mp3Probe, projectName, year))
         throw new Error("Final MP3 validation failed.");
       return { mp3Name, mp3Path, mp3Probe };
     },

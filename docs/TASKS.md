@@ -64,7 +64,7 @@ Status values: `todo`, `in progress`, `blocked`, `deferred`, `complete`, `supers
 | R19 | Validate the desktop release workflow with an RC tag     | P2       | deferred   | R13 in [future work](FUTURE_WORK.md); RC authorization/native hosts |
 | R22 | Search the complete project script                       | P1       | complete   | none                                                                |
 | R23 | Remove the completed-output pin action                   | P1       | complete   | none                                                                |
-| R24 | Write final MP3 tags with an ID3 package                 | P1       | todo       | R02; supersedes R03                                                 |
+| R24 | Write final MP3 tags with FFmpeg                         | P1       | complete   | R02 (complete); D1 resolved                                         |
 | R25 | Show project-render storage in General settings          | P1       | complete   | none                                                                |
 | R26 | Update built-in Global Lexicon pronunciations            | P1       | complete   | none                                                                |
 | R27 | Track active and unviewed renders in the sidebar         | P1       | complete   | none                                                                |
@@ -276,12 +276,11 @@ expires on 2026-10-01 and retains the raw Scout finding.
 
 ### R03: Remove `node-id3` and its obsolete wrapper
 
-**Status:** Superseded by [R24](#r24-write-the-requested-final-mp3-tags-with-an-id3-package)
+**Status:** Superseded by [R24](#r24-write-the-requested-final-mp3-tags-with-ffmpeg)
 on September 4, 2026. Do not execute the former package-removal plan.
 
-The owner now requires a third-party ID3 package for final MP3 metadata.
-`node-id3` and its wrapper remain available for R24 to review and reuse.
-Any obsolete-code cleanup must follow R24's selected implementation.
+R24 owns the metadata values and cleanup. Its September 15 D1 decision selects
+FFmpeg reuse and removal of the unused `node-id3` package and wrapper.
 
 **Commit:** none for the superseded removal task.
 
@@ -349,7 +348,7 @@ current architecture, and mark its obsolete reset guidance as superseded by
 and roadmap rewrite belongs to [future work](FUTURE_WORK.md).
 
 The product title remains `StudyNarrator AI`. MP3 artist metadata is an explicit
-exception: [R24](#r24-write-the-requested-final-mp3-tags-with-an-id3-package) owns
+exception: [R24](#r24-write-the-requested-final-mp3-tags-with-ffmpeg) owns
 the exact value `Study Narrator AI`; this task must not change it.
 
 **Expected files:**
@@ -934,9 +933,12 @@ September 4, 2026; the test was not rerun for this documentation-only update.
 
 **Commit:** none; preserve the existing regression coverage.
 
-### R24: Write the requested final MP3 tags with an ID3 package
+### R24: Write the requested final MP3 tags with FFmpeg
 
-**Goal:** Use a third-party ID3 package to tag the final project MP3 with exactly:
+**Status:** Complete — 2026-09-15. Full repository verification and the required
+Web, Electron, and Docker acceptance checks pass; see the linked report below.
+
+**Goal:** Use the existing FFmpeg writer to tag the final project MP3 with exactly:
 
 | Tag    | Value                              |
 | ------ | ---------------------------------- |
@@ -945,48 +947,46 @@ September 4, 2026; the test was not rerun for this documentation-only update.
 | year   | Current year at final MP3 creation |
 | genre  | `Audio Book`                       |
 
-**Scope decision:** This September 4 request supersedes R03's package-removal
-plan and the metadata implementation/values described in completed R01/R02.
-Keep R01/R02's completed history. R05's product branding does not override the
-explicit MP3 artist above.
+**Scope decision:** On September 15, the owner resolved D1 by selecting FFmpeg
+reuse and removal of the unused `node-id3` wrapper/dependency. This supersedes
+the September 4 package requirement. Keep R01/R02's completed history and all
+requested tag values; R05's product branding does not override the MP3 artist.
 
-**Current evidence:** `packages/rendering/src/id3.ts` already wraps `node-id3`
-and supplies the requested artist/genre, but production does not call it.
-`packages/application/src/artifacts.ts` currently uses FFmpeg for tags with
-artist `StudyNarrator AI` and genre `Speech`. Reuse the installed ID3 package and
-review its wrapper before considering a replacement.
+**Current evidence:** Production already uses FFmpeg. R24 corrects tag values,
+verifies all four tags before publication, and preserves the original creation
+year on rename. See the [implementation report](implement-prd-stories/r24-mp3-tags.md).
 
 **Expected files:**
 
-- `packages/rendering/src/id3.ts`, its tests, and the public rendering export
+- `packages/rendering/src/ffmpeg.ts`, its tests, and the public rendering export
 - `packages/application/src/artifacts.ts` and `render.test.ts`
 - `packages/rendering/package.json` and root lockfile only if the dependency changes
 - existing MP3 assertions in Web, Electron, and Docker acceptance
 
 **Work and acceptance:**
 
-1. Apply all four tags through the ID3 package after encoding and before atomic
+1. Apply all four tags through FFmpeg during encoding and before atomic
    publication of the single final MP3. Verify the written file before marking
-   the render complete; handle the package's failure return values and exceptions.
+   the render complete; reject encoding or tag verification failures.
 2. Preserve R02's rename behavior: changing Project Name updates the existing
    completed MP3 title without changing audio frames or the frozen snapshot.
    Preserve the creation year on rename and keep artist/genre consistent with
    this task. Reads and downloads must not initiate metadata rewrites.
 3. Perform updates on temporary files and atomically replace the managed file.
-   Keep the package in rendering infrastructure; no filesystem access in React.
-   Assess the existing wrapper's whole-file memory and blocking cost with a
-   representative long MP3 before adopting it in production.
+   Keep FFmpeg in rendering infrastructure; no filesystem access in React.
+   Remove the unused ID3 package/wrapper and measure the existing stream-copy
+   path with a representative long MP3.
 4. Test actual tags with an independent reader, Unicode project names, year
    boundaries via the injected clock, rename, failed writes, temporary-file
    cleanup, and sentinel-secret redaction. A tag failure must not publish an
    incomplete output or destroy the previous valid MP3.
-5. Update existing FFmpeg-only/tag-value assertions to the intended final
+5. Update existing tag-value assertions to the intended final
    behavior without reintroducing provenance files or download-time copies.
 
 **Focused verification:** Rendering unit tests, application render API tests,
 relevant Web/Electron acceptance, and `npm run verify:docker`.
 
-**Commit:** `fix(render): write the requested MP3 tags with an ID3 package`
+**Commit:** `fix(render): preserve creation year and write final MP3 tags`
 
 ### R25: Show project-render storage in General settings
 
