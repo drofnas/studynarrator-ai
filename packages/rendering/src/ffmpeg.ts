@@ -11,6 +11,8 @@ interface AudioProbeMetadata {
   formatName: string | null;
   title: string | null;
   artist: string | null;
+  year: number | null;
+  genre: string | null;
 }
 
 export interface Mp3Metadata {
@@ -367,7 +369,7 @@ export async function probeAudioFile(options: {
       "-v",
       "error",
       "-show_entries",
-      "format=format_name,duration,bit_rate:format_tags=title,artist:stream=codec_type",
+      "format=format_name,duration,bit_rate:format_tags=title,artist,date,genre:stream=codec_type",
       "-of",
       "json",
       options.inputPath,
@@ -380,7 +382,12 @@ export async function probeAudioFile(options: {
         format_name?: unknown;
         duration?: unknown;
         bit_rate?: unknown;
-        tags?: { title?: unknown; artist?: unknown };
+        tags?: {
+          title?: unknown;
+          artist?: unknown;
+          date?: unknown;
+          genre?: unknown;
+        };
       };
       streams?: Array<{ codec_type?: unknown }>;
     };
@@ -415,6 +422,15 @@ export async function probeAudioFile(options: {
         typeof value.format?.tags?.artist === "string"
           ? value.format.tags.artist
           : null,
+      year:
+        typeof value.format?.tags?.date === "string" &&
+        /^[1-9][0-9]{3}$/u.test(value.format.tags.date)
+          ? Number(value.format.tags.date)
+          : null,
+      genre:
+        typeof value.format?.tags?.genre === "string"
+          ? value.format.tags.genre
+          : null,
     };
   } catch {
     return {
@@ -424,6 +440,8 @@ export async function probeAudioFile(options: {
       formatName: null,
       title: null,
       artist: null,
+      year: null,
+      genre: null,
     };
   }
 }

@@ -28,6 +28,7 @@ async function launch(
   dataDirectory: string,
 ): Promise<ElectronApplication> {
   return await electron.launch({
+    chromiumSandbox: true,
     args: ["."],
     cwd: desktopRoot,
     executablePath: electronExecutable,

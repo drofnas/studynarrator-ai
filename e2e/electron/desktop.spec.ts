@@ -1,6 +1,8 @@
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { resolve } from "node:path";
+import { promisify } from "node:util";
 import { unzipSync } from "fflate";
 import type { Page } from "@playwright/test";
 import type { StudyNarratorBridge } from "@studynarrator/shared-types";
@@ -12,6 +14,18 @@ import {
 } from "../support/electronTest.js";
 
 interface ElectronEvaluationApi {
+  app: { commandLine: { hasSwitch(name: string): boolean } };
+  BrowserWindow: {
+    getAllWindows(): {
+      webContents: {
+        getLastWebPreferences(): {
+          sandbox?: boolean;
+          contextIsolation?: boolean;
+          nodeIntegration?: boolean;
+        };
+      };
+    }[];
+  };
   shell: {
     openExternal(url: string): Promise<void>;
   };
@@ -47,6 +61,25 @@ test.describe("Electron acceptance", () => {
     studyNarrator,
   }) => {
     const { page } = electronStudyNarrator;
+    await expect(page).toHaveTitle("StudyNarrator AI");
+    const security = await electronStudyNarrator.application.evaluate(
+      ({ app, BrowserWindow }: ElectronEvaluationApi) => {
+        const preferences =
+          BrowserWindow.getAllWindows()[0]?.webContents.getLastWebPreferences();
+        return {
+          sandbox: preferences?.sandbox,
+          contextIsolation: preferences?.contextIsolation,
+          nodeIntegration: preferences?.nodeIntegration,
+          sandboxDisabled: app.commandLine.hasSwitch("no-sandbox"),
+        };
+      },
+    );
+    expect(security).toEqual({
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandboxDisabled: false,
+    });
     await configureElectronConnection(page, studyNarrator);
     const bridgeShape = await page.evaluate(() => {
       const renderer = window as typeof window & {
@@ -277,8 +310,12 @@ test.describe("Electron acceptance", () => {
     await expect(
       page.getByRole("heading", { name: "Projects", exact: true }),
     ).toBeVisible();
-    await openProject(page, "Desktop current render");
-    await page.getByRole("tab", { name: "Render" }).click();
+    await page
+      .getByRole("link", { name: /Desktop current render: Render complete/u })
+      .click();
+    await expect(page).toHaveURL(
+      new RegExp(`render=${firstRenders[0]!.id}$`, "u"),
+    );
     await expect(
       page.getByLabel(/Audio player for Completed project render/u),
     ).toBeVisible();
@@ -307,6 +344,20 @@ test.describe("Electron acceptance", () => {
     expect(
       studyNarrator.fakeSpeaches.getState().counters["/v1/audio/speech"] ?? 0,
     ).toBe(2);
+    page = await electronStudyNarrator.relaunch();
+    await expect(
+      page.getByRole("heading", { name: "Projects", exact: true }),
+    ).toBeVisible();
+    await openProject(page, "Desktop current render");
+    await page.getByRole("tab", { name: "Render" }).click();
+    await expect(
+      page.getByLabel("Audio player for Completed project render"),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", {
+        name: /Desktop current render: Render complete/u,
+      }),
+    ).toHaveCount(0);
   });
 
   test("auto-resumes an interrupted render and saves a validated artifact through native IPC", async ({
@@ -362,6 +413,25 @@ test.describe("Electron acceptance", () => {
       )
       .toBeGreaterThan(0);
 
+    const { stdout: metadata } = await promisify(execFile)("ffprobe", [
+      "-v",
+      "error",
+      "-show_entries",
+      "format_tags=title,artist,date,genre",
+      "-of",
+      "json",
+      destination,
+    ]);
+    expect(
+      (JSON.parse(metadata) as { format: { tags: Record<string, string> } })
+        .format.tags,
+    ).toMatchObject({
+      title: "Desktop render recovery",
+      artist: "Study Narrator AI",
+      date: String(new Date().getFullYear()),
+      genre: "Audio Book",
+    });
+
     const detailsDestination = resolve(
       electronStudyNarrator.dataDirectory,
       "exported-render-details.zip",
@@ -409,7 +479,7 @@ test.describe("Electron acceptance", () => {
       name: "Create a script prompt editor",
     });
     await expect(creationEditor).toContainText(
-      "# StudyNarrator Script Creation Instructions",
+      "# StudyNarrator AI Script Creation Instructions",
     );
     await expect(
       page.getByText(
@@ -417,7 +487,9 @@ test.describe("Electron acceptance", () => {
       ),
     ).toBeVisible();
     await expect(creationEditor).toContainText("## AUTHORING RULES");
-    await creationEditor.press("Meta+ArrowDown");
+    const endOfDocument =
+      process.platform === "darwin" ? "Meta+ArrowDown" : "Control+End";
+    await creationEditor.press(endOfDocument);
     await expect(creationEditor).toContainText(
       "[PASTE SOURCE MATERIAL HERE AND/OR ATTACH RELEVANT FILES TO THE CONVERSATION.]",
     );
@@ -454,7 +526,7 @@ test.describe("Electron acceptance", () => {
     const updateEditor = page.getByRole("textbox", {
       name: "Update a script prompt editor",
     });
-    await updateEditor.press("Meta+ArrowDown");
+    await updateEditor.press(endOfDocument);
     await expect(updateEditor).toContainText(
       "[OPTIONAL — PROVIDE FACTS, RESEARCH, SOURCE MATERIAL, CONSTRAINTS, OR ATTACH RELEVANT FILES.]",
     );

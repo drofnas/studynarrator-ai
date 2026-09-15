@@ -66,7 +66,7 @@ function safeSynthesisError(error: unknown): ScratchpadServiceError {
       case "authenticationRequired":
         return new ScratchpadServiceError(
           "SCRATCHPAD_AUTHENTICATION",
-          "This Speaches server requires authentication, which StudyNarrator does not support.",
+          "This Speaches server requires authentication, which StudyNarrator AI does not support.",
         );
       case "configurationError":
         return new ScratchpadServiceError(
@@ -76,7 +76,7 @@ function safeSynthesisError(error: unknown): ScratchpadServiceError {
       case "invalidAudio":
         return new ScratchpadServiceError(
           "SCRATCHPAD_INVALID_AUDIO",
-          "Speaches returned WAV audio that StudyNarrator could not validate.",
+          "Speaches returned WAV audio that StudyNarrator AI could not validate.",
         );
       case "selectionRejected":
         return new ScratchpadServiceError(
@@ -102,7 +102,7 @@ function safeSynthesisError(error: unknown): ScratchpadServiceError {
   }
   return new ScratchpadServiceError(
     "SCRATCHPAD_UNAVAILABLE",
-    "StudyNarrator could not complete speech synthesis.",
+    "StudyNarrator AI could not complete speech synthesis.",
   );
 }
 

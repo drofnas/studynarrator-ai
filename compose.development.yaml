@@ -1,0 +1,88 @@
+name: studynarrator-development
+
+x-tooling: &tooling
+  image: studynarrator-tooling:local
+  build:
+    context: .
+    dockerfile: deploy/development/Dockerfile
+  init: true
+  shm_size: 2gb
+
+services:
+  tools:
+    <<: *tooling
+    profiles: ["tools"]
+    # Chromium's setuid sandbox needs to create PID/network namespaces.
+    cap_add: ["SYS_ADMIN"]
+    command: ["npm", "test"]
+
+  docker:
+    image: docker:29.1.3-dind
+    privileged: true
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+    command:
+      ["dockerd", "--host=unix:///docker-socket/docker.sock", "--group=users"]
+    volumes:
+      - docker-socket:/docker-socket
+      - docker-data:/var/lib/docker
+    healthcheck:
+      test:
+        ["CMD", "docker", "--host=unix:///docker-socket/docker.sock", "info"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  verify:
+    <<: *tooling
+    cap_add: ["SYS_ADMIN"]
+    network_mode: service:docker
+    group_add: ["100"]
+    depends_on:
+      docker:
+        condition: service_healthy
+    volumes:
+      - docker-socket:/docker-socket
+      - type: bind
+        source: .git
+        target: /workspace/.git
+        read_only: true
+
+  web:
+    <<: *tooling
+    profiles: ["web"]
+    command:
+      - npx
+      - concurrently
+      - --kill-others
+      - npm run dev --workspace @studynarrator/server
+      - npm run dev --workspace @studynarrator/web -- --host 0.0.0.0
+    ports:
+      - "127.0.0.1:${STUDYNARRATOR_DEV_PORT:-5173}:5173"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      STUDYNARRATOR_DATA_DIR: /workspace/.tmp/dev/web
+    volumes:
+      - web-data:/workspace/.tmp/dev/web
+    develop:
+      watch:
+        - action: sync
+          path: .
+          target: /workspace
+          ignore: &build-inputs
+            - "**/package.json"
+            - package-lock.json
+            - deploy/development/
+            - compose.development.yaml
+            - .npmrc
+            - .nvmrc
+            - .trivy-version
+        - action: rebuild
+          path: .
+          include: *build-inputs
+
+volumes:
+  docker-socket:
+  docker-data:
+  web-data:

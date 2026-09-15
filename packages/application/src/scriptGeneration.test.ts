@@ -68,7 +68,7 @@ describe("script generation service", () => {
     expect(document.mimeType).toBe("text/markdown; charset=utf-8");
     expect(document.checksum).toMatch(/^[a-f0-9]{64}$/u);
     expect(document.content).toContain(
-      "# StudyNarrator Script Creation Instructions",
+      "# StudyNarrator AI Script Creation Instructions",
     );
     expect(document.content).toContain("[WHAT SHOULD THE SCRIPT TEACH?]");
     expect(document.content).not.toContain(project.scriptSource);
@@ -78,7 +78,7 @@ describe("script generation service", () => {
       fileName: "resume-unsafe-project-update-prompt.md",
     });
     expect(update.content).toContain(
-      "# StudyNarrator Script Update Instructions",
+      "# StudyNarrator AI Script Update Instructions",
     );
     expect(update.content).toContain(
       "[DESCRIBE WHAT SHOULD BE ADDED, REMOVED, CORRECTED, EXPANDED, OR REORGANIZED.]",
@@ -138,7 +138,7 @@ describe("script generation service", () => {
     const service = createScriptGenerationService({ repository: repository() });
     const file = await service.resolvePromptExport(project.id, "creation");
     expect(strFromU8(file.bytes)).toContain(
-      "# StudyNarrator Script Creation Instructions",
+      "# StudyNarrator AI Script Creation Instructions",
     );
   });
 

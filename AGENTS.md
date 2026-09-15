@@ -6,6 +6,17 @@ Use this workflow for each task. The affected surfaces determine the required ga
 
 ### 1. Ground the task and control scope
 
+- Run application builds, dependency installation, formatting, lint, tests,
+  coverage, browsers, Electron, FFmpeg, and scanners inside the Docker tooling
+  environment in `compose.development.yaml`. Do not require a host application
+  toolchain. The npm commands below are container commands: use
+  `docker compose -f compose.development.yaml run --build --rm tools <command>`
+  for focused work and
+  `docker compose -f compose.development.yaml up --build --abort-on-container-exit --exit-code-from verify verify`
+  for the full verifier. See `deploy/development/README.md` for source writes,
+  report export, and cleanup. Native macOS/Windows release checks belong on their
+  matching CI hosts.
+
 Before editing:
 
 - Inspect `git status`, relevant source, public manifests, tests, accepted ADRs, and `docs/technical-debt.md`.

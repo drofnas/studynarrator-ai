@@ -48,10 +48,19 @@ export function ProjectScriptPanel({
               <span>Source</span>
               <h3>Script editor</h3>
             </div>
-            <ScriptStatistics
-              source={draft.scriptSource}
-              label="Script statistics above editor"
-            />
+            <div className={styles.scriptTools}>
+              <ScriptStatistics
+                source={draft.scriptSource}
+                label="Script statistics above editor"
+              />
+              <button
+                type="button"
+                className={styles.secondary}
+                onClick={() => editorRef.current?.openSearch()}
+              >
+                Search Script
+              </button>
+            </div>
           </div>
           <EstimateStrip
             wordCount={countWords(draft.scriptSource)}

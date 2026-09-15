@@ -85,7 +85,7 @@ describe("script generation", () => {
       context,
       lexiconEntries: entries,
     });
-    expect(prompt).toContain("# StudyNarrator Script Creation Instructions");
+    expect(prompt).toContain("# StudyNarrator AI Script Creation Instructions");
     expect(prompt).toContain("## PRIMARY GOAL");
     expect(prompt).toContain("# USER INPUT");
     expect(prompt).toContain(
@@ -128,13 +128,13 @@ describe("script generation", () => {
       context,
       lexiconEntries: entries,
     });
-    expect(prompt).toContain("# StudyNarrator Script Update Instructions");
+    expect(prompt).toContain("# StudyNarrator AI Script Update Instructions");
     expect(prompt).toContain("## UPDATE RULES");
     expect(prompt).toContain(
       "## Requested changes\n\n[DESCRIBE WHAT SHOULD BE ADDED, REMOVED, CORRECTED, EXPANDED, OR REORGANIZED.]",
     );
     expect(prompt).toContain(
-      "## Current StudyNarrator script\n\n[PASTE THE CURRENT SCRIPT HERE AND/OR ATTACH IT TO THE CONVERSATION.]",
+      "## Current StudyNarrator AI script\n\n[PASTE THE CURRENT SCRIPT HERE AND/OR ATTACH IT TO THE CONVERSATION.]",
     );
     expect(
       prompt
@@ -182,8 +182,10 @@ describe("script generation", () => {
       "examples/two-speaker-study-guide.txt",
     ]);
     const combined = files.map(({ content }) => content).join("\n");
-    expect(combined).toContain("# StudyNarrator Script Creation Instructions");
-    expect(combined).toContain("# StudyNarrator Script Update Instructions");
+    expect(combined).toContain(
+      "# StudyNarrator AI Script Creation Instructions",
+    );
+    expect(combined).toContain("# StudyNarrator AI Script Update Instructions");
     expect(combined).toContain("[WHAT SHOULD THE SCRIPT TEACH?]");
     expect(combined).toContain(
       "[DESCRIBE WHAT SHOULD BE ADDED, REMOVED, CORRECTED, EXPANDED, OR REORGANIZED.]",

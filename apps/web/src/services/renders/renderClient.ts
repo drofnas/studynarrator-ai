@@ -31,7 +31,7 @@ async function read<T>(
     throw new Error(
       failure.success
         ? failure.data.error.message
-        : "StudyNarrator could not complete the render operation.",
+        : "StudyNarrator AI could not complete the render operation.",
     );
   }
   return parse(body);
@@ -124,7 +124,10 @@ export function createRestRenderClient(
 
       source.addEventListener("progress", (event) => {
         const job = parse(event as MessageEvent<string>);
-        if (job) onJob(job);
+        if (job) {
+          dropped = false;
+          onJob(job);
+        }
       });
       source.addEventListener("terminal", (event) => {
         const job = parse(event as MessageEvent<string>);
@@ -250,7 +253,7 @@ export function createRestRenderClient(
         throw new Error(
           failure.success
             ? failure.data.error.message
-            : "StudyNarrator could not export the render segment.",
+            : "StudyNarrator AI could not export the render segment.",
         );
       }
       const blobUrl = URL.createObjectURL(await response.blob());

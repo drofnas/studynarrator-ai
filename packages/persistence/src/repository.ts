@@ -189,7 +189,7 @@ function createRepository(options: {
         return candidate;
     }
     throw new PersistenceConflictError(
-      "StudyNarrator could not allocate a collision-free durable ID.",
+      "StudyNarrator AI could not allocate a collision-free durable ID.",
     );
   };
 

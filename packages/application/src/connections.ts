@@ -89,7 +89,7 @@ function safeCatalogError(error: unknown): ConnectionCatalogError {
       case "authenticationRequired":
         return new ConnectionCatalogError(
           "CONNECTION_CATALOG_AUTHENTICATION",
-          "This Speaches server requires authentication, which StudyNarrator does not support.",
+          "This Speaches server requires authentication, which StudyNarrator AI does not support.",
         );
       case "configurationError":
         return new ConnectionCatalogError(
@@ -110,7 +110,7 @@ function safeCatalogError(error: unknown): ConnectionCatalogError {
   }
   return new ConnectionCatalogError(
     "CONNECTION_CATALOG_UNAVAILABLE",
-    "StudyNarrator could not load speech models and voices from this server.",
+    "StudyNarrator AI could not load speech models and voices from this server.",
   );
 }
 

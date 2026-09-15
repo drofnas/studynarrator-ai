@@ -43,7 +43,7 @@ if (existsSync(webEntryPoint)) {
   );
 } else if (configuration.requireWebDistribution) {
   throw new Error(
-    `StudyNarrator Web distribution is missing at ${webEntryPoint}.`,
+    `StudyNarrator AI Web distribution is missing at ${webEntryPoint}.`,
   );
 }
 const server = application.listen(
@@ -51,7 +51,7 @@ const server = application.listen(
   configuration.host,
   () => {
     console.log(
-      `StudyNarrator ${configuration.distribution} server listening on http://${configuration.host}:${String(configuration.port)}`,
+      `StudyNarrator AI ${configuration.distribution} server listening on http://${configuration.host}:${String(configuration.port)}`,
     );
   },
 );

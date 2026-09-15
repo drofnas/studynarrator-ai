@@ -1,7 +1,8 @@
 import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { resolve, sep } from "node:path";
-import { test as base, expect, type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
+import { test as base } from "./cspTest.js";
 import {
   startFakeSpeachesServer,
   type FakeSpeachesServer,

@@ -89,7 +89,7 @@ function safeError(error: unknown): RenderPlanServiceError {
   }
   return new RenderPlanServiceError(
     "RENDER_PLAN_STORAGE",
-    "StudyNarrator could not render the study narration.",
+    "StudyNarrator AI could not render the study narration.",
   );
 }
 

@@ -189,6 +189,7 @@ export async function createStudyNarratorServices(options: {
       dataDirectory: descriptor.dataDirectory,
     });
     speechCache = createSpeechCacheService(cache, {
+      projectRenderStorage: retentionMaintenance.projectRenderStorage,
       clearCacheAndRenderedProjectClips:
         retentionMaintenance.clearCacheAndRenderedProjectClips,
     });
@@ -211,7 +212,7 @@ export async function createStudyNarratorServices(options: {
       list: () => listPersistenceBackups(databasePath),
       restore: () => {
         throw new PersistenceConflictError(
-          "Close StudyNarrator before restoring a backup; the database must not be open.",
+          "Close StudyNarrator AI before restoring a backup; the database must not be open.",
         );
       },
     };

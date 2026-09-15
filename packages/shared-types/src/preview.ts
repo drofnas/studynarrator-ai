@@ -112,6 +112,20 @@ export const ProjectPreviewResultSchema = z
   .strict();
 export type ProjectPreviewResult = z.infer<typeof ProjectPreviewResultSchema>;
 
+const ProjectRenderStorageStatusSchema = z
+  .object({
+    totalBytes: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    reclaimableBytes: z
+      .number()
+      .int()
+      .nonnegative()
+      .max(Number.MAX_SAFE_INTEGER),
+  })
+  .strict();
+export type ProjectRenderStorageStatus = z.infer<
+  typeof ProjectRenderStorageStatusSchema
+>;
+
 export const SpeechCacheStatusSchema = z
   .object({
     contractVersion: z.literal(SPEECH_CACHE_CONTRACT_VERSION),
@@ -123,15 +137,24 @@ export const SpeechCacheStatusSchema = z
     sessionWrites: z.number().int().nonnegative(),
     sessionCorruptMisses: z.number().int().nonnegative(),
     inFlight: z.number().int().nonnegative(),
+    projectRenders: ProjectRenderStorageStatusSchema.nullable(),
   })
   .strict();
 export type SpeechCacheStatus = z.infer<typeof SpeechCacheStatusSchema>;
+
+const ProjectRenderCleanupResultSchema = z
+  .object({
+    entriesRemoved: z.number().int().nonnegative(),
+    bytesFreed: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  })
+  .strict();
 
 export const SpeechCacheCleanupResultSchema = z
   .object({
     contractVersion: z.literal(SPEECH_CACHE_CONTRACT_VERSION),
     entriesRemoved: z.number().int().nonnegative(),
     bytesFreed: z.number().int().nonnegative(),
+    renderedProjectClips: ProjectRenderCleanupResultSchema,
   })
   .strict();
 type SpeechCacheCleanupResult = z.infer<typeof SpeechCacheCleanupResultSchema>;

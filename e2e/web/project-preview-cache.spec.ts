@@ -183,7 +183,7 @@ test.describe("project preview cache", () => {
       page.getByRole("heading", { name: "Speech cache" }),
     ).toBeVisible();
     await expect(
-      page.getByText(/Clear them here when you want every future preview/u),
+      page.getByText(/future previews will contact Speaches/u),
     ).toBeVisible();
     await expect(page.getByText(/entries/u).first()).toBeVisible();
     page.on("dialog", (dialog) => dialog.accept());

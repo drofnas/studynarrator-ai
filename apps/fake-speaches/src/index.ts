@@ -21,6 +21,7 @@ const FAKE_SPEACHES_SCENARIOS = [
   "empty-body",
   "invalid-content-type",
   "corrupt-audio",
+  "redirected-voice-catalog",
 ] as const;
 export type FakeSpeachesScenario = (typeof FAKE_SPEACHES_SCENARIOS)[number];
 
@@ -229,6 +230,11 @@ export async function startFakeSpeachesServer(
       return;
     }
     if (path === "/v1/audio/models") {
+      if (scenario === "redirected-voice-catalog") {
+        log(307);
+        response.writeHead(307, { Location: "/private-redirect-target" }).end();
+        return;
+      }
       log(200);
       sendJson(response, 200, {
         object: "list",

@@ -49,19 +49,56 @@ describe("speech cache service", () => {
     const clearCacheAndRenderedProjectClips = vi.fn(async () => ({
       entriesRemoved: 2,
       bytesFreed: 5,
+      renderedProjectClips: { entriesRemoved: 1, bytesFreed: 2 },
     }));
-    const service = createSpeechCacheService({ clearAll } as never, {
-      clearCacheAndRenderedProjectClips,
+    const projectRenderStorage = vi.fn(async () => ({
+      totalBytes: 9,
+      reclaimableBytes: 6,
+    }));
+    const service = createSpeechCacheService(
+      {
+        status: vi.fn(async () => ({
+          entryCount: 1,
+          totalBytes: 3,
+          lastUsedAt: null,
+          sessionHits: 0,
+          sessionMisses: 0,
+          sessionWrites: 0,
+          sessionCorruptMisses: 0,
+          inFlight: 0,
+        })),
+        clearAll,
+      } as never,
+      {
+        clearCacheAndRenderedProjectClips,
+        projectRenderStorage,
+      },
+    );
+
+    await expect(service.status()).resolves.toMatchObject({
+      projectRenders: {
+        totalBytes: 9,
+        reclaimableBytes: 6,
+      },
     });
 
     await expect(
       service.clearAll({ includeRenderedProjectClips: false }),
-    ).resolves.toMatchObject({ entriesRemoved: 1, bytesFreed: 3 });
+    ).resolves.toMatchObject({
+      entriesRemoved: 1,
+      bytesFreed: 3,
+      renderedProjectClips: { entriesRemoved: 0, bytesFreed: 0 },
+    });
     await expect(
       service.clearAll({ includeRenderedProjectClips: true }),
-    ).resolves.toMatchObject({ entriesRemoved: 2, bytesFreed: 5 });
+    ).resolves.toMatchObject({
+      entriesRemoved: 2,
+      bytesFreed: 5,
+      renderedProjectClips: { entriesRemoved: 1, bytesFreed: 2 },
+    });
     expect(clearAll).toHaveBeenCalledOnce();
     expect(clearCacheAndRenderedProjectClips).toHaveBeenCalledOnce();
+    expect(projectRenderStorage).toHaveBeenCalledOnce();
     await expect(service.clearAll({} as never)).rejects.toThrow();
   });
 });

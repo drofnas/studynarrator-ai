@@ -37,6 +37,7 @@ const logger = {
 const recorded = vi.hoisted(() => ({
   calls: [] as string[],
   renderLoggers: [] as unknown[],
+  speechCacheServiceOptions: [] as Array<Record<string, unknown>>,
   speechCacheStatusCalls: 0,
   sweepInputs: [] as Array<{ pinnedProjectIds?: readonly string[] }>,
   restoreInputs: [] as {
@@ -123,10 +124,13 @@ vi.mock("./cachedSpeech.js", async (importOriginal) => {
         },
       } as unknown;
     }),
-    createSpeechCacheService: vi.fn(() => {
-      recorded.calls.push("speechCacheService");
-      return {};
-    }),
+    createSpeechCacheService: vi.fn(
+      (_cache: unknown, options: Record<string, unknown>) => {
+        recorded.calls.push("speechCacheService");
+        recorded.speechCacheServiceOptions.push(options);
+        return {};
+      },
+    ),
     createCachedSpeechSynthesis: vi.fn(() => ({
       synthesize: async () => {
         throw new Error("not exercised by composition tests");
@@ -241,6 +245,7 @@ describe("createStudyNarratorServices", () => {
   beforeEach(() => {
     recorded.calls.length = 0;
     recorded.renderLoggers.length = 0;
+    recorded.speechCacheServiceOptions.length = 0;
     recorded.speechCacheStatusCalls = 0;
     recorded.sweepInputs.length = 0;
     recorded.restoreInputs.length = 0;
@@ -342,6 +347,10 @@ describe("createStudyNarratorServices", () => {
       });
       expect(services.logger).toBe(logger);
       expect(recorded.renderLoggers).toEqual([logger]);
+      expect(Object.keys(recorded.speechCacheServiceOptions[0] ?? {})).toEqual([
+        "projectRenderStorage",
+        "clearCacheAndRenderedProjectClips",
+      ]);
       for (const key of [
         "connection",
         "voiceCatalog",
@@ -463,7 +472,7 @@ describe("createStudyNarratorServices", () => {
       await expect(
         services.persistence.backups?.restore({ backupPath: backup.path }),
       ).rejects.toThrow(
-        "Close StudyNarrator before restoring a backup; the database must not be open.",
+        "Close StudyNarrator AI before restoring a backup; the database must not be open.",
       );
       expect(vi.mocked(restoreDatabaseFromBackup)).not.toHaveBeenCalled();
     });

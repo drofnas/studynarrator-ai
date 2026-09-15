@@ -11,10 +11,8 @@ import {
 import { createServer } from "node:net";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
-import {
-  assertScoutPolicy,
-  collectTiffEvidence,
-} from "./verify-docker-vulnerabilities.mjs";
+import { collectAudioEvidence } from "./verify-docker-audio.mjs";
+import { assertTrivyPolicy } from "./verify-docker-vulnerabilities.mjs";
 import {
   BUILDKIT_IMAGE,
   VERIFICATION_LABEL,
@@ -30,6 +28,10 @@ import {
 } from "./verify-docker-cleanup.mjs";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
+const requiredTrivyVersion = readFileSync(
+  resolve(repositoryRoot, ".trivy-version"),
+  "utf8",
+).trim();
 const verificationRoot = resolve(repositoryRoot, ".tmp", "verify-docker");
 const buildkitOwnershipMarker = resolve(
   verificationRoot,
@@ -237,6 +239,10 @@ function assertImageContract(inspect) {
     "image must run as fixed UID/GID 10001",
   );
   invariant(
+    labels["org.opencontainers.image.title"] === "StudyNarrator AI",
+    "OCI title label is incorrect",
+  );
+  invariant(
     labels["org.opencontainers.image.version"] === "verify",
     "OCI version label is incorrect",
   );
@@ -346,7 +352,7 @@ async function runDockerAcceptance({
   fakeApplicationUrl,
   fakePort,
   sbomPath,
-  scoutPath,
+  trivyPath,
   assessmentPath,
 }) {
   const config = JSON.parse(await composeOutput("config", "--format", "json"));
@@ -388,7 +394,12 @@ async function runDockerAcceptance({
   invariant(
     (await commandOutput(
       "docker",
-      smokeContainerArgs("id", "/usr/bin/id", "-u"),
+      smokeContainerArgs(
+        "id",
+        "/nodejs/bin/node",
+        "-e",
+        "process.stdout.write(String(process.getuid()))",
+      ),
     )) === "10001",
     "runtime process is not non-root",
   );
@@ -403,26 +414,38 @@ async function runDockerAcceptance({
   );
   await run(
     "docker",
-    smokeContainerArgs("license", "/usr/bin/test", "-s", "/app/LICENSE"),
-  );
-  await run(
-    "docker",
     smokeContainerArgs(
-      "acknowledgments",
-      "/usr/bin/test",
-      "-s",
-      "/app/ACKNOWLEDGMENTS.md",
+      "notices",
+      "/nodejs/bin/node",
+      "-e",
+      "for (const path of ['/app/LICENSE', '/app/ACKNOWLEDGMENTS.md']) if (!require('node:fs').statSync(path).size) process.exit(1)",
     ),
   );
 
-  await run("docker", [
-    "scout",
-    "sbom",
+  await run("trivy", [
+    "image",
+    "--scanners",
+    "vuln",
+    "--severity",
+    "CRITICAL,HIGH",
+    "--image-src",
+    "docker",
+    "--format",
+    "json",
+    "--output",
+    trivyPath,
+    "--no-progress",
+    "--skip-version-check",
+    resourceNames.imageTag,
+  ]);
+  const report = JSON.parse(readFileSync(trivyPath, "utf8"));
+  await run("trivy", [
+    "convert",
     "--format",
     "cyclonedx",
     "--output",
     sbomPath,
-    `local://${resourceNames.imageTag}`,
+    trivyPath,
   ]);
   const sbom = JSON.parse(readFileSync(sbomPath, "utf8"));
   invariant(
@@ -431,81 +454,56 @@ async function runDockerAcceptance({
       sbom.components.length > 0,
     "CycloneDX image inventory is invalid",
   );
-  await run("docker", [
-    "scout",
-    "cves",
-    "--only-severity",
-    "critical,high",
-    "--format",
-    "sarif",
-    "--output",
-    scoutPath,
-    `local://${resourceNames.imageTag}`,
-  ]);
-  const report = JSON.parse(readFileSync(scoutPath, "utf8"));
-  let evidence;
-  if (JSON.stringify(report).includes("CVE-2026-52490")) {
-    process.stdout.write(
-      "\n> Inspecting TIFF package and filesystem evidence in the scanned image\n",
-    );
-    const inspection = await executeProcess(
-      "docker",
-      [
-        "run",
-        "--rm",
-        "--name",
-        `${resourceNames.runId}-tiff-evidence`,
-        "--label",
-        verificationLabel,
-        "--label",
-        verificationRunLabel,
-        "--read-only",
-        "--network",
-        "none",
-        "--cap-drop",
-        "ALL",
-        "--cap-add",
-        "DAC_READ_SEARCH",
-        "--security-opt",
-        "no-new-privileges:true",
-        "--user",
-        "0:10001",
-        "--tmpfs",
-        "/data:rw,noexec,nosuid,size=16m",
-        "--entrypoint",
-        "/usr/local/bin/node",
-        imageInspect.Id,
-        "--input-type=module",
-        "-e",
-        `process.stdout.write(JSON.stringify(await (${collectTiffEvidence.toString()})()))`,
-      ],
-      {},
-      true,
-    );
-    if (inspection.status !== 0) {
-      const reason = inspection.stderr.match(
-        /TIFF image evidence could not be collected \((metadata|filesystem|library)\)/u,
-      );
-      fail(
-        `TIFF image evidence inspection failed${reason ? ` (${reason[1]})` : ""}`,
-      );
-    }
-    try {
-      evidence = JSON.parse(inspection.stdout);
-    } catch {
-      fail("TIFF image evidence is invalid");
-    }
+  const audioInspection = await executeProcess(
+    "docker",
+    [
+      "run",
+      "--rm",
+      "--name",
+      `${resourceNames.runId}-audio-evidence`,
+      "--label",
+      verificationLabel,
+      "--label",
+      verificationRunLabel,
+      "--read-only",
+      "--network",
+      "none",
+      "--cap-drop",
+      "ALL",
+      "--security-opt",
+      "no-new-privileges:true",
+      "--user",
+      "10001:10001",
+      "--tmpfs",
+      "/data:rw,noexec,nosuid,size=16m",
+      "--entrypoint",
+      "/nodejs/bin/node",
+      imageInspect.Id,
+      "--input-type=module",
+      "-e",
+      `process.stdout.write(JSON.stringify(await (${collectAudioEvidence.toString()})()))`,
+    ],
+    {},
+    true,
+  );
+  if (audioInspection.status !== 0)
+    fail("audio build evidence inspection failed");
+  let audioEvidence;
+  try {
+    audioEvidence = JSON.parse(audioInspection.stdout);
+  } catch {
+    fail("audio build evidence is invalid");
   }
-  const assessment = assertScoutPolicy({
+  const assessment = assertTrivyPolicy({
     report,
     exceptions: JSON.parse(
       readFileSync(
-        resolve(repositoryRoot, "deploy/docker/scout-high-exceptions.json"),
+        resolve(repositoryRoot, "deploy/docker/container-high-exceptions.json"),
         "utf8",
       ),
     ),
     sbom,
-    evidence,
+    audioEvidence,
     imageId: imageInspect.Id,
   });
   writeFileSync(assessmentPath, `${JSON.stringify(assessment, null, 2)}\n`, {
@@ -513,7 +511,7 @@ async function runDockerAcceptance({
   });
   if (assessment.assessments.length > 0) {
     process.stdout.write(
-      "DOCKER VERIFY: CVE-2026-52490 not affected — vulnerable tiffcrop code is absent; raw Scout finding retained\n",
+      `DOCKER VERIFY: ${assessment.assessments.length} findings assessed against this image; raw Trivy findings retained\n`,
     );
   }
 
@@ -688,7 +686,7 @@ async function main() {
 
   let buildkitImageExistedBeforeRun = true;
   let sbomPath;
-  let scoutPath;
+  let trivyPath;
   let assessmentPath;
   try {
     await executeWithCleanup({
@@ -729,6 +727,13 @@ async function main() {
         }
 
         await commandOutput("docker", ["buildx", "version"]);
+        const trivyVersion = (
+          await commandOutput("trivy", ["--version"])
+        ).match(/^Version:\s*(\S+)$/mu)?.[1];
+        invariant(
+          trivyVersion === requiredTrivyVersion,
+          `Trivy ${requiredTrivyVersion} is required; found ${trivyVersion ?? "an unknown version"}`,
+        );
         buildkitImageExistedBeforeRun = await buildkitImageExists();
         if (!buildkitImageExistedBeforeRun) {
           writeFileSync(
@@ -745,7 +750,7 @@ async function main() {
 
         const verificationRun = mkdtempSync(resolve(verificationRoot, "run-"));
         sbomPath = resolve(verificationRun, "studynarrator.cdx.json");
-        scoutPath = resolve(verificationRun, "docker-scout.sarif");
+        trivyPath = resolve(verificationRun, "trivy.json");
         assessmentPath = resolve(
           verificationRun,
           "vulnerability-assessment.json",
@@ -757,7 +762,6 @@ async function main() {
         const fakeApplicationUrl = `http://host.docker.internal:${fakePort}`;
 
         composeEnvironment = {
-          STUDYNARRATOR_BIND_ADDRESS: "127.0.0.1",
           STUDYNARRATOR_HOST_PORT: String(hostPort),
           STUDYNARRATOR_IMAGE_TAG: resourceNames.imageVersionTag,
           STUDYNARRATOR_SOURCE_REVISION: sourceRevision,
@@ -769,7 +773,7 @@ async function main() {
           fakeApplicationUrl,
           fakePort,
           sbomPath,
-          scoutPath,
+          trivyPath,
           assessmentPath,
         });
       },
@@ -833,7 +837,7 @@ async function main() {
   }
 
   process.stdout.write(
-    `\nDOCKER VERIFY: ALL CHECKS PASSED\nCycloneDX inventory: ${sbomPath}\nDocker Scout report: ${scoutPath}\nVulnerability assessment: ${assessmentPath}\n`,
+    `\nDOCKER VERIFY: ALL CHECKS PASSED\nCycloneDX inventory: ${sbomPath}\nTrivy JSON report: ${trivyPath}\nVulnerability assessment: ${assessmentPath}\n`,
   );
 }
 

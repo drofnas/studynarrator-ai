@@ -37,7 +37,8 @@ their scope and dependencies when resumed. Paths refer to the repository root.
 Use [TASKS.md](TASKS.md) for the execution rules and current release workload;
 use this file for deferred roadmap inputs. R24's exact MP3 artist
 `Study Narrator AI` takes precedence over R16's broader product-name consistency
-proposal. Future R12 must inventory the ID3 package that R24 actually uses.
+proposal. D1 selects FFmpeg reuse and removal of `node-id3`; future R12 must
+inventory the resulting shipped npm dependencies. R13 owns FFmpeg notices.
 
 ### R12: Generate the shipped npm license inventory
 
@@ -148,7 +149,7 @@ npm run test:e2e:electron
 
 ### R14: Document the tested Kokoro model and output licensing
 
-**Goal:** Explain the license boundary between StudyNarrator, Speaches, the tested
+**Goal:** Explain the license boundary between StudyNarrator AI, Speaches, the tested
 `speaches-ai/Kokoro-82M-v1.0-ONNX` model, its voice assets, source material, and
 generated audio.
 
@@ -163,11 +164,11 @@ generated audio.
 
 1. Verify the current Speaches repository license from its primary source.
 2. Document `speaches-ai/Kokoro-82M-v1.0-ONNX` as the only model tested with
-   StudyNarrator. Verify its model card and the license for the voice assets used
+   StudyNarrator AI. Verify its model card and the license for the voice assets used
    by the repository baseline from primary sources.
 3. Do not describe other models or voices from the Speaches catalog as tested or
    recommended. Tell users to review the upstream terms before selecting them.
-4. State that StudyNarrator's Apache-2.0 license does not grant rights to imported
+4. State that StudyNarrator AI's Apache-2.0 license does not grant rights to imported
    text, model weights, voice assets, or generated output.
 5. Link users to upstream license and model-card pages without copying setup
    instructions that will drift.

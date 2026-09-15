@@ -83,6 +83,15 @@ export function attachStaticWebApplication(
   app: Express,
   distributionDirectory: string,
 ): void {
+  app.use((_request, response, next) => {
+    // CodeMirror inserts style elements; keep this exception out of scripts
+    // and style attributes. See docs/technical-debt.md.
+    response.setHeader(
+      "Content-Security-Policy",
+      "default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; style-src-elem 'self' 'unsafe-inline'; style-src-attr 'none'",
+    );
+    next();
+  });
   app.use(
     express.static(distributionDirectory, {
       index: "index.html",
@@ -127,6 +136,17 @@ export function createExpressApp(options: {
       options.allowedHosts ?? resolveServerHostAllowlist(),
     ),
   );
+  app.use((_request, response, next) => {
+    response.set({
+      "X-Content-Type-Options": "nosniff",
+      "Referrer-Policy": "no-referrer",
+      "X-Frame-Options": "DENY",
+      "Permissions-Policy":
+        "camera=(), geolocation=(), microphone=(), payment=(), usb=()",
+      "X-XSS-Protection": "0",
+    });
+    next();
+  });
   app.use((_request, response, next) => {
     const requestId = randomUUID();
     response.locals.requestId = requestId;

@@ -38,7 +38,7 @@ export function createSystemRouter(
             error: {
               code: "DIAGNOSTICS_BOUNDARY_ERROR",
               message:
-                "StudyNarrator could not validate the diagnostics response.",
+                "StudyNarrator AI could not validate the diagnostics response.",
             },
           }),
         );

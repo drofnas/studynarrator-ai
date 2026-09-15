@@ -104,7 +104,7 @@ describe("createSystemService", () => {
       status: "fail",
       code: "STORAGE_UNAVAILABLE",
       message:
-        "StudyNarrator could not write and read its diagnostic database.",
+        "StudyNarrator AI could not write and read its diagnostic database.",
     });
     expect(JSON.stringify(result)).not.toContain("private database detail");
   });

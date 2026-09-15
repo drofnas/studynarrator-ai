@@ -159,7 +159,7 @@ describe("persistence contracts", () => {
   });
 
   it("loads the complete stable Global Lexicon catalog", () => {
-    expect(GLOBAL_LEXICON_BUILT_INS).toHaveLength(45);
+    expect(GLOBAL_LEXICON_BUILT_INS).toHaveLength(48);
     expect(globalNamedSenseBuiltIns).toHaveLength(36);
     expect(GLOBAL_LEXICON_BUILT_INS.map(({ id }) => id)).toEqual([
       "10000000-0000-4000-8000-000000000007",
@@ -207,6 +207,9 @@ describe("persistence contracts", () => {
       "10000000-0000-4000-8000-000000000053",
       "10000000-0000-4000-8000-000000000054",
       "10000000-0000-4000-8000-000000000055",
+      "10000000-0000-4000-8000-000000000056",
+      "10000000-0000-4000-8000-000000000057",
+      "10000000-0000-4000-8000-000000000058",
     ]);
     expect(
       GLOBAL_LEXICON_BUILT_INS.map(({ displayText, spokenText }) => [
@@ -241,6 +244,9 @@ describe("persistence contracts", () => {
         ["coordinate", "cord.in.ate"],
         ["solr", "solar"],
         ["illustrative", "illustray.tiv"],
+        ["redis", "red.is"],
+        ["postgres", "post.gress"],
+        ["retryable", "retry.uble"],
       ]),
     );
     expect(globalNamedSenseBuiltIns).not.toEqual(
@@ -275,7 +281,7 @@ describe("persistence contracts", () => {
           updatedAt: timestamp,
         })),
       ),
-    ).toHaveLength(45);
+    ).toHaveLength(48);
   });
 
   it("preserves legacy custom metadata in read-only Global Lexicon state", () => {

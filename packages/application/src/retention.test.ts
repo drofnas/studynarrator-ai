@@ -13,6 +13,7 @@ import {
   type RetentionSettings,
 } from "@studynarrator/shared-types";
 import { createRetentionMaintenance } from "./retention.js";
+import { createSpeechCacheService } from "./cachedSpeech.js";
 
 const roots: string[] = [];
 const projectId = "00000000-0000-4000-8000-000000000001";
@@ -64,7 +65,12 @@ function job(id: string, pinned = false): RenderJob {
 }
 
 async function fixture(
-  options: { pinned?: boolean; roots?: boolean; recoverable?: boolean } = {},
+  options: {
+    pinned?: boolean;
+    roots?: boolean;
+    recoverable?: boolean;
+    state?: RenderJob["state"];
+  } = {},
 ) {
   const dataDirectory = await mkdtemp(
     join(tmpdir(), "studynarrator-retention-"),
@@ -94,6 +100,7 @@ async function fixture(
     )
   ).key;
   const render = job(renderId, options.pinned);
+  render.state = options.state ?? render.state;
   if (options.roots !== false) {
     await mkdir(join(dataDirectory, "render-plans", ".jobs", render.id), {
       recursive: true,
@@ -147,6 +154,7 @@ async function fixture(
     cache,
     cacheKey,
     maintenance,
+    activityGate,
     cleared,
     setSettings: (next: RetentionSettings) => {
       settings = next;
@@ -160,7 +168,11 @@ describe("retention maintenance", () => {
 
     await expect(
       maintenance.clearCacheAndRenderedProjectClips(),
-    ).resolves.toEqual({ entriesRemoved: 1, bytesFreed: 7 });
+    ).resolves.toEqual({
+      entriesRemoved: 1,
+      bytesFreed: 15,
+      renderedProjectClips: { entriesRemoved: 1, bytesFreed: 8 },
+    });
     await expect(cache.status()).resolves.toMatchObject({ entryCount: 0 });
     await expect(
       readFile(join(dataDirectory, "renders", renderId, "audio.mp3")),
@@ -186,7 +198,11 @@ describe("retention maintenance", () => {
 
     await expect(
       maintenance.clearCacheAndRenderedProjectClips(),
-    ).resolves.toEqual({ entriesRemoved: 1, bytesFreed: 7 });
+    ).resolves.toEqual({
+      entriesRemoved: 1,
+      bytesFreed: 7,
+      renderedProjectClips: { entriesRemoved: 0, bytesFreed: 0 },
+    });
     await expect(cache.status()).resolves.toMatchObject({ entryCount: 0 });
     await expect(
       readFile(join(dataDirectory, "renders", renderId, "audio.mp3")),
@@ -194,19 +210,81 @@ describe("retention maintenance", () => {
     expect(cleared).toEqual([]);
   });
 
-  it("preserves cache and media when a render is recoverable", async () => {
-    const { cache, cleared, dataDirectory, maintenance } = await fixture({
-      recoverable: true,
+  it("reports total and reclaimable project-render storage", async () => {
+    const available = await fixture();
+    await expect(available.maintenance.projectRenderStorage()).resolves.toEqual(
+      {
+        totalBytes: 8,
+        reclaimableBytes: 8,
+      },
+    );
+
+    const pinned = await fixture({ pinned: true });
+    await expect(pinned.maintenance.projectRenderStorage()).resolves.toEqual({
+      totalBytes: 8,
+      reclaimableBytes: 0,
     });
+  });
+
+  it.each(["queued", "synthesizing"] as const)(
+    "includes %s render bytes without making them reclaimable",
+    async (state) => {
+      const { cache, cleared, dataDirectory, maintenance } = await fixture({
+        state,
+        recoverable: true,
+      });
+
+      await expect(maintenance.projectRenderStorage()).resolves.toEqual({
+        totalBytes: 8,
+        reclaimableBytes: 0,
+      });
+      await expect(
+        maintenance.clearCacheAndRenderedProjectClips(),
+      ).rejects.toThrow("while a render is recoverable");
+      await expect(cache.status()).resolves.toMatchObject({ entryCount: 1 });
+      await expect(
+        readFile(join(dataDirectory, "renders", renderId, "audio.mp3")),
+      ).resolves.toEqual(Buffer.from("artifact"));
+      expect(cleared).toEqual([]);
+    },
+  );
+
+  it("reports unavailable project storage separately from known cache storage", async () => {
+    const { cache } = await fixture();
+
+    await expect(
+      createSpeechCacheService(cache).status(),
+    ).resolves.toMatchObject({
+      totalBytes: 7,
+      projectRenders: null,
+    });
+  });
+
+  it("preserves cache and render files during speech activity and allows cleanup afterward", async () => {
+    const { activityGate, cache, dataDirectory, maintenance } = await fixture();
+    const activity = await activityGate.beginActivity();
+    try {
+      await expect(
+        maintenance.clearCacheAndRenderedProjectClips(),
+      ).rejects.toThrow("while speech activity is in progress");
+      await expect(cache.status()).resolves.toMatchObject({ entryCount: 1 });
+      await expect(
+        readFile(join(dataDirectory, "renders", renderId, "audio.mp3")),
+      ).resolves.toEqual(Buffer.from("artifact"));
+    } finally {
+      activity.release();
+    }
 
     await expect(
       maintenance.clearCacheAndRenderedProjectClips(),
-    ).rejects.toThrow("while a render is recoverable");
-    await expect(cache.status()).resolves.toMatchObject({ entryCount: 1 });
-    await expect(
-      readFile(join(dataDirectory, "renders", renderId, "audio.mp3")),
-    ).resolves.toEqual(Buffer.from("artifact"));
-    expect(cleared).toEqual([]);
+    ).resolves.toMatchObject({
+      bytesFreed: 15,
+      renderedProjectClips: { entriesRemoved: 1, bytesFreed: 8 },
+    });
+    await expect(maintenance.projectRenderStorage()).resolves.toEqual({
+      totalBytes: 0,
+      reclaimableBytes: 0,
+    });
   });
 
   it("honors saved TTLs for cache, job snapshots, and render artifacts", async () => {
@@ -326,6 +404,10 @@ describe("retention maintenance", () => {
       speechCache: { entries: 1, bytes: 7 },
       jobSnapshots: { entries: 0, bytes: 0 },
       renderArtifacts: { entries: 0, bytes: 0 },
+    });
+    await expect(maintenance.projectRenderStorage()).resolves.toEqual({
+      totalBytes: 0,
+      reclaimableBytes: 0,
     });
     await expect(maintenance.reclaim({ confirm: false })).rejects.toThrow();
   });

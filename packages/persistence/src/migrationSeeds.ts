@@ -764,3 +764,39 @@ export const V12_GLOBAL_LEXICON_RECONCILIATION = [
     notes: "",
   },
 ];
+
+export const V14_GLOBAL_LEXICON_RECONCILIATION = [
+  {
+    id: "10000000-0000-4000-8000-000000000056",
+    ordinal: 45,
+    entryType: "exactTerm",
+    displayText: "redis",
+    spokenText: "red.is",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    notes: "",
+  },
+  {
+    id: "10000000-0000-4000-8000-000000000057",
+    ordinal: 46,
+    entryType: "exactTerm",
+    displayText: "postgres",
+    spokenText: "post.gress",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    notes: "",
+  },
+  {
+    id: "10000000-0000-4000-8000-000000000058",
+    ordinal: 47,
+    entryType: "exactTerm",
+    displayText: "retryable",
+    spokenText: "retry.uble",
+    caseSensitive: false,
+    wholeWord: true,
+    priority: 0,
+    notes: "",
+  },
+];

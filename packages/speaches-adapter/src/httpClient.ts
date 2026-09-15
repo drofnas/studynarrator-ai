@@ -38,6 +38,14 @@ export class DiagnosticFailure extends Error {
   }
 }
 
+export function isRedirectRejection(error: unknown): boolean {
+  return (
+    error instanceof TypeError &&
+    error.cause instanceof Error &&
+    error.cause.message === "unexpected redirect"
+  );
+}
+
 export function normalizeSpeachesUrl(input: string): NormalizedSpeachesUrl {
   const trimmed = input.trim();
   let parsed: URL;

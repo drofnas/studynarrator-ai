@@ -130,7 +130,7 @@ export async function restoreDatabaseFromBackup(options: {
   }
   if (currentStats !== null && !currentStats.isFile())
     throw new BackupRestoreError(
-      "StudyNarrator could not preserve the current database before restoring.",
+      "StudyNarrator AI could not preserve the current database before restoring.",
     );
 
   // Only a database that exists can be preserved. A missing database is a

@@ -1,40 +1,4 @@
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-import { HashRouter } from "react-router";
-import { App } from "@/app/App.js";
-import { resolveSystemClient } from "@/services/system/systemClient.js";
-import { resolvePersistenceClient } from "@/services/persistence/persistenceClient.js";
-import {
-  resolveConnectionClient,
-  resolveVoiceCatalogClient,
-} from "@/services/connections/connectionsClient.js";
-import { createScriptAnalysisWorkerClient } from "@/workers/parser/parserClient.js";
-import { resolveScratchpadClient } from "@/services/scratchpad/scratchpadClient.js";
-import {
-  resolveProjectPreviewClient,
-  resolveSpeechCacheClient,
-} from "@/services/preview/previewClient.js";
-import { resolveRenderClient } from "@/services/renders/renderClient.js";
-import { resolveScriptGenerationClient } from "@/services/scriptGeneration/scriptGenerationClient.js";
+import "@/shared/validation.js";
 
-const root = document.getElementById("root");
-if (!root) throw new Error("StudyNarrator root element is missing");
-
-createRoot(root).render(
-  <StrictMode>
-    <HashRouter>
-      <App
-        analyzer={createScriptAnalysisWorkerClient()}
-        client={resolveSystemClient()}
-        persistence={resolvePersistenceClient()}
-        connection={resolveConnectionClient()}
-        voiceCatalog={resolveVoiceCatalogClient()}
-        scratchpad={resolveScratchpadClient()}
-        projectPreview={resolveProjectPreviewClient()}
-        speechCache={resolveSpeechCacheClient()}
-        renders={resolveRenderClient()}
-        scriptGeneration={resolveScriptGenerationClient()}
-      />
-    </HashRouter>
-  </StrictMode>,
-);
+// A dynamic boundary keeps bundled schema chunks behind the CSP-safe config.
+await import("@/app/bootstrap.js");

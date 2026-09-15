@@ -10,6 +10,7 @@ import {
   type RetentionReclaimResult,
   type RetentionUsage,
   type RenderJob,
+  type ProjectRenderStorageStatus,
 } from "@studynarrator/shared-types";
 import type { StudyNarratorRepository } from "@studynarrator/persistence";
 import type {
@@ -193,9 +194,26 @@ export function createRetentionMaintenance(options: {
     });
   };
 
+  const totalBytes = (directories: readonly ManagedDirectory[]) =>
+    directories.reduce((total, item) => total + item.bytes, 0);
+  const renderedProjectClips = (directories: readonly ManagedDirectory[]) =>
+    directories.filter(({ job }) => terminal(job) && !job.pinned);
+
+  const projectRenderStorage =
+    async (): Promise<ProjectRenderStorageStatus> => {
+      const directories = await directoryUsage();
+      return {
+        totalBytes: totalBytes(directories.artifacts),
+        reclaimableBytes: totalBytes(
+          renderedProjectClips(directories.artifacts),
+        ),
+      };
+    };
+
   const clearCacheAndRenderedProjectClips = async (): Promise<{
     entriesRemoved: number;
     bytesFreed: number;
+    renderedProjectClips: { entriesRemoved: number; bytesFreed: number };
   }> => {
     const maintenance = options.activityGate.beginMaintenance();
     if (!maintenance)
@@ -208,15 +226,21 @@ export function createRetentionMaintenance(options: {
           "Rendered project clips cannot be cleared while a render is recoverable.",
         );
       const directories = await directoryUsage();
-      const renderedClips = directories.artifacts.filter(
-        ({ job }) => terminal(job) && !job.pinned,
-      );
+      const renderedClips = renderedProjectClips(directories.artifacts);
       const cacheResult = await options.cache.clearAll();
       for (const item of renderedClips) {
         await rm(item.path, { recursive: true, force: true });
         options.repository.clearRenderMedia(item.job.id);
       }
-      return cacheResult;
+      const renderedBytesFreed = totalBytes(renderedClips);
+      return {
+        entriesRemoved: cacheResult.entriesRemoved,
+        bytesFreed: cacheResult.bytesFreed + renderedBytesFreed,
+        renderedProjectClips: {
+          entriesRemoved: renderedClips.length,
+          bytesFreed: renderedBytesFreed,
+        },
+      };
     } finally {
       maintenance.release();
     }
@@ -321,6 +345,7 @@ export function createRetentionMaintenance(options: {
 
   return {
     usage,
+    projectRenderStorage,
     previewReclaim: async () =>
       (await reclaim(true)) as RetentionReclaimPreview,
     reclaim: async (input: unknown) => {

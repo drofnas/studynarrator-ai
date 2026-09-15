@@ -20,13 +20,14 @@ import {
   connectTcp,
   defaultSleep,
   headers,
+  isRedirectRejection,
   normalizeSpeachesUrl,
   probeAudioWithFfprobe,
   readBoundedBody,
   withAbort,
 } from "./httpClient.js";
 
-const DIAGNOSTIC_TEXT = "StudyNarrator connection check.";
+const DIAGNOSTIC_TEXT = "StudyNarrator AI connection check.";
 
 const MAX_ERROR_LENGTH = 280;
 const STAGE_NAMES = [
@@ -130,6 +131,12 @@ function finishStages(
 
 function errorFailure(error: unknown, fallbackCode: string): DiagnosticFailure {
   if (error instanceof DiagnosticFailure) return error;
+  if (isRedirectRejection(error))
+    return new DiagnosticFailure(
+      "redirect-rejected",
+      "The endpoint attempted a redirect, which is not allowed.",
+      "invalid-response",
+    );
   if (error instanceof DOMException && error.name === "AbortError")
     return new DiagnosticFailure(
       "request-aborted",
@@ -307,6 +314,12 @@ function catalogFailure(
   externalSignal?: AbortSignal,
 ): SpeachesCatalogError {
   if (error instanceof SpeachesCatalogError) return error;
+  if (isRedirectRejection(error))
+    return new SpeachesCatalogError(
+      "invalidResponse",
+      "Speaches attempted a redirect, which is not allowed.",
+      false,
+    );
   if (error instanceof DiagnosticFailure) {
     if (error.kind === "invalid-response")
       return new SpeachesCatalogError(
@@ -395,6 +408,7 @@ export async function discoverSpeachesSpeechCatalog(
         `${normalized.rootUrl}/v1/audio/models`,
         {
           method: "GET",
+          redirect: "error",
           headers: { ...headers(input.apiKey), Accept: "application/json" },
           signal,
         },
@@ -556,6 +570,7 @@ export async function diagnoseSpeaches(
   try {
     response = await fetchImpl(`${normalized.rootUrl}/health`, {
       method: "GET",
+      redirect: "error",
       headers: headers(input.apiKey),
       signal,
     });
@@ -605,6 +620,7 @@ export async function diagnoseSpeaches(
   try {
     response = await fetchImpl(`${normalized.rootUrl}/v1/models`, {
       method: "GET",
+      redirect: "error",
       headers: headers(input.apiKey),
       signal,
     });
@@ -632,7 +648,7 @@ export async function diagnoseSpeaches(
         response.status === 401
           ? "authentication-required"
           : "authentication-forbidden",
-        "This Speaches server requires authentication, which StudyNarrator does not support.",
+        "This Speaches server requires authentication, which StudyNarrator AI does not support.",
         elapsed(started),
       ),
     );
@@ -769,7 +785,12 @@ export async function diagnoseSpeaches(
   try {
     const catalogResponse = await fetchImpl(
       `${normalized.rootUrl}/v1/audio/models`,
-      { method: "GET", headers: headers(input.apiKey), signal },
+      {
+        method: "GET",
+        redirect: "error",
+        headers: headers(input.apiKey),
+        signal,
+      },
     );
     if (catalogResponse.ok) {
       const catalog = parseSpeechCatalog(await readJson(catalogResponse));
@@ -791,7 +812,12 @@ export async function diagnoseSpeaches(
     } else {
       const voiceResponse = await fetchImpl(
         `${normalized.rootUrl}/v1/audio/voices`,
-        { method: "GET", headers: headers(input.apiKey), signal },
+        {
+          method: "GET",
+          redirect: "error",
+          headers: headers(input.apiKey),
+          signal,
+        },
       );
       if (voiceResponse.ok) {
         voices = parseIdentifiers(await readJson(voiceResponse), [
@@ -822,7 +848,17 @@ export async function diagnoseSpeaches(
         );
       }
     }
-  } catch {
+  } catch (error) {
+    if (isRedirectRejection(error)) {
+      const failure = errorFailure(error, "voice-list-unavailable");
+      stages.push(
+        stage("voice", "fail", failure.code, failure.message, elapsed(started)),
+      );
+      return {
+        normalizedUrl: normalized,
+        summary: result("disconnected", testedAt, null, stages, models, voices),
+      };
+    }
     stages.push(
       stage(
         "voice",
@@ -859,6 +895,7 @@ export async function diagnoseSpeaches(
   try {
     speechResponse = await fetchImpl(`${normalized.rootUrl}/v1/audio/speech`, {
       method: "POST",
+      redirect: "error",
       headers: {
         ...headers(input.apiKey),
         "Content-Type": "application/json",

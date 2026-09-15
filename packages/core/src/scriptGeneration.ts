@@ -157,7 +157,7 @@ function formatReference(
     ...formatStructure(context),
     "",
     "Pronunciation lexicon",
-    "- Preserve the written display text. StudyNarrator applies configured pronunciations during narration.",
+    "- Preserve the written display text. StudyNarrator AI applies configured pronunciations during narration.",
     ...(aliases.senses.length > 0
       ? [
           "- Named pronunciation senses:",
@@ -172,7 +172,7 @@ function formatReference(
       : ["- No automatic pronunciation replacements are configured."]),
     "- If a word or name may need a new pronunciation entry, annotate it as {{display text|new_sense_id}}.",
     "- Make new_sense_id a short lowercase identifier with letters, numbers, underscores, or hyphens.",
-    "- Do not invent a spoken pronunciation. StudyNarrator will detect the new sense during import so the user can review and add it to the lexicon.",
+    "- Do not invent a spoken pronunciation. StudyNarrator AI will detect the new sense during import so the user can review and add it to the lexicon.",
   ];
 }
 
@@ -204,9 +204,9 @@ function example(
   return `${lines.join("\n")}\n`;
 }
 
-const CREATION_PROMPT = `# StudyNarrator Script Creation Instructions
+const CREATION_PROMPT = `# StudyNarrator AI Script Creation Instructions
 
-Create a new StudyNarrator study script using the topic, learning goals, requirements, source material, and any attached files provided at the end of this prompt.
+Create a new StudyNarrator AI study script using the topic, learning goals, requirements, source material, and any attached files provided at the end of this prompt.
 
 Use supplied source material when available. If additional research is needed and web access is available, research the topic using reliable sources before creating the script.
 
@@ -230,7 +230,7 @@ Do not simply turn source material into a list of facts. Organize the material i
 
 ## WRITE FOR AUDIO
 
-StudyNarrator scripts are meant to be heard rather than visually read.
+StudyNarrator AI scripts are meant to be heard rather than visually read.
 
 - Prefer natural spoken explanations over document-style prose.
 - Do not depend on visual formatting to communicate meaning.
@@ -298,9 +298,9 @@ Section titles should be short and meaningful.
 
 ## CONTEXT-SENSITIVE WORD ALIASES
 
-StudyNarrator handles normal pronunciation through its own pronunciation lexicon. Write ordinary terms using their normal spelling.
+StudyNarrator AI handles normal pronunciation through its own pronunciation lexicon. Write ordinary terms using their normal spelling.
 
-A small number of words may have the same spelling but different pronunciations depending on their meaning. For these words, use the configured context alias so StudyNarrator knows which meaning is intended.
+A small number of words may have the same spelling but different pronunciations depending on their meaning. For these words, use the configured context alias so StudyNarrator AI knows which meaning is intended.
 
 Configured aliases:
 
@@ -351,7 +351,7 @@ When you are ready, resume/continue the lesson.
 
 ## OUTPUT CONTRACT
 
-- Return only the complete raw StudyNarrator script.
+- Return only the complete raw StudyNarrator AI script.
 - Do not wrap the script in a Markdown code fence.
 - Do not add commentary, research notes, citations, explanations, or a summary outside the script.
 
@@ -389,15 +389,15 @@ Not every field needs to be filled in. Use whatever information is provided.
 
 [PASTE SOURCE MATERIAL HERE AND/OR ATTACH RELEVANT FILES TO THE CONVERSATION.]`;
 
-const UPDATE_PROMPT = `# StudyNarrator Script Update Instructions
+const UPDATE_PROMPT = `# StudyNarrator AI Script Update Instructions
 
-Update an existing StudyNarrator script using the requested changes, current script, supporting information, and any relevant files attached to the conversation.
+Update an existing StudyNarrator AI script using the requested changes, current script, supporting information, and any relevant files attached to the conversation.
 
 Use supplied source material when available. If the requested changes require additional research and web access is available, research the necessary information using reliable sources before updating the script.
 
 ## PRIMARY GOAL
 
-Return a complete revised StudyNarrator script that incorporates the requested changes while preserving correct material that does not need to change.
+Return a complete revised StudyNarrator AI script that incorporates the requested changes while preserving correct material that does not need to change.
 
 ## UPDATE RULES
 
@@ -412,7 +412,7 @@ Return a complete revised StudyNarrator script that incorporates the requested c
 
 ## WRITE FOR AUDIO
 
-StudyNarrator scripts are meant to be heard rather than visually read.
+StudyNarrator AI scripts are meant to be heard rather than visually read.
 
 When adding or revising content:
 
@@ -474,9 +474,9 @@ Add, rename, reorder, or remove sections when necessary to properly incorporate 
 
 ## CONTEXT-SENSITIVE WORD ALIASES
 
-StudyNarrator handles normal pronunciation through its own pronunciation lexicon. Write ordinary terms using their normal spelling.
+StudyNarrator AI handles normal pronunciation through its own pronunciation lexicon. Write ordinary terms using their normal spelling.
 
-A small number of words may have the same spelling but different pronunciations depending on their meaning. For these words, use the configured context alias so StudyNarrator knows which meaning is intended.
+A small number of words may have the same spelling but different pronunciations depending on their meaning. For these words, use the configured context alias so StudyNarrator AI knows which meaning is intended.
 
 Configured aliases:
 
@@ -519,7 +519,7 @@ Rules:
 
 ## OUTPUT CONTRACT
 
-- Return only the complete revised raw StudyNarrator script.
+- Return only the complete revised raw StudyNarrator AI script.
 - Do not wrap the script in a Markdown code fence.
 - Do not add commentary, research notes, citations, explanations, or a change summary outside the script.
 
@@ -531,7 +531,7 @@ Process the information provided below and any relevant files attached to the co
 
 [DESCRIBE WHAT SHOULD BE ADDED, REMOVED, CORRECTED, EXPANDED, OR REORGANIZED.]
 
-## Current StudyNarrator script
+## Current StudyNarrator AI script
 
 [PASTE THE CURRENT SCRIPT HERE AND/OR ATTACH IT TO THE CONVERSATION.]
 
@@ -568,7 +568,7 @@ export function buildSkillPackageFiles(input: {
     {
       path: "SKILL.md",
       content: [
-        "# StudyNarrator Script Authoring",
+        "# StudyNarrator AI Script Authoring",
         "",
         "Use CREATION_PROMPT.md when starting a script and UPDATE_PROMPT.md when revising an existing script.",
         "Follow SCRIPT_FORMAT.md, preserve supplied facts, and return only the raw script.",
@@ -597,7 +597,7 @@ export function buildSkillPackageFiles(input: {
         "",
         "## New candidates",
         "",
-        "Mark a pronunciation candidate as {{display text|new_sense_id}}. StudyNarrator will detect it during import for user review.",
+        "Mark a pronunciation candidate as {{display text|new_sense_id}}. StudyNarrator AI will detect it during import for user review.",
         "",
       ].join("\n"),
     },

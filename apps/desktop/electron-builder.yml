@@ -1,6 +1,8 @@
 appId: io.github.drofnas.studynarrator
-productName: StudyNarrator
+productName: StudyNarrator AI
 electronVersion: 43.3.0
+extraMetadata:
+  homepage: https://github.com/drofnas/studynarrator-ai
 directories:
   output: release
   buildResources: build
@@ -28,6 +30,9 @@ win:
       arch:
         - x64
 linux:
+  executableName: studynarrator
+  artifactName: studynarrator-${version}-${arch}.${ext}
+  maintainer: StudyNarrator AI contributors
   icon: icons
   target:
     - target: AppImage
@@ -36,3 +41,5 @@ linux:
     - target: deb
       arch:
         - x64
+deb:
+  packageName: studynarrator

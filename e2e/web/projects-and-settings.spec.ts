@@ -109,8 +109,10 @@ test.describe("Settings and connection diagnostics", () => {
       ["invalid-content-type", "invalidAudio"],
       ["corrupt-audio", "invalidAudio"],
       ["timeout", "disconnected"],
+      ["redirected-voice-catalog", "disconnected"],
     ];
     for (const [scenario, expected] of scenarios) {
+      studyNarrator.fakeSpeaches.reset();
       studyNarrator.fakeSpeaches.setScenario(scenario);
       await testButton.click();
       await expect(page.getByText(`Connection test: ${expected}.`)).toBeVisible(
@@ -120,6 +122,18 @@ test.describe("Settings and connection diagnostics", () => {
       );
       await expect(page.getByText("Signal path")).toBeVisible();
       await expect(page.getByRole("heading", { name: expected })).toBeVisible();
+      if (scenario === "redirected-voice-catalog") {
+        await expect(
+          page.getByText(
+            "The endpoint attempted a redirect, which is not allowed.",
+          ),
+        ).toBeVisible();
+        expect(studyNarrator.fakeSpeaches.getState().counters).toEqual({
+          "/health": 1,
+          "/v1/models": 1,
+          "/v1/audio/models": 1,
+        });
+      }
     }
 
     const downloadPromise = page.waitForEvent("download");
@@ -133,6 +147,8 @@ test.describe("Settings and connection diagnostics", () => {
     expect(exported).toContain('"endpointClass": "loopback"');
     expect(exported).not.toContain("127.0.0.1");
     expect(exported).not.toContain("authorization");
+    expect(exported).toContain("redirect-rejected");
+    expect(exported).not.toContain("private-redirect-target");
 
     studyNarrator.fakeSpeaches.setScenario("healthy");
     await testButton.click();
@@ -343,7 +359,20 @@ test.describe("Settings and connection diagnostics", () => {
     const custom = page.getByRole("region", { name: "Custom lexicon" });
     await expect(globals).toBeVisible();
     await expect(custom).toBeVisible();
-    await expect(globals.getByText("45 entries")).toBeVisible();
+    await expect(globals.getByText("48 entries")).toBeVisible();
+
+    for (const [input, spoken] of [
+      ["redis", "red.is"],
+      ["postgres", "post.gress"],
+      ["retryable", "retry.uble"],
+    ] as const) {
+      const entry = globals.getByRole("article", {
+        name: `Lexicon entry ${input}`,
+        exact: true,
+      });
+      await expect(entry.getByLabel("Alias")).toHaveValue(input);
+      await expect(entry.getByLabel("Spoken Text")).toHaveValue(spoken);
+    }
 
     const seeded = globals.getByRole("article", {
       name: "Lexicon entry resume/cv",
@@ -421,6 +450,64 @@ test.describe("Settings and connection diagnostics", () => {
 });
 
 test.describe("Projects connected authoring", () => {
+  test("finds and selects repeated script text beyond the rendered viewport", async ({
+    page,
+    studyNarrator,
+  }) => {
+    await continueOffline(page, studyNarrator);
+    await createProject(page, "Searchable script");
+    const script = [
+      ...Array.from(
+        { length: 120 },
+        (_value, index) =>
+          `[speaker_teacher] Opening line ${String(index + 1)}.`,
+      ),
+      "[speaker_teacher] First distant target.",
+      ...Array.from(
+        { length: 120 },
+        (_value, index) =>
+          `[speaker_teacher] Closing line ${String(index + 1)}.`,
+      ),
+      "[speaker_teacher] Second distant target.",
+    ].join("\n");
+    const source = page.getByRole("textbox", { name: "Script source" });
+    await source.fill(script);
+    await page.getByRole("button", { name: "Search Script" }).click();
+
+    const search = page.getByRole("search", { name: "Search script" });
+    const find = search.getByRole("textbox", { name: "Find in script" });
+    await find.fill("distant target");
+    await expect(search.getByRole("status")).toHaveText("Matches found.");
+    await search.getByRole("button", { name: "Next match" }).click();
+
+    const selected = page.locator(".cm-searchMatch-selected");
+    await expect(selected).toHaveText("distant target");
+    await expect
+      .poll(async () => {
+        const box = await selected.boundingBox();
+        return box !== null && box.y >= 0 && box.y + box.height <= 800;
+      })
+      .toBe(true);
+    await search.getByRole("button", { name: "Next match" }).click();
+    await expect(
+      selected.locator("xpath=ancestor::*[contains(@class, 'cm-line')][1]"),
+    ).toContainText("Second distant target");
+    await search.getByRole("button", { name: "Previous match" }).click();
+    await expect(
+      selected.locator("xpath=ancestor::*[contains(@class, 'cm-line')][1]"),
+    ).toContainText("First distant target");
+
+    await find.press("Escape");
+    await expect(
+      page.getByRole("search", { name: "Search script" }),
+    ).toHaveCount(0);
+    await source.focus();
+    await page.keyboard.press(
+      `${process.platform === "darwin" ? "Meta" : "Control"}+f`,
+    );
+    await expect(find).toBeFocused();
+  });
+
   test("defaults and persists catalog voices while Details uses document scrolling without requesting TTS", async ({
     page,
     studyNarrator,

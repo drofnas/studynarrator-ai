@@ -14,7 +14,7 @@ import styles from "./ScriptGenerationPage.module.css";
 function message(error: unknown): string {
   return error instanceof Error
     ? error.message
-    : "StudyNarrator could not prepare the script prompts.";
+    : "StudyNarrator AI could not prepare the script prompts.";
 }
 
 const promptLabels: Record<
@@ -273,7 +273,7 @@ export function ScriptGenerationPage({
           <p className={styles.instructions}>
             {selected === "creation"
               ? "The questions to customize this prompt are in the USER INPUT section at the end. Replace the bracketed sample text with your answers, and delete any question sections you do not need."
-              : "The USER INPUT section at the end asks for the requested changes, current StudyNarrator script, and any additional requirements or source material. Replace the bracketed sample text, and delete any sections you do not need."}
+              : "The USER INPUT section at the end asks for the requested changes, current StudyNarrator AI script, and any additional requirements or source material. Replace the bracketed sample text, and delete any sections you do not need."}
           </p>
           {operationError ? (
             <p className={styles.error} role="alert">

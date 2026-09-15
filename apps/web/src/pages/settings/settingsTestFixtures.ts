@@ -20,6 +20,7 @@ export const cacheClient: SpeechCacheClient = {
       sessionWrites: 0,
       sessionCorruptMisses: 0,
       inFlight: 0,
+      projectRenders: null,
     }),
   ),
   clearAll: vi.fn(() =>
@@ -27,6 +28,7 @@ export const cacheClient: SpeechCacheClient = {
       contractVersion: 1 as const,
       entriesRemoved: 0,
       bytesFreed: 0,
+      renderedProjectClips: { entriesRemoved: 0, bytesFreed: 0 },
     }),
   ),
   clearProject: vi.fn(),

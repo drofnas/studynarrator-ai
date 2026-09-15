@@ -234,6 +234,9 @@ describe("render REST client", () => {
 
     source.emit("progress", JSON.stringify(progressJob));
     expect(onJob).toHaveBeenCalledWith(progressJob);
+    source.emit("error");
+    source.emit("error");
+    expect(onDropped).toHaveBeenCalledTimes(2);
     unsubscribe();
     expect(source.close).toHaveBeenCalledOnce();
   });

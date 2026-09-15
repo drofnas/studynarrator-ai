@@ -1,4 +1,4 @@
-# StudyNarrator — Upgrading, Downgrading, and Your Data
+# StudyNarrator AI — Upgrading, Downgrading, and Your Data
 
 This guide explains what happens to your projects, renders, caches, and other persisted data when you change application versions.
 
@@ -8,7 +8,7 @@ One row per released version.
 
 | Application version | Database schema version | Data directory layout version |
 | ------------------- | ----------------------- | ----------------------------- |
-| 0.1.0               | 13                      | 2                             |
+| 0.1.0               | 14                      | 2                             |
 
 ## Distribution support decision
 
@@ -16,19 +16,28 @@ Docker Web is a supported single-user distribution. Its `/data` named-volume lay
 
 ## Upgrading
 
-Upgrading is automatic. StudyNarrator migrates the database forward when it starts:
+Upgrading is automatic. StudyNarrator AI migrates the database forward when it starts:
 
 - If the database is behind the schema version the application supports, it migrates forward automatically.
-- Before applying a schema upgrade, StudyNarrator takes a full backup of the current database in the `backups/` directory next to the database file, for example `<dataDir>/backups/`.
-- One-time data directory layout steps run on startup where needed and are recorded in `<dataDir>/manifest.json` so they never run twice. Schema 13 removes completed-render checksum/provenance rows; layout 2 removes only the corresponding legacy `render-manifest.json` and `checksums.txt` files from managed render directories.
+- Before applying a schema upgrade, StudyNarrator AI takes a full backup of the current database in the `backups/` directory next to the database file, for example `<dataDir>/backups/`.
+- One-time data directory layout steps run on startup where needed and are recorded in `<dataDir>/manifest.json` so they never run twice. Schema 13 removes completed-render checksum/provenance rows, schema 14 adds the Redis, Postgres, and retryable built-in pronunciations without replacing user lexicon entries, and layout 2 removes only the corresponding legacy `render-manifest.json` and `checksums.txt` files from managed render directories.
 - Old backups are pruned automatically: the newest backup for each source schema version, plus the three most recent backup files, plus the two most recent pre-restore safety copies always survive.
 - If the data directory was created by a **newer** version of this application than the one you are starting, a recovery screen appears offering a restore from one of the saved backups. Nothing is ever deleted or converted automatically.
 
 To upgrade a Docker Web deployment, pull the new revision and rebuild the application container. The `studynarrator-data` volume is left intact, so projects, renders, caches, and backups survive the upgrade.
 
+### MP3 metadata
+
+New project MP3s use the project name as title, artist `Study Narrator AI`, genre
+`Audio Book`, and the year the final audio was created. Renaming a project updates
+the title and normalizes artist/genre without re-encoding audio. A valid existing
+year tag is retained; older files with a missing or invalid year use the artifact's
+recorded creation year. Existing MP3s are not rewritten merely by reading or
+downloading them. The metadata writer uses the existing FFmpeg installation.
+
 ## Downgrading
 
-An older application cannot read a newer database. There are no down migrations and there cannot be any: a version that shipped before a migration has no code to reverse it, and StudyNarrator never converts data in place.
+An older application cannot read a newer database. There are no down migrations and there cannot be any: a version that shipped before a migration has no code to reverse it, and StudyNarrator AI never converts data in place.
 
 If you must return to an older release, the supported paths are:
 
@@ -39,7 +48,7 @@ Do not copy a newer database file over an older installation in the hope that it
 
 ## Where the data lives
 
-The database, backups, speech cache, and render artifacts all live under one data directory. Its location depends on how you run StudyNarrator:
+The database, backups, speech cache, and render artifacts all live under one data directory. Its location depends on how you run StudyNarrator AI:
 
 | Runtime                       | Data directory                                                                                           |
 | ----------------------------- | -------------------------------------------------------------------------------------------------------- |

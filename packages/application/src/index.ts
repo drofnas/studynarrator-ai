@@ -44,7 +44,7 @@ export interface SystemService {
 const STORAGE_FAILURE: StorageCheck = {
   status: "fail",
   code: "STORAGE_UNAVAILABLE",
-  message: "StudyNarrator could not write and read its diagnostic database.",
+  message: "StudyNarrator AI could not write and read its diagnostic database.",
 };
 
 export interface BackupUsage {

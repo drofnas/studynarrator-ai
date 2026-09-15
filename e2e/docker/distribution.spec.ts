@@ -1,9 +1,7 @@
-import {
-  expect,
-  test,
-  type APIRequestContext,
-  type Page,
-} from "@playwright/test";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { expect, type APIRequestContext, type Page } from "@playwright/test";
+import { test } from "../support/cspTest.js";
 
 const secret =
   process.env.STUDYNARRATOR_DOCKER_TEST_SECRET ??
@@ -245,6 +243,27 @@ test("Docker Web remains authorable offline and renders after Speaches reconnect
   await expect(
     page.getByRole("button", { name: "Download", exact: true }),
   ).toBeVisible();
+
+  const downloaded = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download", exact: true }).click();
+  const { stdout: metadata } = await promisify(execFile)("ffprobe", [
+    "-v",
+    "error",
+    "-show_entries",
+    "format_tags=title,artist,date,genre",
+    "-of",
+    "json",
+    await (await downloaded).path(),
+  ]);
+  expect(
+    (JSON.parse(metadata) as { format: { tags: Record<string, string> } })
+      .format.tags,
+  ).toMatchObject({
+    title: name,
+    artist: "Study Narrator AI",
+    date: String(new Date().getFullYear()),
+    genre: "Audio Book",
+  });
 
   const diagnostics = await jsonRequest(request, "get", "/api/diagnostics");
   const connectionDiagnostics = await jsonRequest(

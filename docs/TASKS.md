@@ -1,4 +1,4 @@
-# StudyNarrator remediation tasks
+# StudyNarrator AI remediation tasks
 
 This file tracks the current release workload. The original remediation plan
 started from `main` commit `ed6879d`; the September 4, 2026 task refresh starts
@@ -46,28 +46,28 @@ documentation checkpoint.
 
 Status values: `todo`, `in progress`, `blocked`, `deferred`, `complete`, `superseded`.
 
-| ID  | Task                                                     | Priority | Status     | Depends on                                |
-| --- | -------------------------------------------------------- | -------- | ---------- | ----------------------------------------- |
-| R01 | Add MP3 metadata to the FFmpeg encoder                   | P0       | complete   | none                                      |
-| R02 | Remove render provenance and retag MP3s on rename        | P0       | complete   | R01                                       |
-| R03 | Remove `node-id3` and its obsolete wrapper               | P1       | superseded | replaced by R24                           |
-| R04 | Reject redirects from every Speaches request             | P0       | todo       | none                                      |
-| R05 | Correct runtime documentation and the product title      | P1       | todo       | R02                                       |
-| R06 | Make Compose LAN allowlisting work from `.env`           | P1       | todo       | none                                      |
-| R07 | Enforce coverage and dead-code checks in pull-request CI | P1       | todo       | none                                      |
-| R08 | Set explicit Web response security headers               | P1       | todo       | none                                      |
-| R09 | Add and verify a production Content Security Policy      | P1       | todo       | R08                                       |
-| R10 | Enforce Docker distribution verification in CI           | P1       | todo       | R07                                       |
-| R11 | Add contributor and vulnerability-reporting guides       | P1       | todo       | none                                      |
-| R17 | Pin CI actions and configure Dependabot updates          | P2       | todo       | R07                                       |
-| R18 | Set the public repository description and topics         | P2       | complete   | none                                      |
-| R19 | Validate the desktop release workflow with an RC tag     | P2       | deferred   | R10; R13 in [future work](FUTURE_WORK.md) |
-| R22 | Search the complete project script                       | P1       | todo       | none                                      |
-| R23 | Remove the completed-output pin action                   | P1       | complete   | none                                      |
-| R24 | Write final MP3 tags with an ID3 package                 | P1       | todo       | R02; supersedes R03                       |
-| R25 | Show project-render storage in General settings          | P1       | todo       | none                                      |
-| R26 | Update built-in Global Lexicon pronunciations            | P1       | todo       | none                                      |
-| R27 | Track active and unviewed renders in the sidebar         | P1       | todo       | none                                      |
+| ID  | Task                                                     | Priority | Status     | Depends on                                                          |
+| --- | -------------------------------------------------------- | -------- | ---------- | ------------------------------------------------------------------- |
+| R01 | Add MP3 metadata to the FFmpeg encoder                   | P0       | complete   | none                                                                |
+| R02 | Remove render provenance and retag MP3s on rename        | P0       | complete   | R01                                                                 |
+| R03 | Remove `node-id3` and its obsolete wrapper               | P1       | superseded | replaced by R24                                                     |
+| R04 | Reject redirects from every Speaches request             | P0       | complete   | none                                                                |
+| R05 | Correct runtime documentation and the product title      | P1       | complete   | R02                                                                 |
+| R06 | Keep the Docker Web launcher local                       | P1       | complete   | none                                                                |
+| R07 | Enforce coverage and dead-code checks in pull-request CI | P1       | complete   | none                                                                |
+| R08 | Set explicit Web response security headers               | P1       | complete   | none                                                                |
+| R09 | Add and verify a production Content Security Policy      | P1       | complete   | R08                                                                 |
+| R10 | Enforce Docker distribution verification in CI           | P1       | complete   | R07                                                                 |
+| R11 | Add contributor and vulnerability-reporting guides       | P1       | complete   | none                                                                |
+| R17 | Pin CI actions and configure Dependabot updates          | P2       | complete   | R07a (complete)                                                     |
+| R18 | Set the public repository description and topics         | P2       | complete   | none                                                                |
+| R19 | Validate the desktop release workflow with an RC tag     | P2       | deferred   | R13 in [future work](FUTURE_WORK.md); RC authorization/native hosts |
+| R22 | Search the complete project script                       | P1       | complete   | none                                                                |
+| R23 | Remove the completed-output pin action                   | P1       | complete   | none                                                                |
+| R24 | Write final MP3 tags with FFmpeg                         | P1       | complete   | R02 (complete); D1 resolved                                         |
+| R25 | Show project-render storage in General settings          | P1       | complete   | none                                                                |
+| R26 | Update built-in Global Lexicon pronunciations            | P1       | complete   | none                                                                |
+| R27 | Track active and unviewed renders in the sidebar         | P1       | complete   | none                                                                |
 
 ## Detailed tasks
 
@@ -276,16 +276,19 @@ expires on 2026-10-01 and retains the raw Scout finding.
 
 ### R03: Remove `node-id3` and its obsolete wrapper
 
-**Status:** Superseded by [R24](#r24-write-the-requested-final-mp3-tags-with-an-id3-package)
+**Status:** Superseded by [R24](#r24-write-the-requested-final-mp3-tags-with-ffmpeg)
 on September 4, 2026. Do not execute the former package-removal plan.
 
-The owner now requires a third-party ID3 package for final MP3 metadata.
-`node-id3` and its wrapper remain available for R24 to review and reuse.
-Any obsolete-code cleanup must follow R24's selected implementation.
+R24 owns the metadata values and cleanup. Its September 15 D1 decision selects
+FFmpeg reuse and removal of the unused `node-id3` package and wrapper.
 
 **Commit:** none for the superseded removal task.
 
 ### R04: Reject redirects from every Speaches request
+
+**Completion:** Validated on 2026-09-14, including optional voice-catalog
+diagnostics, all request-family redirect tests, browser acceptance, and the full
+Docker gate. See the [R04 report](implement-prd-stories/r04-speaches-redirects.md).
 
 **Goal:** Keep URL validation effective after the first HTTP response.
 
@@ -328,6 +331,12 @@ npm test -- packages/speaches-adapter/src/index.test.ts
 
 ### R05: Correct runtime documentation and the product title
 
+**Completion review (2026-09-15):** The existing implementation satisfies its
+runtime and product-identity acceptance criteria. Focused checks and a fresh
+sandboxed Linux package-title smoke pass; the recent full verifier also passes
+against identical application/configuration source. The original Docker scan
+blocker is cleared. [Completion evidence](implement-prd-stories/r05-runtime-product-identity.md).
+
 **Goal:** Make setup instructions agree with the checked-in toolchain and set the
 Web and Electron document title to the exact product name `StudyNarrator AI`.
 
@@ -339,7 +348,7 @@ current architecture, and mark its obsolete reset guidance as superseded by
 and roadmap rewrite belongs to [future work](FUTURE_WORK.md).
 
 The product title remains `StudyNarrator AI`. MP3 artist metadata is an explicit
-exception: [R24](#r24-write-the-requested-final-mp3-tags-with-an-id3-package) owns
+exception: [R24](#r24-write-the-requested-final-mp3-tags-with-ffmpeg) owns
 the exact value `Study Narrator AI`; this task must not change it.
 
 **Expected files:**
@@ -392,38 +401,44 @@ npm test -- apps/web/src/app/App.test.tsx
 
 **Commit:** `docs(setup): align runtime requirements and product title`
 
-### R06: Make Compose LAN allowlisting work from `.env`
+### R06: Keep the Docker Web launcher local
 
-**Goal:** Let a user opt into LAN binding with the supplied Compose file while
-keeping loopback as the default.
+**Completion review (2026-09-14):** The existing launcher passed its acceptance
+review and full verifier inside the Docker tooling environment, including the
+previously failing vulnerability gate. [Completion evidence](implement-prd-stories/r06-local-docker.md).
+
+**Goal:** Keep the supported Docker Web launcher available to one person on the
+local machine without adding LAN access, accounts, or authentication.
 
 **Expected files:**
 
 - `compose.yaml`
 - `.env.example`
 - `README.md`
+- `SETUP.md`
 - `deploy/docker/README.md`
-- `e2e/docker/distribution.spec.ts` or `scripts/verify-docker.mjs`
+- `scripts/verify-docker.mjs`
 
 **Work:**
 
-1. Forward `STUDYNARRATOR_ALLOWED_HOSTS` from Compose interpolation into the
-   container environment.
-2. Keep an unset or empty value equivalent to the current loopback allowlist.
-3. Update `.env.example` so a user can set the bind address and allowlist in the
-   same file without a custom override.
-4. State that LAN exposure has no application authentication and belongs on a
-   trusted network.
-5. Add Docker verification for an allowed custom Host header and a rejected Host
-   header. Keep the default loopback case.
+1. Use the existing `docker compose up --build --detach` command as the local
+   launcher; do not add a wrapper script.
+2. Fix the Compose port publication to `127.0.0.1` while retaining the
+   configurable host port.
+3. Remove the bind-address and LAN-allowlist knobs and their guidance from the
+   supported Docker configuration.
+4. State that Docker Web is opened locally. Preserve supported external
+   Speaches endpoints, including Docker-to-host and private-network addresses.
+5. Keep Docker verification on the loopback URL and remove obsolete verifier
+   configuration for the bind address.
 
 **Acceptance:**
 
-- Default Compose startup still binds to `127.0.0.1`.
-- A configured LAN host passes the Host-header middleware.
-- An unlisted host returns the current sanitized rejection.
-- Documentation gives one supported path instead of an `.env` plus override
-  sequence.
+- Rendered Compose configuration publishes the Web UI on `127.0.0.1` only.
+- `.env.example` exposes no StudyNarrator AI bind-address or Host-allowlist setting.
+- Documentation gives one local launch path and does not present LAN access as a
+  supported product mode.
+- Docker Web can still connect to an external Speaches server.
 
 **Focused verification:**
 
@@ -432,9 +447,15 @@ docker compose config
 npm run verify:docker
 ```
 
-**Commit:** `fix(docker): forward the LAN host allowlist`
+**Commit:** `fix(docker): keep web access local`
 
 ### R07: Enforce coverage and dead-code checks in pull-request CI
+
+**Slice status (2026-09-14):** R07a is complete: CI runs Knip and combined
+coverage, and the active default-branch ruleset requires the GitHub Actions
+`check` job. [Completion evidence](implement-prd-stories/r07a-ci-coverage-knip.md).
+R07b's local-verifier slice also passed its completion review and full verifier;
+R07 is complete. [R07b completion evidence](implement-prd-stories/r07b-local-verification.md).
 
 **Goal:** Make pull-request CI enforce checks already required by the repository.
 
@@ -473,12 +494,17 @@ npm run test:coverage
 
 ### R08: Set explicit Web response security headers
 
+**Completion:** Validated on 2026-09-14. The focused server tests and full
+Docker-hosted verifier passed, including coverage, Web/Electron acceptance,
+Docker vulnerability policy, persistence, and cleanup. Ponytail's assertion
+simplification is applied. See the [R08 report](implement-prd-stories/r08-web-security-headers.md).
+
 **Goal:** Apply a small, dependency-free response-header policy to every API,
 media, error, and production Web response before R09 adds the CSP.
 
-**Scope decision:** Keep this task. Docker Web is a supported HTTP application
-that can be exposed to a trusted LAN, so browser defense-in-depth is useful even
-though loopback remains the default. Do not add Helmet for this fixed policy.
+**Scope decision:** Keep this task to protect the local user's browser session.
+The supported Web/Docker workflow is local-only. Do not add Helmet for this
+fixed policy.
 
 **Expected files:**
 
@@ -497,8 +523,8 @@ though loopback remains the default. Do not add Helmet for this fixed policy.
    require them.
 4. Set `X-XSS-Protection: 0` so obsolete browser filters cannot rewrite content.
 5. Do not set HSTS because StudyNarrator AI does not terminate TLS and supports
-   loopback and trusted-LAN HTTP. Do not add COOP, COEP, or CORP because the app
-   does not require cross-origin isolation. R09 owns CSP and `frame-ancestors`.
+   loopback HTTP. Do not add COOP, COEP, or CORP because the app does not require
+   cross-origin isolation. R09 owns CSP and `frame-ancestors`.
 6. Assert the exact header values on health and JSON APIs, SSE, successful and
    unsatisfiable media Range responses, downloads, sanitized errors, static HTML,
    immutable assets, and the single-page fallback.
@@ -513,14 +539,22 @@ though loopback remains the default. Do not add Helmet for this fixed policy.
 
 **Focused verification:**
 
+Run these commands inside the Docker tooling environment described in
+[the development guide](../deploy/development/README.md):
+
 ```sh
-npm test -- apps/server/src/app.test.ts
+npm run test:api -- apps/server/src/app.test.ts
 npm run test:e2e:web
 ```
 
 **Commit:** `feat(server): add baseline Web security headers`
 
 ### R09: Add and verify a production Content Security Policy
+
+**Completion:** Validated on 2026-09-14 with the full Docker-based verifier,
+including Chromium and Firefox acceptance without unexpected CSP violations.
+[Implementation, resource inventory, and validation evidence](implement-prd-stories/r09-production-csp.md).
+R08 remains the historical prerequisite; R09 has no dependents.
 
 **Goal:** Restrict the production Web application to resources it needs.
 
@@ -558,7 +592,7 @@ npm run test:e2e:web
 **Focused verification:**
 
 ```sh
-npm test -- apps/server/src/app.test.ts
+npm run test:api -- apps/server/src/app.test.ts
 npm run test:e2e:web
 npm run verify:docker
 ```
@@ -567,70 +601,56 @@ npm run verify:docker
 
 ### R10: Enforce Docker distribution verification in CI
 
+**Execution slices:** R10a (scanner and policy) is complete after its
+2026-09-15 full verification and
+[completion review](implement-prd-stories/r10a-trivy-scanner.md). R10b (reusable
+CI workflow) is complete after its 2026-09-15 local verification and
+[completion review](implement-prd-stories/r10b-docker-ci.md). Both slices are
+complete, so the parent R10 is complete. Hosted CI runs after submission.
+
 **Goal:** Make the existing Docker distribution verifier an automatic release
 gate for the supported Docker Web distribution.
 
 **Scope decision:** Keep this task and do not defer it. `npm run verify:docker`
 already owns image hardening, SBOM generation, vulnerability policy, browser
 acceptance, persistence, offline recovery, cleanup, and leftover-resource audits.
-Replace Docker Scout with Trivy so contributors and forks can run the complete
-open-source verifier without a Docker account, Docker Hub entitlement, or
-repository-created credential. This task would become unnecessary only if Docker
-Web stopped being a supported distribution.
+R10a replaced Docker Scout with Trivy. The accepted
+[local-only scope](prd-work-items/local-only-simplification.md) removes the extra
+SARIF output and the proposed dependency from native packaging to Docker
+verification. The current Docker tooling supplies application tools; do not
+duplicate their installation on the host runner. Docker distribution claims
+require a green check for the exact revision.
 
 **Expected files:**
 
 - `.github/workflows/ci.yml`
 - `.github/workflows/docker-verification.yml` for one reusable full-verification
   workflow rather than duplicating provisioning and policy
-- `.github/workflows/release.yml`
 - `scripts/verify-docker.mjs` and its focused tests
-- rename `deploy/docker/scout-high-exceptions.json` to the scanner-neutral
-  `deploy/docker/container-high-exceptions.json`
+- `scripts/docker-workflow.test.ts`
 - `deploy/docker/README.md` and `README.md` when CI requirements or release gates
   change
 
 **Work:**
 
-1. Put the full Docker job in a reusable workflow that supports `workflow_call`,
-   every push to `main`, a weekly schedule, and `workflow_dispatch`. Have the tag
-   release workflow call that same workflow for the tagged revision and make all
-   packaging jobs depend on its success; do not infer release eligibility from a
-   mutable earlier branch run.
-2. Provision Node from `.nvmrc`, install with `npm ci`, install the Playwright
-   Chromium and Firefox system dependencies used by the verifier, confirm Docker
-   Buildx and Compose, and install an exact Trivy version with Aqua Security's
-   official setup action. Pin every added action to a full commit SHA even before
-   R17 runs. Cache Trivy's public vulnerability database through the action's
-   supported cache path without adding a long-lived credential.
-3. Keep the job secret-free. Scan the locally built image, do not log in to
-   Docker Hub or another registry, and do not publish, push, or attest the image.
-   A fork must need only its automatic GitHub Actions token, the public Internet,
-   and the tools provisioned by the workflow.
-4. Replace `docker scout sbom` and `docker scout cves` in
-   `scripts/verify-docker.mjs` with Trivy image scans. Produce a CycloneDX SBOM,
-   a machine-readable JSON vulnerability report for repository-owned policy
-   evaluation, and SARIF diagnostics. Pin the Trivy version in one maintained
-   location and keep local and CI execution on that version.
-5. Rename the exception file to `container-high-exceptions.json` and preserve the
-   existing policy: every critical finding fails; a high finding with a nonempty
-   fixed version fails; an unfixed high passes only through a package-and-CVE-
-   specific, justified, future-expiring exception; stale and unused exceptions
-   fail. Parse Trivy's documented fields and fail closed on malformed or unknown
-   report shapes.
-6. Remove `continue-on-error`. Treat a missing Trivy CLI or vulnerability
-   database, browser, Buildx, or Compose as a named provisioning failure, never
-   as an advisory success. Add focused fixtures for critical, fixable high,
-   excepted unfixed high, stale exception, unused exception, and malformed report
-   cases.
-7. Set a bounded job timeout and concurrency cancellation so an obsolete run
-   cannot consume a runner indefinitely. Preserve the verifier's targeted cleanup
-   and final leftover-resource audit; never add a global Docker prune.
-8. Upload the CycloneDX inventory, Trivy JSON report, and SARIF diagnostics with
-   short retention when the job fails. Do not upload application data, browser
-   traces, registry configuration, cache contents, or unredacted logs.
-9. Update release documentation so Docker distribution or release claims require
-   a green Docker job for the exact source revision.
+1. Put the full verifier job in a reusable workflow. CI calls it for pull
+   requests and every push to `main`. Weekly, manual, and `v*` tag runs use the
+   same job and checked-out revision. Do not add a native packaging dependency.
+2. Check Docker, Buildx, and Compose availability, then use
+   `compose.development.yaml` for the pinned Node/npm/Trivy toolchain, `npm ci`,
+   Chromium/Firefox, and Linux Electron. Keep actions pinned to full commit SHAs.
+3. Keep the job secret-free and repository permissions read-only. Scan the local
+   image without registry login, publication, or attestation.
+4. Retain the CycloneDX inventory, raw Trivy JSON, and exact-image applicability
+   assessment. Remove SARIF generation. Preserve R10a's policy, exception
+   validation, and evidence checks; never suppress findings to make CI pass.
+5. Propagate verification and provisioning failures. Use a bounded job timeout,
+   cancel obsolete runs, and always clean up the disposable environment.
+   Preserve targeted resource cleanup and audits; never use a global prune.
+6. Upload only scanner evidence on failure with short retention. Exclude
+   application data, browser traces, registry configuration, caches, and raw logs.
+   Test this boundary with a sentinel secret.
+7. Document exact-revision Docker verification as the Docker distribution gate.
 
 **Acceptance:**
 
@@ -642,7 +662,7 @@ Web stopped being a supported distribution.
 - Trivy produces a valid CycloneDX inventory and deterministic vulnerability
   evidence, and the repository-owned exception policy fails closed.
 - The job leaves no verification-owned Docker resources.
-- Scheduled, main-branch, manual, and tag-release runs invoke the same reusable
+- Pull-request, scheduled, main-branch, manual, and tag runs invoke the same reusable
   workflow and repository-owned command; no caller duplicates or weakens the
   verifier.
 - No human approval or representative-run checkpoint is required to remove
@@ -700,15 +720,22 @@ npx prettier --check CONTRIBUTING.md SECURITY.md README.md
 
 ### R17: Pin CI actions and configure Dependabot updates
 
+**Completion evidence (2026-09-14):** Implemented monthly reviewed Dependabot
+updates, pinned all 12 workflow action references, and restricted release write
+access to the draft-release job. YAML checks, Actionlint, Ponytail review, and
+the full repository verifier passed. See the
+[R17 implementation report](implement-prd-stories/r17-dependency-maintenance.md).
+Version-update scheduling activates when the configuration reaches the default
+branch; this checkpoint completes the authorized local implementation.
+
 **Goal:** Reduce dependency and workflow supply-chain drift without adding a
 mandatory audit job that fails on advisory-service noise.
 
-**Scope decision:** Keep this task. The repository has npm dependencies across
-multiple workspaces, native Electron/server dependencies, and release-capable
-workflows, while every current GitHub Action reference uses a mutable major tag
-and no Dependabot configuration exists. GitHub's repository settings complement
-this task but do not replace its reviewed configuration. Do not add auto-merge or
-a second update bot.
+**Scope decision:** Keep this task. At the task baseline, the repository had npm
+dependencies across multiple workspaces, native Electron/server dependencies,
+and release-capable workflows, but all action references used mutable major tags
+and no Dependabot configuration existed. GitHub's repository settings complement
+the reviewed configuration. Do not add auto-merge or a second update bot.
 
 **Repository settings completion evidence (August 31, 2026):**
 
@@ -813,9 +840,10 @@ and topics, and the read-back matches the values above.
 **Goal:** Prove macOS, Windows, and Linux packaging before advertising desktop
 installers.
 
-**Status note:** Keep this task `deferred` until R10 and deferred R13 in
-[FUTURE_WORK.md](FUTURE_WORK.md) pass. Tag pushes and
-release deletion require owner approval.
+**Status note:** Keep this task `deferred` until R13 in
+[FUTURE_WORK.md](FUTURE_WORK.md) passes and native hosts and RC authorization are
+available. The accepted local-only plan makes Docker verification independent
+of native packaging. Tag pushes and release deletion require owner approval.
 
 **Expected files:**
 
@@ -825,7 +853,7 @@ release deletion require owner approval.
 
 **Work:**
 
-1. Confirm main CI and the Docker gate are green.
+1. Confirm the applicable native validation gates are green.
 2. Confirm the package includes licenses, acknowledgments, and third-party
    notices.
 3. Ask the owner to approve an exact release-candidate tag.
@@ -852,8 +880,15 @@ release deletion require owner approval.
 **Goal:** Find text anywhere in a project script, including lines outside the
 CodeMirror viewport.
 
-**Current evidence:** `ScriptSourceEditor.tsx` uses CodeMirror `minimalSetup`
-without a search extension. Browser Find cannot reliably search virtualized lines.
+**Status:** Complete — 2026-09-15.
+
+**Current evidence:** `ScriptSourceEditor.tsx` uses CodeMirror's search extension
+and keymap. **Search Script** and the editor shortcut open its accessible search
+panel; next/previous reveal and select matches throughout the document. Current
+editor/project-page and browser checks pass, including offscreen matches,
+editing, undo, and autosave. The original Docker vulnerability blocker is
+resolved, and the unchanged application retains current full-verifier evidence.
+See the [R22 completion report](implement-prd-stories/r22-script-search.md#current-completion-evidence).
 
 **Expected files:**
 
@@ -898,9 +933,12 @@ September 4, 2026; the test was not rerun for this documentation-only update.
 
 **Commit:** none; preserve the existing regression coverage.
 
-### R24: Write the requested final MP3 tags with an ID3 package
+### R24: Write the requested final MP3 tags with FFmpeg
 
-**Goal:** Use a third-party ID3 package to tag the final project MP3 with exactly:
+**Status:** Complete — 2026-09-15. Full repository verification and the required
+Web, Electron, and Docker acceptance checks pass; see the linked report below.
+
+**Goal:** Use the existing FFmpeg writer to tag the final project MP3 with exactly:
 
 | Tag    | Value                              |
 | ------ | ---------------------------------- |
@@ -909,48 +947,46 @@ September 4, 2026; the test was not rerun for this documentation-only update.
 | year   | Current year at final MP3 creation |
 | genre  | `Audio Book`                       |
 
-**Scope decision:** This September 4 request supersedes R03's package-removal
-plan and the metadata implementation/values described in completed R01/R02.
-Keep R01/R02's completed history. R05's product branding does not override the
-explicit MP3 artist above.
+**Scope decision:** On September 15, the owner resolved D1 by selecting FFmpeg
+reuse and removal of the unused `node-id3` wrapper/dependency. This supersedes
+the September 4 package requirement. Keep R01/R02's completed history and all
+requested tag values; R05's product branding does not override the MP3 artist.
 
-**Current evidence:** `packages/rendering/src/id3.ts` already wraps `node-id3`
-and supplies the requested artist/genre, but production does not call it.
-`packages/application/src/artifacts.ts` currently uses FFmpeg for tags with
-artist `StudyNarrator AI` and genre `Speech`. Reuse the installed ID3 package and
-review its wrapper before considering a replacement.
+**Current evidence:** Production already uses FFmpeg. R24 corrects tag values,
+verifies all four tags before publication, and preserves the original creation
+year on rename. See the [implementation report](implement-prd-stories/r24-mp3-tags.md).
 
 **Expected files:**
 
-- `packages/rendering/src/id3.ts`, its tests, and the public rendering export
+- `packages/rendering/src/ffmpeg.ts`, its tests, and the public rendering export
 - `packages/application/src/artifacts.ts` and `render.test.ts`
 - `packages/rendering/package.json` and root lockfile only if the dependency changes
 - existing MP3 assertions in Web, Electron, and Docker acceptance
 
 **Work and acceptance:**
 
-1. Apply all four tags through the ID3 package after encoding and before atomic
+1. Apply all four tags through FFmpeg during encoding and before atomic
    publication of the single final MP3. Verify the written file before marking
-   the render complete; handle the package's failure return values and exceptions.
+   the render complete; reject encoding or tag verification failures.
 2. Preserve R02's rename behavior: changing Project Name updates the existing
    completed MP3 title without changing audio frames or the frozen snapshot.
    Preserve the creation year on rename and keep artist/genre consistent with
    this task. Reads and downloads must not initiate metadata rewrites.
 3. Perform updates on temporary files and atomically replace the managed file.
-   Keep the package in rendering infrastructure; no filesystem access in React.
-   Assess the existing wrapper's whole-file memory and blocking cost with a
-   representative long MP3 before adopting it in production.
+   Keep FFmpeg in rendering infrastructure; no filesystem access in React.
+   Remove the unused ID3 package/wrapper and measure the existing stream-copy
+   path with a representative long MP3.
 4. Test actual tags with an independent reader, Unicode project names, year
    boundaries via the injected clock, rename, failed writes, temporary-file
    cleanup, and sentinel-secret redaction. A tag failure must not publish an
    incomplete output or destroy the previous valid MP3.
-5. Update existing FFmpeg-only/tag-value assertions to the intended final
+5. Update existing tag-value assertions to the intended final
    behavior without reintroducing provenance files or download-time copies.
 
 **Focused verification:** Rendering unit tests, application render API tests,
 relevant Web/Electron acceptance, and `npm run verify:docker`.
 
-**Commit:** `fix(render): write the requested MP3 tags with an ID3 package`
+**Commit:** `fix(render): preserve creation year and write final MP3 tags`
 
 ### R25: Show project-render storage in General settings
 
@@ -958,10 +994,23 @@ relevant Web/Electron acceptance, and `npm run verify:docker`.
 so users can see project-audio storage and the space reclaimable through
 **Include Rendered Project Clips**.
 
-**Current evidence:** General settings shows Stored, This session, and Activity.
-Retention already inventories render-artifact bytes, but clip cleanup excludes
-pinned/nonterminal jobs and rejects active or recoverable rendering. Its current
-`bytesFreed` result counts only speech-cache bytes, not the removed render files.
+**Execution slices:** R25a (storage service and contracts) is complete after its
+2026-09-15 acceptance and full verification; see the
+[completion report](implement-prd-stories/r25a-project-render-storage.md).
+R25b (General settings callout and cleanup feedback) is complete after its
+2026-09-15 acceptance and full verification; see the
+[UI completion report](implement-prd-stories/r25b-render-storage-settings.md).
+Both slices and the parent R25 are complete.
+
+**Current evidence:** General settings shows Stored, This session, Activity, and
+Product Renders, including total and reclaimable bytes, loading, zero, and
+unavailable states. Statistics refresh on entry, while visible, after cleanup,
+and through Refresh. Clip cleanup
+excludes pinned/nonterminal jobs and rejects active or recoverable rendering.
+Its `bytesFreed` result includes cache and removed render bytes, with the render
+directory count and bytes also provided as a nested breakdown. Confirmation
+describes eligible bytes, and results show the render breakdown without adding
+it to the total a second time.
 
 **Expected files:**
 
@@ -1002,9 +1051,15 @@ API/contract tests, and Web acceptance; IPC acceptance if its contract changes.
 | `postgres`  | `post.gress`       |
 | `retryable` | `retry.uble`       |
 
-**Current evidence:** The current `globalLexicon.json` has a PostgreSQL entry,
-but no exact entries for these three requested inputs. Preserve PostgreSQL's
-separate entry when adding `postgres`.
+**Status:** Complete — 2026-09-15.
+
+**Current evidence:** `globalLexicon.json` contains the three exact mappings
+and retains the separate PostgreSQL entry. Schema 14 reconciles existing
+installations while preserving user entries and built-in enabled choices.
+Current catalog, transformer, migration/recovery, component, API, and browser
+checks pass. The original Docker vulnerability blocker is resolved, and the
+unchanged application retains current full-verifier evidence. See the
+[R26 completion report](implement-prd-stories/r26-global-lexicon-pronunciations.md#current-completion-evidence).
 
 **Expected files:**
 
@@ -1040,8 +1095,10 @@ if this intended catalog change affects them, and review the complete diff.
 from the left sidebar to queued, running, and recently completed work.
 
 **Current evidence:** The application already owns a render queue and typed
-per-project history/progress clients. AppShell has no render activity widget.
-Project navigation already accepts `?tab=render`. A second start on a project
+per-project history/progress clients. R27a supplies global active-render
+activity and a verified restricted Docker audio runtime. R27b retains unviewed
+results across reloads and opens exact results with `?tab=render&render=<job ID>`.
+Both slices passed the full verifier; see the [R27b completion report](implement-prd-stories/r27b-render-results.md). A second start on a project
 with active work returns that job; preserve this behavior and the current queue.
 
 **Expected files:**

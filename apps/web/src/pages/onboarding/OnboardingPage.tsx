@@ -134,8 +134,8 @@ export function OnboardingPage() {
           <span>01</span>
           <h3>Enter the server address</h3>
           <p>
-            StudyNarrator supports unauthenticated HTTP(S) Speaches servers on
-            loopback, your LAN, or HTTPS.
+            StudyNarrator AI supports unauthenticated HTTP(S) Speaches servers
+            on loopback, your LAN, or HTTPS.
           </p>
         </div>
         <code>http://127.0.0.1:8000 · http://speaches.home.arpa:8000/v1</code>

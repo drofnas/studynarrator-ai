@@ -1,0 +1,48 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+      time: "09:00"
+      timezone: America/Los_Angeles
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+    commit-message:
+      prefix: chore(deps)
+    groups:
+      development-tools:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+        # Keep runtime, native, packaging, and browser tooling out of this group.
+        patterns:
+          - "@eslint/*"
+          - "@testing-library/*"
+          - "@types/*"
+          - "@vitest/*"
+          - concurrently
+          - eslint
+          - globals
+          - jsdom
+          - knip
+          - prettier
+          - supertest
+          - tsx
+          - typescript
+          - typescript-eslint
+          - vitest
+          - wait-on
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+      time: "09:00"
+      timezone: America/Los_Angeles
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+    commit-message:
+      prefix: ci(deps)

@@ -60,6 +60,15 @@ const context: DiagnosticsContext = {
   sourceRevision: "test-revision",
 };
 
+const WEB_SECURITY_HEADERS = {
+  "x-content-type-options": "nosniff",
+  "referrer-policy": "no-referrer",
+  "x-frame-options": "DENY",
+  "permissions-policy":
+    "camera=(), geolocation=(), microphone=(), payment=(), usb=()",
+  "x-xss-protection": "0",
+} as const;
+
 const openServers = new Set<Server>();
 const openServices = new Set<{ close(): void }>();
 
@@ -385,21 +394,28 @@ async function fixture(logger?: {
       sessionWrites: 0,
       sessionCorruptMisses: 0,
       inFlight: 0,
+      projectRenders: {
+        totalBytes: 8,
+        reclaimableBytes: 8,
+      },
     }),
     clearAll: async () => ({
       contractVersion: 1 as const,
       entriesRemoved: 1,
       bytesFreed: 3,
+      renderedProjectClips: { entriesRemoved: 0, bytesFreed: 0 },
     }),
     clearProject: async (_projectId: string) => ({
       contractVersion: 1 as const,
       entriesRemoved: 1,
       bytesFreed: 3,
+      renderedProjectClips: { entriesRemoved: 0, bytesFreed: 0 },
     }),
     clearEntry: async (_cacheKey: string) => ({
       contractVersion: 1 as const,
       entriesRemoved: 1,
       bytesFreed: 3,
+      renderedProjectClips: { entriesRemoved: 0, bytesFreed: 0 },
     }),
   };
   const renderPlanId = "00000000-0000-4000-8000-000000000002";
@@ -574,7 +590,8 @@ describe("Express diagnostics API", () => {
     expect(response.body).toEqual({
       error: {
         code: "DIAGNOSTICS_BOUNDARY_ERROR",
-        message: "StudyNarrator could not validate the diagnostics response.",
+        message:
+          "StudyNarrator AI could not validate the diagnostics response.",
       },
     });
     expect(JSON.stringify(response.body)).not.toContain("must-not-leak");
@@ -662,11 +679,14 @@ describe("Express boundary logging", () => {
     expect(unknown.body).toEqual({
       error: {
         code: "PERSISTENCE_BOUNDARY_ERROR",
-        message: "StudyNarrator could not complete the persistence operation.",
+        message:
+          "StudyNarrator AI could not complete the persistence operation.",
       },
     });
 
     const responses = [known, pathValidation, validation, unknown];
+    for (const response of responses)
+      expect(response.headers).toMatchObject(WEB_SECURITY_HEADERS);
     const requestIds = responses.map(
       ({ headers }) => headers["x-request-id"] as string,
     );
@@ -728,6 +748,15 @@ describe("Express boundary logging", () => {
 });
 
 describe("production Web application", () => {
+  const contentSecurityPolicy =
+    "default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; style-src-elem 'self' 'unsafe-inline'; style-src-attr 'none'";
+
+  it("keeps API-only development responses free of the production CSP", async () => {
+    const { app } = await fixture();
+    const response = await request(app).get("/api/health").expect(200);
+    expect(response.headers).not.toHaveProperty("content-security-policy");
+  });
+
   it("serves assets and SPA routes without turning unknown API routes into HTML", async () => {
     const { service } = await fixture();
     const distributionDirectory = mkdtempSync(
@@ -735,7 +764,7 @@ describe("production Web application", () => {
     );
     writeFileSync(
       join(distributionDirectory, "index.html"),
-      "<!doctype html><title>StudyNarrator production</title>",
+      "<!doctype html><title>StudyNarrator AI production</title>",
     );
     writeFileSync(
       join(distributionDirectory, "application.js"),
@@ -745,15 +774,34 @@ describe("production Web application", () => {
     attachStaticWebApplication(application, distributionDirectory);
     const server = await listen(application);
 
+    const secret = "csp-private-query-must-not-leak";
+    const root = await request(server).get(`/?secret=${secret}`).expect(200);
+    expect(JSON.stringify(root.headers)).not.toContain(secret);
+    expect(root.text).toContain("StudyNarrator AI production");
+    expect(root.headers["cache-control"]).toBe("no-cache");
+    expect(root.headers).toMatchObject(WEB_SECURITY_HEADERS);
     const entry = await request(server).get("/projects/example").expect(200);
-    expect(entry.text).toContain("StudyNarrator production");
+    expect(entry.text).toContain("StudyNarrator AI production");
     expect(entry.headers["cache-control"]).toBe("no-cache");
-    expect(
-      (await request(server).get("/application.js").expect(200)).headers[
-        "cache-control"
-      ],
-    ).toBe("public, max-age=31536000, immutable");
-    await request(server).get("/api/not-a-route").expect(404);
+    expect(entry.headers).toMatchObject(WEB_SECURITY_HEADERS);
+    const asset = await request(server).get("/application.js").expect(200);
+    expect(asset.headers["cache-control"]).toBe(
+      "public, max-age=31536000, immutable",
+    );
+    expect(asset.headers).toMatchObject(WEB_SECURITY_HEADERS);
+    const missingApi = await request(server)
+      .get("/api/not-a-route")
+      .expect(404);
+    expect(missingApi.headers).toMatchObject(WEB_SECURITY_HEADERS);
+    // Express's final 404 handler keeps its stricter policy for error HTML.
+    expect(missingApi.headers["content-security-policy"]).toBe(
+      "default-src 'none'",
+    );
+    for (const response of [root, entry, asset]) {
+      expect(response.headers["content-security-policy"]).toBe(
+        contentSecurityPolicy,
+      );
+    }
   });
 });
 
@@ -1064,21 +1112,24 @@ describe("Express render review media", () => {
     expect(full.headers["accept-ranges"]).toBe("bytes");
     expect(full.headers["content-type"]).toMatch(/^audio\/mpeg/u);
     expect(JSON.stringify(full.headers)).not.toContain(import.meta.dirname);
-    await request(app)
+    const head = await request(app)
       .head(`/api/renders/${renderId}/audio`)
       .expect(200)
       .expect("content-length", "1");
-    await request(app)
+    expect(head.headers).toMatchObject(WEB_SECURITY_HEADERS);
+    const partial = await request(app)
       .get(`/api/renders/${renderId}/segments/1/audio`)
       .set("range", "bytes=0-0")
       .expect(206)
       .expect("content-range", "bytes 0-0/1")
       .expect("content-length", "1");
-    await request(app)
+    expect(partial.headers).toMatchObject(WEB_SECURITY_HEADERS);
+    const unsatisfiable = await request(app)
       .get(`/api/renders/${renderId}/audio`)
       .set("range", "bytes=2-3")
       .expect(416)
       .expect("content-range", "bytes */1");
+    expect(unsatisfiable.headers).toMatchObject(WEB_SECURITY_HEADERS);
     await request(app)
       .post(`/api/renders/${renderId}/segments/1/export`)
       .expect(200)
@@ -1117,6 +1168,9 @@ describe("Express render progress events", () => {
       expect(stream.response.headers.get("cache-control")).toBe("no-cache");
       expect(stream.response.headers.get("connection")).toBe("keep-alive");
       expect(stream.response.headers.get("x-accel-buffering")).toBe("no");
+      expect(
+        Object.fromEntries(stream.response.headers.entries()),
+      ).toMatchObject(WEB_SECURITY_HEADERS);
       await stream.readUntil('"state":"queued"');
 
       const intervalCallIndex = intervalSpy.mock.calls.findIndex(
@@ -1329,7 +1383,9 @@ describe("REST API operation manifest", () => {
       );
       const agent = request(app)[method.toLowerCase() as "get"](path);
       if (body !== undefined) agent.send(body);
-      return await agent.expect(expected);
+      const response = await agent.expect(expected);
+      expect(response.headers).toMatchObject(WEB_SECURITY_HEADERS);
+      return response;
     };
 
     await call("GET", "/api/health", 200);

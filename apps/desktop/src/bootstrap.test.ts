@@ -181,7 +181,7 @@ describe("desktop storage recovery", () => {
         );
         if (status.state !== "unavailable")
           throw new Error("expected the unavailable persistence status");
-        expect(status.message).toContain("newer version of StudyNarrator");
+        expect(status.message).toContain("newer version of StudyNarrator AI");
         await expect(runtime.persistence.projects.list()).rejects.toThrow(
           "Persistence is unavailable",
         );

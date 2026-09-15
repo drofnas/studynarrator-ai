@@ -13,6 +13,7 @@ import type {
 } from "@studynarrator/shared-types";
 import { ConnectionProvider } from "@/features/connections/ConnectionProvider.js";
 import { PersistenceGate } from "@/features/persistence/persistenceGate.js";
+import { RenderActivityProvider } from "@/features/renders/RenderActivityProvider.js";
 import { AppRoutes } from "./routes.js";
 import type { ScriptAnalyzer } from "@/workers/parser/parserClient.js";
 import "./styles/global.css";
@@ -51,16 +52,21 @@ export function App({
           connectionClient={connection}
           voiceCatalog={voiceCatalog}
         >
-          <AppRoutes
-            analyzer={analyzer}
-            client={client}
+          <RenderActivityProvider
             persistence={persistence}
-            scratchpad={scratchpad}
-            projectPreview={projectPreview}
-            speechCache={speechCache}
-            scriptGeneration={scriptGeneration}
-            {...(renders ? { renders } : {})}
-          />
+            {...(renders ? { renderClient: renders } : {})}
+          >
+            <AppRoutes
+              analyzer={analyzer}
+              client={client}
+              persistence={persistence}
+              scratchpad={scratchpad}
+              projectPreview={projectPreview}
+              speechCache={speechCache}
+              scriptGeneration={scriptGeneration}
+              {...(renders ? { renders } : {})}
+            />
+          </RenderActivityProvider>
         </ConnectionProvider>
       </PersistenceGate>
     </QueryClientProvider>

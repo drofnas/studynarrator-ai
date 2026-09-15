@@ -1,0 +1,52 @@
+name: Docker verification
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+  schedule:
+    - cron: "23 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: docker-verification-${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Check out the source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Check Docker prerequisites
+        run: |
+          docker info > /dev/null
+          docker compose version
+          docker buildx version
+      - name: Verify in Docker
+        run: docker compose -f compose.development.yaml up --build --abort-on-container-exit --exit-code-from verify verify
+      - name: Collect Docker failure evidence
+        if: failure()
+        run: |
+          mkdir -p artifacts
+          docker compose -f compose.development.yaml cp verify:/workspace/.tmp/verify-docker artifacts/ || true
+      - name: Upload Docker failure evidence
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: docker-verification
+          path: |
+            artifacts/verify-docker/**/studynarrator.cdx.json
+            artifacts/verify-docker/**/trivy.json
+            artifacts/verify-docker/**/vulnerability-assessment.json
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: Remove the disposable verification environment
+        if: always()
+        run: docker compose -f compose.development.yaml down --volumes

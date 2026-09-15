@@ -166,7 +166,7 @@ export function createRenderQueue(options: {
       closing = true;
       for (const controller of controllers.values())
         controller.abort(
-          new DOMException("StudyNarrator is shutting down.", "AbortError"),
+          new DOMException("StudyNarrator AI is shutting down.", "AbortError"),
         );
       try {
         await drainPromise;

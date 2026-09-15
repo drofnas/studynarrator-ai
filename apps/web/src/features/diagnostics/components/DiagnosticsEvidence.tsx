@@ -18,8 +18,8 @@ export function DiagnosticsEvidence({ diagnostics }: DiagnosticsEvidenceProps) {
       <article>
         <p>Application</p>
         <code>
-          StudyNarrator {diagnostics.runtime.applicationVersion} · diagnostics
-          schema {diagnostics.schemaVersion}
+          StudyNarrator AI {diagnostics.runtime.applicationVersion} ·
+          diagnostics schema {diagnostics.schemaVersion}
         </code>
       </article>
       <article>
