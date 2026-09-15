@@ -11,26 +11,4 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out the source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - name: Verify in Docker
-        run: docker compose -f compose.development.yaml up --build --abort-on-container-exit --exit-code-from verify verify
-      - name: Collect verification evidence
-        if: always()
-        run: |
-          mkdir -p artifacts
-          for path in coverage playwright-report test-results .tmp/verify-docker; do
-            docker compose -f compose.development.yaml cp "verify:/workspace/$path" artifacts/ || true
-          done
-      - name: Upload verification evidence
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: verification
-          path: artifacts/
-          if-no-files-found: ignore
-      - name: Remove the disposable verification environment
-        if: always()
-        run: docker compose -f compose.development.yaml down --volumes
+    uses: ./.github/workflows/docker-verification.yml

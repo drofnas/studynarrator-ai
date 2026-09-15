@@ -80,7 +80,7 @@ later run also removes stale verification resources left by an interruption; it
 never performs a global Docker prune.
 
 The verifier writes a Trivy JSON vulnerability report, a CycloneDX image
-inventory, SARIF diagnostics, and a separate vulnerability applicability
+inventory, and a separate vulnerability applicability
 assessment under `.tmp/verify-docker/`. Critical findings and highs with an
 available fix fail. An unfixed high requires a package-and-CVE-specific,
 justified, unexpired entry in `container-high-exceptions.json`, or the documented
@@ -89,3 +89,13 @@ The exception file is currently empty. The audio assessment requires evidence
 that the affected code is absent from the exact scanned build and preserves the
 raw findings. Malformed reports, stale exceptions, and changed or expired
 assessment evidence fail verification.
+
+The [reusable Docker workflow](../../.github/workflows/docker-verification.yml)
+runs this full verification through CI for pull requests and main pushes, and
+directly for `v*` tags, manual dispatch, and Mondays at 06:23 UTC. Checkout uses
+the triggering revision; a green earlier branch run does not certify a tag.
+The job requires no registry login or repository secret, has a 30-minute timeout,
+cancels obsolete runs for the same workflow/ref, and always removes its disposable
+environment. Only the inventory, Trivy JSON, and applicability assessment are
+uploaded on failure, with seven-day retention. Local browser/coverage reports
+remain available through the development guide's export commands.

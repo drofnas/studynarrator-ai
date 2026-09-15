@@ -144,8 +144,14 @@ The container runs as UID/GID `10001:10001`. The named volume works without host
 The full verifier retains formatting, lint, typechecking, coverage, builds,
 Web/Electron acceptance, runtime smoke checks, and Docker distribution checks.
 The Docker checks use a dedicated nested daemon, scan the actual image with
-Trivy, and verify browser behavior, persistence, and resource cleanup. Reports
-remain in the stopped verification container for inspection or export.
+Trivy, and verify browser behavior, persistence, and resource cleanup. Locally,
+reports remain in the stopped verification container for inspection or export.
+
+[Docker verification](.github/workflows/docker-verification.yml) runs the same
+pipeline for pull requests and main pushes through CI, plus weekly, manual, and
+`v*` tag runs. Docker distribution claims require a green run for the exact
+revision. Jobs are limited to 30 minutes; failed runs retain only scanner evidence
+for seven days. Native packaging remains independent of this Docker gate.
 
 ## Documentation
 

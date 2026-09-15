@@ -46,28 +46,28 @@ documentation checkpoint.
 
 Status values: `todo`, `in progress`, `blocked`, `deferred`, `complete`, `superseded`.
 
-| ID  | Task                                                     | Priority | Status      | Depends on                                |
-| --- | -------------------------------------------------------- | -------- | ----------- | ----------------------------------------- |
-| R01 | Add MP3 metadata to the FFmpeg encoder                   | P0       | complete    | none                                      |
-| R02 | Remove render provenance and retag MP3s on rename        | P0       | complete    | R01                                       |
-| R03 | Remove `node-id3` and its obsolete wrapper               | P1       | superseded  | replaced by R24                           |
-| R04 | Reject redirects from every Speaches request             | P0       | complete    | none                                      |
-| R05 | Correct runtime documentation and the product title      | P1       | in progress | R02                                       |
-| R06 | Keep the Docker Web launcher local                       | P1       | complete    | none                                      |
-| R07 | Enforce coverage and dead-code checks in pull-request CI | P1       | complete    | none                                      |
-| R08 | Set explicit Web response security headers               | P1       | complete    | none                                      |
-| R09 | Add and verify a production Content Security Policy      | P1       | complete    | R08                                       |
-| R10 | Enforce Docker distribution verification in CI           | P1       | in progress | R07                                       |
-| R11 | Add contributor and vulnerability-reporting guides       | P1       | complete    | none                                      |
-| R17 | Pin CI actions and configure Dependabot updates          | P2       | complete    | R07a (complete)                           |
-| R18 | Set the public repository description and topics         | P2       | complete    | none                                      |
-| R19 | Validate the desktop release workflow with an RC tag     | P2       | deferred    | R10; R13 in [future work](FUTURE_WORK.md) |
-| R22 | Search the complete project script                       | P1       | in progress | none                                      |
-| R23 | Remove the completed-output pin action                   | P1       | complete    | none                                      |
-| R24 | Write final MP3 tags with an ID3 package                 | P1       | todo        | R02; supersedes R03                       |
-| R25 | Show project-render storage in General settings          | P1       | in progress | none                                      |
-| R26 | Update built-in Global Lexicon pronunciations            | P1       | in progress | none                                      |
-| R27 | Track active and unviewed renders in the sidebar         | P1       | complete    | none                                      |
+| ID  | Task                                                     | Priority | Status      | Depends on                                                          |
+| --- | -------------------------------------------------------- | -------- | ----------- | ------------------------------------------------------------------- |
+| R01 | Add MP3 metadata to the FFmpeg encoder                   | P0       | complete    | none                                                                |
+| R02 | Remove render provenance and retag MP3s on rename        | P0       | complete    | R01                                                                 |
+| R03 | Remove `node-id3` and its obsolete wrapper               | P1       | superseded  | replaced by R24                                                     |
+| R04 | Reject redirects from every Speaches request             | P0       | complete    | none                                                                |
+| R05 | Correct runtime documentation and the product title      | P1       | in progress | R02                                                                 |
+| R06 | Keep the Docker Web launcher local                       | P1       | complete    | none                                                                |
+| R07 | Enforce coverage and dead-code checks in pull-request CI | P1       | complete    | none                                                                |
+| R08 | Set explicit Web response security headers               | P1       | complete    | none                                                                |
+| R09 | Add and verify a production Content Security Policy      | P1       | complete    | R08                                                                 |
+| R10 | Enforce Docker distribution verification in CI           | P1       | complete    | R07                                                                 |
+| R11 | Add contributor and vulnerability-reporting guides       | P1       | complete    | none                                                                |
+| R17 | Pin CI actions and configure Dependabot updates          | P2       | complete    | R07a (complete)                                                     |
+| R18 | Set the public repository description and topics         | P2       | complete    | none                                                                |
+| R19 | Validate the desktop release workflow with an RC tag     | P2       | deferred    | R13 in [future work](FUTURE_WORK.md); RC authorization/native hosts |
+| R22 | Search the complete project script                       | P1       | in progress | none                                                                |
+| R23 | Remove the completed-output pin action                   | P1       | complete    | none                                                                |
+| R24 | Write final MP3 tags with an ID3 package                 | P1       | todo        | R02; supersedes R03                                                 |
+| R25 | Show project-render storage in General settings          | P1       | in progress | none                                                                |
+| R26 | Update built-in Global Lexicon pronunciations            | P1       | in progress | none                                                                |
+| R27 | Track active and unviewed renders in the sidebar         | P1       | complete    | none                                                                |
 
 ## Detailed tasks
 
@@ -599,8 +599,9 @@ npm run verify:docker
 **Execution slices:** R10a (scanner and policy) is complete after its
 2026-09-15 full verification and
 [completion review](implement-prd-stories/r10a-trivy-scanner.md). R10b (reusable
-CI workflow) is ready: both R10a and R07a are complete. The parent R10 remains
-in progress until R10b meets its acceptance criteria.
+CI workflow) is complete after its 2026-09-15 local verification and
+[completion review](implement-prd-stories/r10b-docker-ci.md). Both slices are
+complete, so the parent R10 is complete. Hosted CI runs after submission.
 
 **Goal:** Make the existing Docker distribution verifier an automatic release
 gate for the supported Docker Web distribution.
@@ -608,64 +609,43 @@ gate for the supported Docker Web distribution.
 **Scope decision:** Keep this task and do not defer it. `npm run verify:docker`
 already owns image hardening, SBOM generation, vulnerability policy, browser
 acceptance, persistence, offline recovery, cleanup, and leftover-resource audits.
-Replace Docker Scout with Trivy so contributors and forks can run the complete
-open-source verifier without a Docker account, Docker Hub entitlement, or
-repository-created credential. This task would become unnecessary only if Docker
-Web stopped being a supported distribution.
+R10a replaced Docker Scout with Trivy. The accepted
+[local-only scope](prd-work-items/local-only-simplification.md) removes the extra
+SARIF output and the proposed dependency from native packaging to Docker
+verification. The current Docker tooling supplies application tools; do not
+duplicate their installation on the host runner. Docker distribution claims
+require a green check for the exact revision.
 
 **Expected files:**
 
 - `.github/workflows/ci.yml`
 - `.github/workflows/docker-verification.yml` for one reusable full-verification
   workflow rather than duplicating provisioning and policy
-- `.github/workflows/release.yml`
 - `scripts/verify-docker.mjs` and its focused tests
-- rename `deploy/docker/scout-high-exceptions.json` to the scanner-neutral
-  `deploy/docker/container-high-exceptions.json`
+- `scripts/docker-workflow.test.ts`
 - `deploy/docker/README.md` and `README.md` when CI requirements or release gates
   change
 
 **Work:**
 
-1. Put the full Docker job in a reusable workflow that supports `workflow_call`,
-   every push to `main`, a weekly schedule, and `workflow_dispatch`. Have the tag
-   release workflow call that same workflow for the tagged revision and make all
-   packaging jobs depend on its success; do not infer release eligibility from a
-   mutable earlier branch run.
-2. Provision Node from `.nvmrc`, install with `npm ci`, install the Playwright
-   Chromium and Firefox system dependencies used by the verifier, confirm Docker
-   Buildx and Compose, and install an exact Trivy version with Aqua Security's
-   official setup action. Pin every added action to a full commit SHA even before
-   R17 runs. Cache Trivy's public vulnerability database through the action's
-   supported cache path without adding a long-lived credential.
-3. Keep the job secret-free. Scan the locally built image, do not log in to
-   Docker Hub or another registry, and do not publish, push, or attest the image.
-   A fork must need only its automatic GitHub Actions token, the public Internet,
-   and the tools provisioned by the workflow.
-4. Replace `docker scout sbom` and `docker scout cves` in
-   `scripts/verify-docker.mjs` with Trivy image scans. Produce a CycloneDX SBOM,
-   a machine-readable JSON vulnerability report for repository-owned policy
-   evaluation, and SARIF diagnostics. Pin the Trivy version in one maintained
-   location and keep local and CI execution on that version.
-5. Rename the exception file to `container-high-exceptions.json` and preserve the
-   existing policy: every critical finding fails; a high finding with a nonempty
-   fixed version fails; an unfixed high passes only through a package-and-CVE-
-   specific, justified, future-expiring exception; stale and unused exceptions
-   fail. Parse Trivy's documented fields and fail closed on malformed or unknown
-   report shapes.
-6. Remove `continue-on-error`. Treat a missing Trivy CLI or vulnerability
-   database, browser, Buildx, or Compose as a named provisioning failure, never
-   as an advisory success. Add focused fixtures for critical, fixable high,
-   excepted unfixed high, stale exception, unused exception, and malformed report
-   cases.
-7. Set a bounded job timeout and concurrency cancellation so an obsolete run
-   cannot consume a runner indefinitely. Preserve the verifier's targeted cleanup
-   and final leftover-resource audit; never add a global Docker prune.
-8. Upload the CycloneDX inventory, Trivy JSON report, and SARIF diagnostics with
-   short retention when the job fails. Do not upload application data, browser
-   traces, registry configuration, cache contents, or unredacted logs.
-9. Update release documentation so Docker distribution or release claims require
-   a green Docker job for the exact source revision.
+1. Put the full verifier job in a reusable workflow. CI calls it for pull
+   requests and every push to `main`. Weekly, manual, and `v*` tag runs use the
+   same job and checked-out revision. Do not add a native packaging dependency.
+2. Check Docker, Buildx, and Compose availability, then use
+   `compose.development.yaml` for the pinned Node/npm/Trivy toolchain, `npm ci`,
+   Chromium/Firefox, and Linux Electron. Keep actions pinned to full commit SHAs.
+3. Keep the job secret-free and repository permissions read-only. Scan the local
+   image without registry login, publication, or attestation.
+4. Retain the CycloneDX inventory, raw Trivy JSON, and exact-image applicability
+   assessment. Remove SARIF generation. Preserve R10a's policy, exception
+   validation, and evidence checks; never suppress findings to make CI pass.
+5. Propagate verification and provisioning failures. Use a bounded job timeout,
+   cancel obsolete runs, and always clean up the disposable environment.
+   Preserve targeted resource cleanup and audits; never use a global prune.
+6. Upload only scanner evidence on failure with short retention. Exclude
+   application data, browser traces, registry configuration, caches, and raw logs.
+   Test this boundary with a sentinel secret.
+7. Document exact-revision Docker verification as the Docker distribution gate.
 
 **Acceptance:**
 
@@ -677,7 +657,7 @@ Web stopped being a supported distribution.
 - Trivy produces a valid CycloneDX inventory and deterministic vulnerability
   evidence, and the repository-owned exception policy fails closed.
 - The job leaves no verification-owned Docker resources.
-- Scheduled, main-branch, manual, and tag-release runs invoke the same reusable
+- Pull-request, scheduled, main-branch, manual, and tag runs invoke the same reusable
   workflow and repository-owned command; no caller duplicates or weakens the
   verifier.
 - No human approval or representative-run checkpoint is required to remove
@@ -855,9 +835,10 @@ and topics, and the read-back matches the values above.
 **Goal:** Prove macOS, Windows, and Linux packaging before advertising desktop
 installers.
 
-**Status note:** Keep this task `deferred` until R10 and deferred R13 in
-[FUTURE_WORK.md](FUTURE_WORK.md) pass. Tag pushes and
-release deletion require owner approval.
+**Status note:** Keep this task `deferred` until R13 in
+[FUTURE_WORK.md](FUTURE_WORK.md) passes and native hosts and RC authorization are
+available. The accepted local-only plan makes Docker verification independent
+of native packaging. Tag pushes and release deletion require owner approval.
 
 **Expected files:**
 
@@ -867,7 +848,7 @@ release deletion require owner approval.
 
 **Work:**
 
-1. Confirm main CI and the Docker gate are green.
+1. Confirm the applicable native validation gates are green.
 2. Confirm the package includes licenses, acknowledgments, and third-party
    notices.
 3. Ask the owner to approve an exact release-candidate tag.

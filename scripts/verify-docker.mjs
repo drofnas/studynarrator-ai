@@ -353,7 +353,6 @@ async function runDockerAcceptance({
   fakePort,
   sbomPath,
   trivyPath,
-  sarifPath,
   assessmentPath,
 }) {
   const config = JSON.parse(await composeOutput("config", "--format", "json"));
@@ -454,19 +453,6 @@ async function runDockerAcceptance({
       Array.isArray(sbom.components) &&
       sbom.components.length > 0,
     "CycloneDX image inventory is invalid",
-  );
-  await run("trivy", [
-    "convert",
-    "--format",
-    "sarif",
-    "--output",
-    sarifPath,
-    trivyPath,
-  ]);
-  const sarif = JSON.parse(readFileSync(sarifPath, "utf8"));
-  invariant(
-    sarif.version === "2.1.0" && Array.isArray(sarif.runs),
-    "Trivy SARIF diagnostics are invalid",
   );
   const audioInspection = await executeProcess(
     "docker",
@@ -701,7 +687,6 @@ async function main() {
   let buildkitImageExistedBeforeRun = true;
   let sbomPath;
   let trivyPath;
-  let sarifPath;
   let assessmentPath;
   try {
     await executeWithCleanup({
@@ -766,7 +751,6 @@ async function main() {
         const verificationRun = mkdtempSync(resolve(verificationRoot, "run-"));
         sbomPath = resolve(verificationRun, "studynarrator.cdx.json");
         trivyPath = resolve(verificationRun, "trivy.json");
-        sarifPath = resolve(verificationRun, "trivy.sarif");
         assessmentPath = resolve(
           verificationRun,
           "vulnerability-assessment.json",
@@ -790,7 +774,6 @@ async function main() {
           fakePort,
           sbomPath,
           trivyPath,
-          sarifPath,
           assessmentPath,
         });
       },
@@ -854,7 +837,7 @@ async function main() {
   }
 
   process.stdout.write(
-    `\nDOCKER VERIFY: ALL CHECKS PASSED\nCycloneDX inventory: ${sbomPath}\nTrivy JSON report: ${trivyPath}\nTrivy SARIF diagnostics: ${sarifPath}\nVulnerability assessment: ${assessmentPath}\n`,
+    `\nDOCKER VERIFY: ALL CHECKS PASSED\nCycloneDX inventory: ${sbomPath}\nTrivy JSON report: ${trivyPath}\nVulnerability assessment: ${assessmentPath}\n`,
   );
 }
 
