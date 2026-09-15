@@ -46,28 +46,28 @@ documentation checkpoint.
 
 Status values: `todo`, `in progress`, `blocked`, `deferred`, `complete`, `superseded`.
 
-| ID  | Task                                                     | Priority | Status      | Depends on                                                          |
-| --- | -------------------------------------------------------- | -------- | ----------- | ------------------------------------------------------------------- |
-| R01 | Add MP3 metadata to the FFmpeg encoder                   | P0       | complete    | none                                                                |
-| R02 | Remove render provenance and retag MP3s on rename        | P0       | complete    | R01                                                                 |
-| R03 | Remove `node-id3` and its obsolete wrapper               | P1       | superseded  | replaced by R24                                                     |
-| R04 | Reject redirects from every Speaches request             | P0       | complete    | none                                                                |
-| R05 | Correct runtime documentation and the product title      | P1       | complete    | R02                                                                 |
-| R06 | Keep the Docker Web launcher local                       | P1       | complete    | none                                                                |
-| R07 | Enforce coverage and dead-code checks in pull-request CI | P1       | complete    | none                                                                |
-| R08 | Set explicit Web response security headers               | P1       | complete    | none                                                                |
-| R09 | Add and verify a production Content Security Policy      | P1       | complete    | R08                                                                 |
-| R10 | Enforce Docker distribution verification in CI           | P1       | complete    | R07                                                                 |
-| R11 | Add contributor and vulnerability-reporting guides       | P1       | complete    | none                                                                |
-| R17 | Pin CI actions and configure Dependabot updates          | P2       | complete    | R07a (complete)                                                     |
-| R18 | Set the public repository description and topics         | P2       | complete    | none                                                                |
-| R19 | Validate the desktop release workflow with an RC tag     | P2       | deferred    | R13 in [future work](FUTURE_WORK.md); RC authorization/native hosts |
-| R22 | Search the complete project script                       | P1       | complete    | none                                                                |
-| R23 | Remove the completed-output pin action                   | P1       | complete    | none                                                                |
-| R24 | Write final MP3 tags with an ID3 package                 | P1       | todo        | R02; supersedes R03                                                 |
-| R25 | Show project-render storage in General settings          | P1       | complete    | none                                                                |
-| R26 | Update built-in Global Lexicon pronunciations            | P1       | in progress | none                                                                |
-| R27 | Track active and unviewed renders in the sidebar         | P1       | complete    | none                                                                |
+| ID  | Task                                                     | Priority | Status     | Depends on                                                          |
+| --- | -------------------------------------------------------- | -------- | ---------- | ------------------------------------------------------------------- |
+| R01 | Add MP3 metadata to the FFmpeg encoder                   | P0       | complete   | none                                                                |
+| R02 | Remove render provenance and retag MP3s on rename        | P0       | complete   | R01                                                                 |
+| R03 | Remove `node-id3` and its obsolete wrapper               | P1       | superseded | replaced by R24                                                     |
+| R04 | Reject redirects from every Speaches request             | P0       | complete   | none                                                                |
+| R05 | Correct runtime documentation and the product title      | P1       | complete   | R02                                                                 |
+| R06 | Keep the Docker Web launcher local                       | P1       | complete   | none                                                                |
+| R07 | Enforce coverage and dead-code checks in pull-request CI | P1       | complete   | none                                                                |
+| R08 | Set explicit Web response security headers               | P1       | complete   | none                                                                |
+| R09 | Add and verify a production Content Security Policy      | P1       | complete   | R08                                                                 |
+| R10 | Enforce Docker distribution verification in CI           | P1       | complete   | R07                                                                 |
+| R11 | Add contributor and vulnerability-reporting guides       | P1       | complete   | none                                                                |
+| R17 | Pin CI actions and configure Dependabot updates          | P2       | complete   | R07a (complete)                                                     |
+| R18 | Set the public repository description and topics         | P2       | complete   | none                                                                |
+| R19 | Validate the desktop release workflow with an RC tag     | P2       | deferred   | R13 in [future work](FUTURE_WORK.md); RC authorization/native hosts |
+| R22 | Search the complete project script                       | P1       | complete   | none                                                                |
+| R23 | Remove the completed-output pin action                   | P1       | complete   | none                                                                |
+| R24 | Write final MP3 tags with an ID3 package                 | P1       | todo       | R02; supersedes R03                                                 |
+| R25 | Show project-render storage in General settings          | P1       | complete   | none                                                                |
+| R26 | Update built-in Global Lexicon pronunciations            | P1       | complete   | none                                                                |
+| R27 | Track active and unviewed renders in the sidebar         | P1       | complete   | none                                                                |
 
 ## Detailed tasks
 
@@ -1051,9 +1051,15 @@ API/contract tests, and Web acceptance; IPC acceptance if its contract changes.
 | `postgres`  | `post.gress`       |
 | `retryable` | `retry.uble`       |
 
-**Current evidence:** The current `globalLexicon.json` has a PostgreSQL entry,
-but no exact entries for these three requested inputs. Preserve PostgreSQL's
-separate entry when adding `postgres`.
+**Status:** Complete — 2026-09-15.
+
+**Current evidence:** `globalLexicon.json` contains the three exact mappings
+and retains the separate PostgreSQL entry. Schema 14 reconciles existing
+installations while preserving user entries and built-in enabled choices.
+Current catalog, transformer, migration/recovery, component, API, and browser
+checks pass. The original Docker vulnerability blocker is resolved, and the
+unchanged application retains current full-verifier evidence. See the
+[R26 completion report](implement-prd-stories/r26-global-lexicon-pronunciations.md#current-completion-evidence).
 
 **Expected files:**
 
