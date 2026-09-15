@@ -52,7 +52,7 @@ Status values: `todo`, `in progress`, `blocked`, `deferred`, `complete`, `supers
 | R02 | Remove render provenance and retag MP3s on rename        | P0       | complete    | R01                                                                 |
 | R03 | Remove `node-id3` and its obsolete wrapper               | P1       | superseded  | replaced by R24                                                     |
 | R04 | Reject redirects from every Speaches request             | P0       | complete    | none                                                                |
-| R05 | Correct runtime documentation and the product title      | P1       | in progress | R02                                                                 |
+| R05 | Correct runtime documentation and the product title      | P1       | complete    | R02                                                                 |
 | R06 | Keep the Docker Web launcher local                       | P1       | complete    | none                                                                |
 | R07 | Enforce coverage and dead-code checks in pull-request CI | P1       | complete    | none                                                                |
 | R08 | Set explicit Web response security headers               | P1       | complete    | none                                                                |
@@ -331,6 +331,12 @@ npm test -- packages/speaches-adapter/src/index.test.ts
 **Commit:** `fix(speaches): reject redirected requests`
 
 ### R05: Correct runtime documentation and the product title
+
+**Completion review (2026-09-15):** The existing implementation satisfies its
+runtime and product-identity acceptance criteria. Focused checks and a fresh
+sandboxed Linux package-title smoke pass; the recent full verifier also passes
+against identical application/configuration source. The original Docker scan
+blocker is cleared. [Completion evidence](implement-prd-stories/r05-runtime-product-identity.md).
 
 **Goal:** Make setup instructions agree with the checked-in toolchain and set the
 Web and Electron document title to the exact product name `StudyNarrator AI`.

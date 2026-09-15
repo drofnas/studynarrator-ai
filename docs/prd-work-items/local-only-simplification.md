@@ -64,7 +64,7 @@ Every row is a proposed new issue in `drofnas/studynarrator-ai`, subject to the 
 | ID   | Type  | Area                          | Priority | Planning state  | Blocked by                             | Blocks    |
 | ---- | ----- | ----------------------------- | -------- | --------------- | -------------------------------------- | --------- |
 | R04  | Task  | Speaches adapter              | P0       | Complete        | —                                      | —         |
-| R05  | Task  | Setup and product identity    | P1       | In progress     | —                                      | —         |
+| R05  | Task  | Setup and product identity    | P1       | Complete        | —                                      | —         |
 | R06  | Task  | Local Docker launcher         | P1       | Complete        | —                                      | —         |
 | R07a | Task  | CI                            | P1       | Complete        | —                                      | R10b, R17 |
 | R07b | Task  | Local verification            | P1       | Complete        | —                                      | —         |
