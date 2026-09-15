@@ -9,7 +9,7 @@
   "dependencies": {
     "@studynarrator/core": "0.1.0",
     "@studynarrator/shared-types": "0.1.0",
-    "zod": "4.4.3"
+    "zod": "4.6.2"
   },
   "devDependencies": {
     "@types/better-sqlite3": "9.6.0",
