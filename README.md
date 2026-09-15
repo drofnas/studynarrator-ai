@@ -29,60 +29,38 @@ docker compose up --build --detach
 
 Open <http://127.0.0.1:8080> and complete the onboarding connection to Speaches.
 
-## Other ways to run locally
+## Develop in Docker
 
-All source-based modes require:
+Development and verification require Docker Engine/Desktop with Compose and
+Buildx. Node, npm, compilers, FFmpeg, test browsers, and Trivy are installed in a
+separate tooling image. No application toolchain is required on your workstation.
 
-- Node.js (use the version pinned by `.nvmrc`).
-- npm `11.19.0` (the version declared in `package.json`).
-- FFmpeg and FFprobe on `PATH` for diagnostics and rendering.
-- A reachable Speaches server for preview and render operations. Authoring works without it.
-
-Install FFmpeg with your operating system's package manager, for example `brew install ffmpeg` on macOS or `sudo apt-get install ffmpeg` on Debian/Ubuntu. Then install JavaScript dependencies from the repository root:
+Start the live Web development server:
 
 ```sh
-npm ci
+docker compose -f compose.development.yaml up --build --watch web
 ```
 
-### Web development server
+Open <http://127.0.0.1:5173>. Compose Watch syncs source edits into the container;
+the dependency tree stays inside its image. Development data lives in a separate
+Docker volume and survives service recreation. Use `host.docker.internal` for
+Speaches running on the Docker host.
 
-Start the Vite UI plus Node API:
+Use the final, unauthenticated Speaches address directly. Catalog discovery,
+connection checks, and synthesis reject redirects with sanitized errors,
+including redirects from optional voice catalogs.
+
+Run the complete verification pipeline:
 
 ```sh
-npm run dev:web
+docker compose -f compose.development.yaml up --build --abort-on-container-exit --exit-code-from verify verify
 ```
 
-Open <http://127.0.0.1:5173>. Vite proxies `/api` requests to the Node server on `127.0.0.1:4310`. Development Web data is stored under `.tmp/dev/web` unless `STUDYNARRATOR_DATA_DIR` is set.
-
-Enter the Speaches address during onboarding. Authenticated Speaches servers are not supported by the application connection flow.
-
-Use the final Speaches address directly: catalog discovery, connection checks,
-and speech synthesis reject redirects. A redirect during any connection-check
-stage stops the check with a sanitized `redirect-rejected` failure, including
-redirects from optional voice catalogs.
-
-### Production Web server without Docker
-
-Build the React application and Node server, then serve both from port `4310`:
-
-```sh
-npm run build --workspace @studynarrator/web
-npm run build --workspace @studynarrator/server
-
-npm run start --workspace @studynarrator/server
-```
-
-Open <http://127.0.0.1:4310>. Set `STUDYNARRATOR_DATA_DIR` to a durable directory if this is more than a disposable local run.
-
-### Electron development client
-
-Start the React development server and Electron shell together:
-
-```sh
-npm run dev:desktop
-```
-
-Electron opens its own window and uses the operating system's application-data directory. Configure the single loopback, LAN, or HTTPS Speaches connection during onboarding or in Settings.
+This includes Linux Electron tests on a virtual display. Native macOS/Windows
+packaging stays on matching CI hosts; platform acceptance and signing remain
+separate release work.
+See the [development guide](deploy/development/README.md) for focused commands,
+formatting, reports, dependency changes, and cleanup.
 
 ## Application surfaces
 
@@ -133,28 +111,28 @@ session. The app periodically reconciles activity with existing render history.
 
 ### StudyNarrator AI opens but reports Disconnected
 
-1. Run `curl --fail http://127.0.0.1:8000/health` on the Speaches host.
+1. Check the Speaches container health using its Compose configuration.
 2. Confirm the Speaches container is running with `docker compose ps` in its directory.
 3. Use `http://host.docker.internal:8000` for Docker Web, not `localhost`.
 4. Open **Settings**, verify the saved address, and run the connection test. The staged result identifies the failed URL, DNS, TCP, HTTP, model, voice, or audio check.
 
 ### The server is reachable but the model is unavailable
 
-Run the model download again and confirm the exact ID:
+From the Speaches Compose directory, run the model download inside its container and confirm the exact ID (use the CUDA Compose file if applicable):
 
 ```sh
-SPEACHES_BASE_URL=http://127.0.0.1:8000 \
-  uvx speaches-cli model download speaches-ai/Kokoro-82M-v1.0-ONNX
+docker compose --file compose.cpu.yaml exec -e SPEACHES_BASE_URL=http://127.0.0.1:8000 speaches \
+  uv tool run speaches-cli model download speaches-ai/Kokoro-82M-v1.0-ONNX
 
-SPEACHES_BASE_URL=http://127.0.0.1:8000 \
-  uvx speaches-cli model ls --task text-to-speech
+docker compose --file compose.cpu.yaml exec -e SPEACHES_BASE_URL=http://127.0.0.1:8000 speaches \
+  uv tool run speaches-cli model ls --task text-to-speech
 ```
 
 Choose that same model in the StudyNarrator AI connection or project settings.
 
 ### Diagnostics report that FFmpeg is unavailable
 
-Install FFmpeg and ensure `ffmpeg -version` and `ffprobe -version` work in the shell that launches StudyNarrator AI. The Docker Web image includes FFmpeg.
+Both the application and development Docker images include FFmpeg. Rebuild the affected image and check its container logs; installing FFmpeg on the workstation does not repair a container.
 
 ### Docker Web cannot write `/data`
 
@@ -162,23 +140,12 @@ The container runs as UID/GID `10001:10001`. The named volume works without host
 
 ## Development and verification
 
-Run focused checks while developing:
-
-```sh
-npm run lint
-npm run typecheck
-npm run audit:knip
-npm test
-npm run test:api
-```
-
-The release-level verifier requires the Node version in `.nvmrc`, the npm version in the root `packageManager`, Playwright browser dependencies, Docker Buildx, Docker Compose, and the Trivy version in `.trivy-version`:
-
-```sh
-npm run verify
-```
-
-`npm run verify:docker` can run the Docker acceptance suite alone. It builds the image with an isolated disposable builder, produces one Trivy JSON vulnerability report plus derived CycloneDX and SARIF reports, applies the repository-owned vulnerability policy, runs Chromium and Firefox against a disposable Compose deployment, and recreates the container to prove volume persistence. Before reporting success, it removes and audits all verification-owned images, containers, networks, volumes, builders, and build cache. The reports and per-image applicability assessment remain available under `.tmp/verify-docker/`. See the [CVE-2026-52490 assessment](docs/security/CVE-2026-52490.md) for the narrowly scoped, expiring vulnerable-code-absence check.
+[CONTRIBUTING.md](CONTRIBUTING.md) describes the Docker-based development workflow.
+The full verifier retains formatting, lint, typechecking, coverage, builds,
+Web/Electron acceptance, runtime smoke checks, and Docker distribution checks.
+The Docker checks use a dedicated nested daemon, scan the actual image with
+Trivy, and verify browser behavior, persistence, and resource cleanup. Reports
+remain in the stopped verification container for inspection or export.
 
 ## Documentation
 

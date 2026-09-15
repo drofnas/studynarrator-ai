@@ -56,6 +56,20 @@ StudyNarrator AI supports unauthenticated Speaches servers. Connection settings 
 
 ## Release verification
 
-Run `npm run verify:docker` using the Node version in `.nvmrc` and npm version in the root `packageManager` before distributing an image. The verifier requires Docker Engine/Desktop with Buildx and Compose, the Trivy version in the repository's `.trivy-version`, and Playwright's Chromium and Firefox binaries. It builds from the repository context with a disposable Buildx builder, exercises a disposable one-service Compose project, and verifies offline recovery and volume persistence in both browsers. Before reporting success, it removes and audits every verification-owned image, container, network, volume, builder, and build-cache volume. A later run also removes stale verification resources left by an ungraceful interruption; it never performs a global Docker prune or removes unrelated project cache.
+Run the Docker acceptance suite from the repository root:
+
+```sh
+docker compose -f compose.development.yaml run --build --rm verify npm run verify:docker
+```
+
+The [development environment](../development/README.md) supplies Node, npm,
+Buildx, Compose, Trivy, and Playwright inside Docker. It uses a dedicated nested
+Docker daemon; no host Node, FFmpeg, compiler, or scanner installation is needed.
+The verifier builds with a disposable Buildx builder, exercises a disposable
+one-service Compose project, and verifies offline recovery and volume persistence
+in Chromium and Firefox. It removes and audits every verification-owned image,
+container, network, volume, builder, and build-cache volume before success. A
+later run also removes stale verification resources left by an interruption; it
+never performs a global Docker prune.
 
 The verifier writes a Trivy JSON vulnerability report, a CycloneDX image inventory, SARIF diagnostics, and a separate vulnerability applicability assessment under `.tmp/verify-docker/`. Critical findings fail unless the exact finding passes the documented, expiring [CVE-2026-52490 vulnerable-code-absence assessment](../../docs/security/CVE-2026-52490.md), including checks of the actual image filesystem and installed packages. This assessment does not suppress the raw finding or accept an exploitable critical vulnerability. A high finding with an available fix also fails; an unfixed high must match the package, CVE, rationale, and future expiry in `container-high-exceptions.json`. That exception file is intentionally limited to FFmpeg's current Debian cJSON dependency and must be removed when Debian publishes a fixed package.

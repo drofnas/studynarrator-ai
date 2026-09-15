@@ -22,26 +22,24 @@ mkdir speaches
 cd speaches
 ```
 
-For CPU operation, including Docker Desktop on Apple Silicon, download and start the CPU configuration:
+Download the upstream [base Compose file](https://raw.githubusercontent.com/speaches-ai/speaches/master/compose.yaml)
+and either the [CPU configuration](https://raw.githubusercontent.com/speaches-ai/speaches/master/compose.cpu.yaml)
+or [CUDA configuration](https://raw.githubusercontent.com/speaches-ai/speaches/master/compose.cuda.yaml)
+into that directory using your browser. CPU works with Docker Desktop on Apple
+Silicon; CUDA requires the host's NVIDIA container runtime.
+
+Start the selected configuration:
 
 ```sh
-curl --fail --remote-name https://raw.githubusercontent.com/speaches-ai/speaches/master/compose.yaml
-curl --fail --remote-name https://raw.githubusercontent.com/speaches-ai/speaches/master/compose.cpu.yaml
 docker compose --file compose.cpu.yaml up --detach
 ```
 
-For an NVIDIA GPU with a working CUDA container runtime, use the upstream CUDA configuration instead:
-
-```sh
-curl --fail --remote-name https://raw.githubusercontent.com/speaches-ai/speaches/master/compose.yaml
-curl --fail --remote-name https://raw.githubusercontent.com/speaches-ai/speaches/master/compose.cuda.yaml
-docker compose --file compose.cuda.yaml up --detach
-```
+Use `compose.cuda.yaml` instead for CUDA.
 
 Confirm the server is running:
 
 ```sh
-curl --fail http://127.0.0.1:8000/health
+docker compose --file compose.cpu.yaml exec speaches curl --fail http://127.0.0.1:8000/health
 ```
 
 The response should report a healthy service. If it does not, inspect the container:
@@ -55,18 +53,20 @@ Use `compose.cuda.yaml` in those commands if you selected CUDA.
 
 ## 2. Install the Kokoro speech model
 
-Speaches requires a model download before text-to-speech use. Install the [`uv` command-line tool](https://docs.astral.sh/uv/getting-started/installation/) if you do not have `uvx`, then run:
+Speaches requires a model download before text-to-speech use. Run its CLI inside
+the Speaches container, which already provides `uv`; no host Python or uv
+installation is needed:
 
 ```sh
-SPEACHES_BASE_URL=http://127.0.0.1:8000 \
-  uvx speaches-cli model download speaches-ai/Kokoro-82M-v1.0-ONNX
+docker compose --file compose.cpu.yaml exec -e SPEACHES_BASE_URL=http://127.0.0.1:8000 speaches \
+  uv tool run speaches-cli model download speaches-ai/Kokoro-82M-v1.0-ONNX
 ```
 
 Confirm that the model appears in the installed text-to-speech model list:
 
 ```sh
-SPEACHES_BASE_URL=http://127.0.0.1:8000 \
-  uvx speaches-cli model ls --task text-to-speech
+docker compose --file compose.cpu.yaml exec -e SPEACHES_BASE_URL=http://127.0.0.1:8000 speaches \
+  uv tool run speaches-cli model ls --task text-to-speech
 ```
 
 The output should contain `speaches-ai/Kokoro-82M-v1.0-ONNX`.
@@ -74,16 +74,15 @@ The output should contain `speaches-ai/Kokoro-82M-v1.0-ONNX`.
 Generate a small WAV file before connecting StudyNarrator AI:
 
 ```sh
-curl --fail --silent --show-error \
+docker compose --file compose.cpu.yaml exec -T speaches curl --fail --silent --show-error \
   http://127.0.0.1:8000/v1/audio/speech \
   --header 'Content-Type: application/json' \
-  --output speaches-test.wav \
   --data '{
     "input": "Speaches is ready for StudyNarrator AI.",
     "model": "speaches-ai/Kokoro-82M-v1.0-ONNX",
     "voice": "af_heart",
     "response_format": "wav"
-  }'
+  }' > speaches-test.wav
 
 test -s speaches-test.wav && echo "Speaches text-to-speech is ready."
 ```
@@ -148,3 +147,10 @@ Use the URL that the StudyNarrator AI backend can reach. Your browser may use a 
 StudyNarrator AI accepts a Speaches root URL or a URL ending in `/v1`; it normalizes the address before making API calls. Cross-origin browser access to Speaches is not required because the Node or Electron backend makes the requests.
 
 The connection is a singleton owned by the application installation. Projects do not contain a connection ID, and neither runtime reads connection profiles or credentials from environment variables. StudyNarrator AI does not have an API-key field, credential vault, or operating-system credential-store integration; authenticated Speaches servers are rejected by the connection test.
+
+## Development and automated verification
+
+Use the [Docker development guide](deploy/development/README.md) to edit or test
+StudyNarrator AI. Its tooling image includes the pinned Node/npm versions,
+compilers, FFmpeg, browsers, and scanner. The regular application container and
+Speaches container do not require those tools on your workstation.

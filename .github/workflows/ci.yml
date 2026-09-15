@@ -6,7 +6,6 @@ on:
       - main
   pull_request:
 
-# No secrets: this job must run on fork pull requests.
 permissions:
   contents: read
 
@@ -16,76 +15,22 @@ jobs:
     steps:
       - name: Check out the source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - name: Set up Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Install FFmpeg and FFprobe
+      - name: Verify in Docker
+        run: docker compose -f compose.development.yaml up --build --abort-on-container-exit --exit-code-from verify verify
+      - name: Collect verification evidence
+        if: always()
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
-      - name: Check for dead code
-        run: npm run audit:knip
-      - name: Check formatting
-        run: npm run format:check
-      - name: Lint
-        run: npm run lint
-      - name: Typecheck
-        run: npm run typecheck
-      - name: Run tests with coverage
-        run: npm run test:coverage
-
-  # The Electron e2e project is intentionally not run here: it requires a
-  # native rebuild of better-sqlite3 and a display server, which the hosted
-  # runner does not provide for this workflow.
-  e2e:
-    needs: check
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out the source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - name: Set up Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Install FFmpeg and FFprobe
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
-      - name: Install Chromium and its system dependencies
-        run: npx playwright install --with-deps chromium
-      - name: Run the web end-to-end suite
-        run: npm run test:e2e:web
-      - name: Upload the Playwright report
-        if: failure()
+          mkdir -p artifacts
+          for path in coverage playwright-report test-results .tmp/verify-docker; do
+            docker compose -f compose.development.yaml cp "verify:/workspace/$path" artifacts/ || true
+          done
+      - name: Upload verification evidence
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: playwright-report
-          path: playwright-report/
-
-  # The Docker Scout CLI is not preinstalled on the hosted runner, so the
-  # vulnerability-policy step can fail for infrastructure reasons. Keep the
-  # job and treat the result as advisory until the runner image is verified.
-  docker:
-    needs: check
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out the source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - name: Set up Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Run the Docker acceptance suite
-        continue-on-error: true
-        run: npm run verify:docker
+          name: verification
+          path: artifacts/
+          if-no-files-found: ignore
+      - name: Remove the disposable verification environment
+        if: always()
+        run: docker compose -f compose.development.yaml down --volumes

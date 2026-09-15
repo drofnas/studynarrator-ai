@@ -12,6 +12,18 @@ import {
 } from "../support/electronTest.js";
 
 interface ElectronEvaluationApi {
+  app: { commandLine: { hasSwitch(name: string): boolean } };
+  BrowserWindow: {
+    getAllWindows(): {
+      webContents: {
+        getLastWebPreferences(): {
+          sandbox?: boolean;
+          contextIsolation?: boolean;
+          nodeIntegration?: boolean;
+        };
+      };
+    }[];
+  };
   shell: {
     openExternal(url: string): Promise<void>;
   };
@@ -48,6 +60,24 @@ test.describe("Electron acceptance", () => {
   }) => {
     const { page } = electronStudyNarrator;
     await expect(page).toHaveTitle("StudyNarrator AI");
+    const security = await electronStudyNarrator.application.evaluate(
+      ({ app, BrowserWindow }: ElectronEvaluationApi) => {
+        const preferences =
+          BrowserWindow.getAllWindows()[0]?.webContents.getLastWebPreferences();
+        return {
+          sandbox: preferences?.sandbox,
+          contextIsolation: preferences?.contextIsolation,
+          nodeIntegration: preferences?.nodeIntegration,
+          sandboxDisabled: app.commandLine.hasSwitch("no-sandbox"),
+        };
+      },
+    );
+    expect(security).toEqual({
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandboxDisabled: false,
+    });
     await configureElectronConnection(page, studyNarrator);
     const bridgeShape = await page.evaluate(() => {
       const renderer = window as typeof window & {
@@ -436,7 +466,9 @@ test.describe("Electron acceptance", () => {
       ),
     ).toBeVisible();
     await expect(creationEditor).toContainText("## AUTHORING RULES");
-    await creationEditor.press("Meta+ArrowDown");
+    const endOfDocument =
+      process.platform === "darwin" ? "Meta+ArrowDown" : "Control+End";
+    await creationEditor.press(endOfDocument);
     await expect(creationEditor).toContainText(
       "[PASTE SOURCE MATERIAL HERE AND/OR ATTACH RELEVANT FILES TO THE CONVERSATION.]",
     );
@@ -473,7 +505,7 @@ test.describe("Electron acceptance", () => {
     const updateEditor = page.getByRole("textbox", {
       name: "Update a script prompt editor",
     });
-    await updateEditor.press("Meta+ArrowDown");
+    await updateEditor.press(endOfDocument);
     await expect(updateEditor).toContainText(
       "[OPTIONAL — PROVIDE FACTS, RESEARCH, SOURCE MATERIAL, CONSTRAINTS, OR ATTACH RELEVANT FILES.]",
     );

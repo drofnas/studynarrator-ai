@@ -2,49 +2,43 @@
 
 ## Set up the repository
 
-Use the Node.js version in `.nvmrc` and the npm version in the root
-`packageManager` field. Install FFmpeg and FFprobe on `PATH`, then install the
-locked dependencies from the repository root:
-
-```sh
-npm ci
-```
-
-See [README.md](README.md) for the Web, Electron, and Docker development commands.
+Install Docker Engine/Desktop with Compose and Buildx, then follow the
+[development guide](deploy/development/README.md). The tooling image installs the
+Node version from `.nvmrc`, npm from `packageManager`, and all native and browser
+dependencies. Keep these pins and the lockfile unchanged unless your task calls
+for a dependency update. `npm ci` runs during the image build.
 
 ## Check a change
 
-Run focused tests while developing:
+Run focused tests inside the tooling container:
 
 ```sh
-npm test -- path/to/test.ts
-npm run test:api -- path/to/api.test.ts
+docker compose -f compose.development.yaml run --build --rm tools npm test -- path/to/test.ts
+docker compose -f compose.development.yaml run --build --rm tools npm run test:api -- path/to/api.test.ts
 ```
 
-The default suite covers foundational packages and the Web application. The API
-suite covers application services, server boundaries, and the Electron bridge.
-Run the affected end-to-end suite for user-facing Web or Electron changes:
+Prettier owns formatting. Mount the checkout only for deliberate source edits;
+dependencies still come from the tooling image:
 
 ```sh
-npm run test:e2e:web
-npm run test:e2e:electron
+docker compose -f compose.development.yaml run --build --rm -v "$PWD:/source" tools npm exec prettier -- --write /source/path/to/file
 ```
 
-Prettier owns formatting. Before committing, format the intended files, inspect
-the diff, and run the full verifier:
+Before committing, run the complete pipeline and review the diff:
 
 ```sh
-npx prettier --write <changed-files>
-npm run verify
+docker compose -f compose.development.yaml up --build --abort-on-container-exit --exit-code-from verify verify
 ```
 
-The full verifier also requires the Docker and Trivy prerequisites listed in the
-[README](README.md#development-and-verification). Run `npm run verify:docker`
-when changing the Docker distribution.
+The container runs `npm run verify`: Knip, formatting, lint, typecheck, coverage,
+builds, Web and Linux Electron acceptance, all runtime smoke checks, and Docker
+image, vulnerability, browser, persistence, and cleanup checks. It returns a
+nonzero exit code if any gate fails. Real macOS/Windows release checks stay in
+native CI; they are not prerequisites on a contributor's workstation.
 
-Pull requests targeting the default branch must pass the GitHub Actions `check`
-job. It runs Knip, formatting, lint, typechecking, and both Vitest suites together
-with coverage thresholds. Web end-to-end tests remain a separate `e2e` job.
+Pull requests must pass the GitHub Actions `check` job, which uses this same
+Docker command. Generated reports can be copied from the stopped verification
+container before cleaning up; see the development guide.
 
 ## Review dependency updates
 
@@ -73,7 +67,7 @@ with the exact release tag in a comment. Verify both when reviewing action
 updates. CI, including Dependabot PRs, uses a read-only token and no secrets;
 only the draft-release job has `contents: write`.
 
-Run `npm audit --omit=dev` as an explicit maintainer or release check when needed.
+Run `docker compose -f compose.development.yaml run --rm tools npm audit --omit=dev` as an explicit maintainer or release check when needed.
 It is not a required PR gate: advisory-service availability must not determine
 whether deterministic checks pass. License inventory and the Docker image policy
 remain separate checks.
