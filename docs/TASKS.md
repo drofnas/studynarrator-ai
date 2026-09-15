@@ -65,7 +65,7 @@ Status values: `todo`, `in progress`, `blocked`, `deferred`, `complete`, `supers
 | R22 | Search the complete project script                       | P1       | in progress | none                                                                |
 | R23 | Remove the completed-output pin action                   | P1       | complete    | none                                                                |
 | R24 | Write final MP3 tags with an ID3 package                 | P1       | todo        | R02; supersedes R03                                                 |
-| R25 | Show project-render storage in General settings          | P1       | in progress | none                                                                |
+| R25 | Show project-render storage in General settings          | P1       | complete    | none                                                                |
 | R26 | Update built-in Global Lexicon pronunciations            | P1       | in progress | none                                                                |
 | R27 | Track active and unviewed renders in the sidebar         | P1       | complete    | none                                                                |
 
@@ -984,15 +984,20 @@ so users can see project-audio storage and the space reclaimable through
 **Execution slices:** R25a (storage service and contracts) is complete after its
 2026-09-15 acceptance and full verification; see the
 [completion report](implement-prd-stories/r25a-project-render-storage.md).
-R25b (General settings callout and cleanup feedback) is Ready because R25a is its
-only dependency. The parent R25 remains in progress for that UI slice.
+R25b (General settings callout and cleanup feedback) is complete after its
+2026-09-15 acceptance and full verification; see the
+[UI completion report](implement-prd-stories/r25b-render-storage-settings.md).
+Both slices and the parent R25 are complete.
 
-**Current evidence:** General settings shows Stored, This session, and Activity.
-The storage service now reports total and reclaimable render bytes. Clip cleanup
+**Current evidence:** General settings shows Stored, This session, Activity, and
+Product Renders, including total and reclaimable bytes, loading, zero, and
+unavailable states. Statistics refresh on entry, while visible, after cleanup,
+and through Refresh. Clip cleanup
 excludes pinned/nonterminal jobs and rejects active or recoverable rendering.
 Its `bytesFreed` result includes cache and removed render bytes, with the render
-directory count and bytes also provided as a nested breakdown. R25b must consume
-those values without adding the render bytes to the total a second time.
+directory count and bytes also provided as a nested breakdown. Confirmation
+describes eligible bytes, and results show the render breakdown without adding
+it to the total a second time.
 
 **Expected files:**
 

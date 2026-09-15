@@ -107,6 +107,19 @@ render IDs. It survives reloads and desktop restarts; clearing browser storage
 resets it. If local storage is unavailable, viewed state lasts for the current
 session. The app periodically reconciles activity with existing render history.
 
+## Audio storage
+
+General settings shows **Product Renders** alongside the speech cache: total
+project-audio storage and the reclaimable portion. Statistics refresh while the
+page is open, when you return, after cleanup, and with **Refresh**. Unavailable
+storage is shown explicitly instead of as zero.
+
+**Clear all cached speech** clears previews. Selecting **Include Rendered Project
+Clips** also clears eligible project audio after confirmation. Pinned and unfinished
+renders are protected; clip cleanup waits until no render is active or recoverable.
+Projects and render history are preserved. The result reports total space freed and the
+project-render portion, so that portion is already included in the total.
+
 ## Troubleshooting
 
 ### StudyNarrator AI opens but reports Disconnected

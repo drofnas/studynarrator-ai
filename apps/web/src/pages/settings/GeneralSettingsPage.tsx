@@ -3,7 +3,6 @@ import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import type {
   SpeechBackendConnection,
   SpeechCacheClient,
-  SpeechCacheStatus,
 } from "@studynarrator/shared-types";
 import { queryKeys } from "@/app/queryKeys.js";
 import { useConnections } from "@/features/connections/ConnectionProvider.js";
@@ -54,30 +53,19 @@ export function GeneralSettingsPage({
     retry: false,
   });
   const catalog = catalogQuery.data ?? null;
-  const [cacheStatus, setCacheStatus] = useState<SpeechCacheStatus | null>(
-    null,
-  );
+  const cacheQuery = useQuery({
+    queryKey: queryKeys.speechCache.status(),
+    queryFn: () => cacheClient.status(),
+    retry: false,
+    refetchInterval: 5_000,
+  });
+  const cacheStatus = cacheQuery.isError ? undefined : cacheQuery.data;
+  const projectRenders = cacheStatus?.projectRenders;
   const [cacheBusy, setCacheBusy] = useState(false);
   const [includeRenderedProjectClips, setIncludeRenderedProjectClips] =
     useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
-
-  const refreshCache = async () => {
-    try {
-      setCacheStatus(await cacheClient.status());
-    } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Speech cache status could not be loaded.",
-      );
-    }
-  };
-
-  useEffect(() => {
-    void refreshCache();
-  }, [cacheClient]);
 
   useLayoutEffect(() => {
     if (workspace.connection) setDraft(connectionDraft(workspace.connection));
@@ -201,25 +189,33 @@ export function GeneralSettingsPage({
   };
 
   const clearAllCache = async () => {
+    const cacheEstimate = cacheStatus
+      ? `Cached speech: ${formatBytes(cacheStatus.totalBytes)}.`
+      : "Cached speech size unavailable.";
+    const renderEstimate = projectRenders
+      ? `Eligible project audio: ${formatBytes(projectRenders.reclaimableBytes)}.`
+      : "Project audio size unavailable.";
     if (
       !window.confirm(
         includeRenderedProjectClips
-          ? "Clear every cached speech preview and rendered project clip? Future previews will contact Speaches again. This preserves projects and render history."
-          : "Clear every cached speech preview? Future previews will contact Speaches again. This does not change projects or render history.",
+          ? `Clear cached speech and eligible rendered project clips? ${cacheEstimate} ${renderEstimate} Sizes may change before cleanup. Pinned and unfinished renders are protected. Projects and render history are preserved.`
+          : `Clear every cached speech preview? ${cacheEstimate} Future previews will contact Speaches again. Project audio, projects, and render history are preserved.`,
       )
     )
       return;
     setCacheBusy(true);
+    setStatus("");
+    setError("");
     try {
       const removed = await cacheClient.clearAll({
         includeRenderedProjectClips,
       });
       setStatus(
         includeRenderedProjectClips
-          ? `Cleared ${String(removed.entriesRemoved)} cached speech ${removed.entriesRemoved === 1 ? "entry" : "entries"}, freed ${formatBytes(removed.bytesFreed)}, and removed rendered project clips. Projects and render history were preserved.`
+          ? `Cleared ${String(removed.entriesRemoved)} cached speech ${removed.entriesRemoved === 1 ? "entry" : "entries"} and audio for ${String(removed.renderedProjectClips.entriesRemoved)} project ${removed.renderedProjectClips.entriesRemoved === 1 ? "render" : "renders"} (${formatBytes(removed.renderedProjectClips.bytesFreed)}). Freed ${formatBytes(removed.bytesFreed)} total. Projects and render history were preserved.`
           : `Cleared ${String(removed.entriesRemoved)} cached speech ${removed.entriesRemoved === 1 ? "entry" : "entries"} and freed ${formatBytes(removed.bytesFreed)}.`,
       );
-      await refreshCache();
+      await cacheQuery.refetch();
     } catch (reason) {
       setError(
         reason instanceof Error
@@ -238,7 +234,7 @@ export function GeneralSettingsPage({
         <h2>General</h2>
         <span>
           Manage the Speaches server, connection diagnostics, and disposable
-          preview audio.
+          preview and project audio.
         </span>
       </header>
       {error || workspace.error ? (
@@ -421,20 +417,21 @@ export function GeneralSettingsPage({
       <section className={styles.cache}>
         <div className={styles.sectionHeading}>
           <div>
-            <p>Disposable preview audio</p>
+            <p>Disposable audio storage</p>
             <h3>Speech cache</h3>
           </div>
           <button
             type="button"
             className={styles.secondary}
-            onClick={() => void refreshCache()}
+            disabled={cacheQuery.isFetching || cacheBusy}
+            onClick={() => void cacheQuery.refetch()}
           >
             Refresh
           </button>
         </div>
-        {cacheStatus ? (
-          <>
-            <div className={styles.cacheGrid}>
+        <div className={styles.cacheGrid}>
+          {cacheStatus ? (
+            <>
               <article>
                 <span>Stored</span>
                 <strong>
@@ -465,16 +462,38 @@ export function GeneralSettingsPage({
                     : "Not used yet"}
                 </code>
               </article>
-            </div>
+            </>
+          ) : (
             <p>
-              Cached WAV files are disposable and never create render history.
-              Clear them here when you want every future preview to contact
-              Speaches again.
+              {cacheQuery.isPending
+                ? "Loading cache statistics…"
+                : "Cache statistics unavailable. Try Refresh."}
             </p>
-          </>
-        ) : (
-          <p>Loading cache statistics…</p>
-        )}
+          )}
+          <article aria-labelledby="project-render-storage">
+            <span id="project-render-storage">Product Renders</span>
+            {projectRenders ? (
+              <>
+                <strong>{formatBytes(projectRenders.totalBytes)} stored</strong>
+                <code>
+                  {formatBytes(projectRenders.reclaimableBytes)} reclaimable
+                </code>
+              </>
+            ) : (
+              <strong>
+                {cacheQuery.isPending
+                  ? "Loading render storage…"
+                  : "Storage unavailable"}
+              </strong>
+            )}
+          </article>
+        </div>
+        <p>
+          Cached speech is disposable; future previews will contact Speaches
+          again after cleanup. Include Rendered Project Clips also removes
+          reclaimable project audio. Pinned and unfinished renders are
+          protected. Cleanup preserves projects and render history.
+        </p>
         <div className={styles.cacheControls}>
           <label>
             <input

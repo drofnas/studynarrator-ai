@@ -80,6 +80,22 @@ test.describe("render execution", () => {
     await expect
       .poll(async () => Number(await firstProgress.getAttribute("value")))
       .toBeGreaterThan(initialProgress);
+    await expect(
+      page.getByRole("article", { name: "Product Renders" }),
+    ).toContainText("0 B reclaimable");
+    await page.getByLabel("Include Rendered Project Clips").check();
+    page.once("dialog", (dialog) => dialog.accept());
+    const blockedCleanup = page.waitForResponse(
+      (response) =>
+        response.request().method() === "DELETE" &&
+        response.url().endsWith("/api/speech-cache"),
+    );
+    await page.getByRole("button", { name: "Clear all cached speech" }).click();
+    expect((await blockedCleanup).status()).toBe(409);
+    await expect(page.getByRole("alert")).toContainText(
+      "The persistence operation conflicts with existing data.",
+    );
+    await expect(firstProgress).toBeVisible();
     await page.getByRole("link", { name: /Network activity: /u }).click();
     await expect(page).toHaveURL(
       new RegExp(`/projects/${second.id}\\?tab=render&render=[a-f0-9-]+$`, "u"),
@@ -444,7 +460,7 @@ test.describe("render execution", () => {
     page.once("dialog", (dialog) => dialog.accept());
     await page.getByRole("button", { name: "Clear all cached speech" }).click();
     await expect(
-      page.getByText(/removed rendered project clips/u),
+      page.getByText(/and audio for 2 project renders/u),
     ).toBeVisible();
 
     const artifactsLoaded = page.waitForResponse(
