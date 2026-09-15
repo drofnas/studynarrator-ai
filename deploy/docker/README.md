@@ -79,4 +79,13 @@ container, network, volume, builder, and build-cache volume before success. A
 later run also removes stale verification resources left by an interruption; it
 never performs a global Docker prune.
 
-The verifier writes a Trivy JSON vulnerability report, a CycloneDX image inventory, SARIF diagnostics, and a separate vulnerability applicability assessment under `.tmp/verify-docker/`. Critical findings fail unless the exact finding passes the documented, expiring [CVE-2026-52490 vulnerable-code-absence assessment](../../docs/security/CVE-2026-52490.md), including checks of the actual image filesystem and installed packages. This assessment does not suppress the raw finding or accept an exploitable critical vulnerability. A high finding with an available fix also fails; an unfixed high must match the package, CVE, rationale, and future expiry in `container-high-exceptions.json`. That exception file is intentionally limited to FFmpeg's current Debian cJSON dependency and must be removed when Debian publishes a fixed package.
+The verifier writes a Trivy JSON vulnerability report, a CycloneDX image
+inventory, SARIF diagnostics, and a separate vulnerability applicability
+assessment under `.tmp/verify-docker/`. Critical findings and highs with an
+available fix fail. An unfixed high requires a package-and-CVE-specific,
+justified, unexpired entry in `container-high-exceptions.json`, or the documented
+[audio build applicability assessment](../../docs/security/docker-audio-build.md).
+The exception file is currently empty. The audio assessment requires evidence
+that the affected code is absent from the exact scanned build and preserves the
+raw findings. Malformed reports, stale exceptions, and changed or expired
+assessment evidence fail verification.

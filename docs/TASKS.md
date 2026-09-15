@@ -596,6 +596,12 @@ npm run verify:docker
 
 ### R10: Enforce Docker distribution verification in CI
 
+**Execution slices:** R10a (scanner and policy) is complete after its
+2026-09-15 full verification and
+[completion review](implement-prd-stories/r10a-trivy-scanner.md). R10b (reusable
+CI workflow) is ready: both R10a and R07a are complete. The parent R10 remains
+in progress until R10b meets its acceptance criteria.
+
 **Goal:** Make the existing Docker distribution verifier an automatic release
 gate for the supported Docker Web distribution.
 
