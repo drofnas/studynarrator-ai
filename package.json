@@ -60,6 +60,6 @@
     "typescript-eslint": "8.67.0",
     "vitest": "4.1.11",
     "wait-on": "9.1.0",
-    "yaml": "2.9.0"
+    "yaml": "2.9.1"
   }
 }
