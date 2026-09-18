@@ -1,18 +1,39 @@
 :root {
+  color-scheme: light;
   scrollbar-gutter: stable;
-  color: #17304b;
-  background: #eaf0f2;
-  font-family: "Avenir Next", Avenir, "Segoe UI", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --ink: #17304b;
-  --paper: #f8fbfb;
-  --mist: #eaf0f2;
-  --signal: #0a827d;
-  --signal-pale: #c7e4e1;
-  --copper: #d56a43;
-  --fault: #a63d49;
-  --line: #b9c8ce;
+  color: var(--ink);
+  background: var(--mist);
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  --ink: #252735;
+  --text-secondary: #626779;
+  --paper: #ffffff;
+  --mist: #f5f6fa;
+  --signal: #6550c7;
+  --signal-hover: #503caf;
+  --signal-pale: #eeebfb;
+  --warning: #905c16;
+  --warning-pale: #fff5e4;
+  --fault: #b03248;
+  --fault-pale: #fff0f2;
+  --success: #247452;
+  --success-pale: #eaf5ee;
+  --line: #dadee8;
+  --input-line: #b8bdcc;
+  --focus: #6550c7;
+  --nav: #252735;
+  --nav-hover: #333645;
+  --nav-active: #423b62;
+  --nav-text: #f1effa;
+  --nav-muted: #b9baca;
+  --nav-line: #454756;
+  --radius: 8px;
+  --radius-panel: 12px;
 }
 
 * {
@@ -23,45 +44,134 @@ body {
   min-width: 320px;
   min-height: 100vh;
 }
+::selection {
+  color: var(--ink);
+  background: #ded7fa;
+}
 button,
 input,
 textarea,
 select {
   font: inherit;
 }
-
+button,
+a,
+input,
+textarea,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+a {
+  color: var(--signal);
+  text-underline-offset: 3px;
+}
 button {
-  min-height: 46px;
-  padding: 0 20px;
+  min-height: 40px;
+  padding: 8px 16px;
   color: white;
-  background: var(--ink);
-  border: 2px solid var(--ink);
-  border-radius: 2px;
-  cursor: pointer;
-  font-weight: 700;
-  transition:
-    transform 140ms ease,
-    background 140ms ease;
-}
-
-button:hover:not(:disabled) {
   background: var(--signal);
-  transform: translateY(-2px);
+  border: 1px solid var(--signal);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.4;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
 }
-button:focus-visible {
-  outline: 3px solid var(--copper);
+button:hover:not(:disabled) {
+  color: white;
+  background: var(--signal-hover);
+  border-color: var(--signal-hover);
+}
+button:active:not(:disabled) {
+  background: #443394;
+}
+:focus-visible {
+  outline: 2px solid var(--focus);
   outline-offset: 3px;
 }
 button:disabled {
-  cursor: wait;
-  opacity: 0.6;
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+textarea,
+select {
+  min-height: 40px;
+  min-width: 0;
+  padding: 9px 12px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--input-line);
+  border-radius: var(--radius);
+  caret-color: var(--signal);
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-secondary);
+  opacity: 1;
+}
+input[type="checkbox"],
+input[type="radio"],
+input[type="range"],
+progress {
+  accent-color: var(--signal);
+}
+input[type="checkbox"],
+input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+input:disabled,
+select:disabled,
+textarea:disabled {
+  cursor: not-allowed;
+}
+textarea {
+  resize: vertical;
+}
+h1,
+h2,
+h3,
+h4 {
+  color: inherit;
+  line-height: 1.25;
+  text-wrap: balance;
+}
+h2 {
+  font-size: 2rem;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+}
+h3 {
+  font-size: 1.0625rem;
+  font-weight: 650;
 }
 code {
   display: block;
   overflow-wrap: anywhere;
-  color: var(--ink);
-  font-size: 0.78rem;
-  line-height: 1.55;
+  color: inherit;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+small {
+  font-size: 0.8125rem;
+}
+th,
+td,
+time,
+output {
+  font-variant-numeric: tabular-nums;
+}
+button svg {
+  flex-shrink: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -70,5 +180,6 @@ code {
   *::after {
     scroll-behavior: auto !important;
     transition: none !important;
+    animation: none !important;
   }
 }

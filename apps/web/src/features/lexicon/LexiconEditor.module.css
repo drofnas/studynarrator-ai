@@ -7,16 +7,16 @@
   gap: 5px;
   min-width: 0;
   margin: 0;
-  font-size: 0.72rem;
-  font-weight: 800;
+  font-size: 0.8125rem;
+  font-weight: 600;
 }
 .editor input:not([type="checkbox"]) {
   width: 100%;
   padding: 9px 10px;
   color: var(--ink);
   background: white;
-  border: 1px solid #91a9b2;
-  border-radius: 0;
+  border: 1px solid var(--input-line);
+  border-radius: var(--radius);
 }
 .editor input:focus {
   outline: 3px solid var(--signal-pale);
@@ -33,7 +33,7 @@
 .add > span {
   padding-bottom: 10px;
   color: var(--signal);
-  font-weight: 900;
+  font-weight: 650;
 }
 .add button {
   min-height: 39px;
@@ -49,7 +49,7 @@
 .entries > p {
   margin: 0;
   padding: 14px;
-  color: #557080;
+  color: var(--text-secondary);
   background: var(--mist);
 }
 .entries article {
@@ -59,12 +59,12 @@
   align-items: end;
   padding: 10px 12px;
   background: white;
-  border-left: 3px solid var(--signal);
+  border-inline-start: 1px solid var(--line);
 }
 .entries article > span[aria-hidden="true"] {
   padding-bottom: 10px;
   color: var(--signal);
-  font-weight: 900;
+  font-weight: 650;
 }
 .enabled {
   display: flex;
@@ -86,7 +86,7 @@
 .rowError {
   margin: 0;
   color: var(--fault);
-  font-size: 0.76rem;
+  font-size: 0.8125rem;
   font-weight: 700;
 }
 .rowError {

@@ -6,47 +6,35 @@
 .header {
   display: flex;
   justify-content: space-between;
-  gap: 32px;
-  align-items: end;
-  padding: 0 8px 22px;
-  border-bottom: 2px solid var(--ink);
+  gap: 24px;
+  align-items: center;
+  padding-bottom: 8px;
 }
 .header > div {
   max-width: 850px;
 }
-.kicker,
-.previewHeading span {
-  display: block;
-  margin: 0 0 7px;
-  color: var(--signal);
-  font:
-    800 0.68rem ui-monospace,
-    monospace;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
 .header h2 {
   margin: 0;
-  font:
-    700 clamp(2.8rem, 6vw, 5.4rem)/0.88 "Avenir Next Condensed",
-    "Arial Narrow",
-    sans-serif;
-  letter-spacing: -0.05em;
+  font: 650 2rem/1.2 var(--font-ui);
+  letter-spacing: -0.03em;
 }
-.header p:not(.kicker) {
+.header p {
   max-width: 720px;
   margin: 14px 0 0;
-  color: #557080;
+  color: var(--text-secondary);
   line-height: 1.55;
 }
 .backLink {
   display: inline-flex;
   align-items: center;
-  min-height: 42px;
-  padding: 0 14px;
+  min-height: 40px;
+  padding: 8px 14px;
   color: var(--ink);
-  border: 2px solid var(--ink);
-  font-weight: 800;
+  background: var(--paper);
+  border: 1px solid var(--input-line);
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  font-weight: 600;
   text-decoration: none;
   white-space: nowrap;
 }
@@ -55,7 +43,7 @@
   background: var(--signal);
 }
 .backLink:focus-visible {
-  outline: 3px solid var(--copper);
+  outline: 3px solid var(--warning);
   outline-offset: 3px;
 }
 .workspace {
@@ -64,33 +52,34 @@
 }
 .previewPanel {
   min-width: 0;
-  padding: 20px;
+  padding: 24px;
   background: var(--paper);
   border: 1px solid var(--line);
-  border-top: 0;
+  border-radius: 0 0 var(--radius-panel) var(--radius-panel);
 }
 .previewHeading h3 {
   margin: 0;
 }
 .instructions,
 .notice {
-  color: #557080;
-  font-size: 0.76rem;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
   line-height: 1.5;
 }
 .instructions {
-  max-width: 720px;
-  margin: 12px 0 16px;
-  padding: 11px 13px;
-  background: #dcebec;
-  border-left: 5px solid var(--signal);
+  max-width: 75ch;
+  margin: 12px 0 20px;
+  padding: 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.6;
 }
 .error {
   padding: 10px;
   color: var(--fault);
-  background: #f8e5e5;
-  font-size: 0.78rem;
-  font-weight: 800;
+  background: var(--fault-pale);
+  font-size: 0.8125rem;
+  font-weight: 600;
 }
 .notice {
   min-height: 1.2em;
@@ -101,17 +90,17 @@
   justify-content: space-between;
   gap: 8px;
   margin-top: 9px;
-  color: #557080;
-  font-size: 0.7rem;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
 }
 .loadingState {
   padding: 30px;
   background: var(--paper);
-  border-top: 5px solid var(--signal);
+  border-top: 1px solid var(--line);
 }
 .loadingState a {
   color: var(--signal);
-  font-weight: 800;
+  font-weight: 600;
 }
 @media (max-width: 900px) {
   .header {
@@ -123,4 +112,10 @@
   .previewPanel {
     padding: 14px;
   }
+}
+
+.previewPanel :global(.cm-scroller) {
+  height: min(65vh, 640px);
+  min-height: 420px;
+  overflow: auto;
 }

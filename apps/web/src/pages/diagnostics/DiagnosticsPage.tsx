@@ -29,7 +29,6 @@ export function DiagnosticsPage({ client }: DiagnosticsPageProps) {
               : "Run self-test"}
         </button>
       }
-      kicker="Local runtime"
       title="Runtime self-test"
       titleId="console-title"
     >

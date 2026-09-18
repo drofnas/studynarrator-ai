@@ -80,7 +80,6 @@ export function DatabaseRecoveryScreen({
 
   return (
     <main className={styles.recovery} data-outcome={outcome.kind}>
-      <p className={styles.eyebrow}>study-narrator storage recovery</p>
       <h1>study-narrator storage is unavailable</h1>
       <p className={styles.lead}>
         {status.code === "SCHEMA_TOO_NEW" ? (
@@ -152,15 +151,17 @@ export function DatabaseRecoveryScreen({
             <tbody>
               {status.availableBackups.map((backup) => (
                 <tr key={backup.path} data-backup-kind={backup.kind}>
-                  <td>
+                  <td data-label="Backup">
                     <code>{backup.path}</code>
                   </td>
-                  <td>
+                  <td data-label="Type">
                     {backup.kind === "prerestore" ? "Safety copy" : "Migration"}
                   </td>
-                  <td>version {backup.fromVersion}</td>
-                  <td>{backup.createdAt}</td>
-                  <td>{formatBytes(backup.sizeBytes)}</td>
+                  <td data-label="From version">
+                    version {backup.fromVersion}
+                  </td>
+                  <td data-label="Created">{backup.createdAt}</td>
+                  <td data-label="Size">{formatBytes(backup.sizeBytes)}</td>
                   <td>
                     <button
                       type="button"

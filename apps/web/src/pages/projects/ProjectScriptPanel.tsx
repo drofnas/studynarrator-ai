@@ -45,7 +45,6 @@ export function ProjectScriptPanel({
         <section className={styles.scriptPanel}>
           <div className={styles.sectionHeading}>
             <div>
-              <span>Source</span>
               <h3>Script editor</h3>
             </div>
             <div className={styles.scriptTools}>
@@ -62,25 +61,6 @@ export function ProjectScriptPanel({
               </button>
             </div>
           </div>
-          <EstimateStrip
-            wordCount={countWords(draft.scriptSource)}
-            allVoicesCalibrated={renderEstimates?.allVoicesCalibrated ?? false}
-            {...(renderEstimates
-              ? {
-                  durationMs: renderEstimates.durationMs,
-                  mp3Bytes: renderEstimates.mp3Bytes,
-                  cacheBytes: renderEstimates.cacheBytes,
-                  peakDiskBytes: renderEstimates.peakDiskBytes,
-                }
-              : {})}
-            {...(estimateContextState.status === "ready"
-              ? {
-                  freeSpaceBytes: estimateContextState.value.freeSpaceBytes,
-                }
-              : estimateContextState.status === "unavailable"
-                ? { freeSpaceBytes: null }
-                : {})}
-          />
           <div
             className={styles.panelScrollBody}
             role="region"
@@ -134,6 +114,30 @@ export function ProjectScriptPanel({
               ) : null}
             </div>
           </div>
+          <details className={styles.estimateDetails} open>
+            <summary>Audio estimates</summary>
+            <EstimateStrip
+              wordCount={countWords(draft.scriptSource)}
+              allVoicesCalibrated={
+                renderEstimates?.allVoicesCalibrated ?? false
+              }
+              {...(renderEstimates
+                ? {
+                    durationMs: renderEstimates.durationMs,
+                    mp3Bytes: renderEstimates.mp3Bytes,
+                    cacheBytes: renderEstimates.cacheBytes,
+                    peakDiskBytes: renderEstimates.peakDiskBytes,
+                  }
+                : {})}
+              {...(estimateContextState.status === "ready"
+                ? {
+                    freeSpaceBytes: estimateContextState.value.freeSpaceBytes,
+                  }
+                : estimateContextState.status === "unavailable"
+                  ? { freeSpaceBytes: null }
+                  : {})}
+            />
+          </details>
         </section>
       ) : null}
     </main>

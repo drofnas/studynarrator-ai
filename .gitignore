@@ -13,3 +13,6 @@ test-results/
 *.tsbuildinfo
 .gstack/
 .aider*
+
+# Local Impeccable visual verification evidence
+/.impeccable/review/

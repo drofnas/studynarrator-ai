@@ -229,7 +229,7 @@ describe("script prompt kit", () => {
       screen.getByRole("tablist", { name: "Choose a prompt template" }),
     ).toHaveTextContent("Create PromptUpdate Prompt");
     expect(
-      screen.getByText("Existing script", { exact: true }),
+      screen.getByRole("heading", { name: "Update a script" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByText(/Blank page|Red pen|Included automatically/u),

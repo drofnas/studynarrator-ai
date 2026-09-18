@@ -144,6 +144,29 @@ describe("ScriptSourceEditor", () => {
     expect(onChange).toHaveBeenLastCalledWith("Original script\nNew match");
   });
 
+  it("leaves scrolling within a bounded editor to the browser", () => {
+    const scrollBy = vi
+      .spyOn(window, "scrollBy")
+      .mockImplementation(() => undefined);
+    render(
+      <ScriptSourceEditor
+        value="First line"
+        onChange={() => undefined}
+        scrollWithin
+      />,
+    );
+    const gesture = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      deltaY: 120,
+    });
+    screen
+      .getByRole("textbox", { name: "Script source" })
+      .dispatchEvent(gesture);
+    expect(gesture.defaultPrevented).toBe(false);
+    expect(scrollBy).not.toHaveBeenCalled();
+  });
+
   it("hands vertical wheel deltas to the page", () => {
     const scrollBy = vi
       .spyOn(window, "scrollBy")

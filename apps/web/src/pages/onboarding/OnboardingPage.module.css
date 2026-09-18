@@ -1,46 +1,42 @@
 .page {
   display: grid;
-  grid-template-columns: minmax(0, 0.75fr) minmax(420px, 1.25fr);
-  gap: 20px;
+  max-width: 1040px;
+  margin: 16px auto;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 32px;
 }
 .page > header {
   grid-column: 1 / -1;
-  padding: 12px 0 24px;
-  border-bottom: 2px solid var(--ink);
+  padding: 0 0 16px;
 }
 .page > header p,
 .heading > span,
 .guide > div:first-child > span {
   margin: 0 0 7px;
   color: var(--signal);
-  font:
-    800 0.68rem ui-monospace,
-    monospace;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  font: 600 0.8125rem var(--font-ui);
+  letter-spacing: normal;
+  text-transform: none;
 }
 .page > header h2 {
-  max-width: 900px;
+  max-width: 800px;
   margin: 0;
-  font:
-    700 clamp(3rem, 7vw, 6.2rem)/0.86 "Avenir Next Condensed",
-    "Arial Narrow",
-    sans-serif;
-  letter-spacing: -0.05em;
+  font: 650 2rem/1.2 var(--font-ui);
+  letter-spacing: -0.03em;
 }
 .page > header > span {
   display: block;
   max-width: 690px;
   margin-top: 16px;
-  color: #557080;
+  color: var(--text-secondary);
 }
 .guide,
 .form,
 .existing {
-  padding: 22px;
+  padding: 28px;
   background: var(--paper);
   border: 1px solid var(--line);
-  border-top: 5px solid var(--copper);
+  border-radius: var(--radius-panel);
 }
 .guide h3,
 .form h3,
@@ -49,15 +45,16 @@
 }
 .guide p,
 .heading p {
-  color: #557080;
+  color: var(--text-secondary);
   line-height: 1.55;
 }
 .guide code {
   display: block;
   padding: 14px;
   overflow-wrap: anywhere;
-  color: #c8f3ef;
-  background: var(--ink);
+  color: var(--ink);
+  background: var(--mist);
+  border-radius: var(--radius);
 }
 .links {
   display: grid;
@@ -66,10 +63,10 @@
 }
 .links a {
   color: var(--signal);
-  font-weight: 800;
+  font-weight: 600;
 }
 .form {
-  border-top-color: var(--signal);
+  border-top-color: var(--line);
 }
 .heading {
   display: flex;
@@ -79,21 +76,21 @@
   display: grid;
   gap: 5px;
   margin-top: 13px;
-  font-size: 0.75rem;
-  font-weight: 800;
+  font-size: 0.8125rem;
+  font-weight: 600;
 }
 .form input {
   padding: 10px 11px;
-  border: 1px solid #91a9b2;
+  border: 1px solid var(--input-line);
 }
 .form small {
-  color: #557080;
+  color: var(--text-secondary);
   font-weight: 500;
 }
 .managed {
   padding: 11px;
   background: var(--mist);
-  font-weight: 800;
+  font-weight: 600;
 }
 .actions {
   display: flex;
@@ -103,11 +100,12 @@
 }
 .offline {
   color: var(--ink);
-  background: transparent;
+  background: var(--paper);
+  border-color: var(--input-line);
 }
 .error {
   color: var(--fault);
-  font-weight: 800;
+  font-weight: 600;
 }
 .existing {
   grid-column: 1 / -1;
@@ -125,9 +123,9 @@
   gap: 4px;
 }
 .existing article span {
-  color: #557080;
-  font-size: 0.75rem;
-  font-weight: 800;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 600;
 }
 @media (max-width: 780px) {
   .page {
@@ -139,5 +137,35 @@
   }
   .existing article {
     grid-template-columns: 1fr;
+  }
+}
+
+.guide {
+  padding: 12px 0;
+  background: transparent;
+  border: 0;
+}
+.form label {
+  margin-top: 20px;
+}
+.heading p {
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+.actions {
+  margin-top: 24px;
+}
+@media (max-width: 560px) {
+  .form {
+    padding: 20px;
+  }
+}
+
+@media (max-width: 780px) {
+  .form {
+    grid-row: 2;
+  }
+  .guide {
+    grid-row: 3;
   }
 }

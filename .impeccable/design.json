@@ -1,0 +1,616 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-18T02:39:40.353Z",
+  "title": "Design System: StudyNarrator AI",
+  "extensions": {
+    "colorMeta": {
+      "signal": {
+        "role": "primary",
+        "displayName": "Iris",
+        "tonalRamp": [
+          "oklch(15% 0.1773 286.56)",
+          "oklch(25% 0.1773 286.56)",
+          "oklch(35% 0.1773 286.56)",
+          "oklch(45% 0.1773 286.56)",
+          "oklch(60% 0.1773 286.56)",
+          "oklch(72% 0.1773 286.56)",
+          "oklch(84% 0.1773 286.56)",
+          "oklch(95% 0.1773 286.56)"
+        ]
+      },
+      "signal-hover": {
+        "role": "primary",
+        "displayName": "Iris hover",
+        "tonalRamp": [
+          "oklch(15% 0.1743 284.89)",
+          "oklch(25% 0.1743 284.89)",
+          "oklch(35% 0.1743 284.89)",
+          "oklch(45% 0.1743 284.89)",
+          "oklch(60% 0.1743 284.89)",
+          "oklch(72% 0.1743 284.89)",
+          "oklch(84% 0.1743 284.89)",
+          "oklch(95% 0.1743 284.89)"
+        ]
+      },
+      "signal-active": {
+        "role": "primary",
+        "displayName": "Iris pressed",
+        "tonalRamp": [
+          "oklch(15% 0.1518 285.28)",
+          "oklch(25% 0.1518 285.28)",
+          "oklch(35% 0.1518 285.28)",
+          "oklch(45% 0.1518 285.28)",
+          "oklch(60% 0.1518 285.28)",
+          "oklch(72% 0.1518 285.28)",
+          "oklch(84% 0.1518 285.28)",
+          "oklch(95% 0.1518 285.28)"
+        ]
+      },
+      "signal-pale": {
+        "role": "primary",
+        "displayName": "Iris wash",
+        "tonalRamp": [
+          "oklch(15% 0.0216 294.59)",
+          "oklch(25% 0.0216 294.59)",
+          "oklch(35% 0.0216 294.59)",
+          "oklch(45% 0.0216 294.59)",
+          "oklch(60% 0.0216 294.59)",
+          "oklch(72% 0.0216 294.59)",
+          "oklch(84% 0.0216 294.59)",
+          "oklch(95% 0.0216 294.59)"
+        ]
+      },
+      "selection": {
+        "role": "primary",
+        "displayName": "Text selection",
+        "tonalRamp": [
+          "oklch(15% 0.0481 294.58)",
+          "oklch(25% 0.0481 294.58)",
+          "oklch(35% 0.0481 294.58)",
+          "oklch(45% 0.0481 294.58)",
+          "oklch(60% 0.0481 294.58)",
+          "oklch(72% 0.0481 294.58)",
+          "oklch(84% 0.0481 294.58)",
+          "oklch(95% 0.0481 294.58)"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Graphite ink",
+        "tonalRamp": [
+          "oklch(15% 0.0260 278.22)",
+          "oklch(25% 0.0260 278.22)",
+          "oklch(35% 0.0260 278.22)",
+          "oklch(45% 0.0260 278.22)",
+          "oklch(60% 0.0260 278.22)",
+          "oklch(72% 0.0260 278.22)",
+          "oklch(84% 0.0260 278.22)",
+          "oklch(95% 0.0260 278.22)"
+        ]
+      },
+      "text-secondary": {
+        "role": "neutral",
+        "displayName": "Slate text",
+        "tonalRamp": [
+          "oklch(15% 0.0291 273.10)",
+          "oklch(25% 0.0291 273.10)",
+          "oklch(35% 0.0291 273.10)",
+          "oklch(45% 0.0291 273.10)",
+          "oklch(60% 0.0291 273.10)",
+          "oklch(72% 0.0291 273.10)",
+          "oklch(84% 0.0291 273.10)",
+          "oklch(95% 0.0291 273.10)"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "tonalRamp": [
+          "oklch(15% 0.0000 0.00)",
+          "oklch(25% 0.0000 0.00)",
+          "oklch(35% 0.0000 0.00)",
+          "oklch(45% 0.0000 0.00)",
+          "oklch(60% 0.0000 0.00)",
+          "oklch(72% 0.0000 0.00)",
+          "oklch(84% 0.0000 0.00)",
+          "oklch(95% 0.0000 0.00)"
+        ]
+      },
+      "mist": {
+        "role": "neutral",
+        "displayName": "Cool mist",
+        "tonalRamp": [
+          "oklch(15% 0.0054 274.97)",
+          "oklch(25% 0.0054 274.97)",
+          "oklch(35% 0.0054 274.97)",
+          "oklch(45% 0.0054 274.97)",
+          "oklch(60% 0.0054 274.97)",
+          "oklch(72% 0.0054 274.97)",
+          "oklch(84% 0.0054 274.97)",
+          "oklch(95% 0.0054 274.97)"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Quiet divider",
+        "tonalRamp": [
+          "oklch(15% 0.0143 268.48)",
+          "oklch(25% 0.0143 268.48)",
+          "oklch(35% 0.0143 268.48)",
+          "oklch(45% 0.0143 268.48)",
+          "oklch(60% 0.0143 268.48)",
+          "oklch(72% 0.0143 268.48)",
+          "oklch(84% 0.0143 268.48)",
+          "oklch(95% 0.0143 268.48)"
+        ]
+      },
+      "input-line": {
+        "role": "neutral",
+        "displayName": "Field edge",
+        "tonalRamp": [
+          "oklch(15% 0.0218 271.14)",
+          "oklch(25% 0.0218 271.14)",
+          "oklch(35% 0.0218 271.14)",
+          "oklch(45% 0.0218 271.14)",
+          "oklch(60% 0.0218 271.14)",
+          "oklch(72% 0.0218 271.14)",
+          "oklch(84% 0.0218 271.14)",
+          "oklch(95% 0.0218 271.14)"
+        ]
+      },
+      "warning": {
+        "role": "semantic",
+        "displayName": "Amber",
+        "tonalRamp": [
+          "oklch(15% 0.1050 68.28)",
+          "oklch(25% 0.1050 68.28)",
+          "oklch(35% 0.1050 68.28)",
+          "oklch(45% 0.1050 68.28)",
+          "oklch(60% 0.1050 68.28)",
+          "oklch(72% 0.1050 68.28)",
+          "oklch(84% 0.1050 68.28)",
+          "oklch(95% 0.1050 68.28)"
+        ]
+      },
+      "warning-pale": {
+        "role": "semantic",
+        "displayName": "Amber wash",
+        "tonalRamp": [
+          "oklch(15% 0.0248 81.13)",
+          "oklch(25% 0.0248 81.13)",
+          "oklch(35% 0.0248 81.13)",
+          "oklch(45% 0.0248 81.13)",
+          "oklch(60% 0.0248 81.13)",
+          "oklch(72% 0.0248 81.13)",
+          "oklch(84% 0.0248 81.13)",
+          "oklch(95% 0.0248 81.13)"
+        ]
+      },
+      "fault": {
+        "role": "semantic",
+        "displayName": "Rose",
+        "tonalRamp": [
+          "oklch(15% 0.1616 15.08)",
+          "oklch(25% 0.1616 15.08)",
+          "oklch(35% 0.1616 15.08)",
+          "oklch(45% 0.1616 15.08)",
+          "oklch(60% 0.1616 15.08)",
+          "oklch(72% 0.1616 15.08)",
+          "oklch(84% 0.1616 15.08)",
+          "oklch(95% 0.1616 15.08)"
+        ]
+      },
+      "fault-pale": {
+        "role": "semantic",
+        "displayName": "Rose wash",
+        "tonalRamp": [
+          "oklch(15% 0.0164 8.16)",
+          "oklch(25% 0.0164 8.16)",
+          "oklch(35% 0.0164 8.16)",
+          "oklch(45% 0.0164 8.16)",
+          "oklch(60% 0.0164 8.16)",
+          "oklch(72% 0.0164 8.16)",
+          "oklch(84% 0.0164 8.16)",
+          "oklch(95% 0.0164 8.16)"
+        ]
+      },
+      "success": {
+        "role": "semantic",
+        "displayName": "Pine",
+        "tonalRamp": [
+          "oklch(15% 0.0947 161.35)",
+          "oklch(25% 0.0947 161.35)",
+          "oklch(35% 0.0947 161.35)",
+          "oklch(45% 0.0947 161.35)",
+          "oklch(60% 0.0947 161.35)",
+          "oklch(72% 0.0947 161.35)",
+          "oklch(84% 0.0947 161.35)",
+          "oklch(95% 0.0947 161.35)"
+        ]
+      },
+      "success-pale": {
+        "role": "semantic",
+        "displayName": "Pine wash",
+        "tonalRamp": [
+          "oklch(15% 0.0149 158.25)",
+          "oklch(25% 0.0149 158.25)",
+          "oklch(35% 0.0149 158.25)",
+          "oklch(45% 0.0149 158.25)",
+          "oklch(60% 0.0149 158.25)",
+          "oklch(72% 0.0149 158.25)",
+          "oklch(84% 0.0149 158.25)",
+          "oklch(95% 0.0149 158.25)"
+        ]
+      },
+      "focus": {
+        "role": "primary",
+        "displayName": "Focus iris",
+        "tonalRamp": [
+          "oklch(15% 0.1773 286.56)",
+          "oklch(25% 0.1773 286.56)",
+          "oklch(35% 0.1773 286.56)",
+          "oklch(45% 0.1773 286.56)",
+          "oklch(60% 0.1773 286.56)",
+          "oklch(72% 0.1773 286.56)",
+          "oklch(84% 0.1773 286.56)",
+          "oklch(95% 0.1773 286.56)"
+        ]
+      },
+      "nav": {
+        "role": "neutral",
+        "displayName": "Navigation graphite",
+        "tonalRamp": [
+          "oklch(15% 0.0260 278.22)",
+          "oklch(25% 0.0260 278.22)",
+          "oklch(35% 0.0260 278.22)",
+          "oklch(45% 0.0260 278.22)",
+          "oklch(60% 0.0260 278.22)",
+          "oklch(72% 0.0260 278.22)",
+          "oklch(84% 0.0260 278.22)",
+          "oklch(95% 0.0260 278.22)"
+        ]
+      },
+      "nav-hover": {
+        "role": "neutral",
+        "displayName": "Navigation hover",
+        "tonalRamp": [
+          "oklch(15% 0.0267 276.03)",
+          "oklch(25% 0.0267 276.03)",
+          "oklch(35% 0.0267 276.03)",
+          "oklch(45% 0.0267 276.03)",
+          "oklch(60% 0.0267 276.03)",
+          "oklch(72% 0.0267 276.03)",
+          "oklch(84% 0.0267 276.03)",
+          "oklch(95% 0.0267 276.03)"
+        ]
+      },
+      "nav-active": {
+        "role": "neutral",
+        "displayName": "Navigation selected",
+        "tonalRamp": [
+          "oklch(15% 0.0659 291.14)",
+          "oklch(25% 0.0659 291.14)",
+          "oklch(35% 0.0659 291.14)",
+          "oklch(45% 0.0659 291.14)",
+          "oklch(60% 0.0659 291.14)",
+          "oklch(72% 0.0659 291.14)",
+          "oklch(84% 0.0659 291.14)",
+          "oklch(95% 0.0659 291.14)"
+        ]
+      },
+      "nav-text": {
+        "role": "neutral",
+        "displayName": "Navigation text",
+        "tonalRamp": [
+          "oklch(15% 0.0148 294.47)",
+          "oklch(25% 0.0148 294.47)",
+          "oklch(35% 0.0148 294.47)",
+          "oklch(45% 0.0148 294.47)",
+          "oklch(60% 0.0148 294.47)",
+          "oklch(72% 0.0148 294.47)",
+          "oklch(84% 0.0148 294.47)",
+          "oklch(95% 0.0148 294.47)"
+        ]
+      },
+      "nav-muted": {
+        "role": "neutral",
+        "displayName": "Navigation secondary text",
+        "tonalRamp": [
+          "oklch(15% 0.0225 283.02)",
+          "oklch(25% 0.0225 283.02)",
+          "oklch(35% 0.0225 283.02)",
+          "oklch(45% 0.0225 283.02)",
+          "oklch(60% 0.0225 283.02)",
+          "oklch(72% 0.0225 283.02)",
+          "oklch(84% 0.0225 283.02)",
+          "oklch(95% 0.0225 283.02)"
+        ]
+      },
+      "nav-line": {
+        "role": "neutral",
+        "displayName": "Navigation divider",
+        "tonalRamp": [
+          "oklch(15% 0.0253 279.22)",
+          "oklch(25% 0.0253 279.22)",
+          "oklch(35% 0.0253 279.22)",
+          "oklch(45% 0.0253 279.22)",
+          "oklch(60% 0.0253 279.22)",
+          "oklch(72% 0.0253 279.22)",
+          "oklch(84% 0.0253 279.22)",
+          "oklch(95% 0.0253 279.22)"
+        ]
+      },
+      "nav-highlight": {
+        "role": "primary",
+        "displayName": "Navigation lavender",
+        "tonalRamp": [
+          "oklch(15% 0.0966 292.79)",
+          "oklch(25% 0.0966 292.79)",
+          "oklch(35% 0.0966 292.79)",
+          "oklch(45% 0.0966 292.79)",
+          "oklch(60% 0.0966 292.79)",
+          "oklch(72% 0.0966 292.79)",
+          "oklch(84% 0.0966 292.79)",
+          "oklch(95% 0.0966 292.79)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Page headline",
+        "purpose": "Compact route headings."
+      },
+      "workspace-title": {
+        "displayName": "Workspace title",
+        "purpose": "Project identity above authoring controls."
+      },
+      "title": {
+        "displayName": "Section title",
+        "purpose": "Editor, form, and review-group headings."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Default interface text."
+      },
+      "supporting": {
+        "displayName": "Supporting prose",
+        "purpose": "Route descriptions and explanatory copy."
+      },
+      "control": {
+        "displayName": "Button text",
+        "purpose": "Semibold action labels."
+      },
+      "field": {
+        "displayName": "Field text",
+        "purpose": "Regular-weight entered text."
+      },
+      "label": {
+        "displayName": "Field label",
+        "purpose": "Persistent labels and supporting control names."
+      },
+      "metadata": {
+        "displayName": "Metadata",
+        "purpose": "Counts and secondary context."
+      },
+      "code": {
+        "displayName": "Technical identifier",
+        "purpose": "Paths, identifiers, and technical values."
+      },
+      "editor": {
+        "displayName": "Script",
+        "purpose": "Multiline script text with a spacious line height."
+      }
+    },
+    "shadows": [
+      {
+        "name": "navigation-drawer",
+        "value": "12px 0 36px rgb(24 26 40 / 20%)",
+        "purpose": "Separate the mobile navigation overlay from the workspace."
+      }
+    ],
+    "motion": [
+      {
+        "name": "control-state",
+        "value": "160ms ease",
+        "purpose": "Button and navigation color transitions."
+      },
+      {
+        "name": "project-row-hover",
+        "value": "120ms ease",
+        "purpose": "Quiet background feedback on project rows."
+      },
+      {
+        "name": "navigation-drawer",
+        "value": "180ms ease-out",
+        "purpose": "Drawer translation and backdrop opacity."
+      },
+      {
+        "name": "connection-pulse",
+        "value": "1s steps(2, end) infinite",
+        "purpose": "Testing and loading connection indicators."
+      },
+      {
+        "name": "audition-spin",
+        "value": "800ms linear infinite",
+        "purpose": "Preparing an audio audition."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "none",
+        "purpose": "Disable transitions and animations when reduced motion is requested."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "page-inset",
+        "value": "1180px"
+      },
+      {
+        "name": "audio-reflow",
+        "value": "980px"
+      },
+      {
+        "name": "navigation-drawer",
+        "value": "960px"
+      },
+      {
+        "name": "comparison-guidance",
+        "value": "900px"
+      },
+      {
+        "name": "project-fields-and-estimates",
+        "value": "820px"
+      },
+      {
+        "name": "content-panel",
+        "value": "720px"
+      },
+      {
+        "name": "settings-forms",
+        "value": "700px"
+      },
+      {
+        "name": "recovery-rows",
+        "value": "600px"
+      },
+      {
+        "name": "compact-workspace",
+        "value": "560px"
+      },
+      {
+        "name": "page-inset-small",
+        "value": "520px"
+      },
+      {
+        "name": "estimate-pairs",
+        "value": "480px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The main action for creating, saving, or rendering.",
+      "html": "<button class=\"ds-button-primary\" type=\"button\">Save now</button>",
+      "css": ".ds-button-primary { min-height: 40px; padding: 8px 16px; border: 1px solid var(--signal, #6550c7); border-radius: var(--radius, 8px); font: 600 0.875rem/1.4 var(--font-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif); cursor: pointer; transition: background 160ms ease, border-color 160ms ease, color 160ms ease; } .ds-button-primary:disabled { cursor: not-allowed; opacity: 0.55; } .ds-button-primary:focus-visible { outline: 2px solid var(--focus, #6550c7); outline-offset: 3px; } @media (prefers-reduced-motion: reduce) { .ds-button-primary { transition: none; } } .ds-button-primary { color: var(--paper, #ffffff); background: var(--signal, #6550c7); } .ds-button-primary:hover:not(:disabled) { background: var(--signal-hover, #503caf); border-color: var(--signal-hover, #503caf); } .ds-button-primary:active:not(:disabled) { background: #443394; }"
+    },
+    {
+      "name": "Secondary button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Supporting actions on a paper surface.",
+      "html": "<button class=\"ds-button-secondary\" type=\"button\">Test connection</button>",
+      "css": ".ds-button-secondary { min-height: 40px; padding: 8px 16px; border: 1px solid var(--signal, #6550c7); border-radius: var(--radius, 8px); font: 600 0.875rem/1.4 var(--font-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif); cursor: pointer; transition: background 160ms ease, border-color 160ms ease, color 160ms ease; } .ds-button-secondary:disabled { cursor: not-allowed; opacity: 0.55; } .ds-button-secondary:focus-visible { outline: 2px solid var(--focus, #6550c7); outline-offset: 3px; } @media (prefers-reduced-motion: reduce) { .ds-button-secondary { transition: none; } } .ds-button-secondary { color: var(--ink, #252735); background: var(--paper, #ffffff); border-color: var(--input-line, #b8bdcc); } .ds-button-secondary:hover:not(:disabled) { color: var(--paper, #ffffff); background: var(--signal-hover, #503caf); border-color: var(--signal-hover, #503caf); } .ds-button-secondary:active:not(:disabled) { background: #443394; }"
+    },
+    {
+      "name": "Destructive button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "The outlined destructive action used in settings.",
+      "html": "<button class=\"ds-button-danger\" type=\"button\">Delete profile</button>",
+      "css": ".ds-button-danger { min-height: 40px; padding: 8px 16px; border: 1px solid var(--signal, #6550c7); border-radius: var(--radius, 8px); font: 600 0.875rem/1.4 var(--font-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif); cursor: pointer; transition: background 160ms ease, border-color 160ms ease, color 160ms ease; } .ds-button-danger:disabled { cursor: not-allowed; opacity: 0.55; } .ds-button-danger:focus-visible { outline: 2px solid var(--focus, #6550c7); outline-offset: 3px; } @media (prefers-reduced-motion: reduce) { .ds-button-danger { transition: none; } } .ds-button-danger { color: var(--fault, #b03248); background: var(--paper, #ffffff); border-color: var(--fault, #b03248); } .ds-button-danger:hover:not(:disabled), .ds-button-danger:active:not(:disabled) { color: var(--paper, #ffffff); background: var(--fault, #b03248); border-color: var(--fault, #b03248); }"
+    },
+    {
+      "name": "Text action",
+      "kind": "button",
+      "refersTo": "button-text",
+      "description": "An underlined supporting action alongside a main button.",
+      "html": "<button class=\"ds-button-text\" type=\"button\">Download Details</button>",
+      "css": ".ds-button-text { min-height: 0; padding: 4px 0; color: var(--signal, #6550c7); background: transparent; border: 0; border-radius: var(--radius, 8px); font: 600 0.875rem/1.4 var(--font-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; transition: color 160ms ease; } .ds-button-text:hover, .ds-button-text:active { color: var(--ink, #252735); background: transparent; } .ds-button-text:disabled { color: var(--text-secondary, #626779); cursor: not-allowed; opacity: 0.55; } .ds-button-text:focus-visible { outline: 2px solid var(--focus, #6550c7); outline-offset: 3px; } @media (prefers-reduced-motion: reduce) { .ds-button-text { transition: none; } }"
+    },
+    {
+      "name": "Labeled field",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "Visible label and a quiet but distinct field boundary.",
+      "html": "<label class=\"ds-field\">Project name<input class=\"ds-field-input\" type=\"text\" value=\"Biology · Cell structure\" /></label>",
+      "css": ".ds-field { display: grid; gap: 5px; color: var(--ink, #252735); font: 600 0.8125rem/1.5 var(--font-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif); } .ds-field-input { min-height: 40px; min-width: 0; padding: 9px 12px; color: var(--ink, #252735); background: var(--paper, #ffffff); border: 1px solid var(--input-line, #b8bdcc); border-radius: var(--radius, 8px); caret-color: var(--signal, #6550c7); font: 400 0.875rem/1.4 var(--font-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif); } .ds-field-input::placeholder { color: var(--text-secondary, #626779); opacity: 1; } .ds-field-input:disabled { cursor: not-allowed; } .ds-field-input:focus-visible { outline: 2px solid var(--focus, #6550c7); outline-offset: 3px; }"
+    },
+    {
+      "name": "Navigation links",
+      "kind": "nav",
+      "refersTo": "navigation-item",
+      "description": "Graphite rail links with explicit selection and labeled line icons.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Workspace preview\"><a class=\"ds-nav-link\" href=\"#projects\" aria-current=\"page\"><svg class=\"ds-nav-icon\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M3 7.5h7l2 2h9v10H3z\"/><path d=\"M3 7.5v-3h7l2 3\"/></svg><span>Projects</span></a><a class=\"ds-nav-link\" href=\"#scratchpad\"><svg class=\"ds-nav-icon\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M7 3v4M17 3v4M5 5h14v16H5zM8 11h8M8 15h5\"/></svg><span>Quick Scratchpad</span></a></nav>",
+      "css": ".ds-nav { display: grid; gap: 5px; padding: 16px; background: var(--nav, #252735); } .ds-nav-link { display: flex; min-height: 44px; align-items: center; gap: 11px; padding: 10px 12px; color: var(--nav-muted, #b9baca); border: 1px solid transparent; border-radius: var(--radius, 8px); font: 500 0.875rem/1.5 var(--font-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif); text-decoration: none; transition: color 160ms ease, background 160ms ease; } .ds-nav-link:hover { color: var(--nav-text, #f1effa); background: var(--nav-hover, #333645); } .ds-nav-link[aria-current=\"page\"] { color: var(--paper, #ffffff); background: var(--nav-active, #423b62); border-color: #625581; } .ds-nav-icon { flex: none; width: 18px; height: 18px; } .ds-nav-link[aria-current=\"page\"] .ds-nav-icon { color: #c7baff; } .ds-nav-link:focus-visible { outline: 2px solid #c7baff; outline-offset: 2px; } @media (prefers-reduced-motion: reduce) { .ds-nav-link { transition: none; } }"
+    },
+    {
+      "name": "Count chip",
+      "kind": "chip",
+      "refersTo": "count-chip",
+      "description": "A noninteractive project count beside a section heading.",
+      "html": "<span class=\"ds-count-chip\" aria-label=\"3 projects\">3</span>",
+      "css": ".ds-count-chip { display: inline-flex; min-width: 26px; min-height: 26px; align-items: center; justify-content: center; padding: 2px 8px; color: var(--text-secondary, #626779); background: var(--mist, #f5f6fa); border-radius: 6px; font: 400 0.75rem/1.5 var(--font-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif); }"
+    },
+    {
+      "name": "Content panel",
+      "kind": "card",
+      "refersTo": "content-panel",
+      "description": "A reusable paper panel with a compact page heading.",
+      "html": "<section class=\"ds-panel\" aria-labelledby=\"ds-panel-title\"><div class=\"ds-panel-heading\"><h2 class=\"ds-panel-title\" id=\"ds-panel-title\">System diagnostics</h2></div><p class=\"ds-panel-copy\">Connection details and diagnostic results.</p></section>",
+      "css": ".ds-panel { padding: 28px; color: var(--ink, #252735); background: var(--paper, #ffffff); border: 1px solid var(--line, #dadee8); border-radius: var(--radius-panel, 12px); font: 400 1rem/1.5 var(--font-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif); } .ds-panel-heading { display: flex; justify-content: space-between; gap: 24px; align-items: center; margin-bottom: 28px; } .ds-panel-title { margin: 0; font: 650 2rem/1.25 var(--font-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif); letter-spacing: -0.03em; text-wrap: balance; } .ds-panel-copy { color: var(--text-secondary, #626779); } @media (max-width: 720px) { .ds-panel { padding: 20px; } .ds-panel-heading { align-items: start; flex-direction: column; } }"
+    },
+    {
+      "name": "Project task tabs",
+      "kind": "nav",
+      "refersTo": "task-tab",
+      "description": "Sticky task navigation with an iris selection underline; four tabs fit on narrow screens.",
+      "html": "<div class=\"ds-tabs\" role=\"tablist\" aria-label=\"Project tasks\"><button class=\"ds-tab\" type=\"button\" role=\"tab\" aria-selected=\"true\">Script Editor</button><button class=\"ds-tab\" type=\"button\" role=\"tab\" aria-selected=\"false\" tabindex=\"-1\">Settings</button><button class=\"ds-tab\" type=\"button\" role=\"tab\" aria-selected=\"false\" tabindex=\"-1\">Details</button><button class=\"ds-tab\" type=\"button\" role=\"tab\" aria-selected=\"false\" tabindex=\"-1\">Render</button></div>",
+      "css": ".ds-tabs { position: sticky; top: 0; display: flex; min-width: 0; gap: 4px; overflow-x: auto; background: var(--mist, #f5f6fa); border-bottom: 1px solid var(--line, #dadee8); } .ds-tab { flex: 0 0 auto; min-width: 132px; min-height: 48px; padding: 12px 18px; color: var(--text-secondary, #626779); background: transparent; border: 0; border-bottom: 2px solid transparent; border-radius: 0; font: 600 0.875rem/1.4 var(--font-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif); cursor: pointer; transition: background 160ms ease, border-color 160ms ease, color 160ms ease; } .ds-tab:hover { color: var(--signal, #6550c7); background: var(--signal-pale, #eeebfb); } .ds-tab[aria-selected=\"true\"] { color: var(--signal, #6550c7); background: transparent; border-bottom-color: var(--signal, #6550c7); } .ds-tab:focus-visible { position: relative; outline: 2px solid var(--focus, #6550c7); outline-offset: -3px; } @media (max-width: 560px) { .ds-tabs { gap: 0; overflow: visible; } .ds-tab { flex: 1 1 0; min-width: 0; padding-inline: 4px; font-size: 0.8125rem; } } @media (prefers-reduced-motion: reduce) { .ds-tab { transition: none; } }"
+    },
+    {
+      "name": "Script editing surface",
+      "kind": "custom",
+      "refersTo": "script-editor",
+      "description": "A visual sample of the CodeMirror surface and its gutter; editor services belong to the application.",
+      "html": "<div class=\"ds-editor\"><div class=\"ds-editor-gutter\" aria-hidden=\"true\">1<br/>2<br/>3</div><div class=\"ds-editor-text\" contenteditable=\"true\" role=\"textbox\" aria-multiline=\"true\" aria-label=\"Script surface preview\" spellcheck=\"false\">[section: The living cell]<br/>[speaker_teacher]<br/>Every cell is a small, organized system.</div></div>",
+      "css": ".ds-editor { display: grid; grid-template-columns: 44px minmax(0, 1fr); min-width: 0; min-height: 420px; color: var(--ink, #252735); background: var(--paper, #ffffff); border: 1px solid var(--line, #dadee8); border-radius: var(--radius, 8px); font: 400 0.875rem/1.8 var(--font-mono, ui-monospace, 'SFMono-Regular', Consolas, monospace); } .ds-editor:focus-within { border-color: var(--signal, #6550c7); outline: 2px solid var(--focus, #6550c7); outline-offset: 2px; } .ds-editor-gutter { padding: 20px 9px 20px 4px; color: var(--text-secondary, #626779); background: var(--mist, #f5f6fa); border-right: 1px solid var(--line, #dadee8); border-radius: var(--radius, 8px) 0 0 var(--radius, 8px); text-align: right; user-select: none; } .ds-editor-text { min-width: 0; padding: 20px 18px; white-space: pre-wrap; overflow-wrap: anywhere; caret-color: var(--signal, #6550c7); } .ds-editor-text:focus { outline: none; } .ds-editor-text::selection { background: #ded7fa; } @media (max-width: 560px) { .ds-editor { grid-template-columns: 32px minmax(0, 1fr); } .ds-editor-text { padding-inline: 12px; } .ds-editor-gutter { padding-right: 6px; } }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Technical Manual Workspace",
+    "overview": "StudyNarrator AI is a calm workspace for an individual turning study material into audio. The visual system makes long passages, project lists, voice assignments, and task controls easy to scan. Graphite navigation stays peripheral while light working surfaces hold the author's material.\n\nCompact headings, familiar controls, and fine dividers provide the structure. Iris identifies actions and selection; semantic state colors explain progress, warnings, and errors. The same visual vocabulary continues through authoring, listening, settings, diagnostics, setup, and recovery.",
+    "keyCharacteristics": [
+      "Light document surfaces beside graphite navigation.",
+      "Compact functional typography with a distinct monospace editor.",
+      "Iris actions, quiet borders, and explicit state labels.",
+      "Flat panels, gently rounded controls, and restrained motion.",
+      "Responsive reflow that keeps task controls and content accessible."
+    ],
+    "rules": [
+      {
+        "name": "The Meaningful Color Rule",
+        "body": "Use iris for action and selection, and semantic colors for named states. Keep ordinary reading surfaces neutral.",
+        "section": "colors"
+      },
+      {
+        "name": "The Reading First Rule",
+        "body": "Keep headings subordinate to the material being edited, and reserve monospace for scripts and technical identifiers.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Workspace Rule",
+        "body": "Use borders and tonal separation for resting content. Reserve the recorded shadow for the navigation drawer.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do reuse the source tokens for actions, surfaces, borders, and state.",
+      "Do keep script content visually dominant over its supporting controls.",
+      "Do keep visible labels, keyboard focus, and text descriptions of state.",
+      "Do preserve task order when panels, rows, and controls reflow.",
+      "Do use inline SVG for interface icons and native markers for disclosures.",
+      "Do preserve horizontal comparison tables with clear overflow guidance."
+    ],
+    "donts": [
+      "Don't use semantic state colors as unrelated decorative accents.",
+      "Don't add shadows to resting workspace panels.",
+      "Don't replace the compact heading hierarchy with oversized display type.",
+      "Don't hide primary actions beyond a narrow-screen table viewport.",
+      "Don't turn every row or supporting annotation into a separate card.",
+      "Don't add decorative kickers or use text glyphs as a reusable icon system."
+    ]
+  }
+}

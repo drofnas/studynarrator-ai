@@ -17,18 +17,13 @@ function message(error: unknown): string {
     : "StudyNarrator AI could not prepare the script prompts.";
 }
 
-const promptLabels: Record<
-  ScriptPromptKind,
-  { tab: string; eyebrow: string; title: string }
-> = {
+const promptLabels: Record<ScriptPromptKind, { tab: string; title: string }> = {
   creation: {
     tab: "Create Prompt",
-    eyebrow: "New script",
     title: "Create a script",
   },
   update: {
     tab: "Update Prompt",
-    eyebrow: "Existing script",
     title: "Update a script",
   },
 };
@@ -179,7 +174,6 @@ export function ScriptGenerationPage({
     <div className={styles.page}>
       <header className={styles.header}>
         <div>
-          <p className={styles.kicker}>External-LLM handoff</p>
           <h2>Script prompt kit</h2>
           <p>
             Copy a starting contract, add your subject matter or edit request,
@@ -267,7 +261,6 @@ export function ScriptGenerationPage({
           aria-labelledby={`prompt-tab-${selected}`}
         >
           <div className={styles.previewHeading}>
-            <span>{promptLabels[selected].eyebrow}</span>
             <h3>{promptLabels[selected].title}</h3>
           </div>
           <p className={styles.instructions}>
@@ -285,6 +278,7 @@ export function ScriptGenerationPage({
           </p>
           <ScriptSourceEditor
             key={selected}
+            scrollWithin
             value={draft}
             ariaLabel={`${promptLabels[selected].title} prompt editor`}
             onChange={(content) =>

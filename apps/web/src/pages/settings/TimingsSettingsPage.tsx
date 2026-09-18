@@ -173,7 +173,6 @@ export function TimingsSettingsPage({ client }: { client: PersistenceClient }) {
   return (
     <div className={`${styles.page} ${styles.singleColumnPage}`}>
       <header>
-        <p>Shared render rhythm</p>
         <h2>Timings</h2>
         <span>
           Set the pause presets and transitions used by editable projects and
@@ -191,14 +190,21 @@ export function TimingsSettingsPage({ client }: { client: PersistenceClient }) {
 
       <section className={styles.pacing} aria-labelledby="timing-heading">
         <div>
-          <p>Shared render rhythm</p>
           <h3 id="timing-heading">Global timing</h3>
         </div>
         <p>
           Saved changes affect every project and newly frozen render plan.
           Existing frozen plans keep their captured timing.
         </p>
-        <div className={styles.pauseTableScroll}>
+        <p className={styles.overflowHint}>
+          Scroll horizontally to edit durations and descriptions →
+        </p>
+        <div
+          className={styles.pauseTableScroll}
+          role="region"
+          aria-label="Pause presets"
+          tabIndex={0}
+        >
           <table className={styles.pauseTable}>
             <thead>
               <tr>

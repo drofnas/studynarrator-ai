@@ -717,6 +717,48 @@ afterEach(() => {
 });
 
 describe("Projects workbench", () => {
+  it("filters project names and descriptions, and recovers from an empty search", async () => {
+    const { client, analyze } = fixture({
+      ...project,
+      description: "Biology revision",
+    });
+    renderPage(client, analyze, { path: "/projects" });
+    await screen.findByRole("link", { name: "Authoring study" });
+    const search = screen.getByRole("searchbox", { name: "Search projects" });
+    await userEvent.type(search, "  BIOLOGY  ");
+    expect(
+      screen.getByRole("link", { name: "Authoring study" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("1 matching project");
+    await userEvent.clear(search);
+    await userEvent.type(search, "unmatched");
+    expect(
+      screen.queryByRole("link", { name: "Authoring study" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "No matching projects" }),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Clear search" }));
+    expect(search).toHaveValue("");
+    expect(
+      screen.getByRole("link", { name: "Authoring study" }),
+    ).toBeInTheDocument();
+    await userEvent.type(search, "AUTHORING");
+    expect(
+      screen.getByRole("link", { name: "Authoring study" }),
+    ).toBeInTheDocument();
+  });
+
+  it("opens project creation from the empty library", async () => {
+    const { client, analyze, listProjects } = fixture();
+    listProjects.mockResolvedValue([]);
+    renderPage(client, analyze, { path: "/projects" });
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Create your first project" }),
+    );
+    expect(screen.getByRole("textbox", { name: "Project name" })).toHaveFocus();
+  });
+
   it("renders the project index ledger and creates from an expandable form", async () => {
     const { client, analyze, create } = fixture(
       { ...project, description: "" },
@@ -758,7 +800,7 @@ describe("Projects workbench", () => {
       description: "Created from the project index.",
     });
     expect(
-      await screen.findByRole("heading", { name: "Project details" }),
+      await screen.findByRole("heading", { name: "Index-created project" }),
     ).toBeInTheDocument();
     expect(
       await screen.findByRole("tab", { name: "Script Editor" }),
@@ -1974,6 +2016,9 @@ describe("Projects workbench", () => {
     fireEvent.change(description, {
       target: { value: "Pending duplicate source" },
     });
+    fireEvent.click(
+      screen.getByText("Project details", { selector: "summary" }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
 
     await waitFor(() =>
@@ -2116,7 +2161,7 @@ describe("Projects workbench", () => {
     renderPage(client, analyze);
     await openProjectTab("Render");
     expect(
-      screen.getByRole("heading", { name: "Project details" }),
+      screen.getByRole("heading", { name: project.name }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Project name")).toHaveValue(project.name);
     expect(screen.getByLabelText("Description")).toHaveValue(
@@ -2125,6 +2170,9 @@ describe("Projects workbench", () => {
     expect(
       screen.getByRole("button", { name: "Save now" }),
     ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByText("Project details", { selector: "summary" }),
+    );
     expect(
       screen.getByRole("button", { name: "Duplicate" }),
     ).toBeInTheDocument();

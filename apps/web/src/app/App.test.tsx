@@ -156,6 +156,18 @@ async function findHeading(name: string) {
 }
 
 describe("application routing", () => {
+  it("skips navigation to the workspace without changing the route", async () => {
+    renderApp("/projects", { diagnostics: vi.fn() });
+    await findHeading("Projects");
+    await userEvent.click(
+      screen.getByRole("link", { name: "Skip to workspace" }),
+    );
+    expect(document.getElementById("workspace-content")).toHaveFocus();
+    expect(
+      screen.getByRole("heading", { name: "Projects" }),
+    ).toBeInTheDocument();
+  });
+
   it.each(["/", "/missing-page"])("redirects %s to Projects", async (route) => {
     const diagnostics = vi.fn();
     renderApp(route, { diagnostics });
@@ -164,8 +176,8 @@ describe("application routing", () => {
     expect(
       navigation.getAllByRole("link").map((link) => link.textContent),
     ).toEqual([
-      "Prompt Kit",
       "Projects",
+      "Prompt Kit",
       "Quick Scratchpad",
       "Settings",
       "General",

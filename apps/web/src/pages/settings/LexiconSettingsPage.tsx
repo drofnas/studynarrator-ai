@@ -345,7 +345,6 @@ export function LexiconSettingsPage({ client }: { client: PersistenceClient }) {
   return (
     <div className={`${styles.page} ${styles.singleColumnPage}`}>
       <header>
-        <p>Shared pronunciation</p>
         <h2>Lexicon</h2>
         <span>
           Manage pronunciation rules that apply to every project and preview.
@@ -368,7 +367,6 @@ export function LexiconSettingsPage({ client }: { client: PersistenceClient }) {
       >
         <div className={styles.sectionHeading}>
           <div>
-            <p>User defined</p>
             <h3 id="custom-lexicon-heading">Custom lexicon</h3>
           </div>
           <span>{customLexicon.length} entries</span>
@@ -403,7 +401,6 @@ export function LexiconSettingsPage({ client }: { client: PersistenceClient }) {
       >
         <div className={styles.sectionHeading}>
           <div>
-            <p>Built in</p>
             <h3 id="global-lexicon-heading">Global lexicon</h3>
           </div>
           <span>{builtInLexicon.length} entries</span>
@@ -437,7 +434,6 @@ export function LexiconSettingsPage({ client }: { client: PersistenceClient }) {
       >
         <div className={styles.sectionHeading}>
           <div>
-            <p>Restore built-ins</p>
             <h3 id="reimport-heading">Reimport global lexicon</h3>
           </div>
         </div>

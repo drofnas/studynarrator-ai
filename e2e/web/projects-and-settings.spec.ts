@@ -85,7 +85,6 @@ test.describe("Settings and connection diagnostics", () => {
         .getState()
         .requests.every(({ path }) => !path.includes("/v1/v1")),
     ).toBe(true);
-    await expect(page.getByText("Signal path")).toHaveCount(0);
     await expect(
       page.getByRole("button", { name: "Export redacted JSON" }),
     ).toHaveCount(0);
@@ -120,7 +119,6 @@ test.describe("Settings and connection diagnostics", () => {
           timeout: scenario === "timeout" ? 20_000 : 10_000,
         },
       );
-      await expect(page.getByText("Signal path")).toBeVisible();
       await expect(page.getByRole("heading", { name: expected })).toBeVisible();
       if (scenario === "redirected-voice-catalog") {
         await expect(
@@ -153,7 +151,9 @@ test.describe("Settings and connection diagnostics", () => {
     studyNarrator.fakeSpeaches.setScenario("healthy");
     await testButton.click();
     await expect(page.getByText("Connection test: connected.")).toBeVisible();
-    await expect(page.getByText("Signal path")).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Export redacted JSON" }),
+    ).toHaveCount(0);
 
     await page.reload();
     await expect(page.getByLabel("Address")).toHaveValue(
@@ -571,13 +571,7 @@ test.describe("Projects connected authoring", () => {
       name: "Close navigation",
     });
     await expect(menu).toHaveAttribute("aria-expanded", "false");
-    await expect
-      .poll(() =>
-        closeNavigation.evaluate(
-          (element) => element.getBoundingClientRect().right <= 0,
-        ),
-      )
-      .toBe(true);
+    await expect(closeNavigation).toBeHidden();
     expect(
       await speakers.evaluate(
         (element) => element.scrollWidth > element.clientWidth,
@@ -1023,9 +1017,12 @@ test.describe("Projects connected authoring", () => {
     await page.getByRole("button", { name: "Restore this pattern" }).click();
     await expect(page.getByText("MALFORMED_SECTION_DIRECTIVE")).toBeVisible();
     page.on("dialog", (dialog) => dialog.accept());
+    await page.locator("summary", { hasText: "Project details" }).click();
     await page.getByRole("button", { name: "Delete" }).click();
     await expect(
-      page.getByText("No projects yet. Create the first study guide."),
+      page.getByRole("heading", {
+        name: "Make room for your first study guide",
+      }),
     ).toBeVisible();
   });
 });

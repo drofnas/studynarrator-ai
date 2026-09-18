@@ -167,7 +167,6 @@ export function RetentionSettingsPage({
   return (
     <div className={`${styles.page} ${styles.singleColumnPage}`}>
       <header>
-        <p>Storage lifecycle</p>
         <h2>Retention</h2>
         <span>
           Choose how long managed speech cache, frozen job snapshots, and render
@@ -188,7 +187,6 @@ export function RetentionSettingsPage({
         aria-labelledby="retention-policy-heading"
       >
         <div>
-          <p>Saved policy</p>
           <h3 id="retention-policy-heading">Storage controls</h3>
         </div>
         {settings ? (
@@ -287,7 +285,6 @@ export function RetentionSettingsPage({
       >
         <div className={styles.sectionHeading}>
           <div>
-            <p>Managed storage</p>
             <h3 id="retention-usage-heading">Current usage</h3>
           </div>
           <button
@@ -346,7 +343,6 @@ export function RetentionSettingsPage({
           aria-labelledby="reclaim-heading"
         >
           <div>
-            <p>Non-destructive preview</p>
             <h3 id="reclaim-heading">Confirm reclaim</h3>
           </div>
           {preview.skipped ? (

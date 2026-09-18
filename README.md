@@ -64,7 +64,16 @@ formatting, reports, dependency changes, and cleanup.
 
 ## Application surfaces
 
-The primary navigation is **Prompt Kit**, **Projects**, **Quick Scratchpad**, and **Settings**, with **General**, **Voices**, **Lexicon**, **Timings**, and **System diagnostics** beneath Settings. Web requests use the manifest-backed `/api` surface for runtime diagnostics, projects, prompt export, previews, render plans and renders, pacing, preferences, the global lexicon, the singleton connection, setup, voice catalogs, Scratchpad, and speech-cache controls. Electron exposes the same operations through its validated public IPC manifest; operation names are contract-tested in both transports.
+The primary navigation is **Projects**, **Prompt Kit**, **Quick Scratchpad**, **Settings**, and **System diagnostics**. Settings contains **General**, **Voices**, **Lexicon**, **Timings**, and **Retention**. Web requests use the manifest-backed `/api` surface for runtime diagnostics, projects, prompt export, previews, render plans and renders, pacing, preferences, the global lexicon, the singleton connection, setup, voice catalogs, Scratchpad, and speech-cache controls. Electron exposes the same operations through its validated public IPC manifest; operation names are contract-tested in both transports.
+
+Projects can be searched by name or description. On narrow screens, the library
+stacks each project's description and audio statistics beneath its name. The
+shared Web and Electron interface uses a light editing canvas, a persistent
+navigation rail on larger screens, and a keyboard-accessible navigation drawer
+on smaller screens. **Skip to workspace** bypasses navigation; project tabs stay
+in reach while scrolling. Project details expand to reveal names, descriptions,
+and management actions; audio estimates follow the script. The Prompt Kit editor
+scrolls within its panel.
 
 New installations include built-in Global Lexicon defaults for common acronyms and ambiguous pronunciations. Named-sense aliases use `word/sense` directly in scripts, such as `resume/cv`. Built-in entries can only be enabled or disabled. Add fully editable Custom Lexicon entries for personal rules; reimporting the bundled Global Lexicon catalog restores only built-ins and preserves every custom entry.
 

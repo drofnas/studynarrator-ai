@@ -26,7 +26,6 @@ export function ProjectConfigurationPanel({
       <section>
         <div className={styles.sectionHeading}>
           <div>
-            <span>Discovered</span>
             <h3>Speakers</h3>
           </div>
           <b>
@@ -36,6 +35,9 @@ export function ProjectConfigurationPanel({
             }
           </b>
         </div>
+        <p className={styles.overflowHint}>
+          Scroll horizontally for voice, speed, and gain controls →
+        </p>
         <div
           className={styles.speakerTableScroll}
           role="region"
@@ -188,7 +190,6 @@ export function ProjectLexiconPanel({
     >
       <div className={styles.sectionHeading}>
         <div>
-          <span>Project pronunciation</span>
           <h3 id="project-lexicon-heading">Project lexicon</h3>
         </div>
         <b>{projectLexicon.length} entries</b>
