@@ -272,7 +272,6 @@ export function ScratchpadPage({
     <div className={styles.page}>
       <header className={styles.pageHeader}>
         <div>
-          <p className={styles.kicker}>One passage · one request</p>
           <h2>Quick Scratchpad</h2>
           <p>Test a voice or pronunciation without touching a project.</p>
         </div>
@@ -283,7 +282,6 @@ export function ScratchpadPage({
         aria-label="Scratchpad synthesis controls"
       >
         <div className={styles.setupHeading}>
-          <span className={styles.step}>Signal path</span>
           <h3>Voice setup</h3>
         </div>
         <div className={styles.setupGrid}>
@@ -370,7 +368,6 @@ export function ScratchpadPage({
         <section className={styles.passagePanel}>
           <div className={styles.sectionHeading}>
             <div>
-              <span className={styles.step}>Source</span>
               <h3>Short passage</h3>
             </div>
             <b>{text.length} / 1200</b>

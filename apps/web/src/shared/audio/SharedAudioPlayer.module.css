@@ -5,11 +5,11 @@
   align-items: center;
   padding: 18px;
   color: white;
-  background: #10293f;
-  border-left: 6px solid var(--copper);
+  background: var(--nav);
+  border-radius: var(--radius-panel);
 }
 .player[data-disabled="true"] {
-  color: #b7c0c5;
+  color: var(--nav-muted);
   filter: grayscale(1);
   opacity: 0.58;
 }
@@ -27,12 +27,10 @@
 }
 .identity span,
 .state {
-  color: #9ed8d3;
-  font:
-    700 0.62rem ui-monospace,
-    monospace;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  color: #c7baff;
+  font: 700 0.75rem var(--font-ui);
+  letter-spacing: normal;
+  text-transform: none;
 }
 .identity strong {
   overflow: hidden;
@@ -49,8 +47,8 @@
 .volume button {
   min-height: 36px;
   padding: 0 11px;
-  border-color: #d7e4e7;
-  font-size: 0.72rem;
+  border-color: var(--nav-line);
+  font-size: 0.8125rem;
 }
 .secondary {
   color: white;
@@ -60,8 +58,9 @@
   position: relative;
   height: 54px;
   overflow: hidden;
-  background: #17374e;
-  border: 1px solid #476477;
+  background: var(--nav-hover);
+  border: 1px solid var(--nav-line);
+  border-radius: 6px;
   cursor: crosshair;
 }
 .signal svg {
@@ -69,7 +68,7 @@
   inset: 5px 0;
   width: 100%;
   height: calc(100% - 10px);
-  fill: #69d5c7;
+  fill: #b9abff;
   opacity: 0.8;
 }
 .signal input {
@@ -87,13 +86,13 @@
   height: 20px;
   inset: auto 6px 3px;
   width: calc(100% - 12px);
-  accent-color: #f1a770;
+  accent-color: #d7c9ff;
 }
 .played {
   position: absolute;
   inset: 0 auto 0 0;
-  border-right: 2px solid #f1a770;
-  background: rgb(241 167 112 / 13%);
+  border-right: 2px solid #d7c9ff;
+  background: rgb(185 171 255 / 18%);
   pointer-events: none;
 }
 .fallback {
@@ -103,31 +102,29 @@
   right: 8px;
   height: 8px;
   translate: 0 -50%;
-  background: #3e596c;
+  background: var(--nav-line);
 }
 .fallback i {
   display: block;
   height: 100%;
-  background: #69d5c7;
+  background: #b9abff;
 }
 .timeline {
   grid-column: 3;
   display: flex;
   justify-content: space-between;
-  color: #c5d6dc;
-  font:
-    0.68rem ui-monospace,
-    monospace;
+  color: var(--nav-muted);
+  font: 0.8125rem var(--font-ui);
 }
 .volume label {
   display: grid;
   gap: 2px;
-  color: #c5d6dc;
-  font-size: 0.62rem;
+  color: var(--nav-muted);
+  font-size: 0.75rem;
 }
 .volume input {
   width: 88px;
-  accent-color: #69d5c7;
+  accent-color: #b9abff;
 }
 .state {
   grid-column: 1 / 3;

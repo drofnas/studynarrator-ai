@@ -230,7 +230,6 @@ export function GeneralSettingsPage({
   return (
     <div className={`${styles.page} ${styles.singleColumnPage}`}>
       <header>
-        <p>Connection + storage</p>
         <h2>General</h2>
         <span>
           Manage the Speaches server, connection diagnostics, and disposable
@@ -251,7 +250,6 @@ export function GeneralSettingsPage({
       <section className={styles.connections}>
         <div className={styles.sectionHeading}>
           <div>
-            <p>Speaches server</p>
             <h3>Connection workshop</h3>
           </div>
           <button
@@ -371,7 +369,6 @@ export function GeneralSettingsPage({
               <div className={styles.diagnostics}>
                 <div className={styles.diagnosticHeader}>
                   <div>
-                    <p>Signal path</p>
                     <h4>{connectionSummary.overall}</h4>
                   </div>
                   <button
@@ -417,7 +414,6 @@ export function GeneralSettingsPage({
       <section className={styles.cache}>
         <div className={styles.sectionHeading}>
           <div>
-            <p>Disposable audio storage</p>
             <h3>Speech cache</h3>
           </div>
           <button

@@ -37,7 +37,7 @@ function renderPage(children: ReactNode) {
 }
 
 describe("General settings", () => {
-  it("shows the Signal path only for an actual connection error", async () => {
+  it("shows connection diagnostics only for an actual connection error", async () => {
     const connected = renderPage(
       <ConnectionProvider
         connectionClient={connectionClient({
@@ -52,7 +52,6 @@ describe("General settings", () => {
     expect(
       screen.getByRole("heading", { name: "General" }),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Signal path")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Export redacted JSON" }),
     ).not.toBeInTheDocument();
@@ -68,9 +67,8 @@ describe("General settings", () => {
         <GeneralSettingsPage cacheClient={cacheClient} />
       </ConnectionProvider>,
     );
-    expect(await screen.findByText("Signal path")).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "disconnected" }),
+      await screen.findByRole("heading", { name: "disconnected" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Export redacted JSON" }),
@@ -92,7 +90,6 @@ describe("General settings", () => {
     await waitFor(() =>
       expect(screen.getByLabelText("Address")).toHaveValue(""),
     );
-    expect(screen.queryByText("Signal path")).not.toBeInTheDocument();
   });
 
   it("shows session cache statistics and confirms clear-all", async () => {

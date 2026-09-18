@@ -161,7 +161,6 @@ export function VoicesSettingsPage({
   return (
     <div className={`${styles.page} ${styles.singleColumnPage}`}>
       <header>
-        <p>Catalog + audition</p>
         <h2>Voices</h2>
         <span>
           Browse the saved model’s voices, keep favorites close, and audition
@@ -177,7 +176,6 @@ export function VoicesSettingsPage({
       <section className={styles.catalog}>
         <div className={styles.sectionHeading}>
           <div>
-            <p>Versioned local catalog</p>
             <h3>Voice browser</h3>
           </div>
           <div className={styles.catalogMeta}>

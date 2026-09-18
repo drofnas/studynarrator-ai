@@ -79,8 +79,8 @@ test.describe("shell, onboarding, and runtime routes", () => {
     await expect(
       navigation.getByRole("link").allTextContents(),
     ).resolves.toEqual([
-      "Prompt Kit",
       "Projects",
+      "Prompt Kit",
       "Quick Scratchpad",
       "Settings",
       "General",
@@ -152,7 +152,9 @@ test.describe("shell, onboarding, and runtime routes", () => {
       page.getByRole("button", { name: "Close navigation" }),
     ).toBeFocused();
     await page.keyboard.press("Tab");
-    await expect(page.getByRole("link", { name: "Prompt Kit" })).toBeFocused();
+    await expect(
+      page.getByRole("link", { name: "Projects", exact: true }),
+    ).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(menu).toBeFocused();
 
@@ -245,19 +247,12 @@ test.describe("shell, onboarding, and runtime routes", () => {
     await expect(
       page.getByRole("tab", { name: "Script Editor" }),
     ).toHaveAttribute("aria-selected", "true");
-    const descriptionBox = await page.getByLabel("Description").boundingBox();
-    const saveBox = await page
-      .getByRole("button", { name: "Save now" })
-      .boundingBox();
-    expect(descriptionBox).not.toBeNull();
-    expect(saveBox).not.toBeNull();
-    expect(
-      Math.abs(
-        descriptionBox!.y +
-          descriptionBox!.height -
-          (saveBox!.y + saveBox!.height),
-      ),
-    ).toBeLessThanOrEqual(1);
+    const metadata = page.locator("summary", { hasText: "Project details" });
+    await metadata.click();
+    await expect(page.getByLabel("Description")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save now" })).toBeVisible();
+    await metadata.click();
+    await expect(page.getByLabel("Description")).toBeHidden();
     const tabList = page.getByRole("tablist", { name: "Project workspace" });
     expect(
       await tabList.evaluate((element) => element.getBoundingClientRect().top),
@@ -310,7 +305,7 @@ test.describe("shell, onboarding, and runtime routes", () => {
     await expect(scrollRegion).toBeVisible();
     expect(
       await scrollRegion.evaluate(
-        (element) => element.scrollWidth > element.clientWidth,
+        (element) => element.scrollWidth <= element.clientWidth + 1,
       ),
     ).toBe(true);
     expect(
@@ -329,7 +324,7 @@ test.describe("shell, onboarding, and runtime routes", () => {
     await projectLink.press("Enter");
     expect(
       await tabList.evaluate(
-        (element) => element.scrollWidth > element.clientWidth,
+        (element) => element.scrollWidth <= element.clientWidth + 1,
       ),
     ).toBe(true);
     await page.evaluate(() =>

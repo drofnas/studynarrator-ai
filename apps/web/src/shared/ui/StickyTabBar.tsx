@@ -6,15 +6,22 @@ export function StickyTabBar({
   actionsLabel = "Tab actions",
   actions,
   children,
+  fit = false,
 }: {
   label: string;
   actionsLabel?: string;
   actions?: ReactNode;
   children: ReactNode;
+  fit?: boolean;
 }) {
   return (
     <div className={styles.bar}>
-      <div className={styles.tabs} role="tablist" aria-label={label}>
+      <div
+        className={styles.tabs}
+        data-fit={fit}
+        role="tablist"
+        aria-label={label}
+      >
         {children}
       </div>
       {actions ? (

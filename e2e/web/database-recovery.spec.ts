@@ -228,3 +228,56 @@ test.describe("database recovery after a downgrade", () => {
     ).toBeEnabled();
   });
 });
+
+for (const viewport of [
+  { name: "desktop", width: 1440, height: 1000 },
+  { name: "mobile", width: 390, height: 844 },
+]) {
+  test(`keeps recovery and restore confirmation accessible on ${viewport.name}`, async ({
+    page,
+    studyNarrator,
+  }, testInfo) => {
+    await page.setViewportSize(viewport);
+    await page.goto(`${studyNarrator.baseUrl}/#/projects`);
+    await expect(recoveryHeading(page)).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            document.documentElement.scrollWidth -
+            document.documentElement.clientWidth,
+        ),
+      )
+      .toBeLessThanOrEqual(1);
+    const restoreButton = page
+      .getByRole("button", { name: "Restore from this backup" })
+      .first();
+    const restoreBounds = await restoreButton.boundingBox();
+    expect(restoreBounds).not.toBeNull();
+    expect(restoreBounds!.x).toBeGreaterThanOrEqual(0);
+    expect(restoreBounds!.x + restoreBounds!.width).toBeLessThanOrEqual(
+      viewport.width,
+    );
+    await page.screenshot({
+      path: testInfo.outputPath(`recovery-${viewport.name}.png`),
+      fullPage: true,
+    });
+    await page
+      .getByRole("button", { name: "Restore from this backup" })
+      .first()
+      .click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await page.screenshot({
+      path: testInfo.outputPath(`restore-${viewport.name}.png`),
+      fullPage: true,
+    });
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dialog).toBeHidden();
+    expect(
+      readMaximumSchemaVersion(
+        recoveryPaths(studyNarrator.dataDirectory).databasePath,
+      ),
+    ).toBe(99);
+  });
+}

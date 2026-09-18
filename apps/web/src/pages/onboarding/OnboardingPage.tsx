@@ -122,7 +122,6 @@ export function OnboardingPage() {
   return (
     <div className={styles.page}>
       <header>
-        <p>First run</p>
         <h2>Connect the voice workshop</h2>
         <span>
           Enter your Speaches server, review its first available model and
@@ -131,7 +130,6 @@ export function OnboardingPage() {
       </header>
       <section className={styles.guide}>
         <div>
-          <span>01</span>
           <h3>Enter the server address</h3>
           <p>
             StudyNarrator AI supports unauthenticated HTTP(S) Speaches servers
@@ -164,7 +162,6 @@ export function OnboardingPage() {
         }}
       >
         <div className={styles.heading}>
-          <span>02</span>
           <div>
             <h3>Load and review the catalog</h3>
             <p>The address is not saved until you choose Save and Test.</p>

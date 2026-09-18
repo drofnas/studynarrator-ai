@@ -63,19 +63,19 @@ export function ProjectWorkspace({
   } = controller;
 
   return (
-    <div className={styles.page}>
-      <Link className={styles.backLink} to="/projects">
-        ← Back to Projects
-      </Link>
-      <header className={styles.pageHeader}>
+    <div className={`${styles.page} ${styles.projectPage}`}>
+      <header className={styles.workspaceHeader}>
         <div>
-          <p className={styles.kicker}>Project workspace</p>
-          <h2>Project details</h2>
-          <p>
-            Shape the script, assign voices, inspect the narration score, then
-            render and listen.
-          </p>
+          <Link className={styles.backLink} to="/projects">
+            ← Back to Projects
+          </Link>
+          <h2>{draft?.name || "Project details"}</h2>
         </div>
+        {draft && project ? (
+          <button type="button" onClick={() => void saveNow()}>
+            Save now
+          </button>
+        ) : null}
       </header>
       {errors.length > 0 ? (
         <div className={styles.alert} role="alert">
@@ -96,57 +96,57 @@ export function ProjectWorkspace({
 
       {draft && project ? (
         <>
-          <section
-            className={styles.projectIdentity}
-            aria-label="Project details"
-          >
-            <label>
-              Project name
-              <input
-                value={draft.name}
-                onChange={(event) =>
-                  updateDraft((current) => ({
-                    ...current,
-                    name: event.target.value,
-                  }))
-                }
-              />
-            </label>
-            <label>
-              Description
-              <input
-                value={draft.description}
-                onChange={(event) =>
-                  updateDraft((current) => ({
-                    ...current,
-                    description: event.target.value,
-                  }))
-                }
-              />
-            </label>
-            <div className={styles.projectActions}>
-              <div className={styles.actionRow}>
-                <button type="button" onClick={() => void saveNow()}>
-                  Save now
-                </button>
-                <button
-                  type="button"
-                  className={styles.secondary}
-                  onClick={() => void duplicateProject()}
-                >
-                  Duplicate
-                </button>
-                <button
-                  type="button"
-                  className={styles.danger}
-                  onClick={() => void deleteProject()}
-                >
-                  Delete
-                </button>
+          <details className={styles.projectMetadata}>
+            <summary>Project details</summary>
+            <section
+              className={styles.projectIdentity}
+              aria-label="Project details"
+            >
+              <label>
+                Project name
+                <input
+                  value={draft.name}
+                  onChange={(event) =>
+                    updateDraft((current) => ({
+                      ...current,
+                      name: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label>
+                Description
+                <input
+                  value={draft.description}
+                  onChange={(event) =>
+                    updateDraft((current) => ({
+                      ...current,
+                      description: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <div className={styles.projectActions}>
+                <div className={styles.actionRow}>
+                  <button
+                    type="button"
+                    className={styles.secondary}
+                    onClick={() => void duplicateProject()}
+                  >
+                    Duplicate
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.danger}
+                    onClick={() => void deleteProject()}
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
-            </div>
-          </section>
-          <StickyTabBar label="Project workspace">
+            </section>
+          </details>
+          <StickyTabBar label="Project workspace" fit>
             {projectTabs.map(({ id, label }) => (
               <button
                 ref={(element) => {
@@ -221,7 +221,6 @@ export function ProjectWorkspace({
               >
                 <div className={styles.sectionHeading}>
                   <div>
-                    <span>Project audio</span>
                     <h3 id="render-listen-heading">Render and listen</h3>
                   </div>
                   {renderClient ? (
@@ -376,7 +375,6 @@ export function ProjectWorkspace({
               <section className={styles.validationPanel}>
                 <div className={styles.sectionHeading}>
                   <div>
-                    <span>Offline validation</span>
                     <h3>Narration score</h3>
                   </div>
                   <b>{dryRun?.rows.length ?? 0} ordered rows</b>
@@ -390,9 +388,17 @@ export function ProjectWorkspace({
                   {analysisError ? (
                     <p className={styles.fieldError}>{analysisError}</p>
                   ) : null}
+                  <p className={styles.overflowHint}>
+                    Scroll horizontally to compare the text and access audio
+                    controls →
+                  </p>
                   <div
                     className={styles.validationSummary}
-                    data-state={dryRun?.status ?? "blocked"}
+                    data-state={
+                      analysisState === "parsing"
+                        ? "parsing"
+                        : (dryRun?.status ?? "blocked")
+                    }
                   >
                     <strong>
                       {analysisState === "parsing"

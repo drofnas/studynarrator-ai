@@ -6,16 +6,7 @@
   padding: 40px 20px 64px;
   color: var(--ink);
 }
-.eyebrow {
-  margin: 0;
-  color: var(--signal);
-  font:
-    800 0.62rem ui-monospace,
-    monospace;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-h1 {
+.recovery h1 {
   margin: 0;
   font-size: 1.7rem;
   letter-spacing: -0.02em;
@@ -43,25 +34,26 @@ h1 {
 .meta small,
 .backups p small,
 .done p small {
-  color: #557080;
-  font:
-    800 0.56rem ui-monospace,
-    monospace;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  color: var(--text-secondary);
+  font: 600 0.75rem var(--font-ui);
+  letter-spacing: normal;
+  text-transform: none;
 }
 .meta code {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.68rem;
+  font-size: 0.8125rem;
 }
 .backups {
+  position: relative;
   display: grid;
+  min-width: 0;
   gap: 10px;
   border: 1px solid var(--line);
   background: var(--paper);
   padding: 16px;
+  overflow-x: auto;
 }
 .backups h2 {
   margin: 0;
@@ -69,24 +61,22 @@ h1 {
 }
 .backups p {
   margin: 0;
-  color: #456577;
+  color: var(--text-secondary);
   font-size: 0.8rem;
 }
 .backupTable {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.72rem;
+  font-size: 0.8125rem;
 }
 .backupTable th {
   padding: 8px 10px;
-  color: #557080;
-  font:
-    800 0.58rem ui-monospace,
-    monospace;
-  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  font: 600 0.75rem var(--font-ui);
+  letter-spacing: normal;
   text-align: left;
-  text-transform: uppercase;
-  border-bottom: 2px solid var(--ink);
+  text-transform: none;
+  border-bottom: 1px solid var(--line);
 }
 .backupTable td {
   padding: 10px;
@@ -107,7 +97,7 @@ h1 {
 .restore {
   min-height: 34px;
   padding: 0 12px;
-  font-size: 0.68rem;
+  font-size: 0.8125rem;
   white-space: nowrap;
 }
 .restore:hover:not(:disabled),
@@ -116,14 +106,10 @@ h1 {
   color: white;
   background: var(--ink);
 }
-.restore:disabled {
-  opacity: 0.55;
-}
 .alternative {
   display: grid;
   gap: 6px;
   border: 1px solid var(--line);
-  border-left: 5px solid var(--signal);
   background: var(--signal-pale);
   padding: 14px 16px;
 }
@@ -135,7 +121,7 @@ h1 {
 .alternative p {
   margin: 0;
   max-width: 80ch;
-  color: #35555f;
+  color: var(--ink);
   font-size: 0.8rem;
   line-height: 1.5;
 }
@@ -143,13 +129,12 @@ h1 {
   display: grid;
   gap: 8px;
   border: 1px solid var(--line);
-  border-left: 5px solid #178077;
-  background: #eef7f5;
+  background: var(--success-pale);
   padding: 14px 16px;
 }
 .done p {
   margin: 0;
-  color: #35655d;
+  color: var(--success);
   font-size: 0.8rem;
   line-height: 1.5;
 }
@@ -160,28 +145,28 @@ h1 {
   white-space: nowrap;
   display: inline-block;
   vertical-align: bottom;
-  font-size: 0.68rem;
+  font-size: 0.8125rem;
 }
 .restart {
   justify-self: start;
   min-height: 36px;
   padding: 0 16px;
-  font-size: 0.72rem;
-  background: #178077;
-  border-color: #178077;
+  font-size: 0.8125rem;
+  background: var(--success);
+  border-color: var(--success);
 }
 .error {
   margin: 0;
   padding: 10px 12px;
   color: var(--fault);
-  background: #fae8e8;
-  border-left: 4px solid var(--fault);
-  font-size: 0.76rem;
+  background: var(--fault-pale);
+  border-inline-start: 1px solid var(--line);
+  font-size: 0.8125rem;
 }
 .busy {
   margin: 0;
-  color: #456577;
-  font-size: 0.74rem;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
 }
 .srOnly {
   position: absolute;
@@ -213,18 +198,19 @@ h1 {
 }
 .dialog p {
   margin: 0;
-  color: #456577;
+  color: var(--text-secondary);
   line-height: 1.5;
 }
 .dialogActions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
 }
 .dialogActions button {
   min-height: 34px;
   padding: 0 14px;
-  font-size: 0.7rem;
+  font-size: 0.8125rem;
 }
 .danger {
   color: white;
@@ -233,6 +219,58 @@ h1 {
 }
 .danger:hover {
   color: white;
-  background: #9c3535;
-  border-color: #9c3535;
+  background: #92273a;
+  border-color: #92273a;
+}
+
+.backups,
+.alternative,
+.done,
+.dialog[open] {
+  border-radius: var(--radius-panel);
+}
+@media (max-width: 600px) {
+  .backupTable,
+  .backupTable tbody {
+    display: block;
+    width: 100%;
+  }
+  .backupTable thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .backupTable tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 12px;
+    padding-block: 16px;
+    border-top: 1px solid var(--line);
+  }
+  .backupTable td {
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    overflow-wrap: anywhere;
+  }
+  .backupTable td:first-child,
+  .backupTable td:last-child {
+    grid-column: 1 / -1;
+  }
+  .backupTable td[data-label]::before {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--text-secondary);
+    content: attr(data-label);
+  }
+  .backupTable code {
+    max-width: 100%;
+    white-space: normal;
+  }
+  .restore {
+    width: 100%;
+    min-height: 40px;
+  }
 }

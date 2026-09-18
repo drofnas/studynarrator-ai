@@ -8,15 +8,15 @@
 .grid article {
   min-width: 0;
   padding: 18px;
-  background: #eef4f4;
+  background: var(--mist);
 }
 .grid p {
   margin: 0 0 8px;
-  color: #557080;
-  font-size: 0.76rem;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 @media (max-width: 720px) {

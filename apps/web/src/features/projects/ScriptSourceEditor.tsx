@@ -118,9 +118,10 @@ export const ScriptSourceEditor = forwardRef<
     value: string;
     onChange: (value: string) => void;
     ariaLabel?: string;
+    scrollWithin?: boolean;
   }
 >(function ScriptSourceEditor(
-  { value, onChange, ariaLabel = "Script source" },
+  { value, onChange, ariaLabel = "Script source", scrollWithin = false },
   ref,
 ) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -157,6 +158,7 @@ export const ScriptSourceEditor = forwardRef<
     viewRef.current = view;
 
     const scrollPageFromEditorWheel = (event: WheelEvent) => {
+      if (scrollWithin) return;
       if (event.ctrlKey || event.metaKey || event.deltaY === 0) return;
       const pageWindow = host.ownerDocument.defaultView;
       if (!pageWindow) return;
@@ -182,7 +184,7 @@ export const ScriptSourceEditor = forwardRef<
       viewRef.current = undefined;
       view.destroy();
     };
-  }, [ariaLabel]);
+  }, [ariaLabel, scrollWithin]);
 
   useEffect(() => {
     const view = viewRef.current;

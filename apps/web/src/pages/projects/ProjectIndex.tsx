@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "react-router";
 import styles from "./ProjectsPage.module.css";
 import {
@@ -23,13 +24,21 @@ export function ProjectIndex({
     setNewDescription,
     createProject,
   } = controller;
+  const [search, setSearch] = useState("");
+  const query = search.trim().toLocaleLowerCase();
+  const visibleProjects = projects.filter((project) =>
+    `${project.name} ${project.description}`
+      .toLocaleLowerCase()
+      .includes(query),
+  );
   return (
     <div className={styles.page}>
       <header className={styles.pageHeader}>
         <div>
-          <p className={styles.kicker}>Project index</p>
           <h2>Projects</h2>
-          <p>Open a narration workspace or start a new study guide.</p>
+          <p>
+            Your study material, ready to become something you can listen to.
+          </p>
         </div>
         <button
           type="button"
@@ -63,7 +72,6 @@ export function ProjectIndex({
           }}
         >
           <div>
-            <p className={styles.kicker}>New workspace</p>
             <h3>Create project</h3>
           </div>
           <label>
@@ -104,12 +112,25 @@ export function ProjectIndex({
         aria-labelledby="project-index-heading"
       >
         <div className={styles.sectionHeading}>
-          <div>
-            <span>Authoring ledger</span>
+          <div className={styles.libraryHeading}>
             <h3 id="project-index-heading">All projects</h3>
+            <span className={styles.projectCount}>{projects.length}</span>
           </div>
-          <b>{projects.length}</b>
+          <label className={styles.projectSearch}>
+            <span>Search projects</span>
+            <input
+              type="search"
+              placeholder="Search by name or description…"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </label>
         </div>
+        <p className={styles.searchStatus} role="status">
+          {query
+            ? `${visibleProjects.length} matching ${visibleProjects.length === 1 ? "project" : "projects"}`
+            : ""}
+        </p>
         <div className={styles.projectTableScroll} tabIndex={0}>
           <table className={styles.projectTable}>
             <thead>
@@ -128,11 +149,39 @@ export function ProjectIndex({
               ) : projects.length === 0 ? (
                 <tr>
                   <td colSpan={4}>
-                    No projects yet. Create the first study guide.
+                    <div className={styles.libraryEmpty}>
+                      <h3>Make room for your first study guide</h3>
+                      <p>
+                        Create a project to write a script, choose voices, and
+                        turn your notes into audio.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setNewProjectOpen(true)}
+                      >
+                        Create your first project
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ) : visibleProjects.length === 0 ? (
+                <tr>
+                  <td colSpan={4}>
+                    <div className={styles.libraryEmpty}>
+                      <h3>No matching projects</h3>
+                      <p>Try another name or a word from the description.</p>
+                      <button
+                        type="button"
+                        className={styles.secondary}
+                        onClick={() => setSearch("")}
+                      >
+                        Clear search
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ) : (
-                projects.map((item) => (
+                visibleProjects.map((item) => (
                   <tr className={styles.projectRow} key={item.id}>
                     <th scope="row">
                       <Link
@@ -143,8 +192,12 @@ export function ProjectIndex({
                       </Link>
                     </th>
                     <td>{item.description || "-"}</td>
-                    <td>{item.scriptLineCount?.toLocaleString() ?? "-"}</td>
-                    <td>{formatAudioDuration(item.audioDurationMs)}</td>
+                    <td data-label="Script lines">
+                      {item.scriptLineCount?.toLocaleString() ?? "-"}
+                    </td>
+                    <td data-label="Audio length">
+                      {formatAudioDuration(item.audioDurationMs)}
+                    </td>
                   </tr>
                 ))
               )}

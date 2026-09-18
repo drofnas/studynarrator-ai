@@ -70,11 +70,11 @@ test.describe("external-LLM script generation", () => {
     if (!createBox || !updateBox || !actionsBox || !barBox || !panelBox)
       throw new Error("Expected Prompt Kit layout boxes.");
     expect(Math.abs(createBox.y - updateBox.y)).toBeLessThan(1);
-    expect(createBox.width).toBeGreaterThanOrEqual(150);
-    expect(updateBox.width).toBeGreaterThanOrEqual(150);
-    expect(Math.abs(createBox.x + createBox.width - updateBox.x)).toBeLessThan(
-      1,
-    );
+    expect(createBox.width).toBeGreaterThanOrEqual(132);
+    expect(updateBox.width).toBeGreaterThanOrEqual(132);
+    expect(
+      Math.abs(createBox.x + createBox.width + 4 - updateBox.x),
+    ).toBeLessThan(1);
     expect(updateBox.x + updateBox.width).toBeLessThanOrEqual(actionsBox.x + 1);
     expect(Math.abs(barBox.width - panelBox.width)).toBeLessThan(1);
     await expect(
@@ -91,19 +91,22 @@ test.describe("external-LLM script generation", () => {
       )
         throw new Error("Expected CodeMirror layout elements.");
       return {
-        availableWidth: panel.clientWidth,
-        editorWidth: editor.getBoundingClientRect().width,
+        availableWidth:
+          panel.clientWidth -
+          parseFloat(getComputedStyle(panel).paddingLeft) -
+          parseFloat(getComputedStyle(panel).paddingRight),
+        editorWidth: editor.parentElement?.getBoundingClientRect().width ?? 0,
         editorMaxHeight: getComputedStyle(editor).maxHeight,
         scrollerMaxHeight: getComputedStyle(scroller).maxHeight,
         scrollerOverflowY: getComputedStyle(scroller).overflowY,
       };
     });
     expect(editorLayout.editorWidth).toBeGreaterThanOrEqual(
-      editorLayout.availableWidth - 42,
+      editorLayout.availableWidth - 1,
     );
     expect(editorLayout.editorMaxHeight).toBe("none");
     expect(editorLayout.scrollerMaxHeight).toBe("none");
-    expect(editorLayout.scrollerOverflowY).toBe("visible");
+    expect(editorLayout.scrollerOverflowY).toBe("auto");
     await expect(page.getByRole("link", { name: "View Projects" })).toHaveCount(
       0,
     );
@@ -111,7 +114,10 @@ test.describe("external-LLM script generation", () => {
       page.getByRole("button", { name: /both prompts/u }),
     ).toHaveCount(0);
 
-    await creationEditor.evaluate((el) => el.scrollIntoView({ block: "end" }));
+    await creationEditor.evaluate((el) => {
+      const scroller = el.closest(".cm-scroller");
+      if (scroller) scroller.scrollTop = scroller.scrollHeight;
+    });
     await expect(creationEditor).toContainText(
       "[PASTE SOURCE MATERIAL HERE AND/OR ATTACH RELEVANT FILES TO THE CONVERSATION.]",
     );
@@ -152,7 +158,10 @@ test.describe("external-LLM script generation", () => {
         /USER INPUT section at the end asks for the requested changes/u,
       ),
     ).toBeVisible();
-    await updateEditor.evaluate((el) => el.scrollIntoView({ block: "end" }));
+    await updateEditor.evaluate((el) => {
+      const scroller = el.closest(".cm-scroller");
+      if (scroller) scroller.scrollTop = scroller.scrollHeight;
+    });
     await expect(updateEditor).toContainText(
       "[OPTIONAL — PROVIDE FACTS, RESEARCH, SOURCE MATERIAL, CONSTRAINTS, OR ATTACH RELEVANT FILES.]",
     );
@@ -175,27 +184,29 @@ test.describe("external-LLM script generation", () => {
         (_value, index) => `PROMPT LINE ${String(index + 1)}`,
       ).join("\n"),
     );
-    await page.evaluate(() =>
-      window.scrollTo(0, document.documentElement.scrollHeight),
-    );
-    await expect
-      .poll(() =>
-        promptBar.evaluate((element) =>
-          Math.round(element.getBoundingClientRect().top),
-        ),
-      )
-      .toBe(0);
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.evaluate(() =>
-      window.scrollTo(0, document.documentElement.scrollHeight),
-    );
-    await expect
-      .poll(() =>
-        promptBar.evaluate((element) =>
-          Math.round(element.getBoundingClientRect().top),
-        ),
-      )
-      .toBe(58);
+    const scroller = page.locator(".cm-scroller");
+    for (const viewport of [
+      { width: 1280, height: 720 },
+      { width: 390, height: 844 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await scroller.evaluate((element) => {
+        element.scrollTop = 0;
+      });
+      await scroller.hover();
+      const pageScroll = await page.evaluate(() => window.scrollY);
+      await page.mouse.wheel(0, 400);
+      await expect
+        .poll(() => scroller.evaluate((element) => element.scrollTop))
+        .toBeGreaterThan(0);
+      expect(await page.evaluate(() => window.scrollY)).toBe(pageScroll);
+      expect(
+        await scroller.evaluate((element) => element.clientHeight),
+      ).toBeLessThan(viewport.height);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await expect(createTab).toBeVisible();
+      await expect(promptActions).toBeVisible();
+    }
     expect(
       await page.evaluate(
         () =>

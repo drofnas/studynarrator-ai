@@ -223,6 +223,16 @@ export function AppShell() {
 
   return (
     <div className={styles.shell}>
+      <a
+        className={styles.skipLink}
+        href="#workspace-content"
+        onClick={(event) => {
+          event.preventDefault();
+          document.getElementById("workspace-content")?.focus();
+        }}
+      >
+        Skip to workspace
+      </a>
       <header className={styles.mobileBar}>
         <span className={styles.mobileBrand}>StudyNarrator AI</span>
         <button
@@ -269,7 +279,7 @@ export function AppShell() {
             </span>
             <span>
               <strong>StudyNarrator AI</strong>
-              <small>Authoring room</small>
+              <small>Your study, in audio</small>
             </span>
           </Link>
           <button
@@ -284,21 +294,18 @@ export function AppShell() {
         </div>
 
         <nav className={styles.navigation} aria-label="StudyNarrator AI tools">
-          <Link
-            className={styles.promptAction}
-            data-active={promptActive}
-            aria-current={promptActive ? "page" : undefined}
-            to={APP_PATHS.scriptPrompts}
-          >
-            <Icon name="prompt" />
-            <span>Prompt Kit</span>
-          </Link>
           <div className={styles.navLinks}>
             {navigationLink(
               APP_PATHS.projects,
               "Projects",
               "projects",
               projectsActive,
+            )}
+            {navigationLink(
+              APP_PATHS.scriptPrompts,
+              "Prompt Kit",
+              "prompt",
+              promptActive,
             )}
             {navigationLink(
               APP_PATHS.scratchpad,
@@ -360,7 +367,7 @@ export function AppShell() {
           <span className={styles.version}>Version 0.1.0</span>
         </div>
       </aside>
-      <div className={styles.content}>
+      <div id="workspace-content" tabIndex={-1} className={styles.content}>
         <Suspense fallback={<p role="status">Loading page…</p>}>
           <Outlet />
         </Suspense>
