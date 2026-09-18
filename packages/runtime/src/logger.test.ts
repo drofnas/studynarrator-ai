@@ -31,7 +31,7 @@ afterEach(() => {
     rmSync(directory, { recursive: true, force: true });
 });
 
-describe.sequential("createLogger", () => {
+describe("createLogger", { concurrent: false }, () => {
   it("resolves an explicit level before the environment and defaults to info", () => {
     process.env.STUDYNARRATOR_LOG_LEVEL = "error";
     const level: LoggerLevel = "debug";
