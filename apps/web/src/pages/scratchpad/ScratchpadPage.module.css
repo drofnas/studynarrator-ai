@@ -22,17 +22,10 @@
   padding: 24px;
   border-radius: var(--radius-panel);
 }
-.controls {
-  padding: 24px;
-  border-radius: var(--radius-panel);
-}
 .setupHeading {
   display: flex;
   gap: 14px;
   align-items: baseline;
-}
-.setupHeading .step {
-  margin: 0;
 }
 .controls h3,
 .passagePanel h3 {
@@ -84,7 +77,6 @@
 }
 .passagePanel {
   padding: 18px;
-  border-top: 1px solid var(--line);
 }
 .sectionHeading {
   display: flex;

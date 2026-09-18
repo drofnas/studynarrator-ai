@@ -21,16 +21,6 @@
   grid-column: 1 / -1;
   padding-bottom: 8px;
 }
-.page > header p,
-.sectionHeading p,
-.pacing > div p,
-.diagnosticHeader p {
-  margin: 0 0 7px;
-  color: var(--signal);
-  font: 600 0.8125rem var(--font-ui);
-  letter-spacing: normal;
-  text-transform: none;
-}
 .page > header h2 {
   margin: 0;
   font: 650 2rem/1.2 var(--font-ui);
@@ -41,6 +31,8 @@
   max-width: 700px;
   margin-top: 12px;
   color: var(--text-secondary);
+  font-size: 0.9375rem;
+  line-height: 1.6;
 }
 .page > .error,
 .page > .status {
@@ -70,7 +62,6 @@
 }
 .catalog {
   grid-column: 1 / -1;
-  border-top-color: var(--line);
 }
 .globalLexicon {
   grid-column: 1 / -1;
@@ -116,34 +107,6 @@
   letter-spacing: normal;
   text-transform: none;
 }
-.connectionGrid {
-  display: grid;
-  grid-template-columns: 250px minmax(0, 1fr);
-  gap: 18px;
-}
-.profileList {
-  display: grid;
-  gap: 6px;
-  align-content: start;
-}
-.profileList button {
-  display: grid;
-  gap: 4px;
-  min-height: 0;
-  padding: 12px;
-  color: var(--ink);
-  text-align: left;
-  background: white;
-  border: 1px solid var(--line);
-}
-.profileList button[data-active="true"] {
-  color: white;
-  background: var(--ink);
-  border-inline-start: 1px solid var(--line);
-}
-.profileList span {
-  font-size: 0.8125rem;
-}
 .connectionForm {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -188,15 +151,6 @@
   color: var(--text-secondary);
   background: var(--line);
 }
-.managed,
-.keyState {
-  grid-column: 1 / -1;
-  margin: 0;
-  padding: 10px;
-  background: var(--signal-pale);
-  font-size: 0.8125rem;
-  font-weight: 600;
-}
 .inline {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -207,14 +161,6 @@
   gap: 5px;
   font-size: 0.8125rem;
   font-weight: 600;
-}
-.check {
-  display: flex !important;
-  align-items: center;
-  gap: 7px !important;
-}
-.check input {
-  width: auto;
 }
 .actions {
   grid-column: 1 / -1;
@@ -250,12 +196,6 @@
   padding: 10px;
   background: white;
   border-top: 1px solid var(--line);
-}
-.diagnostics li[data-status="pass"] {
-  border-top-color: var(--line);
-}
-.diagnostics li[data-status="fail"] {
-  border-top-color: var(--line);
 }
 .diagnostics li > b {
   color: var(--text-secondary);
@@ -308,9 +248,6 @@
   color: var(--ink);
   border-bottom: 1px solid var(--line);
 }
-.voiceGroup[data-group="favorites"] .voiceGroupRibbon {
-  border-left-color: var(--warning);
-}
 .voiceGroupRibbon strong {
   font: 600 0.8125rem var(--font-ui);
   letter-spacing: normal;
@@ -336,9 +273,6 @@
   display: grid;
   gap: 3px;
   min-width: 0;
-}
-.voiceList article[data-enabled="false"] {
-  border-left-color: var(--line);
 }
 .voiceList article[data-enabled="false"] > div:first-child {
   opacity: 0.58;
@@ -379,11 +313,6 @@
 .auditionButton:focus-visible {
   outline: 3px solid color-mix(in srgb, var(--signal) 35%, transparent);
   outline-offset: 2px;
-}
-.favoriteButton:disabled,
-.auditionButton:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
 }
 .favoriteButton svg,
 .auditionButton svg {
@@ -510,14 +439,6 @@
 }
 .cache {
   align-self: start;
-  border-top-color: var(--line);
-}
-.cache .sectionHeading p {
-  margin: 0 0 7px;
-  color: var(--signal);
-  font: 600 0.8125rem var(--font-ui);
-  letter-spacing: normal;
-  text-transform: none;
 }
 .cacheGrid {
   display: grid;
@@ -536,11 +457,16 @@
   font-size: 0.8125rem;
   font-weight: 500;
 }
-.cacheGrid code,
-.cache > p {
+.cacheGrid code {
   color: var(--text-secondary);
   font-size: 0.8125rem;
   line-height: 1.45;
+}
+.cache > p {
+  max-width: 75ch;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.65;
 }
 .cacheControls {
   display: grid;
@@ -570,13 +496,10 @@
   }
 }
 @media (max-width: 700px) {
-  .connectionGrid,
   .connectionForm,
   .transitionGrid {
     grid-template-columns: 1fr;
   }
-  .managed,
-  .keyState,
   .actions {
     grid-column: 1;
   }
@@ -604,15 +527,6 @@
 }
 .page > .status:empty {
   display: none;
-}
-.page > header span {
-  font-size: 0.9375rem;
-  line-height: 1.6;
-}
-.cache > p {
-  max-width: 75ch;
-  font-size: 0.875rem;
-  line-height: 1.65;
 }
 @media (max-width: 560px) {
   .connections,

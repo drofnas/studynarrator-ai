@@ -53,6 +53,7 @@
   border: 1px solid var(--line);
   background: var(--paper);
   padding: 16px;
+  overflow-x: auto;
 }
 .backups h2 {
   margin: 0;
@@ -105,14 +106,10 @@
   color: white;
   background: var(--ink);
 }
-.restore:disabled {
-  opacity: 0.55;
-}
 .alternative {
   display: grid;
   gap: 6px;
   border: 1px solid var(--line);
-  border-inline-start: 1px solid var(--line);
   background: var(--signal-pale);
   padding: 14px 16px;
 }
@@ -132,7 +129,6 @@
   display: grid;
   gap: 8px;
   border: 1px solid var(--line);
-  border-inline-start: 1px solid var(--line);
   background: var(--success-pale);
   padding: 14px 16px;
 }
@@ -207,6 +203,7 @@
 }
 .dialogActions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
 }
@@ -231,12 +228,6 @@
 .done,
 .dialog[open] {
   border-radius: var(--radius-panel);
-}
-.backups {
-  overflow-x: auto;
-}
-.dialogActions {
-  flex-wrap: wrap;
 }
 @media (max-width: 600px) {
   .backupTable,

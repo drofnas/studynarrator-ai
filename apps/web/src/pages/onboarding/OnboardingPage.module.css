@@ -9,15 +9,6 @@
   grid-column: 1 / -1;
   padding: 0 0 16px;
 }
-.page > header p,
-.heading > span,
-.guide > div:first-child > span {
-  margin: 0 0 7px;
-  color: var(--signal);
-  font: 600 0.8125rem var(--font-ui);
-  letter-spacing: normal;
-  text-transform: none;
-}
 .page > header h2 {
   max-width: 800px;
   margin: 0;
@@ -31,16 +22,14 @@
   color: var(--text-secondary);
 }
 .guide,
-.form,
-.existing {
+.form {
   padding: 28px;
   background: var(--paper);
   border: 1px solid var(--line);
   border-radius: var(--radius-panel);
 }
 .guide h3,
-.form h3,
-.existing h3 {
+.form h3 {
   margin: 0;
 }
 .guide p,
@@ -65,9 +54,6 @@
   color: var(--signal);
   font-weight: 600;
 }
-.form {
-  border-top-color: var(--line);
-}
 .heading {
   display: flex;
   gap: 14px;
@@ -75,7 +61,7 @@
 .form label {
   display: grid;
   gap: 5px;
-  margin-top: 13px;
+  margin-top: 20px;
   font-size: 0.8125rem;
   font-weight: 600;
 }
@@ -87,16 +73,11 @@
   color: var(--text-secondary);
   font-weight: 500;
 }
-.managed {
-  padding: 11px;
-  background: var(--mist);
-  font-weight: 600;
-}
 .actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 18px;
+  margin-top: 24px;
 }
 .offline {
   color: var(--ink);
@@ -107,36 +88,18 @@
   color: var(--fault);
   font-weight: 600;
 }
-.existing {
-  grid-column: 1 / -1;
-}
-.existing article {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 14px;
-  align-items: center;
-  padding: 12px 0;
-  border-top: 1px solid var(--line);
-}
-.existing article div {
-  display: grid;
-  gap: 4px;
-}
-.existing article span {
-  color: var(--text-secondary);
-  font-size: 0.8125rem;
-  font-weight: 600;
-}
 @media (max-width: 780px) {
   .page {
     grid-template-columns: 1fr;
   }
-  .page > header,
-  .existing {
+  .page > header {
     grid-column: 1;
   }
-  .existing article {
-    grid-template-columns: 1fr;
+  .form {
+    grid-row: 2;
+  }
+  .guide {
+    grid-row: 3;
   }
 }
 
@@ -145,27 +108,12 @@
   background: transparent;
   border: 0;
 }
-.form label {
-  margin-top: 20px;
-}
 .heading p {
   font-size: 0.875rem;
   line-height: 1.6;
 }
-.actions {
-  margin-top: 24px;
-}
 @media (max-width: 560px) {
   .form {
     padding: 20px;
-  }
-}
-
-@media (max-width: 780px) {
-  .form {
-    grid-row: 2;
-  }
-  .guide {
-    grid-row: 3;
   }
 }
