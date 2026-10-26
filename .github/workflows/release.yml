@@ -1,6 +1,11 @@
 name: Release unsigned desktop installers
 
+# Installer builds run only for pull requests into the release branch (build
+# check) and for release tags (build plus draft release).
 on:
+  pull_request:
+    branches:
+      - release
   push:
     tags:
       - "v*"
@@ -75,6 +80,7 @@ jobs:
   release:
     name: Create draft release
     needs: package
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write

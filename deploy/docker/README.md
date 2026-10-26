@@ -91,9 +91,10 @@ raw findings. Malformed reports, stale exceptions, and changed or expired
 assessment evidence fail verification.
 
 The [reusable Docker workflow](../../.github/workflows/docker-verification.yml)
-runs this full verification through CI for pull requests and main pushes, and
-directly for `v*` tags, manual dispatch, and Mondays at 06:23 UTC. Checkout uses
-the triggering revision; a green earlier branch run does not certify a tag.
+runs this full verification through CI for pull requests into the `integration`
+and `release` branches, and directly on manual dispatch. It does not run for
+pull requests into the default branch, default-branch pushes, tags, or a
+schedule. Checkout uses the triggering revision.
 The job requires no registry login or repository secret, has a 30-minute timeout,
 cancels obsolete runs for the same workflow/ref, and always removes its disposable
 environment. Only the inventory, Trivy JSON, and applicability assessment are

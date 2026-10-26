@@ -3,11 +3,6 @@ name: Docker verification
 on:
   workflow_call:
   workflow_dispatch:
-  push:
-    tags:
-      - "v*"
-  schedule:
-    - cron: "23 6 * * 1"
 
 permissions:
   contents: read

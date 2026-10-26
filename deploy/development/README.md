@@ -139,7 +139,8 @@ docker rm studynarrator-package-linux
 ```
 
 Exported installers are ignored by Git and Docker builds. macOS and Windows
-packaging runs on matching GitHub Actions hosts.
+packaging runs on matching GitHub Actions hosts for pull requests into `release`
+and for `v*` tags.
 
 ## Stop and clean up
 
