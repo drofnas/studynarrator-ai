@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
 import { unzipSync } from "fflate";
@@ -214,7 +215,13 @@ test.describe("Electron acceptance", () => {
     await page.getByRole("link", { name: "System diagnostics" }).click();
     await page.getByRole("button", { name: "Run self-test" }).click();
     await expect(page.getByText("IPC", { exact: true })).toBeVisible();
-    await expect(page.getByText(/Electron 43/u)).toBeVisible();
+    const { version } = createRequire(resolve("apps/desktop/package.json"))(
+      "electron/package.json",
+    ) as { version: string };
+    const electronMajor = version.split(".")[0];
+    await expect(
+      page.getByText(new RegExp(`Electron ${electronMajor}`, "u")),
+    ).toBeVisible();
   });
 
   test("persists project UI state across a desktop relaunch", async ({

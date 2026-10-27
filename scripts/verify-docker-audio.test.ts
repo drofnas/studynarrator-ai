@@ -83,7 +83,7 @@ describe("restricted FFmpeg image assessment", () => {
         imageId,
         justification: "vulnerable_code_not_present",
         absentObject: "libavcodec/cfhd.o",
-        expiresAt: "2026-10-14T00:00:00Z",
+        expiresAt: "2026-11-26T00:00:00Z",
       }),
     ]);
     expect(JSON.stringify(input.report)).toBe(raw);
@@ -147,7 +147,7 @@ describe("restricted FFmpeg image assessment", () => {
     [
       "expired assessment",
       (input) => {
-        input.now = Date.parse("2026-10-14");
+        input.now = Date.parse("2026-11-26");
       },
     ],
     [
