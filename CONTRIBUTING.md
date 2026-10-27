@@ -36,11 +36,18 @@ image, vulnerability, browser, persistence, and cleanup checks. It returns a
 nonzero exit code if any gate fails. Real macOS/Windows release checks stay in
 native CI; they are not prerequisites on a contributor's workstation.
 
-Pull requests must pass the GitHub Actions `check / check` status, emitted by
-the `CI` workflow's `check` caller and the reusable workflow's `check` job.
-It uses this same Docker command. After changing job names or reusable workflow
-calls, compare the actual PR check name with the default branch's required
-status; an obsolete name leaves GitHub waiting indefinitely. Generated reports
+Hosted CI runs only for pull requests into the `integration` and `release`
+branches (and manual dispatch); pull requests into the default branch run no
+Actions and have no pre-push or pre-commit full-suite hook, so run the verifier
+locally when you want that confidence. Pull requests into `integration` and
+`release` must pass the GitHub Actions `check / check` status, emitted by the
+`CI` workflow's `check` caller and the reusable workflow's `check` job. The
+desktop installer build in `release.yml` additionally runs for pull requests
+into `release` and for `v*` tags. CI uses this same Docker command. Do not
+mark `check / check` required on the default branch, since it never runs there.
+After changing job names or reusable workflow calls, compare the actual PR check
+name with the required status on `integration` and `release`; an obsolete name
+leaves GitHub waiting indefinitely. Generated reports
 can be copied from the stopped verification container before cleaning up; see
 the development guide.
 

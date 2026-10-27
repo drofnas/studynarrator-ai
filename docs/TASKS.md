@@ -451,6 +451,9 @@ npm run verify:docker
 
 ### R07: Enforce coverage and dead-code checks in pull-request CI
 
+**Scope note (2026-10-26):** Hosted CI now targets pull requests into
+`integration` and `release` only, not the default branch; see `CONTRIBUTING.md`.
+
 **Slice status (2026-09-14):** R07a is complete: CI runs Knip and combined
 coverage, and the active default-branch ruleset requires the GitHub Actions
 `check` job. [Completion evidence](implement-prd-stories/r07a-ci-coverage-knip.md).
@@ -634,8 +637,9 @@ require a green check for the exact revision.
 **Work:**
 
 1. Put the full verifier job in a reusable workflow. CI calls it for pull
-   requests and every push to `main`. Weekly, manual, and `v*` tag runs use the
-   same job and checked-out revision. Do not add a native packaging dependency.
+   requests into `integration` and `release`. Manual runs use the same job and
+   checked-out revision (superseded 2026-10-26: no default-branch, tag, or
+   weekly runs). Do not add a native packaging dependency.
 2. Check Docker, Buildx, and Compose availability, then use
    `compose.development.yaml` for the pinned Node/npm/Trivy toolchain, `npm ci`,
    Chromium/Firefox, and Linux Electron. Keep actions pinned to full commit SHAs.
