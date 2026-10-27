@@ -1,6 +1,6 @@
 # Docker audio build applicability
 
-Reviewed 2026-09-14. Assessment expires 2026-10-14 UTC.
+Reviewed 2026-09-14; renewed 2026-10-27. Assessment expires 2026-11-26 UTC.
 
 ## Runtime change
 
@@ -85,6 +85,14 @@ The historical low-risk decision for CVE-2026-70632 still applies to the owner's
 trusted native local-use scenario. This Docker build instead receives a scoped
 `not_affected` assessment because CFHD code is absent. This does not assess
 host-installed FFmpeg or certify a CVE-free Electron distribution.
+
+## Renewal record
+
+2026-10-27: Debian's security tracker still lists all 16 CVEs as vulnerable in
+trixie `7:7.1.5-0+deb13u1` with no fixed trixie version, and no newer trixie
+FFmpeg source exists. The package version and source descriptor are unchanged,
+and no CVE was added. The verifier re-collects the object-absence evidence from
+the rebuilt image on every run.
 
 ## Update and validation
 

@@ -1,7 +1,7 @@
 // Exact build applicability, not a severity or local-use risk exception.
 // Sources and scope: docs/security/docker-audio-build.md.
 const version = "7:7.1.5-0+deb13u1";
-const expiresAt = "2026-10-14T00:00:00Z";
+const expiresAt = "2026-11-26T00:00:00Z";
 const affectedComponents = {
   "CVE-2026-58049": ["RASC_DECODER", "libavcodec/rasc.o"],
   "CVE-2026-64830": ["VOBSUB_DEMUXER", "libavformat/mpeg.o"],
