@@ -33,22 +33,23 @@ describe("Docker verification workflow", () => {
   });
   afterEach(() => rmSync(directory, { recursive: true, force: true }));
 
-  it("uses one bounded, read-only verifier for PR, main, tag, manual, and weekly runs", () => {
+  it("uses one bounded, read-only verifier for integration/release PR and manual runs", () => {
     expect(ci.errors).toEqual([]);
     expect(workflow.errors).toEqual([]);
     expect(ci.toJS()).toMatchObject({
-      on: { push: { branches: ["main"] }, pull_request: null },
+      on: { pull_request: { branches: ["integration", "release"] } },
       permissions: { contents: "read" },
       jobs: { check: { uses: "./.github/workflows/docker-verification.yml" } },
     });
+    expect(ci.getIn(["on", "push"])).toBeUndefined();
+    expect(workflow.getIn(["on", "push"])).toBeUndefined();
+    expect(workflow.getIn(["on", "schedule"])).toBeUndefined();
     expect(ci.getIn(["jobs", "check", "steps"])).toBeUndefined();
     expect(ci.getIn(["jobs", "check", "secrets"])).toBeUndefined();
     expect(workflow.toJS()).toMatchObject({
       on: {
         workflow_call: null,
         workflow_dispatch: null,
-        push: { tags: ["v*"] },
-        schedule: [{ cron: "23 6 * * 1" }],
       },
       permissions: { contents: "read" },
       jobs: {
