@@ -57,8 +57,6 @@ export default {
         "src/**/*.test.ts",
       ],
       project: ["src/**/*.{ts,css}"],
-      // electron-builder runs through npm exec and is not statically discoverable.
-      ignoreDependencies: ["electron-builder"],
     },
     "apps/fake-speaches": {
       entry: ["src/**/*.test.ts"],
