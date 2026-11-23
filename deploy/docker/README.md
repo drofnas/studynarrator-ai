@@ -27,7 +27,14 @@ The supplied Compose package publishes the Web UI on `127.0.0.1` only. Its `.env
 
 Follow the official [Speaches installation guide](https://speaches.ai/installation/) and [text-to-speech guide](https://speaches.ai/usage/text-to-speech/) for Speaches installation, hardware, model, and voice setup.
 
-Speaches keeps model memory after requests finish. On the Speaches Docker host, `scripts/speaches/speaches-status.sh` reports the container's memory, CPU, and open client connections, and recommends a restart (`Restart?: True`) when memory use is at or above the threshold and CPU use stays below the idle threshold for every sample in a short window. Open connections are informational only, because a reverse proxy such as Tailscale Serve keeps its connection to Speaches open while idle. The script only reports; a scheduled job on that host can act on its output. Override the defaults with `SPEACHES_CONTAINER` (`speaches`), `SPEACHES_PORT` (`8080`, the port inside the container), `SPEACHES_RESTART_MEMORY_THRESHOLD` (`5`, percent), `SPEACHES_IDLE_CPU_THRESHOLD` (`2`, percent), `SPEACHES_IDLE_SAMPLES` (`6`), and `SPEACHES_IDLE_INTERVAL_SECONDS` (`10`).
+Speaches keeps model memory after requests finish. On the Speaches Docker host, `scripts/speaches/speaches-idle-restart.sh` restarts the Speaches container once its CPU use has stayed below the idle threshold for 10 minutes while it still holds memory. Run it every minute; each run takes one CPU sample, records the last active time under `~/.local/state/speaches-idle-restart/`, and prints one log line. Open connections are ignored, because a reverse proxy such as Tailscale Serve keeps its connection to Speaches open while idle. Pass `--dry-run` to see the decision without restarting.
+
+```sh
+# crontab -e on the Speaches host (the user must be able to run docker)
+* * * * * /path/to/speaches-idle-restart.sh >> "$HOME/speaches-idle-restart.log" 2>&1
+```
+
+Override the defaults with `SPEACHES_CONTAINER` (`speaches`), `SPEACHES_IDLE_MINUTES` (`10`), `SPEACHES_IDLE_CPU_THRESHOLD` (`2`, percent), `SPEACHES_RESTART_MEMORY_THRESHOLD` (`5`, percent), and `SPEACHES_STATE_DIR`.
 
 StudyNarrator AI starts and remains healthy while Speaches is offline. Project editing, parsing, lexicon work, dry runs, and prompt exports remain available. Preview and rendering recover after the configured Speaches endpoint becomes reachable; the StudyNarrator AI container does not need to restart.
 
