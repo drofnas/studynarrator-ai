@@ -3,6 +3,7 @@ import {
   LexiconEntrySchema,
   PauseIdSchema,
   SpeakerIdSchema,
+  VoiceHintSchema,
   type LexiconEntry,
 } from "./schemas.js";
 
@@ -62,6 +63,118 @@ export type ScriptGenerationContext = z.infer<
 
 const ScriptGenerationLexiconSchema = z.array(LexiconEntrySchema).max(20_000);
 
+/**
+ * A voice the generated instructions may offer as a speaker's script default.
+ * The application supplies these from its bundled voice catalog because core
+ * has no catalog of its own.
+ */
+const ScriptGenerationVoicesSchema = z
+  .array(
+    z
+      .object({
+        voiceId: VoiceHintSchema,
+        language: z.string().trim().min(1).max(100),
+      })
+      .strict(),
+  )
+  .max(500);
+export type ScriptGenerationVoice = z.infer<
+  typeof ScriptGenerationVoicesSchema
+>[number];
+
+const SCRIPT_GENERATION_VOICE_MODEL_LABEL =
+  "Kokoro 82M v1.0 ONNX (`speaches-ai/Kokoro-82M-v1.0-ONNX`)";
+
+function voiceListLines(voices: readonly ScriptGenerationVoice[]): string[] {
+  const byLanguage = new Map<string, string[]>();
+  for (const { voiceId, language } of voices) {
+    const ids = byLanguage.get(language) ?? [];
+    ids.push(`\`${voiceId}\``);
+    byLanguage.set(language, ids);
+  }
+  return [...byLanguage].map(
+    ([language, ids]) => `- ${language}: ${ids.join(", ")}`,
+  );
+}
+
+function voiceGuidance(voices: readonly ScriptGenerationVoice[]): string[] {
+  const shared = [
+    "- Add the voice to the speaker's first directive only: `[speaker_<id>|<voice_id>]`. After that, use the plain `[speaker_<id>]`.",
+    "- Give each speaker one voice. A different voice on a later directive for the same speaker is ignored and produces a warning.",
+    "- Give different speakers different voices so listeners can tell them apart, and choose voices that match the language of the script.",
+    "- The voice becomes that speaker's script default. The user can still choose a different voice for any speaker in the project settings.",
+  ];
+  if (voices.length === 0)
+    return [
+      "Each speaker can be given a default voice in the script.",
+      "",
+      ...shared,
+      "- Use a voice ID only if the user input names one. Otherwise leave the voice out, and the user will choose voices in StudyNarrator AI.",
+    ];
+  return [
+    `Each speaker can be given a default voice from the ${SCRIPT_GENERATION_VOICE_MODEL_LABEL} speech model.`,
+    "",
+    ...shared,
+    "- Use only voice IDs from the list below. Do not invent voice IDs.",
+    "- In a voice ID, the first letter is the language and the second letter is the voice's gender: `f` for female and `m` for male. For example, `af_heart` is an American English female voice and `bm_george` is a British English male voice.",
+    "",
+    "Available voices:",
+    "",
+    ...voiceListLines(voices),
+  ];
+}
+
+const MULTI_SPEAKER_EXAMPLE = [
+  "[speaker_host|af_heart] Welcome back. Today we will look at why a cache can make a slow system feel fast.",
+  "",
+  "[speaker_guest|bm_george] The short version is that a cache remembers answers, so they do not have to be worked out twice.",
+  "",
+  "[speaker_host] So what happens when the underlying data changes?",
+  "",
+  "[speaker_guest] Then the remembered copy can go stale, which is why every cache needs a rule for when to refresh it.",
+].join("\n");
+
+function speakerSection(
+  kind: ScriptPromptKind,
+  voices: readonly ScriptGenerationVoice[],
+): string {
+  return [
+    "### Speakers",
+    "",
+    "A speaker directive selects the voice used for the spoken content that follows. The selected speaker remains active until another speaker directive appears.",
+    "",
+    "A script can use as many speakers as it needs. One narrator works well for a straightforward explanation. Use two or more speakers for a dialogue, an interview, a debate, question-and-answer practice, or a story with several characters. If the user input asks for particular speakers, use them.",
+    "",
+    "Rules:",
+    "",
+    "- `[speaker_<id>]` switches to that speaker.",
+    "- Make each speaker ID a short lowercase name such as `narrator`, `host`, `guest`, `teacher`, or `alice`. IDs may contain only letters, numbers, underscores, and hyphens, and must start with a letter or number.",
+    "- Use exactly the same ID every time the same speaker talks. IDs that differ only by capitalization are reported as a mistake.",
+    "- Text before the first speaker directive is spoken by the `narrator` speaker.",
+    "- A speaker directive does not need to be repeated for every paragraph if the same speaker remains active.",
+    ...(kind === "update"
+      ? [
+          "- Keep the speaker IDs already used in the current script. Voice settings are attached to speaker IDs, so do not rename an existing speaker unless the requested changes ask for it.",
+          "- You may add new speakers when the requested changes call for them.",
+        ]
+      : []),
+    "",
+    "### Voices",
+    "",
+    ...voiceGuidance(voices),
+    ...(kind === "update"
+      ? [
+          "",
+          "- If the current script sets a speaker's voice, keep that voice on the speaker's first directive in the revised script, even if sections move. Give each new speaker a voice on its first directive.",
+        ]
+      : []),
+    "",
+    "Example with two speakers:",
+    "",
+    MULTI_SPEAKER_EXAMPLE,
+  ].join("\n");
+}
+
 interface GeneratedTextFile {
   path: string;
   content: string;
@@ -117,15 +230,22 @@ function aliasSections(entriesInput: readonly LexiconEntry[]): {
   return { senses, automatic };
 }
 
-function formatStructure(context: ScriptGenerationContext): string[] {
+function formatStructure(
+  context: ScriptGenerationContext,
+  voices: readonly ScriptGenerationVoice[],
+): string[] {
   return [
     "Speaker directives",
     "- Start a spoken turn with [speaker_<id>]. The selected speaker remains active until another speaker directive appears.",
-    "- Use only these configured speaker directives:",
+    "- A script can use as many speakers as it needs. This project already has these speakers; reuse their IDs for these roles:",
     ...context.speakers.map(
       ({ speakerId, roleDescription }) =>
         `  - [speaker_${speakerId}]: ${oneLine(roleDescription)}`,
     ),
+    "- Add new speakers when the script needs them. Use short lowercase IDs containing only letters, numbers, underscores, or hyphens, and spell each ID the same way every time.",
+    "",
+    "Speaker voices",
+    ...voiceGuidance(voices),
     "",
     "Pause directives",
     "- Put a pause command on its own line between spoken passages.",
@@ -149,12 +269,13 @@ function formatStructure(context: ScriptGenerationContext): string[] {
 function formatReference(
   context: ScriptGenerationContext,
   entriesInput: readonly LexiconEntry[],
+  voices: readonly ScriptGenerationVoice[],
 ): string[] {
   const aliases = aliasSections(entriesInput);
   return [
     "SCRIPT FORMAT AND LEXICON",
     "",
-    ...formatStructure(context),
+    ...formatStructure(context, voices),
     "",
     "Pronunciation lexicon",
     "- Preserve the written display text. StudyNarrator AI applies configured pronunciations during narration.",
@@ -204,7 +325,9 @@ function example(
   return `${lines.join("\n")}\n`;
 }
 
-const CREATION_PROMPT = `# StudyNarrator AI Script Creation Instructions
+const creationPromptText = (
+  voices: readonly ScriptGenerationVoice[],
+) => `# StudyNarrator AI Script Creation Instructions
 
 Create a new StudyNarrator AI study script using the topic, learning goals, requirements, source material, and any attached files provided at the end of this prompt.
 
@@ -226,7 +349,7 @@ Do not simply turn source material into a list of facts. Organize the material i
 - Use clear transitions so the lesson can be followed without looking at a screen.
 - Reinforce especially important ideas when repetition improves retention.
 - Preserve important names, numbers, warnings, constraints, qualifications, and technical distinctions from supplied sources.
-- Do not invent facts, citations, source claims, speaker IDs, or unsupported details.
+- Do not invent facts, citations, source claims, voice IDs, or unsupported details.
 
 ## WRITE FOR AUDIO
 
@@ -242,25 +365,7 @@ StudyNarrator AI scripts are meant to be heard rather than visually read.
 
 ## STUDYNARRATOR SCRIPT FORMAT
 
-### Speakers
-
-A speaker directive selects the voice used for the spoken content that follows.
-
-Configured speakers:
-
-- \`[speaker_narrator]\` — Primary narrator. Explains the material clearly and accurately.
-
-Example:
-
-[speaker_narrator] A cache stores previously computed data so later requests can often be answered more quickly.
-
-The selected speaker remains active until another speaker directive appears.
-
-Rules:
-
-- Use only configured speaker IDs.
-- Do not invent additional speaker IDs.
-- A speaker directive does not need to be repeated for every paragraph if the same speaker remains active.
+${speakerSection("creation", voices)}
 
 ### Pauses
 
@@ -373,6 +478,10 @@ Not every field needs to be filled in. Use whatever information is provided.
 
 [OPTIONAL — WHO IS THIS FOR AND WHAT DO THEY ALREADY KNOW?]
 
+## Speakers and voices
+
+[OPTIONAL — FOR EXAMPLE: ONE NARRATOR, A HOST AND A GUEST, OR A TEACHER AND TWO STUDENTS, PLUS ANY VOICES, ACCENTS, OR GENDERS YOU PREFER.]
+
 ## Desired depth, length, or emphasis
 
 [OPTIONAL — FOR EXAMPLE: QUICK REVIEW, INTERVIEW PREP, BEGINNER LESSON, DEEP TECHNICAL STUDY.]
@@ -389,7 +498,9 @@ Not every field needs to be filled in. Use whatever information is provided.
 
 [PASTE SOURCE MATERIAL HERE AND/OR ATTACH RELEVANT FILES TO THE CONVERSATION.]`;
 
-const UPDATE_PROMPT = `# StudyNarrator AI Script Update Instructions
+const updatePromptText = (
+  voices: readonly ScriptGenerationVoice[],
+) => `# StudyNarrator AI Script Update Instructions
 
 Update an existing StudyNarrator AI script using the requested changes, current script, supporting information, and any relevant files attached to the conversation.
 
@@ -408,7 +519,7 @@ Return a complete revised StudyNarrator AI script that incorporates the requeste
 - Restructure sections when necessary to make the requested additions understandable.
 - Preserve important names, numbers, warnings, constraints, qualifications, and technical distinctions.
 - Maintain a coherent lesson rather than simply inserting disconnected information.
-- Do not invent facts, citations, source claims, speaker IDs, or unsupported details.
+- Do not invent facts, citations, source claims, voice IDs, or unsupported details.
 
 ## WRITE FOR AUDIO
 
@@ -428,25 +539,7 @@ When adding or revising content:
 
 ## STUDYNARRATOR SCRIPT FORMAT
 
-### Speakers
-
-A speaker directive selects the voice used for the spoken content that follows.
-
-Configured speakers:
-
-- \`[speaker_narrator]\` — Primary narrator. Explains the material clearly and accurately.
-
-Example:
-
-[speaker_narrator] A cache stores previously computed data so later requests can often be answered more quickly.
-
-The selected speaker remains active until another speaker directive appears.
-
-Rules:
-
-- Use only configured speaker IDs already supported by the script.
-- Do not invent additional speaker IDs.
-- A speaker directive does not need to be repeated for every paragraph if the same speaker remains active.
+${speakerSection("update", voices)}
 
 ### Pauses
 
@@ -539,31 +632,37 @@ Process the information provided below and any relevant files attached to the co
 
 [OPTIONAL — PROVIDE FACTS, RESEARCH, SOURCE MATERIAL, CONSTRAINTS, OR ATTACH RELEVANT FILES.]`;
 
-function creationPrompt(): string {
-  return `${CREATION_PROMPT}\n`;
+function creationPrompt(voices: readonly ScriptGenerationVoice[]): string {
+  return `${creationPromptText(voices)}\n`;
 }
 
-function updatePrompt(): string {
-  return `${UPDATE_PROMPT}\n`;
+function updatePrompt(voices: readonly ScriptGenerationVoice[]): string {
+  return `${updatePromptText(voices)}\n`;
 }
 
 export function buildExternalLlmPrompt(input: {
   kind: ScriptPromptKind;
   context: ScriptGenerationContext;
   lexiconEntries: readonly LexiconEntry[];
+  voices?: readonly ScriptGenerationVoice[];
 }): string {
   const kind = ScriptPromptKindSchema.parse(input.kind);
   ScriptGenerationContextSchema.parse(input.context);
-  return kind === "creation" ? creationPrompt() : updatePrompt();
+  const voices = ScriptGenerationVoicesSchema.parse(input.voices ?? []);
+  return kind === "creation" ? creationPrompt(voices) : updatePrompt(voices);
 }
 
 export function buildSkillPackageFiles(input: {
   context: ScriptGenerationContext;
   lexiconEntries: readonly LexiconEntry[];
+  voices?: readonly ScriptGenerationVoice[];
 }): GeneratedTextFile[] {
   const context = ScriptGenerationContextSchema.parse(input.context);
+  const voices = ScriptGenerationVoicesSchema.parse(input.voices ?? []);
   const aliases = aliasSections(input.lexiconEntries);
-  const format = formatReference(context, input.lexiconEntries).join("\n");
+  const format = formatReference(context, input.lexiconEntries, voices).join(
+    "\n",
+  );
   const files: GeneratedTextFile[] = [
     {
       path: "SKILL.md",
@@ -575,8 +674,8 @@ export function buildSkillPackageFiles(input: {
         "",
       ].join("\n"),
     },
-    { path: "CREATION_PROMPT.md", content: creationPrompt() },
-    { path: "UPDATE_PROMPT.md", content: updatePrompt() },
+    { path: "CREATION_PROMPT.md", content: creationPrompt(voices) },
+    { path: "UPDATE_PROMPT.md", content: updatePrompt(voices) },
     { path: "SCRIPT_FORMAT.md", content: `# Script Format\n\n${format}\n` },
     {
       path: "LEXICON_ALIASES.md",

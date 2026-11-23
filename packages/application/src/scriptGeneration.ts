@@ -8,6 +8,7 @@ import {
   buildSkillPackageFiles,
   type LexiconEntry,
   type ScriptGenerationContext,
+  type ScriptGenerationVoice,
   type ScriptPromptKind,
 } from "@studynarrator/core";
 import {
@@ -17,7 +18,15 @@ import {
   type ProjectDetail,
   type SystemTimingConfiguration,
 } from "@studynarrator/shared-types";
+import { KOKORO_V1_VOICE_CATALOG } from "./kokoroCatalog.js";
 import type { PersistenceRepository } from "./persistence.js";
+
+/** Kokoro voices the prompt kit offers as speaker script defaults. */
+const SCRIPT_GENERATION_VOICES: readonly ScriptGenerationVoice[] =
+  KOKORO_V1_VOICE_CATALOG.entries.map(({ voiceId, language }) => ({
+    voiceId,
+    language: language ?? "Other",
+  }));
 
 type ScriptGenerationServiceErrorCode =
   "SCRIPT_GENERATION_NOT_FOUND" | "SCRIPT_GENERATION_STORAGE";
@@ -138,6 +147,7 @@ function promptDocument(
     kind,
     context: generationContext(timing, project),
     lexiconEntries: entries,
+    voices: SCRIPT_GENERATION_VOICES,
   });
   return PromptDocumentSchema.parse({
     kind,
@@ -210,6 +220,7 @@ export function createScriptGenerationService(dependencies: {
         for (const file of buildSkillPackageFiles({
           context: generationContext(timing, project),
           lexiconEntries: entries,
+          voices: SCRIPT_GENERATION_VOICES,
         })) {
           archiveEntries[file.path] = [
             strToU8(file.content),

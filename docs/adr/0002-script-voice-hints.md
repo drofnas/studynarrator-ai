@@ -23,4 +23,4 @@ The PRD requires the UI to keep a script speaker ID distinct from a model voice 
 
 ## Consequences
 
-Scripts can carry voices, and people can still change any voice in Settings. Hints apply only when a project is opened in the Web or Electron UI, which is when voices are resolved and saved; projects changed only through the API keep their saved voices until then. Script generation does not yet emit voice hints.
+Scripts can carry voices, and people can still change any voice in Settings. Hints apply only when a project is opened in the Web or Electron UI, which is when voices are resolved and saved; projects changed only through the API keep their saved voices until then. The prompt kit (create and update prompts, and the skill package's `SCRIPT_FORMAT.md`) tells an LLM that a script may use any number of speakers, teaches the `[speaker_<id>|<voice-id>]` form on a speaker's first directive, and lists the bundled Kokoro 82M v1.0 ONNX voice IDs so generated hints match the catalog.

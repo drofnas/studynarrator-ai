@@ -80,5 +80,6 @@ export {
   buildExternalLlmPrompt,
   buildSkillPackageFiles,
   type ScriptGenerationContext,
+  type ScriptGenerationVoice,
   type ScriptPromptKind,
 } from "./scriptGeneration.js";
