@@ -1,0 +1,6 @@
+[speaker_alice|af_heart] Hello, I am Alice.
+[speaker_bob|en_US-lessac-medium] And I am Bob.
+[speaker_alice] Alice again; the voice comes from her first tag.
+Inline [speaker_carol|af_sky] switch with a hint, then [speaker_alice|am_adam] a conflicting hint.
+[speaker_dave|] An empty hint stays literal.
+\[speaker_alice|af_heart] An escaped tag stays literal.

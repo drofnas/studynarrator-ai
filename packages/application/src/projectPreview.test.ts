@@ -269,6 +269,13 @@ describe("project preview service", () => {
         text: "[pause_short]",
       }),
     ).rejects.toMatchObject({ code: "PROJECT_PREVIEW_INVALID_SEGMENT" });
+    for (const text of [
+      "[speaker_teacher] Sample.",
+      "Sample [speaker_teacher|af_heart] with a voice hint.",
+    ])
+      await expect(
+        service.preview(projectId, { mode: "pronunciation", text }),
+      ).rejects.toMatchObject({ code: "PROJECT_PREVIEW_INVALID_SEGMENT" });
     expect(speech.synthesize).not.toHaveBeenCalled();
   });
 });

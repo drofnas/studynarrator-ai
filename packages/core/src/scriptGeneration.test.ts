@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { parseScript } from "./parser.js";
 import type { LexiconEntry } from "./schemas.js";
 import {
   ScriptGenerationContextSchema,
@@ -144,7 +145,9 @@ describe("script generation", () => {
         ),
     ).toBe(true);
     expect(prompt).toContain("`resume/cv` — a résumé or career document.");
-    expect(prompt).toContain("[speaker_narrator]");
+    expect(prompt).toContain("`[speaker_<id>|<voice_id>]`");
+    expect(prompt).toContain("do not rename an existing speaker");
+    expect(prompt).toContain("You may add new speakers");
     expect(prompt).toContain("[pause_short]");
     expect(prompt).toContain("[section: Descriptive title]");
     expect(prompt).not.toContain("[speaker_student]");
@@ -153,6 +156,84 @@ describe("script generation", () => {
     expect(prompt).not.toContain("import/verb");
     expect(prompt).not.toContain("KNOWLEDGE TO GATHER AND TEACH");
     expect(prompt).not.toContain("Convert the existing study guide");
+  });
+
+  it("allows any number of speakers and offers the supplied voices", () => {
+    const voices = [
+      { voiceId: "af_heart", language: "American English" },
+      { voiceId: "am_adam", language: "American English" },
+      { voiceId: "bm_george", language: "British English" },
+    ];
+    for (const kind of ["creation", "update"] as const) {
+      const prompt = buildExternalLlmPrompt({
+        kind,
+        context,
+        lexiconEntries: entries,
+        voices,
+      });
+      expect(prompt).toContain(
+        "A script can use as many speakers as it needs.",
+      );
+      expect(prompt).not.toContain("Do not invent additional speaker IDs");
+      expect(prompt).not.toContain("Use only configured speaker IDs");
+      expect(prompt).not.toContain("speaker IDs, or unsupported details");
+      expect(prompt).toContain("Kokoro 82M v1.0 ONNX");
+      expect(prompt).toContain(
+        "- American English: `af_heart`, `am_adam`\n- British English: `bm_george`",
+      );
+      expect(prompt).toContain("Do not invent voice IDs.");
+      expect(prompt).not.toContain("[speaker_teacher]");
+      expect(prompt).not.toContain("[speaker_student]");
+    }
+  });
+
+  it("asks for user-named voices when no voice list is supplied", () => {
+    const prompt = buildExternalLlmPrompt({
+      kind: "creation",
+      context,
+      lexiconEntries: entries,
+    });
+    expect(prompt).toContain(
+      "Use a voice ID only if the user input names one.",
+    );
+    expect(prompt).not.toContain("Available voices:");
+    expect(prompt).toContain("## Speakers and voices");
+  });
+
+  it("teaches a multi-speaker example the parser accepts without diagnostics", () => {
+    const prompt = buildExternalLlmPrompt({
+      kind: "creation",
+      context,
+      lexiconEntries: entries,
+    });
+    const example = prompt
+      .split("\n")
+      .filter((line) => /^\[speaker_(?:host|guest)[|\]]/u.test(line))
+      .join("\n\n");
+    expect(example.split("\n\n")).toHaveLength(4);
+    const result = parseScript({ source: example });
+    expect(result.errors).toEqual([]);
+    expect(result.warnings).toEqual([]);
+    expect(
+      result.discoveries.speakers.map(({ id, voiceHint }) => ({
+        id,
+        voiceHint,
+      })),
+    ).toEqual([
+      { id: "host", voiceHint: "af_heart" },
+      { id: "guest", voiceHint: "bm_george" },
+    ]);
+  });
+
+  it("rejects malformed voice lists", () => {
+    expect(() =>
+      buildExternalLlmPrompt({
+        kind: "creation",
+        context,
+        lexiconEntries: entries,
+        voices: [{ voiceId: "bad voice", language: "English" }],
+      }),
+    ).toThrow();
   });
 
   it("rejects duplicate and invalid project-derived IDs", () => {
@@ -200,6 +281,17 @@ describe("script generation", () => {
     });
     expect(single.map(({ path }) => path)).not.toContain(
       "examples/two-speaker-study-guide.txt",
+    );
+    const format = buildSkillPackageFiles({
+      context,
+      lexiconEntries: entries,
+      voices: [{ voiceId: "af_heart", language: "American English" }],
+    }).find(({ path }) => path === "SCRIPT_FORMAT.md")?.content;
+    expect(format).toContain("A script can use as many speakers as it needs.");
+    expect(format).toContain("Add new speakers when the script needs them.");
+    expect(format).toContain("- American English: `af_heart`");
+    expect(format).not.toContain(
+      "Use only these configured speaker directives",
     );
   });
 });

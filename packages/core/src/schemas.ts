@@ -14,6 +14,11 @@ export const SUPPORTED_PAUSE_IDS = [
 ] as const;
 
 export const SpeakerIdSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/u);
+export const VOICE_HINT_MAX_LENGTH = 500;
+export const VoiceHintSchema = z
+  .string()
+  .max(VOICE_HINT_MAX_LENGTH)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/u);
 export const PauseIdSchema = z.string().regex(/^pause_[A-Za-z0-9_-]*$/u);
 export const SupportedPauseIdSchema = z.enum(SUPPORTED_PAUSE_IDS);
 export type SupportedPauseId = z.infer<typeof SupportedPauseIdSchema>;
@@ -124,6 +129,10 @@ const NamedDiscoverySchema = z
   })
   .strict();
 
+const SpeakerDiscoverySchema = NamedDiscoverySchema.extend({
+  voiceHint: VoiceHintSchema.optional(),
+}).strict();
+
 const SectionDiscoverySchema = z
   .object({
     title: z.string().min(1),
@@ -143,7 +152,7 @@ export const ParseScriptResultSchema = z
     nodes: z.array(CirNodeSchema),
     discoveries: z
       .object({
-        speakers: z.array(NamedDiscoverySchema),
+        speakers: z.array(SpeakerDiscoverySchema),
         pauses: z.array(NamedDiscoverySchema),
         sections: z.array(SectionDiscoverySchema),
         pronunciations: z.array(PronunciationDiscoverySchema),

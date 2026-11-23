@@ -591,7 +591,18 @@ describe("Electron boundary", () => {
       description: "",
       scriptSource: "",
       scriptHash: "a".repeat(64),
-      speakerMappings: [],
+      speakerMappings: [
+        {
+          speakerId: "teacher",
+          displayName: "Teacher",
+          voiceId: "voice",
+          voiceOverride: true,
+          speed: 1,
+          gainDb: 0,
+          roleDescription: "",
+          sampleText: "",
+        },
+      ],
       lexiconEntries: [],
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -774,7 +785,7 @@ describe("Electron boundary", () => {
       name: project.name,
       description: "",
       scriptSource: "",
-      speakerMappings: [],
+      speakerMappings: project.speakerMappings,
       lexiconEntries: [],
     };
     const connectionInput = {
@@ -896,6 +907,28 @@ describe("Electron boundary", () => {
         notes: "",
       },
     ]);
+    expect(persistence.projects.replace).toHaveBeenCalledWith(
+      project.id,
+      expect.objectContaining({
+        speakerMappings: [
+          expect.objectContaining({
+            speakerId: "teacher",
+            voiceOverride: true,
+          }),
+        ],
+      }),
+    );
+    await expect(
+      handlers.get(PERSISTENCE_CHANNELS.projectsReplace)?.(undefined, {
+        projectId: project.id,
+        project: {
+          ...projectReplace,
+          speakerMappings: [
+            { ...project.speakerMappings[0], voiceOverride: "yes" },
+          ],
+        },
+      }),
+    ).rejects.toThrow();
     expect(renders.startProject).toHaveBeenCalledWith(project.id, {
       diskSpaceCheckEnabled: false,
     });

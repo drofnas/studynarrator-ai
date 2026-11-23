@@ -60,6 +60,7 @@ describe("transformScratchpadPassage", () => {
 
   it.each([
     "[speaker_teacher] Read this.",
+    "Read this. [speaker_teacher|af_heart] With a voice hint.",
     "Read this. [pause_short] Then continue.",
     "[section: Topic]\nRead this.",
   ])("rejects structured control text: %s", (text) => {

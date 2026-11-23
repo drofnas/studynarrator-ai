@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 import { VoiceSelect } from "@/features/connections/VoiceSelect.js";
 import { LexiconEditor } from "@/features/lexicon/LexiconEditor.js";
+import { speakerVoiceSelection } from "@/features/projects/projectAuthoring.js";
 import styles from "./ProjectsPage.module.css";
 import type { ProjectPageController } from "./useProjectsPageController.js";
 
@@ -11,7 +12,13 @@ export function ProjectConfigurationPanel({
 }) {
   const {
     configuration,
+    displayedSpeakers,
+    speakerSort,
+    setSpeakerSort,
+    beginSpeakerNameEdit,
+    endSpeakerNameEdit,
     updateSpeaker,
+    resetSpeakerVoices,
     enabledVoices,
     presentedEnabledVoices,
     voiceSelectionState,
@@ -25,16 +32,39 @@ export function ProjectConfigurationPanel({
     <aside className={styles.configRail} aria-label="Project configuration">
       <section>
         <div className={styles.sectionHeading}>
-          <div>
+          <div className={styles.speakerTitle}>
             <h3>Speakers</h3>
+            <b aria-label="Speakers in script">
+              {
+                configuration.speakers.filter(({ discovered }) => discovered)
+                  .length
+              }
+            </b>
           </div>
-          <b>
-            {
-              configuration.speakers.filter(({ discovered }) => discovered)
-                .length
+          <button
+            type="button"
+            disabled={
+              enabledVoices.length === 0 || configuration.speakers.length === 0
             }
-          </b>
+            onClick={resetSpeakerVoices}
+          >
+            Reset Defaults
+          </button>
         </div>
+        <label className={styles.speakerSort}>
+          Sort speakers
+          <select
+            value={speakerSort}
+            onChange={(event) =>
+              setSpeakerSort(
+                event.target.value === "script" ? "script" : "name",
+              )
+            }
+          >
+            <option value="name">Name (A–Z)</option>
+            <option value="script">Script order</option>
+          </select>
+        </label>
         <p className={styles.overflowHint}>
           Scroll horizontally for voice, speed, and gain controls →
         </p>
@@ -59,7 +89,7 @@ export function ProjectConfigurationPanel({
                   <td colSpan={4}>No speakers discovered.</td>
                 </tr>
               ) : (
-                configuration.speakers.map((row) => (
+                displayedSpeakers.map((row) => (
                   <tr
                     className={!row.discovered ? styles.unused : ""}
                     key={row.speakerId}
@@ -68,6 +98,8 @@ export function ProjectConfigurationPanel({
                       <input
                         aria-label={`Name for speaker ${row.speakerId}`}
                         value={row.displayName}
+                        onFocus={beginSpeakerNameEdit}
+                        onBlur={endSpeakerNameEdit}
                         onChange={(event) =>
                           updateSpeaker(row.speakerId, {
                             displayName: event.target.value,
@@ -78,6 +110,11 @@ export function ProjectConfigurationPanel({
                     <td>
                       <VoiceSelect
                         aria-label={`Voice for speaker ${row.speakerId}`}
+                        aria-describedby={
+                          row.voiceHint === undefined
+                            ? undefined
+                            : "script-voice-legend"
+                        }
                         disabled={enabledVoices.length === 0}
                         value={
                           enabledVoices.some(
@@ -87,6 +124,7 @@ export function ProjectConfigurationPanel({
                             : ""
                         }
                         voices={presentedEnabledVoices}
+                        scriptDefaultVoiceId={row.voiceHint}
                         emptyOption={
                           enabledVoices.length === 0
                             ? voiceSelectionState === "loading"
@@ -95,7 +133,10 @@ export function ProjectConfigurationPanel({
                             : undefined
                         }
                         onChange={(voiceId) =>
-                          updateSpeaker(row.speakerId, { voiceId })
+                          updateSpeaker(
+                            row.speakerId,
+                            speakerVoiceSelection(row, voiceId),
+                          )
                         }
                       />
                     </td>
@@ -134,6 +175,13 @@ export function ProjectConfigurationPanel({
             </tbody>
           </table>
         </div>
+        {configuration.speakers.some(
+          ({ voiceHint }) => voiceHint !== undefined,
+        ) ? (
+          <p id="script-voice-legend" className={styles.scriptVoiceNote}>
+            * Default voice set in the script.
+          </p>
+        ) : null}
         {enabledVoices.length === 0 ? (
           <p className={styles.voiceFieldMessage}>
             {!selectedConnection?.configured && voiceSelectionState === "ready"

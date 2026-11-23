@@ -503,6 +503,7 @@ Rules:
 - The selected speaker remains active across subsequent lines until another speaker tag appears.
 - Text before the first speaker tag uses the configured default-speaker override when present, otherwise the system default `narrator`.
 - A bare script therefore remains valid and discovers `narrator` as its logical speaker; later voice configuration may map that ID without changing source.
+- A speaker directive may name a voice hint after one `|`, for example `[speaker_person_a|af_heart]`. The hint is a model voice ID, not part of the speaker ID, and does not change how speech is split. The first hint for a speaker wins; a different later hint is a warning, and a malformed hint is a blocking diagnostic that stays literal speech. See `docs/script-grammar-v1.md` and ADR 0002.
 - A speaker may be mapped to the same voice as another speaker.
 
 ### 9.3 Pause directives
@@ -920,6 +921,8 @@ Required actions:
 - Find all script occurrences.
 
 The UI must clearly distinguish a script speaker ID from a model voice ID.
+
+When the script gives a speaker a voice hint, the voice list marks that voice with `*` as the script default and uses it unless the user has chosen another voice in Settings. Choosing another voice saves an override with the project; choosing the `*` voice again follows the script. A hint the selected model does not offer is a non-blocking warning, and the default voice applies.
 
 ### 10.8 Transition settings
 

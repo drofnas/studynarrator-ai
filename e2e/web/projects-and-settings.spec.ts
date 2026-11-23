@@ -508,6 +508,176 @@ test.describe("Projects connected authoring", () => {
     await expect(find).toBeFocused();
   });
 
+  test("sorts project speakers by name or script order and remembers the choice", async ({
+    page,
+    request,
+    studyNarrator,
+  }) => {
+    await continueOffline(page, studyNarrator);
+    await createProject(page, "Sorted speakers");
+    await page
+      .getByLabel("Script source")
+      .fill(
+        [
+          "[speaker_teacher] Welcome.",
+          "[speaker_student] I am ready.",
+          "[speaker_narrator] Let us begin.",
+          "[speaker_coach] Watch the spacing.",
+          "[speaker_guest] Hello.",
+          "[speaker_facilitator] Confirm the order.",
+        ].join("\n"),
+      );
+    await page.getByRole("tab", { name: "Settings" }).click();
+    const speakers = page.getByRole("region", { name: "Project speakers" });
+    const order = () =>
+      speakers
+        .getByRole("textbox", { name: /^Name for speaker / })
+        .evaluateAll((inputs) =>
+          inputs.map((input) =>
+            (input.getAttribute("aria-label") ?? "").replace(
+              "Name for speaker ",
+              "",
+            ),
+          ),
+        );
+    const nameOrder = [
+      "coach",
+      "facilitator",
+      "guest",
+      "narrator",
+      "student",
+      "teacher",
+    ];
+    const scriptOrder = [
+      "teacher",
+      "student",
+      "narrator",
+      "coach",
+      "guest",
+      "facilitator",
+    ];
+    const sort = page.getByLabel("Sort speakers");
+    await expect(sort).toHaveValue("name");
+    await expect.poll(order).toEqual(nameOrder);
+
+    await sort.selectOption("script");
+    await expect.poll(order).toEqual(scriptOrder);
+
+    const projectId = /projects\/([0-9a-f-]{36})/u.exec(page.url())?.[1] ?? "";
+    const persistedOrder = async () => {
+      const response = await request.get(
+        `${studyNarrator.baseUrl}/api/projects/${projectId}`,
+      );
+      const body = (await response.json()) as {
+        speakerMappings: Array<{ speakerId: string }>;
+      };
+      return body.speakerMappings.map(({ speakerId }) => speakerId);
+    };
+    await page.getByRole("button", { name: "Save now" }).click();
+    // Sorting is display-only: saved mappings keep first-appearance order.
+    await expect.poll(persistedOrder).toEqual(scriptOrder);
+
+    await sort.selectOption("name");
+    await page.reload();
+    await page.getByRole("tab", { name: "Settings" }).click();
+    await expect(page.getByLabel("Sort speakers")).toHaveValue("name");
+    await expect.poll(order).toEqual(nameOrder);
+    await page.getByLabel("Sort speakers").selectOption("script");
+    await page.reload();
+    await page.getByRole("tab", { name: "Settings" }).click();
+    await expect(page.getByLabel("Sort speakers")).toHaveValue("script");
+    await expect.poll(order).toEqual(scriptOrder);
+    expect(await persistedOrder()).toEqual(scriptOrder);
+  });
+
+  test("fills voices from script hints, marks the script default, and persists Settings overrides", async ({
+    page,
+    request,
+    studyNarrator,
+  }) => {
+    await continueOffline(page, studyNarrator);
+    await createProject(page, "Script voices");
+    await page
+      .getByLabel("Script source")
+      .fill(
+        [
+          "[speaker_alice|af_sky] Hello, I am Alice.",
+          "[speaker_bob] And I am Bob.",
+          "[speaker_carol|zz_missing] I asked for a missing voice.",
+        ].join("\n"),
+      );
+    await page.getByRole("tab", { name: "Settings" }).click();
+    const alice = page.getByLabel("Voice for speaker alice");
+    await expect(alice).toHaveValue("af_sky");
+    await expect(alice).toBeEnabled();
+    await expect(alice).toHaveAccessibleDescription(
+      "* Default voice set in the script.",
+    );
+    await expect(
+      page.getByText("* Default voice set in the script.", { exact: true }),
+    ).toHaveCount(1);
+    await expect(
+      alice.getByRole("option", { name: /^\* .*af_sky.*\(script default\)$/u }),
+    ).toBeAttached();
+    await expect(page.getByLabel("Voice for speaker bob")).toHaveValue(
+      "af_heart",
+    );
+    await expect(page.getByLabel("Voice for speaker carol")).toHaveValue(
+      "af_heart",
+    );
+
+    const projectId = /projects\/([0-9a-f-]{36})/u.exec(page.url())?.[1] ?? "";
+    const persistedAlice = async () => {
+      const response = await request.get(
+        `${studyNarrator.baseUrl}/api/projects/${projectId}`,
+      );
+      const body = (await response.json()) as {
+        speakerMappings: Array<{
+          speakerId: string;
+          voiceId: string | null;
+          voiceOverride?: boolean;
+        }>;
+      };
+      const mapping = body.speakerMappings.find(
+        ({ speakerId }) => speakerId === "alice",
+      );
+      return {
+        voiceId: mapping?.voiceId,
+        voiceOverride: mapping?.voiceOverride,
+      };
+    };
+    await expect
+      .poll(persistedAlice)
+      .toEqual({ voiceId: "af_sky", voiceOverride: false });
+
+    await alice.selectOption("af_heart");
+    await expect
+      .poll(persistedAlice)
+      .toEqual({ voiceId: "af_heart", voiceOverride: true });
+    await page.reload();
+    await page.getByRole("tab", { name: "Settings" }).click();
+    await expect(page.getByLabel("Voice for speaker alice")).toHaveValue(
+      "af_heart",
+    );
+
+    await page.getByLabel("Voice for speaker alice").selectOption("af_sky");
+    await expect
+      .poll(persistedAlice)
+      .toEqual({ voiceId: "af_sky", voiceOverride: false });
+
+    await page.getByLabel("Voice for speaker alice").selectOption("af_heart");
+    await expect
+      .poll(persistedAlice)
+      .toEqual({ voiceId: "af_heart", voiceOverride: true });
+    await page.getByRole("button", { name: "Reset Defaults" }).click();
+    await expect(page.getByLabel("Voice for speaker alice")).toHaveValue(
+      "af_sky",
+    );
+    await expect
+      .poll(persistedAlice)
+      .toEqual({ voiceId: "af_sky", voiceOverride: false });
+  });
+
   test("defaults and persists catalog voices while Details uses document scrolling without requesting TTS", async ({
     page,
     studyNarrator,

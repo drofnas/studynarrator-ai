@@ -6,6 +6,7 @@ import {
   SourceRangeSchema,
   SpeakerIdSchema,
   TransformScriptResultSchema,
+  VoiceHintSchema,
   type ParseScriptResult,
   type ResolveParagraphPausesResult,
   type TransformScriptResult,
@@ -18,6 +19,7 @@ const AuthoringSpeakerConfigurationSchema = z
     speakerId: SpeakerIdSchema,
     displayName: z.string().trim().min(1).max(200),
     voiceId: z.string().max(500).nullable(),
+    voiceOverride: z.boolean().optional(),
     speed: z.number().positive().max(4),
     gainDb: z.number().min(-60).max(24),
     roleDescription: z.string().max(5_000),
@@ -42,6 +44,9 @@ export type AuthoringPauseConfiguration = z.infer<
 const AuthoringSpeakerRowSchema = AuthoringSpeakerConfigurationSchema.extend({
   discovered: z.boolean(),
   occurrenceCount: z.number().int().nonnegative(),
+  // Display-only: the first voice hint the current script gives this speaker.
+  // It is never persisted with the speaker mapping.
+  voiceHint: VoiceHintSchema.optional(),
 }).strict();
 export type AuthoringSpeakerRow = z.infer<typeof AuthoringSpeakerRowSchema>;
 
@@ -190,6 +195,7 @@ export function reconcileDiscoveredConfiguration(input: {
         speakerId: discovery.id,
         displayName: displayNameForSpeaker(discovery.id),
         voiceId: null,
+        voiceOverride: false,
         speed: 1,
         gainDb: 0,
         roleDescription: "",
@@ -197,6 +203,9 @@ export function reconcileDiscoveredConfiguration(input: {
       }),
       discovered: true,
       occurrenceCount: discovery.occurrences.length,
+      ...(discovery.voiceHint === undefined
+        ? {}
+        : { voiceHint: discovery.voiceHint }),
     }),
   );
   const discoveredSpeakers = new Set(

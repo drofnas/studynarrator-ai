@@ -9,6 +9,7 @@ import {
   createScriptGenerationService,
   type ScriptGenerationRepository,
 } from "./scriptGeneration.js";
+import { KOKORO_V1_VOICE_CATALOG } from "./kokoroCatalog.js";
 import { APPLICATION_SERVICE_MANIFEST } from "./serviceManifest.js";
 
 const timestamp = "2026-08-14T00:00:00.000Z";
@@ -117,6 +118,32 @@ describe("script generation service", () => {
     await expect(service.resolveSkillPackage(null)).resolves.toMatchObject({
       fileName: "studynarrator-script-skill.zip",
     });
+  });
+
+  it("offers only bundled Kokoro voices in both prompts and the skill package", async () => {
+    const service = createScriptGenerationService({ repository: repository() });
+    const catalogIds = new Set(
+      KOKORO_V1_VOICE_CATALOG.entries.map(({ voiceId }) => voiceId),
+    );
+    const archive = unzipSync(
+      (await service.resolveSkillPackage(project.id)).bytes,
+    );
+    const texts = [
+      (await service.previewPrompt(project.id, "creation")).content,
+      (await service.previewPrompt(project.id, "update")).content,
+      strFromU8(archive["SCRIPT_FORMAT.md"]!),
+    ];
+    for (const text of texts) {
+      expect(text).toContain("Kokoro 82M v1.0 ONNX");
+      const offered = [
+        ...text.matchAll(/`([a-z]{2}_[a-z]+)`/gu),
+        ...text.matchAll(/\[speaker_[^|\]]+\|([a-z]{2}_[a-z]+)\]/gu),
+      ].map((match) => match[1]!);
+      expect(offered.length).toBeGreaterThanOrEqual(catalogIds.size);
+      for (const voiceId of offered) expect(catalogIds).toContain(voiceId);
+      for (const voiceId of catalogIds)
+        expect(text).toContain(`\`${voiceId}\``);
+    }
   });
 
   it("exports edited prompt content with the generated filename and a matching checksum", async () => {

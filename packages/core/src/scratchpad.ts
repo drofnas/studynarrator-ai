@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { LexiconEntrySchema, type LexiconEntry } from "./schemas.js";
-import { parseScript } from "./parser.js";
+import { containsSpeakerDirective, parseScript } from "./parser.js";
 import { transformScript } from "./transformer.js";
 
 const SCRATCHPAD_PASSAGE_MAX_CHARACTERS = 1_200;
@@ -68,8 +68,7 @@ export function transformScratchpadPassage(inputValue: {
   const hasControlNode = parsed.nodes.some(
     (node) => node.type === "section" || node.type === "pause",
   );
-  const hasSpeakerControl =
-    /(^|[^\\])\[speaker_[A-Za-z0-9][A-Za-z0-9_-]*\]/u.test(input.text);
+  const hasSpeakerControl = containsSpeakerDirective(input.text);
   if (hasControlNode || hasSpeakerControl) {
     throw new ScratchpadPassageError(
       "Quick Scratchpad accepts speech text only. Use Projects for speaker, pause, and section controls.",

@@ -80,6 +80,7 @@ export function createProjectRepository(dependencies: {
         speakerId: speaker.speaker_id,
         displayName: speaker.display_name,
         voiceId: speaker.voice_id,
+        voiceOverride: speaker.voice_override === 1,
         speed: speaker.speed,
         gainDb: speaker.gain_db,
         roleDescription: speaker.role_description,
@@ -193,8 +194,8 @@ export function createProjectRepository(dependencies: {
           .run(projectId);
         const insertSpeaker = database.prepare(`
           INSERT INTO speaker_mappings (
-            project_id, speaker_id, ordinal, display_name, voice_id, speed, gain_db, role_description, sample_text
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            project_id, speaker_id, ordinal, display_name, voice_id, voice_override, speed, gain_db, role_description, sample_text
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
         input.speakerMappings.forEach((speaker, ordinal) =>
           insertSpeaker.run(
@@ -203,6 +204,7 @@ export function createProjectRepository(dependencies: {
             ordinal,
             speaker.displayName,
             speaker.voiceId,
+            speaker.voiceOverride === true ? 1 : 0,
             speaker.speed,
             speaker.gainDb,
             speaker.roleDescription,
@@ -296,8 +298,8 @@ export function createProjectRepository(dependencies: {
           );
         const insertSpeaker = database.prepare(`
           INSERT INTO speaker_mappings (
-            project_id, speaker_id, ordinal, display_name, voice_id, speed, gain_db, role_description, sample_text
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            project_id, speaker_id, ordinal, display_name, voice_id, voice_override, speed, gain_db, role_description, sample_text
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
         source.speakerMappings.forEach((speaker, ordinal) =>
           insertSpeaker.run(
@@ -306,6 +308,7 @@ export function createProjectRepository(dependencies: {
             ordinal,
             speaker.displayName,
             speaker.voiceId,
+            speaker.voiceOverride === true ? 1 : 0,
             speaker.speed,
             speaker.gainDb,
             speaker.roleDescription,

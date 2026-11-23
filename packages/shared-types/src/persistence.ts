@@ -9,7 +9,7 @@ import {
   SupportedPauseIdSchema,
 } from "./contracts.js";
 
-export const DATABASE_SCHEMA_VERSION = 14;
+export const DATABASE_SCHEMA_VERSION = 15;
 export const PERSISTENCE_CONTRACT_VERSION = 1;
 export const PERSISTENCE_CHANNELS = Object.freeze({
   status: "persistence.status",
@@ -123,6 +123,10 @@ const SpeakerMappingSchema = z
     speakerId: SpeakerIdSchema,
     displayName: z.string().trim().min(1).max(200),
     voiceId: z.string().max(500).nullable(),
+    // True when the voice was chosen in Settings and must win over a script
+    // voice hint. Optional so render snapshots written before schema v15
+    // still parse and keep their recorded hashes; absent means false.
+    voiceOverride: z.boolean().optional(),
     speed: z.number().positive().max(4),
     gainDb: z.number().min(-60).max(24),
     roleDescription: z.string().max(5_000),

@@ -45,16 +45,19 @@ import type { ScriptAnalyzer } from "@/workers/parser/parserClient.js";
 import type { ScriptAnalysisResult } from "@/workers/parser/parserWorkerProtocol.js";
 import {
   authoringLexicon,
+  defaultSpeakerVoice,
   draftFromProject,
   GLOBAL_VOICE_CATALOG_DEFAULT_VOICE_ID,
   GLOBAL_VOICE_CATALOG_MODEL_ID,
   materializeLexicon,
   paragraphPauseForAnalysis,
-  resolveProjectSpeakerVoiceId,
+  resolveEffectiveSpeakerVoiceId,
+  scriptVoiceStatus,
   supportedProjectVoices,
   stripSingleSurroundingCodeFence,
   type ProjectDraft,
 } from "@/features/projects/projectAuthoring.js";
+import { useSortedSpeakers } from "@/features/projects/speakerSort.js";
 import { queryKeys } from "@/app/queryKeys.js";
 import { useConnections } from "@/features/connections/ConnectionProvider.js";
 import { presentVoices } from "@/features/connections/voicePresentation.js";
@@ -219,6 +222,7 @@ export function useProjectsPageController({
       speechSegmentCount: number;
     }>;
   }>({ speakers: [], pauses: [], sections: [] });
+  const speakerOrdering = useSortedSpeakers(configuration.speakers);
   const [analysis, setAnalysis] = useState<ScriptAnalysisResult>();
   const [analysisState, setAnalysisState] = useState<AnalysisState>("idle");
   const [analysisError, setAnalysisError] = useState("");
@@ -703,7 +707,7 @@ export function useProjectsPageController({
       patch: Partial<
         Pick<
           AuthoringSpeakerRow,
-          "displayName" | "voiceId" | "speed" | "gainDb"
+          "displayName" | "voiceId" | "voiceOverride" | "speed" | "gainDb"
         >
       >,
     ) => {
@@ -723,6 +727,32 @@ export function useProjectsPageController({
     [updateDraft],
   );
 
+  const resetSpeakerVoices = useCallback(() => {
+    if (enabledVoices.length === 0) return;
+    const voiceHints = new Map(
+      configuration.speakers.map(({ speakerId, voiceHint }) => [
+        speakerId,
+        voiceHint,
+      ]),
+    );
+    const reset = <T extends { speakerId: string }>(speaker: T): T => ({
+      ...speaker,
+      ...defaultSpeakerVoice(
+        { voiceHint: voiceHints.get(speaker.speakerId) },
+        voiceDefaultId,
+        enabledVoices,
+      ),
+    });
+    setConfiguration((current) => ({
+      ...current,
+      speakers: current.speakers.map(reset),
+    }));
+    updateDraft((current) => ({
+      ...current,
+      speakerMappings: current.speakerMappings.map(reset),
+    }));
+  }, [configuration.speakers, enabledVoices, updateDraft, voiceDefaultId]);
+
   useEffect(() => {
     if (
       voiceSelectionState !== "ready" ||
@@ -733,11 +763,8 @@ export function useProjectsPageController({
     const replacements = new Map(
       configuration.speakers.map((speaker) => [
         speaker.speakerId,
-        resolveProjectSpeakerVoiceId(
-          speaker.voiceId,
-          voiceDefaultId,
-          enabledVoices,
-        ),
+        // Fills the effective voice only; the override flag is never set here.
+        resolveEffectiveSpeakerVoiceId(speaker, voiceDefaultId, enabledVoices),
       ]),
     );
     if (
@@ -862,6 +889,7 @@ export function useProjectsPageController({
             ({
               discovered: _discovered,
               occurrenceCount: _occurrenceCount,
+              voiceHint: _voiceHint,
               ...item
             }) => item,
           );
@@ -914,19 +942,54 @@ export function useProjectsPageController({
     };
   }, [isDirty]);
 
-  const dryRun: AuthoringDryRunResult | undefined = useMemo(
+  const scriptVoiceStatuses = useMemo(
     () =>
-      analysis
-        ? buildAuthoringDryRun({
-            parseResult: analysis.parseResult,
-            pacingResult: analysis.pacingResult,
-            transformResult: analysis.transformResult,
-            speakers: configuration.speakers,
-            pauses: configuration.pauses,
-          })
-        : undefined,
-    [analysis, configuration],
+      new Map(
+        configuration.speakers.map((speaker) => [
+          speaker.speakerId,
+          voiceSelectionState === "ready" && enabledVoices.length > 0
+            ? scriptVoiceStatus(speaker, enabledVoices)
+            : speaker.voiceHint === undefined
+              ? ("none" as const)
+              : speaker.voiceOverride === true &&
+                  speaker.voiceId !== speaker.voiceHint
+                ? ("overridden" as const)
+                : ("following" as const),
+        ]),
+      ),
+    [configuration.speakers, enabledVoices, voiceSelectionState],
   );
+  const dryRun: AuthoringDryRunResult | undefined = useMemo(() => {
+    if (!analysis) return undefined;
+    const result = buildAuthoringDryRun({
+      parseResult: analysis.parseResult,
+      pacingResult: analysis.pacingResult,
+      transformResult: analysis.transformResult,
+      speakers: configuration.speakers,
+      pauses: configuration.pauses,
+    });
+    // The parser has no voice catalog, so unusable script voices are reported
+    // here as non-blocking warnings while the default voice chain applies.
+    const unavailable = configuration.speakers.filter(
+      (speaker) =>
+        speaker.discovered &&
+        scriptVoiceStatuses.get(speaker.speakerId) === "unavailable",
+    );
+    if (unavailable.length === 0) return result;
+    return {
+      ...result,
+      status: result.status === "ready" ? "readyWithWarnings" : result.status,
+      issues: [
+        ...result.issues,
+        ...unavailable.map((speaker) => ({
+          code: "SCRIPT_VOICE_UNAVAILABLE",
+          severity: "warning" as const,
+          message: `Script voice ${speaker.voiceHint ?? ""} for speaker ${speaker.speakerId} is not available for the selected model. Using ${speaker.voiceId ?? "no voice"} instead.`,
+          target: { kind: "speaker" as const, id: speaker.speakerId },
+        })),
+      ],
+    };
+  }, [analysis, configuration, scriptVoiceStatuses]);
   const estimablePlan = useMemo<EstimablePlan | undefined>(() => {
     if (!dryRun) return undefined;
     const speedBySpeaker = new Map(
@@ -1335,6 +1398,7 @@ export function useProjectsPageController({
     project,
     draft,
     configuration,
+    ...speakerOrdering,
     analysisState,
     analysisError,
     errors,
@@ -1362,6 +1426,7 @@ export function useProjectsPageController({
     cleanupUndo,
     setCleanupUndo,
     updateSpeaker,
+    resetSpeakerVoices,
     enabledVoices,
     presentedEnabledVoices,
     voiceSelectionState,

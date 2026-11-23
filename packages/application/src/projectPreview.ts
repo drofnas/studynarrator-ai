@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  containsSpeakerDirective,
   parseScript,
   transformScript,
   type LexiconEntry,
@@ -198,7 +199,7 @@ function pronunciationProjection(
   });
   const hasControl =
     parsed.nodes.some((node) => node.type !== "speech") ||
-    /(^|[^\\])\[speaker_[A-Za-z0-9][A-Za-z0-9_-]*\]/u.test(input.text);
+    containsSpeakerDirective(input.text);
   if (parsed.errors.length > 0 || hasControl) {
     throw new ProjectPreviewServiceError(
       "PROJECT_PREVIEW_INVALID_SEGMENT",
