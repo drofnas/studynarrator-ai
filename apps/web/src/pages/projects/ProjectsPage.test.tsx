@@ -1966,6 +1966,75 @@ describe("Projects workbench", () => {
     expect(screen.queryByText(/^Saved$/u)).not.toBeInTheDocument();
   });
 
+  it("sorts speakers by name by default, offers script order, and never edits mappings", async () => {
+    const mapping = (speakerId: string, displayName: string) => ({
+      speakerId,
+      displayName,
+      voiceId: `voice-${speakerId}`,
+      speed: 1,
+      gainDb: 0,
+      roleDescription: "",
+      sampleText: "",
+    });
+    const sortable = {
+      ...project,
+      scriptSource:
+        "[speaker_teacher] One.\n[speaker_student] Two.\n[speaker_coach] Three.",
+      speakerMappings: [
+        mapping("teacher", "Teacher"),
+        mapping("student", "student"),
+        mapping("coach", "Coach"),
+        mapping("archived", "Aardvark"),
+      ],
+    };
+    const { client, analyze, replace } = fixture(sortable);
+    const timerSpy = vi.spyOn(window, "setTimeout");
+    renderPage(client, analyze);
+    await openProjectTab("Settings");
+    await waitFor(() => expect(analyze).toHaveBeenCalled());
+    const speakers = await screen.findByRole("region", {
+      name: "Project speakers",
+    });
+    const order = () =>
+      within(speakers)
+        .getAllByLabelText(/^Name for speaker /u)
+        .map((input) =>
+          input.getAttribute("aria-label")?.replace("Name for speaker ", ""),
+        );
+    await waitFor(() =>
+      expect(order()).toEqual(["coach", "student", "teacher", "archived"]),
+    );
+    const sort = screen.getByLabelText("Sort speakers");
+    expect(sort).toHaveValue("name");
+
+    fireEvent.change(sort, { target: { value: "script" } });
+    expect(order()).toEqual(["teacher", "student", "coach", "archived"]);
+    expect(
+      window.localStorage.getItem("studynarrator.project-speakers.sort.v1"),
+    ).toBe("script");
+    fireEvent.change(sort, { target: { value: "name" } });
+
+    const coach = screen.getByLabelText("Name for speaker coach");
+    coach.focus();
+    fireEvent.focus(coach);
+    fireEvent.change(coach, { target: { value: "Zed" } });
+    expect(order()).toEqual(["coach", "student", "teacher", "archived"]);
+    expect(screen.getByLabelText("Name for speaker coach")).toHaveFocus();
+    fireEvent.blur(coach);
+    expect(order()).toEqual(["student", "teacher", "coach", "archived"]);
+
+    await waitFor(() => expect(replace).toHaveBeenCalled(), { timeout: 2_000 });
+    expect(
+      replace.mock.calls
+        .at(-1)?.[1]
+        .speakerMappings.map(({ speakerId }) => speakerId),
+    ).toEqual(["teacher", "student", "coach", "archived"]);
+    expect(replace).toHaveBeenCalledTimes(1);
+    expect(
+      timerSpy.mock.calls.filter(([, delay]) => delay === 800),
+    ).toHaveLength(1);
+  });
+
   it("serializes saves so a stale response cannot overwrite a newer revision", async () => {
     const { client, analyze, replace } = fixture();
     const firstSave = deferred<ProjectDetail>();

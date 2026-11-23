@@ -55,6 +55,7 @@ import {
   stripSingleSurroundingCodeFence,
   type ProjectDraft,
 } from "@/features/projects/projectAuthoring.js";
+import { useSortedSpeakers } from "@/features/projects/speakerSort.js";
 import { queryKeys } from "@/app/queryKeys.js";
 import { useConnections } from "@/features/connections/ConnectionProvider.js";
 import { presentVoices } from "@/features/connections/voicePresentation.js";
@@ -219,6 +220,7 @@ export function useProjectsPageController({
       speechSegmentCount: number;
     }>;
   }>({ speakers: [], pauses: [], sections: [] });
+  const speakerOrdering = useSortedSpeakers(configuration.speakers);
   const [analysis, setAnalysis] = useState<ScriptAnalysisResult>();
   const [analysisState, setAnalysisState] = useState<AnalysisState>("idle");
   const [analysisError, setAnalysisError] = useState("");
@@ -1335,6 +1337,7 @@ export function useProjectsPageController({
     project,
     draft,
     configuration,
+    ...speakerOrdering,
     analysisState,
     analysisError,
     errors,

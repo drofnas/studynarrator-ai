@@ -11,6 +11,11 @@ export function ProjectConfigurationPanel({
 }) {
   const {
     configuration,
+    displayedSpeakers,
+    speakerSort,
+    setSpeakerSort,
+    beginSpeakerNameEdit,
+    endSpeakerNameEdit,
     updateSpeaker,
     enabledVoices,
     presentedEnabledVoices,
@@ -35,6 +40,20 @@ export function ProjectConfigurationPanel({
             }
           </b>
         </div>
+        <label className={styles.speakerSort}>
+          Sort speakers
+          <select
+            value={speakerSort}
+            onChange={(event) =>
+              setSpeakerSort(
+                event.target.value === "script" ? "script" : "name",
+              )
+            }
+          >
+            <option value="name">Name (A–Z)</option>
+            <option value="script">Script order</option>
+          </select>
+        </label>
         <p className={styles.overflowHint}>
           Scroll horizontally for voice, speed, and gain controls →
         </p>
@@ -59,7 +78,7 @@ export function ProjectConfigurationPanel({
                   <td colSpan={4}>No speakers discovered.</td>
                 </tr>
               ) : (
-                configuration.speakers.map((row) => (
+                displayedSpeakers.map((row) => (
                   <tr
                     className={!row.discovered ? styles.unused : ""}
                     key={row.speakerId}
@@ -68,6 +87,8 @@ export function ProjectConfigurationPanel({
                       <input
                         aria-label={`Name for speaker ${row.speakerId}`}
                         value={row.displayName}
+                        onFocus={beginSpeakerNameEdit}
+                        onBlur={endSpeakerNameEdit}
                         onChange={(event) =>
                           updateSpeaker(row.speakerId, {
                             displayName: event.target.value,

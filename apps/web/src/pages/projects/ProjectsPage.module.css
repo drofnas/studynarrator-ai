@@ -412,6 +412,18 @@
 .unused {
   opacity: 0.58;
 }
+.speakerSort {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: -8px 0 12px;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+}
+.speakerSort select {
+  max-width: 100%;
+}
 .voiceFieldMessage {
   margin: 8px 0 0;
   color: var(--text-secondary);
