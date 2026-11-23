@@ -27,6 +27,8 @@ The supplied Compose package publishes the Web UI on `127.0.0.1` only. Its `.env
 
 Follow the official [Speaches installation guide](https://speaches.ai/installation/) and [text-to-speech guide](https://speaches.ai/usage/text-to-speech/) for Speaches installation, hardware, model, and voice setup.
 
+Speaches keeps model memory after requests finish. On the Speaches Docker host, `scripts/speaches/speaches-status.sh` reports the container's memory and open client connections, and recommends a restart (`Restart?: True`) when no client is connected and memory use is at or above the threshold. It only reports; a scheduled job on that host can act on its output. Override the defaults with `SPEACHES_CONTAINER` (`speaches`), `SPEACHES_PORT` (`8080`, the port inside the container), and `SPEACHES_RESTART_MEMORY_THRESHOLD` (`5`, in percent).
+
 StudyNarrator AI starts and remains healthy while Speaches is offline. Project editing, parsing, lexicon work, dry runs, and prompt exports remain available. Preview and rendering recover after the configured Speaches endpoint becomes reachable; the StudyNarrator AI container does not need to restart.
 
 ## Data and upgrades
