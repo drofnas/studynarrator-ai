@@ -27,14 +27,23 @@ The supplied Compose package publishes the Web UI on `127.0.0.1` only. Its `.env
 
 Follow the official [Speaches installation guide](https://speaches.ai/installation/) and [text-to-speech guide](https://speaches.ai/usage/text-to-speech/) for Speaches installation, hardware, model, and voice setup.
 
-Speaches keeps model memory after requests finish. On the Speaches Docker host, `scripts/speaches/speaches-idle-restart.sh` restarts the Speaches container once its CPU use has stayed below the idle threshold for 10 minutes while it still holds memory. Run it every minute; each run takes one CPU sample, records the last active time under `~/.local/state/speaches-idle-restart/`, and prints one log line. Open connections are ignored, because a reverse proxy such as Tailscale Serve keeps its connection to Speaches open while idle. Pass `--dry-run` to see the decision without restarting.
+### Releasing Speaches memory
+
+Speaches keeps model memory after requests finish. On the Speaches Docker host, `scripts/speaches/speaches-idle-restart.sh` restarts the Speaches container once its CPU use has stayed below the idle threshold for 10 minutes while it still holds memory. Each check takes one CPU sample, records the last active time, and prints one log line. Open connections are ignored, because a reverse proxy such as Tailscale Serve keeps its connection to Speaches open while idle. Pass `--dry-run` to see the decision without restarting.
+
+Install it as a systemd service:
 
 ```sh
-# crontab -e on the Speaches host (the user must be able to run docker)
-* * * * * /path/to/speaches-idle-restart.sh >> "$HOME/speaches-idle-restart.log" 2>&1
+sudo install -m 755 scripts/speaches/speaches-idle-restart.sh /usr/local/bin/
+sudo install -m 644 scripts/speaches/speaches-idle-restart.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now speaches-idle-restart.service
+journalctl -u speaches-idle-restart.service -f
 ```
 
-Override the defaults with `SPEACHES_CONTAINER` (`speaches`), `SPEACHES_IDLE_MINUTES` (`10`), `SPEACHES_IDLE_CPU_THRESHOLD` (`2`, percent), `SPEACHES_RESTART_MEMORY_THRESHOLD` (`5`, percent), and `SPEACHES_STATE_DIR`.
+To run it from cron instead, call it without `--watch` once a minute. Only one copy runs at a time.
+
+Override the defaults with `Environment=` lines in the unit: `SPEACHES_CONTAINER` (`speaches`), `SPEACHES_IDLE_MINUTES` (`10`), `SPEACHES_IDLE_CPU_THRESHOLD` (`2`, percent), `SPEACHES_RESTART_MEMORY_THRESHOLD` (`5`, percent), `SPEACHES_CHECK_INTERVAL_SECONDS` (`60`), and `SPEACHES_STATE_DIR`.
 
 StudyNarrator AI starts and remains healthy while Speaches is offline. Project editing, parsing, lexicon work, dry runs, and prompt exports remain available. Preview and rendering recover after the configured Speaches endpoint becomes reachable; the StudyNarrator AI container does not need to restart.
 

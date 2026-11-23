@@ -1,0 +1,20 @@
+# Restart the Speaches container after 10 minutes idle.
+# Install: see "Releasing Speaches memory" in deploy/docker/README.md.
+[Unit]
+Description=Restart Speaches after 10 min idle
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/speaches-idle-restart.sh --watch
+StateDirectory=speaches-idle-restart
+Environment=SPEACHES_STATE_DIR=/var/lib/speaches-idle-restart
+# Environment=SPEACHES_CONTAINER=speaches
+# Environment=SPEACHES_IDLE_MINUTES=10
+# Environment=SPEACHES_IDLE_CPU_THRESHOLD=2
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

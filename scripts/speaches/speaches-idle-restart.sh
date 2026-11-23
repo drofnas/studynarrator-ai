@@ -2,16 +2,18 @@
 # Restart a Speaches container after it has been idle for a while, to release
 # the model memory Speaches keeps after requests finish.
 #
-# Run it every minute from cron or a systemd timer on the Docker host that runs
-# Speaches. Each run takes one CPU sample. A sample at or above the CPU
-# threshold marks the container active. When the container has stayed below
-# the threshold for the idle period and still holds memory at or above the
-# memory threshold, the script restarts it.
+# Run it on the Docker host that runs Speaches, either as a service with
+# --watch (see speaches-idle-restart.service) or once a minute from cron. Each
+# check takes one CPU sample. A sample at or above the CPU threshold marks the
+# container active. When the container has stayed below the threshold for the
+# idle period and still holds memory at or above the memory threshold, the
+# script restarts it.
 #
 # Open connections are ignored: a reverse proxy such as Tailscale Serve in a
 # shared network namespace keeps its connection to Speaches open while idle.
 #
-# Usage: speaches-idle-restart.sh [--dry-run]
+# Usage: speaches-idle-restart.sh [--watch] [--dry-run]
+#   --watch    keep running and check every SPEACHES_CHECK_INTERVAL_SECONDS.
 #   --dry-run  report the decision without restarting.
 set -euo pipefail
 
@@ -19,17 +21,21 @@ CONTAINER="${SPEACHES_CONTAINER:-speaches}"
 IDLE_MINUTES="${SPEACHES_IDLE_MINUTES:-10}"
 IDLE_CPU_THRESHOLD="${SPEACHES_IDLE_CPU_THRESHOLD:-2}"
 RESTART_MEMORY_THRESHOLD="${SPEACHES_RESTART_MEMORY_THRESHOLD:-5}"
-STATE_DIR="${SPEACHES_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/speaches-idle-restart}"
+CHECK_INTERVAL_SECONDS="${SPEACHES_CHECK_INTERVAL_SECONDS:-60}"
+STATE_DIR="${SPEACHES_STATE_DIR:-${XDG_STATE_HOME:-${HOME:-/var/tmp}/.local/state}/speaches-idle-restart}"
 
+WATCH="false"
 DRY_RUN="false"
-case "${1:-}" in
-    "") ;;
-    --dry-run) DRY_RUN="true" ;;
-    *)
-        echo "Usage: $0 [--dry-run]" >&2
-        exit 2
-        ;;
-esac
+for arg in "$@"; do
+    case "$arg" in
+        --watch) WATCH="true" ;;
+        --dry-run) DRY_RUN="true" ;;
+        *)
+            echo "Usage: $0 [--watch] [--dry-run]" >&2
+            exit 2
+            ;;
+    esac
+done
 
 # Succeeds when $1 is a number at or above $2. A value that is not a number,
 # such as docker's "--", fails.
@@ -52,66 +58,87 @@ report() {
 mkdir -p "$STATE_DIR"
 STATE_FILE="$STATE_DIR/$CONTAINER.last-active"
 
-# Skip this run if the previous one is still going.
+# Only one copy runs at a time, so a cron entry left beside the service, or an
+# overlapping cron run, exits quietly.
 if command -v flock >/dev/null 2>&1; then
     exec 9>"$STATE_DIR/$CONTAINER.lock"
-    flock -n 9 || exit 0
-fi
-
-if ! docker inspect "$CONTAINER" >/dev/null 2>&1; then
-    report "error=container-not-found"
-    exit 1
-fi
-
-if [[ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER")" != "true" ]]; then
-    report "status=stopped action=none"
-    exit 0
-fi
-
-NOW=$(date +%s)
-
-# A container that started after the last recorded activity has been idle only
-# since it started, so a restart never repeats on the next run.
-STARTED_AT=$(docker inspect -f '{{.State.StartedAt}}' "$CONTAINER")
-STARTED_AT="${STARTED_AT%%.*}"
-STARTED_AT="${STARTED_AT%Z}"
-STARTED=$(date -u -d "${STARTED_AT/T/ }" +%s 2>/dev/null || echo "$NOW")
-
-LAST_ACTIVE=$(cat "$STATE_FILE" 2>/dev/null || true)
-if ! [[ "$LAST_ACTIVE" =~ ^[0-9]+$ ]]; then
-    # First run: start the idle clock now.
-    LAST_ACTIVE="$NOW"
-fi
-if ((STARTED > LAST_ACTIVE)); then
-    LAST_ACTIVE="$STARTED"
-fi
-
-STATS=$(docker stats "$CONTAINER" --no-stream --format '{{.CPUPerc}}|{{.MemUsage}}|{{.MemPerc}}')
-IFS='|' read -r CPU MEMORY MEMORY_PERCENT <<<"$STATS"
-CPU="${CPU%\%}"
-MEMORY_PERCENT="${MEMORY_PERCENT%\%}"
-
-if ! below "$CPU" "$IDLE_CPU_THRESHOLD"; then
-    LAST_ACTIVE="$NOW"
-fi
-
-IDLE_SECONDS=$((NOW - LAST_ACTIVE))
-IDLE_LIMIT_SECONDS=$((IDLE_MINUTES * 60))
-SUMMARY="cpu=${CPU}% memory=\"$MEMORY\" memory_percent=${MEMORY_PERCENT}% idle=$((IDLE_SECONDS / 60))m/${IDLE_MINUTES}m"
-
-ACTION="none"
-if ((IDLE_SECONDS >= IDLE_LIMIT_SECONDS)) &&
-    at_or_above "$MEMORY_PERCENT" "$RESTART_MEMORY_THRESHOLD"; then
-    if [[ "$DRY_RUN" == "true" ]]; then
-        ACTION="would-restart"
-    else
-        docker restart "$CONTAINER" >/dev/null
-        ACTION="restarted"
-        LAST_ACTIVE=$(date +%s)
+    if ! flock -n 9; then
+        [[ "$WATCH" == "true" ]] && report "error=already-running"
+        exit 0
     fi
 fi
 
-echo "$LAST_ACTIVE" >"$STATE_FILE.tmp"
-mv "$STATE_FILE.tmp" "$STATE_FILE"
+# Returns 1 when the check could not read the container.
+check_once() {
+    if ! docker inspect "$CONTAINER" >/dev/null 2>&1; then
+        report "error=container-not-found"
+        return 1
+    fi
 
-report "status=running $SUMMARY action=$ACTION"
+    if [[ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER")" != "true" ]]; then
+        report "status=stopped action=none"
+        return 0
+    fi
+
+    local now started_at started last_active stats cpu memory memory_percent
+    now=$(date +%s)
+
+    # A container that started after the last recorded activity has been idle
+    # only since it started, so a restart never repeats on the next check.
+    started_at=$(docker inspect -f '{{.State.StartedAt}}' "$CONTAINER")
+    started_at="${started_at%%.*}"
+    started_at="${started_at%Z}"
+    started=$(date -u -d "${started_at/T/ }" +%s 2>/dev/null || echo "$now")
+
+    last_active=$(cat "$STATE_FILE" 2>/dev/null || true)
+    if ! [[ "$last_active" =~ ^[0-9]+$ ]]; then
+        # First check: start the idle clock now.
+        last_active="$now"
+    fi
+    if ((started > last_active)); then
+        last_active="$started"
+    fi
+
+    stats=$(docker stats "$CONTAINER" --no-stream --format '{{.CPUPerc}}|{{.MemUsage}}|{{.MemPerc}}')
+    IFS='|' read -r cpu memory memory_percent <<<"$stats"
+    cpu="${cpu%\%}"
+    memory_percent="${memory_percent%\%}"
+
+    if ! below "$cpu" "$IDLE_CPU_THRESHOLD"; then
+        last_active="$now"
+    fi
+
+    local idle_seconds=$((now - last_active))
+    local action="none"
+    if ((idle_seconds >= IDLE_MINUTES * 60)) &&
+        at_or_above "$memory_percent" "$RESTART_MEMORY_THRESHOLD"; then
+        if [[ "$DRY_RUN" == "true" ]]; then
+            action="would-restart"
+        else
+            if docker restart "$CONTAINER" >/dev/null; then
+                action="restarted"
+                last_active=$(date +%s)
+            else
+                action="restart-failed"
+            fi
+        fi
+    fi
+
+    echo "$last_active" >"$STATE_FILE.tmp"
+    mv "$STATE_FILE.tmp" "$STATE_FILE"
+
+    report "status=running cpu=${cpu}% memory=\"$memory\" memory_percent=${memory_percent}%" \
+        "idle=$((idle_seconds / 60))m/${IDLE_MINUTES}m action=$action"
+}
+
+if [[ "$WATCH" != "true" ]]; then
+    check_once
+    exit
+fi
+
+report "watching every ${CHECK_INTERVAL_SECONDS}s; restart after ${IDLE_MINUTES}m below ${IDLE_CPU_THRESHOLD}% CPU"
+while true; do
+    # A failed check is logged and retried on the next interval.
+    check_once || true
+    sleep "$CHECK_INTERVAL_SECONDS"
+done
