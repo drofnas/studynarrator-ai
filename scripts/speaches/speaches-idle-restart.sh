@@ -3,8 +3,9 @@
 # the model memory Speaches keeps after requests finish.
 #
 # Run it on the Docker host that runs Speaches, either as a service with
-# --watch (see speaches-idle-restart.service) or once a minute from cron. Each
-# check takes one CPU sample. A sample at or above the CPU threshold marks the
+# --watch (see speaches-idle-restart.service), which samples every 5 seconds
+# and logs only restarts and errors, or once a minute from cron, which logs
+# every check. Each check takes one CPU sample. A sample at or above the CPU threshold marks the
 # container active. When the container has stayed below the threshold for the
 # idle period and still holds memory at or above the memory threshold, the
 # script restarts it.
@@ -21,7 +22,9 @@ CONTAINER="${SPEACHES_CONTAINER:-speaches}"
 IDLE_MINUTES="${SPEACHES_IDLE_MINUTES:-10}"
 IDLE_CPU_THRESHOLD="${SPEACHES_IDLE_CPU_THRESHOLD:-2}"
 RESTART_MEMORY_THRESHOLD="${SPEACHES_RESTART_MEMORY_THRESHOLD:-5}"
-CHECK_INTERVAL_SECONDS="${SPEACHES_CHECK_INTERVAL_SECONDS:-60}"
+# Short text-to-speech requests can finish between widely spaced samples, so
+# watch mode samples often, like the ComfyUI idle unloader.
+CHECK_INTERVAL_SECONDS="${SPEACHES_CHECK_INTERVAL_SECONDS:-5}"
 STATE_DIR="${SPEACHES_STATE_DIR:-${XDG_STATE_HOME:-${HOME:-/var/tmp}/.local/state}/speaches-idle-restart}"
 
 WATCH="false"
@@ -127,8 +130,11 @@ check_once() {
     echo "$last_active" >"$STATE_FILE.tmp"
     mv "$STATE_FILE.tmp" "$STATE_FILE"
 
-    report "status=running cpu=${cpu}% memory=\"$memory\" memory_percent=${memory_percent}%" \
-        "idle=$((idle_seconds / 60))m/${IDLE_MINUTES}m action=$action"
+    # Watch mode logs only restarts, so the journal stays readable.
+    if [[ "$WATCH" != "true" || "$action" != "none" ]]; then
+        report "status=running cpu=${cpu}% memory=\"$memory\" memory_percent=${memory_percent}%" \
+            "idle=$((idle_seconds / 60))m/${IDLE_MINUTES}m action=$action"
+    fi
 }
 
 if [[ "$WATCH" != "true" ]]; then
