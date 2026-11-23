@@ -611,8 +611,11 @@ test.describe("Projects connected authoring", () => {
     await expect(alice).toHaveValue("af_sky");
     await expect(alice).toBeEnabled();
     await expect(alice).toHaveAccessibleDescription(
-      "* Script default voice af_sky.",
+      "* Default voice set in the script.",
     );
+    await expect(
+      page.getByText("* Default voice set in the script.", { exact: true }),
+    ).toHaveCount(1);
     await expect(
       alice.getByRole("option", { name: /^\* .*af_sky.*\(script default\)$/u }),
     ).toBeAttached();
@@ -622,11 +625,6 @@ test.describe("Projects connected authoring", () => {
     await expect(page.getByLabel("Voice for speaker carol")).toHaveValue(
       "af_heart",
     );
-    await expect(
-      page.getByText(
-        "Script voice zz_missing is not available for this model, so the voice selected here is used.",
-      ),
-    ).toBeVisible();
 
     const projectId = /projects\/([0-9a-f-]{36})/u.exec(page.url())?.[1] ?? "";
     const persistedAlice = async () => {
@@ -653,9 +651,6 @@ test.describe("Projects connected authoring", () => {
       .toEqual({ voiceId: "af_sky", voiceOverride: false });
 
     await alice.selectOption("af_heart");
-    await expect(alice).toHaveAccessibleDescription(
-      "Overrides script default voice af_sky. Choose the * voice to follow the script.",
-    );
     await expect
       .poll(persistedAlice)
       .toEqual({ voiceId: "af_heart", voiceOverride: true });
@@ -666,6 +661,18 @@ test.describe("Projects connected authoring", () => {
     );
 
     await page.getByLabel("Voice for speaker alice").selectOption("af_sky");
+    await expect
+      .poll(persistedAlice)
+      .toEqual({ voiceId: "af_sky", voiceOverride: false });
+
+    await page.getByLabel("Voice for speaker alice").selectOption("af_heart");
+    await expect
+      .poll(persistedAlice)
+      .toEqual({ voiceId: "af_heart", voiceOverride: true });
+    await page.getByRole("button", { name: "Reset Defaults" }).click();
+    await expect(page.getByLabel("Voice for speaker alice")).toHaveValue(
+      "af_sky",
+    );
     await expect
       .poll(persistedAlice)
       .toEqual({ voiceId: "af_sky", voiceOverride: false });

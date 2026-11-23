@@ -5,17 +5,6 @@ import { speakerVoiceSelection } from "@/features/projects/projectAuthoring.js";
 import styles from "./ProjectsPage.module.css";
 import type { ProjectPageController } from "./useProjectsPageController.js";
 
-function scriptVoiceNote(
-  voiceHint: string,
-  status: "none" | "following" | "overridden" | "unavailable",
-): string {
-  if (status === "unavailable")
-    return `Script voice ${voiceHint} is not available for this model, so the voice selected here is used.`;
-  if (status === "overridden")
-    return `Overrides script default voice ${voiceHint}. Choose the * voice to follow the script.`;
-  return `* Script default voice ${voiceHint}.`;
-}
-
 export function ProjectConfigurationPanel({
   controller,
 }: {
@@ -29,7 +18,7 @@ export function ProjectConfigurationPanel({
     beginSpeakerNameEdit,
     endSpeakerNameEdit,
     updateSpeaker,
-    scriptVoiceStatuses,
+    resetSpeakerVoices,
     enabledVoices,
     presentedEnabledVoices,
     voiceSelectionState,
@@ -43,15 +32,24 @@ export function ProjectConfigurationPanel({
     <aside className={styles.configRail} aria-label="Project configuration">
       <section>
         <div className={styles.sectionHeading}>
-          <div>
+          <div className={styles.speakerTitle}>
             <h3>Speakers</h3>
+            <b aria-label="Speakers in script">
+              {
+                configuration.speakers.filter(({ discovered }) => discovered)
+                  .length
+              }
+            </b>
           </div>
-          <b>
-            {
-              configuration.speakers.filter(({ discovered }) => discovered)
-                .length
+          <button
+            type="button"
+            disabled={
+              enabledVoices.length === 0 || configuration.speakers.length === 0
             }
-          </b>
+            onClick={resetSpeakerVoices}
+          >
+            Reset Defaults
+          </button>
         </div>
         <label className={styles.speakerSort}>
           Sort speakers
@@ -115,7 +113,7 @@ export function ProjectConfigurationPanel({
                         aria-describedby={
                           row.voiceHint === undefined
                             ? undefined
-                            : `script-voice-${row.speakerId}`
+                            : "script-voice-legend"
                         }
                         disabled={enabledVoices.length === 0}
                         value={
@@ -141,23 +139,6 @@ export function ProjectConfigurationPanel({
                           )
                         }
                       />
-                      {row.voiceHint === undefined ? null : (
-                        <p
-                          id={`script-voice-${row.speakerId}`}
-                          className={styles.scriptVoiceNote}
-                          role={
-                            scriptVoiceStatuses.get(row.speakerId) ===
-                            "unavailable"
-                              ? "status"
-                              : undefined
-                          }
-                        >
-                          {scriptVoiceNote(
-                            row.voiceHint,
-                            scriptVoiceStatuses.get(row.speakerId) ?? "none",
-                          )}
-                        </p>
-                      )}
                     </td>
                     <td>
                       <input
@@ -194,6 +175,13 @@ export function ProjectConfigurationPanel({
             </tbody>
           </table>
         </div>
+        {configuration.speakers.some(
+          ({ voiceHint }) => voiceHint !== undefined,
+        ) ? (
+          <p id="script-voice-legend" className={styles.scriptVoiceNote}>
+            * Default voice set in the script.
+          </p>
+        ) : null}
         {enabledVoices.length === 0 ? (
           <p className={styles.voiceFieldMessage}>
             {!selectedConnection?.configured && voiceSelectionState === "ready"

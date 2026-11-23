@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import type { VoiceCatalogEntry } from "@studynarrator/shared-types";
 import {
+  defaultSpeakerVoice,
   resolveEffectiveSpeakerVoiceId,
   resolveProjectSpeakerVoiceId,
   scriptVoiceStatus,
@@ -190,5 +191,35 @@ describe("authoring input helpers", () => {
         voices,
       ),
     ).toBe("unavailable");
+  });
+
+  it("resets a speaker to its usable script voice, then af_heart, then the default chain", () => {
+    const heart = { ...voices[1]!, voiceId: "af_heart" };
+    expect(
+      defaultSpeakerVoice({ voiceHint: "voice-first" }, "voice-default", [
+        ...voices,
+        heart,
+      ]),
+    ).toEqual({ voiceId: "voice-first", voiceOverride: false });
+    expect(
+      defaultSpeakerVoice({ voiceHint: "voice-disabled" }, "voice-default", [
+        ...voices,
+        heart,
+      ]),
+    ).toEqual({ voiceId: "af_heart", voiceOverride: false });
+    expect(
+      defaultSpeakerVoice({}, "voice-default", [...voices, heart]),
+    ).toEqual({ voiceId: "af_heart", voiceOverride: false });
+    expect(defaultSpeakerVoice({}, "voice-default", voices)).toEqual({
+      voiceId: "voice-default",
+      voiceOverride: false,
+    });
+    expect(
+      defaultSpeakerVoice(
+        {},
+        null,
+        voices.map((voice) => ({ ...voice, enabled: false })),
+      ),
+    ).toEqual({ voiceId: null, voiceOverride: false });
   });
 });

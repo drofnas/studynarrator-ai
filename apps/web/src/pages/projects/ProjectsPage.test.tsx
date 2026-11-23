@@ -1765,7 +1765,12 @@ describe("Projects workbench", () => {
     const alice = await screen.findByLabelText("Voice for speaker alice");
     await waitFor(() => expect(alice).toHaveValue("af_sky"));
     expect(alice).toBeEnabled();
-    expect(alice).toHaveAccessibleDescription("* Script default voice af_sky.");
+    expect(alice).toHaveAccessibleDescription(
+      "* Default voice set in the script.",
+    );
+    expect(
+      screen.getAllByText("* Default voice set in the script."),
+    ).toHaveLength(1);
     expect(
       within(alice).getByRole("option", {
         name: "* Sky (af_sky | en-US) (script default)",
@@ -1777,15 +1782,10 @@ describe("Projects workbench", () => {
     expect(screen.getByLabelText("Voice for speaker bob")).toHaveValue(
       "af_heart",
     );
-    expect(
-      screen.getByText(
-        "Script voice zz_missing is not available for this model, so the voice selected here is used.",
-      ),
-    ).toHaveAttribute("role", "status");
     const carol = screen.getByLabelText("Voice for speaker carol");
     expect(carol).toHaveValue("af_sky");
     expect(carol).toHaveAccessibleDescription(
-      "Overrides script default voice af_heart. Choose the * voice to follow the script.",
+      "* Default voice set in the script.",
     );
     await waitFor(() =>
       expect(replace).toHaveBeenLastCalledWith(
@@ -1831,9 +1831,7 @@ describe("Projects workbench", () => {
     );
     expect(
       screen.getByLabelText("Voice for speaker alice"),
-    ).toHaveAccessibleDescription(
-      "Overrides script default voice af_sky. Choose the * voice to follow the script.",
-    );
+    ).toHaveAccessibleDescription("* Default voice set in the script.");
     await waitFor(() =>
       expect(replace).toHaveBeenLastCalledWith(
         project.id,
@@ -1845,6 +1843,75 @@ describe("Projects workbench", () => {
               voiceOverride: true,
             }),
             expect.objectContaining({ speakerId: "bob" }),
+            expect.objectContaining({
+              speakerId: "carol",
+              voiceId: "af_heart",
+              voiceOverride: false,
+            }),
+          ],
+        }),
+      ),
+    );
+  });
+
+  it("resets every speaker to its script voice or af_heart and clears overrides", async () => {
+    const { client, analyze, replace } = fixture({
+      ...project,
+      scriptSource:
+        "[speaker_alice|af_sky] Hi.\n[speaker_bob] Yo.\n[speaker_carol|af_heart] Hey.",
+      speakerMappings: [
+        {
+          speakerId: "alice",
+          displayName: "Alice",
+          voiceId: "af_heart",
+          voiceOverride: true,
+          speed: 1,
+          gainDb: 0,
+          roleDescription: "",
+          sampleText: "",
+        },
+        {
+          speakerId: "bob",
+          displayName: "Bob",
+          voiceId: "af_sky",
+          voiceOverride: true,
+          speed: 1,
+          gainDb: 0,
+          roleDescription: "",
+          sampleText: "",
+        },
+      ],
+    });
+    renderPage(client, analyze, { catalog: globalCatalog });
+    await openProjectTab("Settings");
+    const alice = await screen.findByLabelText("Voice for speaker alice");
+    await waitFor(() => expect(alice).toHaveValue("af_heart"));
+    expect(screen.getByLabelText("Speakers in script")).toHaveTextContent("3");
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset Defaults" }));
+
+    expect(alice).toHaveValue("af_sky");
+    expect(screen.getByLabelText("Voice for speaker bob")).toHaveValue(
+      "af_heart",
+    );
+    expect(screen.getByLabelText("Voice for speaker carol")).toHaveValue(
+      "af_heart",
+    );
+    await waitFor(() =>
+      expect(replace).toHaveBeenLastCalledWith(
+        project.id,
+        expect.objectContaining({
+          speakerMappings: [
+            expect.objectContaining({
+              speakerId: "alice",
+              voiceId: "af_sky",
+              voiceOverride: false,
+            }),
+            expect.objectContaining({
+              speakerId: "bob",
+              voiceId: "af_heart",
+              voiceOverride: false,
+            }),
             expect.objectContaining({
               speakerId: "carol",
               voiceId: "af_heart",

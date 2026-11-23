@@ -71,6 +71,31 @@ export function speakerVoiceSelection(
   return { voiceId, voiceOverride: voiceId !== speaker.voiceHint };
 }
 
+/**
+ * The "Reset Defaults" voice for one speaker: the script's voice when it is
+ * usable, otherwise the bundled default voice (af_heart), otherwise the
+ * existing default chain. Resetting always clears the Settings override.
+ */
+export function defaultSpeakerVoice(
+  speaker: Pick<SpeakerVoiceState, "voiceHint">,
+  connectionDefaultVoiceId: string | null,
+  catalogEntries: readonly VoiceCatalogEntry[],
+): { voiceId: string | null; voiceOverride: false } {
+  const enabled = (voiceId: string | undefined) =>
+    voiceId !== undefined &&
+    catalogEntries.some((entry) => entry.enabled && entry.voiceId === voiceId);
+  const voiceId = enabled(speaker.voiceHint)
+    ? speaker.voiceHint!
+    : enabled(GLOBAL_VOICE_CATALOG_DEFAULT_VOICE_ID)
+      ? GLOBAL_VOICE_CATALOG_DEFAULT_VOICE_ID
+      : resolveProjectSpeakerVoiceId(
+          null,
+          connectionDefaultVoiceId,
+          catalogEntries,
+        );
+  return { voiceId, voiceOverride: false };
+}
+
 /** Reports whether a speaker's script voice hint can be used. */
 export function scriptVoiceStatus(
   speaker: SpeakerVoiceState,

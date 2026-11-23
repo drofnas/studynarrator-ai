@@ -45,6 +45,7 @@ import type { ScriptAnalyzer } from "@/workers/parser/parserClient.js";
 import type { ScriptAnalysisResult } from "@/workers/parser/parserWorkerProtocol.js";
 import {
   authoringLexicon,
+  defaultSpeakerVoice,
   draftFromProject,
   GLOBAL_VOICE_CATALOG_DEFAULT_VOICE_ID,
   GLOBAL_VOICE_CATALOG_MODEL_ID,
@@ -726,6 +727,32 @@ export function useProjectsPageController({
     [updateDraft],
   );
 
+  const resetSpeakerVoices = useCallback(() => {
+    if (enabledVoices.length === 0) return;
+    const voiceHints = new Map(
+      configuration.speakers.map(({ speakerId, voiceHint }) => [
+        speakerId,
+        voiceHint,
+      ]),
+    );
+    const reset = <T extends { speakerId: string }>(speaker: T): T => ({
+      ...speaker,
+      ...defaultSpeakerVoice(
+        { voiceHint: voiceHints.get(speaker.speakerId) },
+        voiceDefaultId,
+        enabledVoices,
+      ),
+    });
+    setConfiguration((current) => ({
+      ...current,
+      speakers: current.speakers.map(reset),
+    }));
+    updateDraft((current) => ({
+      ...current,
+      speakerMappings: current.speakerMappings.map(reset),
+    }));
+  }, [configuration.speakers, enabledVoices, updateDraft, voiceDefaultId]);
+
   useEffect(() => {
     if (
       voiceSelectionState !== "ready" ||
@@ -1399,7 +1426,7 @@ export function useProjectsPageController({
     cleanupUndo,
     setCleanupUndo,
     updateSpeaker,
-    scriptVoiceStatuses,
+    resetSpeakerVoices,
     enabledVoices,
     presentedEnabledVoices,
     voiceSelectionState,
