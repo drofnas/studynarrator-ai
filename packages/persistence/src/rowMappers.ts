@@ -46,6 +46,7 @@ export interface SpeakerRow {
   speaker_id: string;
   display_name: string;
   voice_id: string | null;
+  voice_override: 0 | 1;
   speed: number;
   gain_db: number;
   role_description: string;

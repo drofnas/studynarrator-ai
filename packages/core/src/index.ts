@@ -41,7 +41,7 @@ export {
   type TransformScriptInput,
   type TransformScriptResult,
 } from "./schemas.js";
-export { parseScript } from "./parser.js";
+export { containsSpeakerDirective, parseScript } from "./parser.js";
 export { normalizeLexiconEntries } from "./lexicon.js";
 export { transformScript } from "./transformer.js";
 export { resolveParagraphPauses } from "./pacing.js";

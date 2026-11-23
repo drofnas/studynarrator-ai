@@ -29,6 +29,62 @@ export function resolveProjectSpeakerVoiceId(
   return catalogEntries.find(({ enabled }) => enabled)?.voiceId ?? null;
 }
 
+export interface SpeakerVoiceState {
+  voiceId: string | null;
+  voiceOverride?: boolean | undefined;
+  voiceHint?: string | undefined;
+}
+
+/**
+ * Effective voice precedence for one speaker: a saved Settings override, then
+ * a usable script voice hint, then the existing default chain. Only enabled
+ * catalog voices are usable. This never changes the override flag.
+ */
+export function resolveEffectiveSpeakerVoiceId(
+  speaker: SpeakerVoiceState,
+  connectionDefaultVoiceId: string | null,
+  catalogEntries: readonly VoiceCatalogEntry[],
+): string | null {
+  const enabled = (voiceId: string | null | undefined) =>
+    Boolean(voiceId) &&
+    catalogEntries.some((entry) => entry.enabled && entry.voiceId === voiceId);
+  if (speaker.voiceOverride === true && enabled(speaker.voiceId))
+    return speaker.voiceId;
+  if (speaker.voiceHint !== undefined && enabled(speaker.voiceHint))
+    return speaker.voiceHint;
+  return resolveProjectSpeakerVoiceId(
+    speaker.voiceId,
+    connectionDefaultVoiceId,
+    catalogEntries,
+  );
+}
+
+/**
+ * A manual voice choice in Settings. Choosing the script's hinted voice clears
+ * the override so the speaker follows the script again; any other choice is
+ * stored as an override that a script hint cannot replace.
+ */
+export function speakerVoiceSelection(
+  speaker: Pick<SpeakerVoiceState, "voiceHint">,
+  voiceId: string,
+): { voiceId: string; voiceOverride: boolean } {
+  return { voiceId, voiceOverride: voiceId !== speaker.voiceHint };
+}
+
+/** Reports whether a speaker's script voice hint can be used. */
+export function scriptVoiceStatus(
+  speaker: SpeakerVoiceState,
+  catalogEntries: readonly VoiceCatalogEntry[],
+): "none" | "following" | "overridden" | "unavailable" {
+  if (speaker.voiceHint === undefined) return "none";
+  const hintEnabled = catalogEntries.some(
+    (entry) => entry.enabled && entry.voiceId === speaker.voiceHint,
+  );
+  if (speaker.voiceOverride === true && speaker.voiceId !== speaker.voiceHint)
+    return "overridden";
+  return hintEnabled ? "following" : "unavailable";
+}
+
 export function supportedProjectVoices(
   catalogEntries: readonly VoiceCatalogEntry[],
   supportedVoices: readonly SpeechCatalogVoice[],

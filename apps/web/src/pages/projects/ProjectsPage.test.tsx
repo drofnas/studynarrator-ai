@@ -1740,6 +1740,171 @@ describe("Projects workbench", () => {
     );
   });
 
+  it("applies script voice hints, marks the script default, and stores Settings overrides", async () => {
+    const hinted = {
+      ...project,
+      scriptSource:
+        "[speaker_alice|af_sky] Hi.\n[speaker_bob|zz_missing] Yo.\n[speaker_carol|af_heart] Hey.",
+      speakerMappings: [
+        {
+          speakerId: "carol",
+          displayName: "Carol",
+          voiceId: "af_sky",
+          voiceOverride: true,
+          speed: 1,
+          gainDb: 0,
+          roleDescription: "",
+          sampleText: "",
+        },
+      ],
+    };
+    const { client, analyze, replace } = fixture(hinted);
+    renderPage(client, analyze, { catalog: globalCatalog });
+    await openProjectTab("Settings");
+
+    const alice = await screen.findByLabelText("Voice for speaker alice");
+    await waitFor(() => expect(alice).toHaveValue("af_sky"));
+    expect(alice).toBeEnabled();
+    expect(alice).toHaveAccessibleDescription("* Script default voice af_sky.");
+    expect(
+      within(alice).getByRole("option", {
+        name: "* Sky (af_sky | en-US) (script default)",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(alice).getByRole("option", { name: "Heart (af_heart | en-US)" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Voice for speaker bob")).toHaveValue(
+      "af_heart",
+    );
+    expect(
+      screen.getByText(
+        "Script voice zz_missing is not available for this model, so the voice selected here is used.",
+      ),
+    ).toHaveAttribute("role", "status");
+    const carol = screen.getByLabelText("Voice for speaker carol");
+    expect(carol).toHaveValue("af_sky");
+    expect(carol).toHaveAccessibleDescription(
+      "Overrides script default voice af_heart. Choose the * voice to follow the script.",
+    );
+    await waitFor(() =>
+      expect(replace).toHaveBeenLastCalledWith(
+        project.id,
+        expect.objectContaining({
+          speakerMappings: [
+            expect.objectContaining({
+              speakerId: "alice",
+              voiceId: "af_sky",
+              voiceOverride: false,
+            }),
+            expect.objectContaining({
+              speakerId: "bob",
+              voiceId: "af_heart",
+              voiceOverride: false,
+            }),
+            expect.objectContaining({
+              speakerId: "carol",
+              voiceId: "af_sky",
+              voiceOverride: true,
+            }),
+          ],
+        }),
+      ),
+    );
+    expect(
+      replace.mock.calls.every(([, input]) =>
+        input.speakerMappings.every((mapping) => !("voiceHint" in mapping)),
+      ),
+    ).toBe(true);
+    await openProjectTab("Details");
+    expect(await screen.findByText("SCRIPT_VOICE_UNAVAILABLE")).toBeVisible();
+    await openProjectTab("Settings");
+
+    fireEvent.change(screen.getByLabelText("Voice for speaker carol"), {
+      target: { value: "af_heart" },
+    });
+    fireEvent.change(screen.getByLabelText("Voice for speaker alice"), {
+      target: { value: "af_heart" },
+    });
+    expect(screen.getByLabelText("Voice for speaker alice")).toHaveValue(
+      "af_heart",
+    );
+    expect(
+      screen.getByLabelText("Voice for speaker alice"),
+    ).toHaveAccessibleDescription(
+      "Overrides script default voice af_sky. Choose the * voice to follow the script.",
+    );
+    await waitFor(() =>
+      expect(replace).toHaveBeenLastCalledWith(
+        project.id,
+        expect.objectContaining({
+          speakerMappings: [
+            expect.objectContaining({
+              speakerId: "alice",
+              voiceId: "af_heart",
+              voiceOverride: true,
+            }),
+            expect.objectContaining({ speakerId: "bob" }),
+            expect.objectContaining({
+              speakerId: "carol",
+              voiceId: "af_heart",
+              voiceOverride: false,
+            }),
+          ],
+        }),
+      ),
+    );
+  });
+
+  it("switches to a voice hint added after the default voice was filled", async () => {
+    const { client, analyze, replace } = fixture({
+      ...project,
+      scriptSource: "[speaker_teacher] SQL.",
+      speakerMappings: [],
+    });
+    renderPage(client, analyze, { catalog: globalCatalog });
+    await openProjectTab("Settings");
+    const teacher = await screen.findByLabelText("Voice for speaker teacher");
+    await waitFor(() => expect(teacher).toHaveValue("af_heart"));
+    await waitFor(() =>
+      expect(replace).toHaveBeenLastCalledWith(
+        project.id,
+        expect.objectContaining({
+          speakerMappings: [
+            expect.objectContaining({
+              voiceId: "af_heart",
+              voiceOverride: false,
+            }),
+          ],
+        }),
+      ),
+    );
+
+    await openProjectTab("Script Editor");
+    replaceScriptSource("[speaker_teacher|af_sky] SQL.");
+    await openProjectTab("Settings");
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Voice for speaker teacher")).toHaveValue(
+        "af_sky",
+      ),
+    );
+    await waitFor(() =>
+      expect(replace).toHaveBeenLastCalledWith(
+        project.id,
+        expect.objectContaining({
+          scriptSource: "[speaker_teacher|af_sky] SQL.",
+          speakerMappings: [
+            expect.objectContaining({
+              voiceId: "af_sky",
+              voiceOverride: false,
+            }),
+          ],
+        }),
+      ),
+    );
+  });
+
   it("analyzes offline, renders the narration score, and autosaves edits", async () => {
     const { client, analyze, replace } = fixture();
     const fetchSpy = vi.spyOn(globalThis, "fetch");

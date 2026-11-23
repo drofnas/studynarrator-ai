@@ -3,6 +3,7 @@ import {
   ParseScriptInputSchema,
   ParseScriptResultSchema,
   SYSTEM_DEFAULT_SPEAKER_ID,
+  containsSpeakerDirective,
   parseScript,
   transformScript,
 } from "./index.js";
@@ -593,5 +594,155 @@ describe("script parser", () => {
         ignoredDiagnostics: [{ code: "bad", pattern: "text" }],
       }),
     ).toThrow();
+  });
+});
+
+describe("speaker voice hints", () => {
+  it("records a voice hint without speaking the tag or changing the speaker ID", () => {
+    const result = parseScript({
+      source: [
+        "[speaker_alice|af_heart] Hello, I'm Alice.",
+        "[speaker_bob|en_US-lessac-medium] And I'm Bob.",
+        "[speaker_alice] Alice again.",
+        "[speaker_carol] No hint.",
+      ].join("\n"),
+    });
+
+    expect(result.errors).toEqual([]);
+    expect(result.warnings).toEqual([]);
+    expect(
+      result.nodes.flatMap((node) =>
+        node.type === "speech" ? [[node.speakerId, node.readableText]] : [],
+      ),
+    ).toEqual([
+      ["alice", "Hello, I'm Alice."],
+      ["bob", "And I'm Bob."],
+      ["alice", "Alice again."],
+      ["carol", "No hint."],
+    ]);
+    expect(
+      result.discoveries.speakers.map(({ id, voiceHint, occurrences }) => ({
+        id,
+        voiceHint,
+        count: occurrences.length,
+      })),
+    ).toEqual([
+      { id: "alice", voiceHint: "af_heart", count: 2 },
+      { id: "bob", voiceHint: "en_US-lessac-medium", count: 1 },
+      { id: "carol", voiceHint: undefined, count: 1 },
+    ]);
+    expect("voiceHint" in result.discoveries.speakers[2]!).toBe(false);
+    expect(ParseScriptResultSchema.parse(result)).toEqual(result);
+  });
+
+  it("takes a hint from a later tag and keeps the first hint on conflicts", () => {
+    const result = parseScript({
+      source:
+        "[speaker_alice] One. [speaker_alice|af_sky] Two.\n[speaker_alice|af_sky] Three. [speaker_alice|am_adam] Four.",
+    });
+
+    expect(result.errors).toEqual([]);
+    expect(result.discoveries.speakers).toEqual([
+      expect.objectContaining({ id: "alice", voiceHint: "af_sky" }),
+    ]);
+    expect(result.warnings).toEqual([
+      {
+        code: "CONFLICTING_SPEAKER_VOICE_HINT",
+        message:
+          "Speaker alice already uses voice hint af_sky; am_adam is ignored.",
+        line: 2,
+        column: 31,
+        offendingText:
+          "[speaker_alice|af_sky] Three. [speaker_alice|am_adam] Four.",
+        ignorePattern: "[speaker_alice|am_adam]",
+        suggestion:
+          "Use one voice hint for speaker alice, or remove the |am_adam part. The first hint in the script wins.",
+      },
+    ]);
+
+    const ignored = parseScript({
+      source: "[speaker_alice|af_sky] Three. [speaker_alice|am_adam] Four.",
+      ignoredDiagnostics: [
+        {
+          code: "CONFLICTING_SPEAKER_VOICE_HINT",
+          pattern: "[speaker_alice|am_adam]",
+        },
+      ],
+    });
+    expect(ignored.warnings).toEqual([]);
+  });
+
+  it("blocks malformed hints and keeps them as literal speech", () => {
+    const tokens = [
+      "[speaker_alice|]",
+      "[speaker_alice|bad voice]",
+      "[speaker_alice|a|b]",
+      "[speaker_alice|-leading]",
+      "[speaker_alice|voice/path]",
+      `[speaker_alice|${"v".repeat(501)}]`,
+    ];
+    for (const token of tokens) {
+      const result = parseScript({ source: `${token} Literal.` });
+
+      expect(result.errors).toEqual([
+        expect.objectContaining({
+          code: "INVALID_SPEAKER_VOICE_HINT",
+          column: 16,
+          ignorePattern: token,
+        }),
+      ]);
+      expect(result.nodes).toEqual([
+        expect.objectContaining({
+          type: "speech",
+          speakerId: SYSTEM_DEFAULT_SPEAKER_ID,
+          readableText: `${token} Literal.`,
+        }),
+      ]);
+    }
+
+    const longest = parseScript({
+      source: `[speaker_alice|${"v".repeat(500)}] Fine.`,
+    });
+    expect(longest.errors).toEqual([]);
+    expect(longest.discoveries.speakers[0]?.voiceHint).toHaveLength(500);
+  });
+
+  it("reports an invalid speaker name before checking its hint", () => {
+    const result = parseScript({ source: "[speaker_bad name|af_heart] Text." });
+
+    expect(result.errors.map(({ code }) => code)).toEqual([
+      "INVALID_SPEAKER_DIRECTIVE",
+    ]);
+  });
+
+  it("keeps an escaped hinted tag literal and applies hints to the default speaker", () => {
+    const escaped = parseScript({
+      source: "\\[speaker_alice|af_heart] stays literal.",
+    });
+    expect(escaped.errors).toEqual([]);
+    expect(escaped.nodes).toEqual([
+      expect.objectContaining({
+        readableText: "[speaker_alice|af_heart] stays literal.",
+      }),
+    ]);
+
+    const narrator = parseScript({
+      source: "Opening.\n[speaker_narrator|af_sky] Narrator again.",
+    });
+    expect(narrator.discoveries.speakers).toEqual([
+      expect.objectContaining({ id: "narrator", voiceHint: "af_sky" }),
+    ]);
+  });
+
+  it("detects unescaped speaker directives with or without hints", () => {
+    expect(containsSpeakerDirective("[speaker_a] Hi")).toBe(true);
+    expect(containsSpeakerDirective("Hi [speaker_a|af_heart] there")).toBe(
+      true,
+    );
+    expect(containsSpeakerDirective("\\[speaker_a|af_heart] literal")).toBe(
+      false,
+    );
+    expect(containsSpeakerDirective("[speaker_bad name]")).toBe(false);
+    expect(containsSpeakerDirective("plain text")).toBe(false);
   });
 });

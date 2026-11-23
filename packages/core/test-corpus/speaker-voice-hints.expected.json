@@ -1,0 +1,418 @@
+{
+  "parse": {
+    "grammarVersion": 1,
+    "cirSchemaVersion": 1,
+    "source": "[speaker_alice|af_heart] Hello, I am Alice.\n[speaker_bob|en_US-lessac-medium] And I am Bob.\n[speaker_alice] Alice again; the voice comes from her first tag.\nInline [speaker_carol|af_sky] switch with a hint, then [speaker_alice|am_adam] a conflicting hint.\n[speaker_dave|] An empty hint stays literal.\n\\[speaker_alice|af_heart] An escaped tag stays literal.\n",
+    "nodes": [
+      {
+        "ordinal": 1,
+        "range": {
+          "start": {
+            "line": 1,
+            "column": 26
+          },
+          "end": {
+            "line": 1,
+            "column": 44
+          }
+        },
+        "type": "speech",
+        "speakerId": "alice",
+        "rawText": "Hello, I am Alice.",
+        "readableText": "Hello, I am Alice.",
+        "annotations": []
+      },
+      {
+        "ordinal": 2,
+        "range": {
+          "start": {
+            "line": 2,
+            "column": 35
+          },
+          "end": {
+            "line": 2,
+            "column": 48
+          }
+        },
+        "type": "speech",
+        "speakerId": "bob",
+        "rawText": "And I am Bob.",
+        "readableText": "And I am Bob.",
+        "annotations": []
+      },
+      {
+        "ordinal": 3,
+        "range": {
+          "start": {
+            "line": 3,
+            "column": 17
+          },
+          "end": {
+            "line": 3,
+            "column": 65
+          }
+        },
+        "type": "speech",
+        "speakerId": "alice",
+        "rawText": "Alice again; the voice comes from her first tag.",
+        "readableText": "Alice again; the voice comes from her first tag.",
+        "annotations": []
+      },
+      {
+        "ordinal": 4,
+        "range": {
+          "start": {
+            "line": 4,
+            "column": 1
+          },
+          "end": {
+            "line": 4,
+            "column": 7
+          }
+        },
+        "type": "speech",
+        "speakerId": "alice",
+        "rawText": "Inline",
+        "readableText": "Inline",
+        "annotations": []
+      },
+      {
+        "ordinal": 5,
+        "range": {
+          "start": {
+            "line": 4,
+            "column": 31
+          },
+          "end": {
+            "line": 4,
+            "column": 55
+          }
+        },
+        "type": "speech",
+        "speakerId": "carol",
+        "rawText": "switch with a hint, then",
+        "readableText": "switch with a hint, then",
+        "annotations": []
+      },
+      {
+        "ordinal": 6,
+        "range": {
+          "start": {
+            "line": 4,
+            "column": 80
+          },
+          "end": {
+            "line": 4,
+            "column": 99
+          }
+        },
+        "type": "speech",
+        "speakerId": "alice",
+        "rawText": "a conflicting hint.",
+        "readableText": "a conflicting hint.",
+        "annotations": []
+      },
+      {
+        "ordinal": 7,
+        "range": {
+          "start": {
+            "line": 5,
+            "column": 1
+          },
+          "end": {
+            "line": 5,
+            "column": 45
+          }
+        },
+        "type": "speech",
+        "speakerId": "alice",
+        "rawText": "[speaker_dave|] An empty hint stays literal.",
+        "readableText": "[speaker_dave|] An empty hint stays literal.",
+        "annotations": []
+      },
+      {
+        "ordinal": 8,
+        "range": {
+          "start": {
+            "line": 6,
+            "column": 1
+          },
+          "end": {
+            "line": 6,
+            "column": 56
+          }
+        },
+        "type": "speech",
+        "speakerId": "alice",
+        "rawText": "\\[speaker_alice|af_heart] An escaped tag stays literal.",
+        "readableText": "[speaker_alice|af_heart] An escaped tag stays literal.",
+        "annotations": []
+      }
+    ],
+    "discoveries": {
+      "speakers": [
+        {
+          "id": "alice",
+          "occurrences": [
+            {
+              "range": {
+                "start": {
+                  "line": 1,
+                  "column": 1
+                },
+                "end": {
+                  "line": 1,
+                  "column": 25
+                }
+              }
+            },
+            {
+              "range": {
+                "start": {
+                  "line": 3,
+                  "column": 1
+                },
+                "end": {
+                  "line": 3,
+                  "column": 16
+                }
+              }
+            },
+            {
+              "range": {
+                "start": {
+                  "line": 4,
+                  "column": 56
+                },
+                "end": {
+                  "line": 4,
+                  "column": 79
+                }
+              }
+            }
+          ],
+          "voiceHint": "af_heart"
+        },
+        {
+          "id": "bob",
+          "occurrences": [
+            {
+              "range": {
+                "start": {
+                  "line": 2,
+                  "column": 1
+                },
+                "end": {
+                  "line": 2,
+                  "column": 34
+                }
+              }
+            }
+          ],
+          "voiceHint": "en_US-lessac-medium"
+        },
+        {
+          "id": "carol",
+          "occurrences": [
+            {
+              "range": {
+                "start": {
+                  "line": 4,
+                  "column": 8
+                },
+                "end": {
+                  "line": 4,
+                  "column": 30
+                }
+              }
+            }
+          ],
+          "voiceHint": "af_sky"
+        }
+      ],
+      "pauses": [],
+      "sections": [],
+      "pronunciations": []
+    },
+    "summary": {
+      "speakerCount": 3,
+      "pauseIdCount": 0,
+      "sectionCount": 0,
+      "speechSegmentCount": 8,
+      "explicitPauseSegmentCount": 0,
+      "pronunciationAnnotationCount": 0,
+      "paragraphBreakCount": 0,
+      "characterCount": 357
+    },
+    "errors": [
+      {
+        "code": "INVALID_SPEAKER_VOICE_HINT",
+        "message": "Speaker directive has an empty or invalid voice hint.",
+        "line": 5,
+        "column": 15,
+        "offendingText": "[speaker_dave|] An empty hint stays literal.",
+        "ignorePattern": "[speaker_dave|]",
+        "suggestion": "Use [speaker_name|voice_id] with a voice ID containing only letters, numbers, dots, underscores, or hyphens, or remove the |voice part."
+      }
+    ],
+    "warnings": [
+      {
+        "code": "CONFLICTING_SPEAKER_VOICE_HINT",
+        "message": "Speaker alice already uses voice hint af_heart; am_adam is ignored.",
+        "line": 4,
+        "column": 56,
+        "offendingText": "Inline [speaker_carol|af_sky] switch with a hint, then [speaker_alice|am_adam] a conflicting hint.",
+        "ignorePattern": "[speaker_alice|am_adam]",
+        "suggestion": "Use one voice hint for speaker alice, or remove the |am_adam part. The first hint in the script wins."
+      }
+    ]
+  },
+  "transform": {
+    "transformVersion": 1,
+    "source": "[speaker_alice|af_heart] Hello, I am Alice.\n[speaker_bob|en_US-lessac-medium] And I am Bob.\n[speaker_alice] Alice again; the voice comes from her first tag.\nInline [speaker_carol|af_sky] switch with a hint, then [speaker_alice|am_adam] a conflicting hint.\n[speaker_dave|] An empty hint stays literal.\n\\[speaker_alice|af_heart] An escaped tag stays literal.\n",
+    "segments": [
+      {
+        "nodeOrdinal": 1,
+        "speakerId": "alice",
+        "sourceRange": {
+          "start": {
+            "line": 1,
+            "column": 26
+          },
+          "end": {
+            "line": 1,
+            "column": 44
+          }
+        },
+        "readableText": "Hello, I am Alice.",
+        "ttsText": "Hello, I am Alice.",
+        "matches": []
+      },
+      {
+        "nodeOrdinal": 2,
+        "speakerId": "bob",
+        "sourceRange": {
+          "start": {
+            "line": 2,
+            "column": 35
+          },
+          "end": {
+            "line": 2,
+            "column": 48
+          }
+        },
+        "readableText": "And I am Bob.",
+        "ttsText": "And I am Bob.",
+        "matches": []
+      },
+      {
+        "nodeOrdinal": 3,
+        "speakerId": "alice",
+        "sourceRange": {
+          "start": {
+            "line": 3,
+            "column": 17
+          },
+          "end": {
+            "line": 3,
+            "column": 65
+          }
+        },
+        "readableText": "Alice again; the voice comes from her first tag.",
+        "ttsText": "Alice again; the voice comes from her first tag.",
+        "matches": []
+      },
+      {
+        "nodeOrdinal": 4,
+        "speakerId": "alice",
+        "sourceRange": {
+          "start": {
+            "line": 4,
+            "column": 1
+          },
+          "end": {
+            "line": 4,
+            "column": 7
+          }
+        },
+        "readableText": "Inline",
+        "ttsText": "Inline",
+        "matches": []
+      },
+      {
+        "nodeOrdinal": 5,
+        "speakerId": "carol",
+        "sourceRange": {
+          "start": {
+            "line": 4,
+            "column": 31
+          },
+          "end": {
+            "line": 4,
+            "column": 55
+          }
+        },
+        "readableText": "switch with a hint, then",
+        "ttsText": "switch with a hint, then",
+        "matches": []
+      },
+      {
+        "nodeOrdinal": 6,
+        "speakerId": "alice",
+        "sourceRange": {
+          "start": {
+            "line": 4,
+            "column": 80
+          },
+          "end": {
+            "line": 4,
+            "column": 99
+          }
+        },
+        "readableText": "a conflicting hint.",
+        "ttsText": "a conflicting hint.",
+        "matches": []
+      },
+      {
+        "nodeOrdinal": 7,
+        "speakerId": "alice",
+        "sourceRange": {
+          "start": {
+            "line": 5,
+            "column": 1
+          },
+          "end": {
+            "line": 5,
+            "column": 45
+          }
+        },
+        "readableText": "[speaker_dave|] An empty hint stays literal.",
+        "ttsText": "[speaker_dave|] An empty hint stays literal.",
+        "matches": []
+      },
+      {
+        "nodeOrdinal": 8,
+        "speakerId": "alice",
+        "sourceRange": {
+          "start": {
+            "line": 6,
+            "column": 1
+          },
+          "end": {
+            "line": 6,
+            "column": 56
+          }
+        },
+        "readableText": "[speaker_alice|af_heart] An escaped tag stays literal.",
+        "ttsText": "[speaker_alice|af_heart] An escaped tag stays literal.",
+        "matches": []
+      }
+    ],
+    "readableTranscript": "Hello, I am Alice.\nAnd I am Bob.\nAlice again; the voice comes from her first tag.\nInline\nswitch with a hint, then\na conflicting hint.\n[speaker_dave|] An empty hint stays literal.\n[speaker_alice|af_heart] An escaped tag stays literal.",
+    "ttsTranscript": "Hello, I am Alice.\nAnd I am Bob.\nAlice again; the voice comes from her first tag.\nInline\nswitch with a hint, then\na conflicting hint.\n[speaker_dave|] An empty hint stays literal.\n[speaker_alice|af_heart] An escaped tag stays literal.",
+    "matches": [],
+    "errors": [],
+    "warnings": [],
+    "synthesisReady": false
+  }
+}

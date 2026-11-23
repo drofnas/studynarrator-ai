@@ -932,6 +932,80 @@ describe("Express persistence API", () => {
     await request(app).get(`/api/projects/${created.id}`).expect(404);
   });
 
+  it("round-trips speaker voice overrides and rejects malformed override flags", async () => {
+    const { app } = await fixture();
+    const created = ProjectDetailSchema.parse(
+      (
+        await request(app)
+          .post("/api/projects")
+          .send({ name: "Override study" })
+          .expect(201)
+      ).body as unknown,
+    );
+    const mapping = (speakerId: string, extra: Record<string, unknown>) => ({
+      speakerId,
+      displayName: speakerId,
+      voiceId: "af_sky",
+      speed: 1,
+      gainDb: 0,
+      roleDescription: "",
+      sampleText: "",
+      ...extra,
+    });
+    const body = {
+      name: "Override study",
+      description: "",
+      scriptSource: "[speaker_alice|af_heart] Hi. [speaker_bob] Yo.",
+      lexiconEntries: [],
+    };
+
+    const replaced = ProjectDetailSchema.parse(
+      (
+        await request(app)
+          .put(`/api/projects/${created.id}`)
+          .send({
+            ...body,
+            speakerMappings: [
+              mapping("alice", { voiceOverride: true }),
+              mapping("bob", {}),
+            ],
+          })
+          .expect(200)
+      ).body as unknown,
+    );
+    expect(
+      replaced.speakerMappings.map(({ speakerId, voiceOverride }) => ({
+        speakerId,
+        voiceOverride,
+      })),
+    ).toEqual([
+      { speakerId: "alice", voiceOverride: true },
+      { speakerId: "bob", voiceOverride: false },
+    ]);
+    expect(
+      ProjectDetailSchema.parse(
+        (await request(app).get(`/api/projects/${created.id}`).expect(200))
+          .body as unknown,
+      ),
+    ).toEqual(replaced);
+
+    for (const voiceOverride of ["yes", 1, null])
+      await request(app)
+        .put(`/api/projects/${created.id}`)
+        .send({
+          ...body,
+          speakerMappings: [mapping("alice", { voiceOverride })],
+        })
+        .expect(400);
+    await request(app)
+      .put(`/api/projects/${created.id}`)
+      .send({
+        ...body,
+        speakerMappings: [mapping("alice", { voiceHint: "af_heart" })],
+      })
+      .expect(400);
+  });
+
   it("returns path-specific validation errors and sanitized conflicts", async () => {
     const { app } = await fixture();
     const invalidResponse = await request(app)

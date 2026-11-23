@@ -4,6 +4,7 @@ import {
   ParseScriptResultSchema,
   SCRIPT_GRAMMAR_VERSION,
   SYSTEM_DEFAULT_SPEAKER_ID,
+  VOICE_HINT_MAX_LENGTH,
   type CirNode,
   type ParseDiagnostic,
   type ParseScriptInput,
@@ -13,6 +14,9 @@ import {
 } from "./schemas.js";
 
 const SPEAKER_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/u;
+const VOICE_HINT = /^[A-Za-z0-9][A-Za-z0-9._-]*$/u;
+const UNESCAPED_SPEAKER_DIRECTIVE =
+  /(^|[^\\])\[speaker_[A-Za-z0-9][A-Za-z0-9_-]*(?:\|[^\]\r\n]*)?\]/u;
 const PAUSE_ID = /^pause_[A-Za-z0-9_-]*$/u;
 const SENSE_ID = /^[A-Za-z0-9_-]+$/u;
 const INLINE_DIRECTIVE =
@@ -21,6 +25,18 @@ const INLINE_DIRECTIVE =
 interface MutableNamedDiscovery {
   id: string;
   occurrences: Array<{ range: SourceRange }>;
+}
+
+interface MutableSpeakerDiscovery extends MutableNamedDiscovery {
+  voiceHint?: string;
+}
+
+/**
+ * Reports whether text contains an unescaped speaker directive, with or
+ * without a voice hint. Plain-speech surfaces use it to reject speaker control.
+ */
+export function containsSpeakerDirective(text: string): boolean {
+  return UNESCAPED_SPEAKER_DIRECTIVE.test(text);
 }
 
 interface MutableSectionDiscovery {
@@ -227,7 +243,7 @@ export function parseScript(input: ParseScriptInput): ParseScriptResult {
   const nodes: CirNode[] = [];
   const errors: ParseDiagnostic[] = [];
   const warnings: ParseDiagnostic[] = [];
-  const speakerMap = new Map<string, MutableNamedDiscovery>();
+  const speakerMap = new Map<string, MutableSpeakerDiscovery>();
   const pauseMap = new Map<string, MutableNamedDiscovery>();
   const sectionMap = new Map<string, MutableSectionDiscovery>();
   const pronunciationDiscoveries: ParseScriptResult["discoveries"]["pronunciations"] =
@@ -259,10 +275,28 @@ export function parseScript(input: ParseScriptInput): ParseScriptResult {
     id: string,
     occurrenceRange: SourceRange,
     lineText: string,
+    voiceHint?: string,
+    directiveText?: string,
   ): void {
     const existing = speakerMap.get(id);
     if (existing) {
       existing.occurrences.push({ range: occurrenceRange });
+      if (voiceHint === undefined) return;
+      if (existing.voiceHint === undefined) {
+        existing.voiceHint = voiceHint;
+      } else if (existing.voiceHint !== voiceHint) {
+        recordWarning(
+          diagnostic(
+            "CONFLICTING_SPEAKER_VOICE_HINT",
+            `Speaker ${id} already uses voice hint ${existing.voiceHint}; ${voiceHint} is ignored.`,
+            occurrenceRange.start.line,
+            occurrenceRange.start.column,
+            lineText,
+            `Use one voice hint for speaker ${id}, or remove the |${voiceHint} part. The first hint in the script wins.`,
+            directiveText,
+          ),
+        );
+      }
       return;
     }
 
@@ -281,7 +315,11 @@ export function parseScript(input: ParseScriptInput): ParseScriptResult {
         ),
       );
     }
-    speakerMap.set(id, { id, occurrences: [{ range: occurrenceRange }] });
+    speakerMap.set(id, {
+      id,
+      occurrences: [{ range: occurrenceRange }],
+      ...(voiceHint === undefined ? {} : { voiceHint }),
+    });
   }
 
   function recordNamed(
@@ -360,7 +398,16 @@ export function parseScript(input: ParseScriptInput): ParseScriptResult {
 
       const token = match[0].slice(1, -1);
       const isPause = token.startsWith("pause_");
-      const speakerId = isPause ? undefined : token.slice("speaker_".length);
+      const speakerToken = isPause ? undefined : token.slice("speaker_".length);
+      const hintSeparator = speakerToken?.indexOf("|") ?? -1;
+      const speakerId =
+        speakerToken === undefined || hintSeparator === -1
+          ? speakerToken
+          : speakerToken.slice(0, hintSeparator);
+      const voiceHint =
+        speakerToken === undefined || hintSeparator === -1
+          ? undefined
+          : speakerToken.slice(hintSeparator + 1);
       if (
         (isPause && !PAUSE_ID.test(token)) ||
         (speakerId !== undefined && !SPEAKER_ID.test(speakerId))
@@ -377,6 +424,24 @@ export function parseScript(input: ParseScriptInput): ParseScriptResult {
             isPause
               ? "Use a pause such as [pause_short], optionally surrounded by speech."
               : "Use [speaker_name] with a name containing only letters, numbers, underscores, or hyphens.",
+            match[0],
+          ),
+        );
+        continue;
+      }
+      if (
+        voiceHint !== undefined &&
+        (!VOICE_HINT.test(voiceHint) ||
+          voiceHint.length > VOICE_HINT_MAX_LENGTH)
+      ) {
+        recordError(
+          diagnostic(
+            "INVALID_SPEAKER_VOICE_HINT",
+            "Speaker directive has an empty or invalid voice hint.",
+            lineNumber,
+            startColumn + matchIndex + "[speaker_".length + hintSeparator + 1,
+            lineText,
+            "Use [speaker_name|voice_id] with a voice ID containing only letters, numbers, dots, underscores, or hyphens, or remove the |voice part.",
             match[0],
           ),
         );
@@ -410,7 +475,7 @@ export function parseScript(input: ParseScriptInput): ParseScriptResult {
         recordNamed(pauseMap, token, directiveRange);
       } else if (speakerId !== undefined) {
         activeSpeaker = speakerId;
-        recordSpeaker(speakerId, directiveRange, lineText);
+        recordSpeaker(speakerId, directiveRange, lineText, voiceHint, match[0]);
       }
 
       cursor = matchIndex + match[0].length;

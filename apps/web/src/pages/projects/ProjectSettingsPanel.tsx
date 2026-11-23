@@ -1,8 +1,20 @@
 import { Link } from "react-router";
 import { VoiceSelect } from "@/features/connections/VoiceSelect.js";
 import { LexiconEditor } from "@/features/lexicon/LexiconEditor.js";
+import { speakerVoiceSelection } from "@/features/projects/projectAuthoring.js";
 import styles from "./ProjectsPage.module.css";
 import type { ProjectPageController } from "./useProjectsPageController.js";
+
+function scriptVoiceNote(
+  voiceHint: string,
+  status: "none" | "following" | "overridden" | "unavailable",
+): string {
+  if (status === "unavailable")
+    return `Script voice ${voiceHint} is not available for this model, so the voice selected here is used.`;
+  if (status === "overridden")
+    return `Overrides script default voice ${voiceHint}. Choose the * voice to follow the script.`;
+  return `* Script default voice ${voiceHint}.`;
+}
 
 export function ProjectConfigurationPanel({
   controller,
@@ -17,6 +29,7 @@ export function ProjectConfigurationPanel({
     beginSpeakerNameEdit,
     endSpeakerNameEdit,
     updateSpeaker,
+    scriptVoiceStatuses,
     enabledVoices,
     presentedEnabledVoices,
     voiceSelectionState,
@@ -99,6 +112,11 @@ export function ProjectConfigurationPanel({
                     <td>
                       <VoiceSelect
                         aria-label={`Voice for speaker ${row.speakerId}`}
+                        aria-describedby={
+                          row.voiceHint === undefined
+                            ? undefined
+                            : `script-voice-${row.speakerId}`
+                        }
                         disabled={enabledVoices.length === 0}
                         value={
                           enabledVoices.some(
@@ -108,6 +126,7 @@ export function ProjectConfigurationPanel({
                             : ""
                         }
                         voices={presentedEnabledVoices}
+                        scriptDefaultVoiceId={row.voiceHint}
                         emptyOption={
                           enabledVoices.length === 0
                             ? voiceSelectionState === "loading"
@@ -116,9 +135,29 @@ export function ProjectConfigurationPanel({
                             : undefined
                         }
                         onChange={(voiceId) =>
-                          updateSpeaker(row.speakerId, { voiceId })
+                          updateSpeaker(
+                            row.speakerId,
+                            speakerVoiceSelection(row, voiceId),
+                          )
                         }
                       />
+                      {row.voiceHint === undefined ? null : (
+                        <p
+                          id={`script-voice-${row.speakerId}`}
+                          className={styles.scriptVoiceNote}
+                          role={
+                            scriptVoiceStatuses.get(row.speakerId) ===
+                            "unavailable"
+                              ? "status"
+                              : undefined
+                          }
+                        >
+                          {scriptVoiceNote(
+                            row.voiceHint,
+                            scriptVoiceStatuses.get(row.speakerId) ?? "none",
+                          )}
+                        </p>
+                      )}
                     </td>
                     <td>
                       <input

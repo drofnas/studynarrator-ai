@@ -173,6 +173,37 @@ describe("discovery reconciliation", () => {
     expect(reloaded).toEqual(first);
   });
 
+  it("carries script voice hints onto discovered rows without choosing a voice", () => {
+    const parseResult = parseScript({
+      source:
+        "[speaker_alice|af_sky] Hi. [speaker_bob|am_adam] Yo. [speaker_carol] Hey.",
+    });
+    const saved = { ...speaker("bob", "af_heart"), voiceOverride: true };
+
+    const result = reconcileDiscoveredConfiguration({
+      parseResult,
+      speakerMappings: [saved, speaker("archived", "old_voice")],
+      pausePresets: [],
+    });
+
+    expect(result.speakers).toEqual([
+      expect.objectContaining({
+        speakerId: "alice",
+        voiceId: null,
+        voiceOverride: false,
+        voiceHint: "af_sky",
+      }),
+      { ...saved, discovered: true, occurrenceCount: 1, voiceHint: "am_adam" },
+      expect.objectContaining({ speakerId: "carol", voiceOverride: false }),
+      {
+        ...speaker("archived", "old_voice"),
+        discovered: false,
+        occurrenceCount: 0,
+      },
+    ]);
+    expect("voiceHint" in result.speakers[2]!).toBe(false);
+  });
+
   it("reports section lines and speech counts", () => {
     const parseResult = parseScript({
       source:

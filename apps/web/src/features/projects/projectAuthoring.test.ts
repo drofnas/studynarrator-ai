@@ -2,7 +2,10 @@
 import { describe, expect, it } from "vitest";
 import type { VoiceCatalogEntry } from "@studynarrator/shared-types";
 import {
+  resolveEffectiveSpeakerVoiceId,
   resolveProjectSpeakerVoiceId,
+  scriptVoiceStatus,
+  speakerVoiceSelection,
   stripSingleSurroundingCodeFence,
   supportedProjectVoices,
 } from "./projectAuthoring.js";
@@ -104,5 +107,88 @@ describe("authoring input helpers", () => {
         category: "neutral",
       }),
     ]);
+  });
+
+  it("prefers a Settings override, then a usable script hint, then the default chain", () => {
+    const resolve = (
+      speaker: Parameters<typeof resolveEffectiveSpeakerVoiceId>[0],
+    ) => resolveEffectiveSpeakerVoiceId(speaker, "voice-default", voices);
+
+    expect(
+      resolve({
+        voiceId: "voice-first",
+        voiceOverride: true,
+        voiceHint: "voice-default",
+      }),
+    ).toBe("voice-first");
+    expect(
+      resolve({
+        voiceId: "voice-first",
+        voiceOverride: false,
+        voiceHint: "voice-default",
+      }),
+    ).toBe("voice-default");
+    expect(resolve({ voiceId: null, voiceHint: "voice-first" })).toBe(
+      "voice-first",
+    );
+    expect(
+      resolve({
+        voiceId: "voice-disabled",
+        voiceOverride: true,
+        voiceHint: "voice-first",
+      }),
+    ).toBe("voice-first");
+    expect(resolve({ voiceId: null, voiceHint: "voice-disabled" })).toBe(
+      "voice-default",
+    );
+    expect(
+      resolve({ voiceId: "voice-first", voiceHint: "unknown-voice" }),
+    ).toBe("voice-first");
+    expect(resolve({ voiceId: "voice-first" })).toBe("voice-first");
+  });
+
+  it("records an override unless the starred script voice is chosen", () => {
+    expect(
+      speakerVoiceSelection({ voiceHint: "voice-first" }, "voice-default"),
+    ).toEqual({
+      voiceId: "voice-default",
+      voiceOverride: true,
+    });
+    expect(
+      speakerVoiceSelection({ voiceHint: "voice-first" }, "voice-first"),
+    ).toEqual({
+      voiceId: "voice-first",
+      voiceOverride: false,
+    });
+    expect(speakerVoiceSelection({}, "voice-first")).toEqual({
+      voiceId: "voice-first",
+      voiceOverride: true,
+    });
+  });
+
+  it("reports whether a speaker follows, overrides, or cannot use its script voice", () => {
+    expect(scriptVoiceStatus({ voiceId: "voice-first" }, voices)).toBe("none");
+    expect(
+      scriptVoiceStatus(
+        { voiceId: "voice-first", voiceHint: "voice-first" },
+        voices,
+      ),
+    ).toBe("following");
+    expect(
+      scriptVoiceStatus(
+        {
+          voiceId: "voice-default",
+          voiceOverride: true,
+          voiceHint: "voice-first",
+        },
+        voices,
+      ),
+    ).toBe("overridden");
+    expect(
+      scriptVoiceStatus(
+        { voiceId: "voice-default", voiceHint: "voice-disabled" },
+        voices,
+      ),
+    ).toBe("unavailable");
   });
 });

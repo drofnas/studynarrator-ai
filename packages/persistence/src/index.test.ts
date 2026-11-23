@@ -294,6 +294,7 @@ describe("migration 14", () => {
     const upgraded = await migrateDatabase({
       Database: DatabaseAdapter,
       databasePath,
+      migrations: STUDYNARRATOR_MIGRATIONS.slice(0, 14),
     });
     expect(upgraded.appliedVersions).toEqual([14]);
     expect(upgraded.databaseSchemaVersion).toBe(14);
@@ -360,6 +361,7 @@ describe("migration 14", () => {
     const reopened = await migrateDatabase({
       Database: DatabaseAdapter,
       databasePath,
+      migrations: STUDYNARRATOR_MIGRATIONS.slice(0, 14),
     });
     expect(reopened.appliedVersions).toEqual([]);
     expect(
@@ -397,11 +399,12 @@ describe("database baseline", () => {
       { version: 12, name: "global-lexicon-pronunciation-reconciliation" },
       { version: 13, name: "remove-render-artifact-provenance" },
       { version: 14, name: "global-lexicon-requested-pronunciations" },
+      { version: 15, name: "speaker-voice-override" },
     ]);
     expect(first.appliedVersions).toEqual([
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14,
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
     ]);
-    expect(first.databaseSchemaVersion).toBe(14);
+    expect(first.databaseSchemaVersion).toBe(15);
     expect(first.backupPath).toBeNull();
     expect(
       first.database.prepare("SELECT version FROM schema_migrations").all(),
@@ -420,6 +423,7 @@ describe("database baseline", () => {
       { version: 12 },
       { version: 13 },
       { version: 14 },
+      { version: 15 },
     ]);
     expect(
       first.database
@@ -533,7 +537,7 @@ describe("database baseline", () => {
       Database: DatabaseAdapter,
       databasePath,
     });
-    expect(upgraded.appliedVersions).toEqual([8, 9, 10, 11, 12, 13, 14]);
+    expect(upgraded.appliedVersions).toEqual([8, 9, 10, 11, 12, 13, 14, 15]);
     expect(
       upgraded.database
         .prepare(
@@ -745,8 +749,8 @@ describe("database baseline", () => {
       Database: DatabaseAdapter,
       databasePath,
     });
-    expect(upgraded.appliedVersions).toEqual([11, 12, 13, 14]);
-    expect(upgraded.databaseSchemaVersion).toBe(14);
+    expect(upgraded.appliedVersions).toEqual([11, 12, 13, 14, 15]);
+    expect(upgraded.databaseSchemaVersion).toBe(15);
     expect(
       upgraded.database
         .prepare(
@@ -863,7 +867,7 @@ describe("database baseline", () => {
       Database: DatabaseAdapter,
       databasePath,
     });
-    expect(upgraded.appliedVersions).toEqual([10, 11, 12, 13, 14]);
+    expect(upgraded.appliedVersions).toEqual([10, 11, 12, 13, 14, 15]);
     expect(
       upgraded.database
         .prepare(
@@ -990,8 +994,8 @@ describe("database baseline", () => {
       Database: DatabaseAdapter,
       databasePath,
     });
-    expect(upgraded.appliedVersions).toEqual([12, 13, 14]);
-    expect(upgraded.databaseSchemaVersion).toBe(14);
+    expect(upgraded.appliedVersions).toEqual([12, 13, 14, 15]);
+    expect(upgraded.databaseSchemaVersion).toBe(15);
     expect(
       upgraded.database
         .prepare(
@@ -1255,6 +1259,111 @@ describe("database baseline", () => {
     database.close();
   });
 
+  it("marks existing saved speaker voices as overrides when adding the flag", async () => {
+    const databasePath = await temporaryDatabase(
+      "studynarrator-voice-override-",
+    );
+    const v14 = await migrateDatabase({
+      Database: DatabaseAdapter,
+      databasePath,
+      migrations: STUDYNARRATOR_MIGRATIONS.slice(0, 14),
+    });
+    const timestamp = "2026-11-22T00:00:00.000Z";
+    v14.database
+      .prepare(
+        `
+        INSERT INTO projects (
+          id, name, description, script_source, script_hash, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `,
+      )
+      .run(
+        projectId,
+        "Voice override project",
+        "",
+        "[speaker_teacher] Hi.",
+        "a".repeat(64),
+        timestamp,
+        timestamp,
+      );
+    const insertSpeaker = v14.database.prepare(`
+      INSERT INTO speaker_mappings (
+        project_id, speaker_id, ordinal, display_name, voice_id, speed, gain_db, role_description, sample_text
+      ) VALUES (?, ?, ?, ?, ?, 1.25, -3, 'Guide', 'Sample')
+    `);
+    insertSpeaker.run(projectId, "teacher", 0, "Teacher", "af_sky");
+    insertSpeaker.run(projectId, "student", 1, "Student", null);
+    v14.database.close();
+
+    const upgraded = await migrateDatabase({
+      Database: DatabaseAdapter,
+      databasePath,
+    });
+    expect(upgraded.appliedVersions).toEqual([15]);
+    expect(upgraded.backupPath).not.toBeNull();
+    const database = upgraded.database as Database.Database;
+    expect(
+      database
+        .prepare(
+          "SELECT speaker_id, display_name, voice_id, voice_override, speed, gain_db, role_description, sample_text FROM speaker_mappings ORDER BY ordinal",
+        )
+        .all(),
+    ).toEqual([
+      {
+        speaker_id: "teacher",
+        display_name: "Teacher",
+        voice_id: "af_sky",
+        voice_override: 1,
+        speed: 1.25,
+        gain_db: -3,
+        role_description: "Guide",
+        sample_text: "Sample",
+      },
+      {
+        speaker_id: "student",
+        display_name: "Student",
+        voice_id: null,
+        voice_override: 0,
+        speed: 1.25,
+        gain_db: -3,
+        role_description: "Guide",
+        sample_text: "Sample",
+      },
+    ]);
+    expect(() =>
+      database
+        .prepare(
+          "UPDATE speaker_mappings SET voice_override = 2 WHERE speaker_id = 'teacher'",
+        )
+        .run(),
+    ).toThrow(/CHECK constraint failed/u);
+    database.close();
+
+    const reopened = await migrateDatabase({
+      Database: DatabaseAdapter,
+      databasePath,
+    });
+    expect(reopened.appliedVersions).toEqual([]);
+    reopened.database.close();
+    const repository = await openStudyNarratorRepository({
+      Database: DatabaseAdapter,
+      databasePath,
+    });
+    expect(repository.getProject(projectId).speakerMappings).toEqual([
+      expect.objectContaining({
+        speakerId: "teacher",
+        voiceId: "af_sky",
+        voiceOverride: true,
+      }),
+      expect.objectContaining({
+        speakerId: "student",
+        voiceId: null,
+        voiceOverride: false,
+      }),
+    ]);
+    repository.close();
+  });
+
   it("seeds the current global lexicon catalog", async () => {
     const databasePath = await temporaryDatabase("studynarrator-frozen-seed-");
     const first = await migrateDatabase({
@@ -1335,10 +1444,10 @@ describe("database baseline", () => {
       logger,
     });
     expect(upgraded.appliedVersions).toEqual([
-      3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14,
+      3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
     ]);
-    expect(upgraded.databaseSchemaVersion).toBe(14);
-    expect(upgraded.backupPath).toContain("-v0002-to-v0014-");
+    expect(upgraded.databaseSchemaVersion).toBe(15);
+    expect(upgraded.backupPath).toContain("-v0002-to-v0015-");
     if (upgraded.backupPath === null)
       throw new Error("Expected the migration backup path.");
     expect(logger.info).toHaveBeenNthCalledWith(
@@ -1347,7 +1456,7 @@ describe("database baseline", () => {
         event: "database-migration-backup-created",
         backupPath: upgraded.backupPath,
         fromDatabaseSchemaVersion: 2,
-        toDatabaseSchemaVersion: 14,
+        toDatabaseSchemaVersion: 15,
       },
       "Database migration backup created",
     );
@@ -1462,6 +1571,15 @@ describe("database baseline", () => {
     expect(logger.info).toHaveBeenNthCalledWith(
       14,
       {
+        event: "database-migration-applied",
+        migrationVersion: 15,
+        migrationName: "speaker-voice-override",
+      },
+      "Database migration applied",
+    );
+    expect(logger.info).toHaveBeenNthCalledWith(
+      15,
+      {
         event: "database-backups-pruned",
         removedCount: 0,
         retainedCount: 1,
@@ -1561,9 +1679,9 @@ describe("database baseline", () => {
       databasePath,
     });
     expect(upgraded.appliedVersions).toEqual([
-      4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14,
+      4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
     ]);
-    expect(upgraded.databaseSchemaVersion).toBe(14);
+    expect(upgraded.databaseSchemaVersion).toBe(15);
     expect(
       upgraded.database
         .prepare(
@@ -1646,7 +1764,7 @@ describe("database baseline", () => {
     migrated.database.close();
   });
 
-  it.each([1, 15])(
+  it.each([1, 16])(
     "rejects an unsupported pre-release schema %d database without deleting it",
     async (version) => {
       const databasePath = await temporaryDatabase(
@@ -1667,7 +1785,7 @@ describe("database baseline", () => {
         .run("keep-me");
       old.close();
 
-      if (version > 14) {
+      if (version > DATABASE_SCHEMA_VERSION) {
         await expect(
           migrateDatabase({ Database: DatabaseAdapter, databasePath }),
         ).rejects.toBeInstanceOf(SchemaTooNewError);
@@ -1705,7 +1823,7 @@ describe("database baseline", () => {
       .run();
     baseline.database.close();
     const failing: Migration = {
-      version: 15,
+      version: 16,
       name: "intentional-test-failure",
       up(database) {
         database.exec(
@@ -1725,7 +1843,7 @@ describe("database baseline", () => {
       failure = error as MigrationFailureError;
     }
     expect(failure).toBeInstanceOf(MigrationFailureError);
-    expect(failure?.backupPath).toContain("-v0014-to-v0015-");
+    expect(failure?.backupPath).toContain("-v0015-to-v0016-");
     expect((await stat(failure!.backupPath!)).mode & 0o777).toBe(0o600);
     expect((await readFile(failure!.backupPath!)).byteLength).toBeGreaterThan(
       0,
@@ -1885,7 +2003,7 @@ describe("StudyNarratorRepository", () => {
     });
     expect(first.status()).toMatchObject({
       contractVersion: 1,
-      databaseSchemaVersion: 14,
+      databaseSchemaVersion: 15,
     });
     const created = first.createProject({
       name: "Persistence restart proof",
@@ -1972,6 +2090,7 @@ describe("StudyNarratorRepository", () => {
           speakerId: "teacher",
           displayName: "Teacher",
           voiceId: "voice",
+          voiceOverride: true,
           speed: 1,
           gainDb: 0,
           roleDescription: "Guide",
@@ -1996,6 +2115,10 @@ describe("StudyNarratorRepository", () => {
       name: "Source copy",
       scriptSource: configured.scriptSource,
     });
+    expect(configured.speakerMappings).toEqual([
+      expect.objectContaining({ voiceId: "voice", voiceOverride: true }),
+    ]);
+    expect(duplicate.speakerMappings).toEqual(configured.speakerMappings);
     expect(duplicate.lexiconEntries[0]).toMatchObject({
       id: duplicateLexiconId,
       displayText: "SQL",
@@ -2214,7 +2337,7 @@ describe("StudyNarratorRepository", () => {
     });
     expect(repository.runMarker()).toMatchObject({
       markerKey: "runtime.storage-self-test",
-      migrationVersion: 14,
+      migrationVersion: 15,
     });
     const project = repository.createProject({ name: "Rendered" });
     repository.replaceProject(project.id, {

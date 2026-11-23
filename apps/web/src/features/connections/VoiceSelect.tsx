@@ -7,10 +7,13 @@ import {
 interface VoiceSelectProps {
   id?: string;
   "aria-label"?: string;
+  "aria-describedby"?: string | undefined;
   value: string;
   voices: readonly PresentedVoice[];
   disabled?: boolean;
   emptyOption?: string | undefined;
+  /** Marks this voice with "*" as the script's default for the speaker. */
+  scriptDefaultVoiceId?: string | undefined;
   onChange: (voiceId: string) => void;
 }
 
@@ -20,6 +23,7 @@ export function VoiceSelect({
   voices,
   disabled = false,
   emptyOption,
+  scriptDefaultVoiceId,
   onChange,
   ...accessible
 }: VoiceSelectProps) {
@@ -39,7 +43,9 @@ export function VoiceSelect({
         <optgroup key={group.key} label={group.label}>
           {group.voices.map((voice) => (
             <option key={voice.voiceId} value={voice.voiceId}>
-              {voiceOptionLabel(voice)}
+              {voice.voiceId === scriptDefaultVoiceId
+                ? `* ${voiceOptionLabel(voice)} (script default)`
+                : voiceOptionLabel(voice)}
             </option>
           ))}
         </optgroup>

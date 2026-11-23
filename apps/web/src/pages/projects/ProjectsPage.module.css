@@ -424,6 +424,13 @@
 .speakerSort select {
   max-width: 100%;
 }
+.scriptVoiceNote {
+  max-width: 28ch;
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
 .voiceFieldMessage {
   margin: 8px 0 0;
   color: var(--text-secondary);

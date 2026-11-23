@@ -847,6 +847,21 @@ export const STUDYNARRATOR_MIGRATIONS: readonly Migration[] = Object.freeze([
       );
     },
   },
+  {
+    version: 15,
+    name: "speaker-voice-override",
+    up(database) {
+      // Voices saved before script voice hints existed were chosen in Settings
+      // (or filled from the default) and must keep rendering unchanged, so
+      // every saved voice becomes an override that a later hint cannot replace.
+      database.exec(`
+        ALTER TABLE speaker_mappings
+          ADD COLUMN voice_override INTEGER NOT NULL DEFAULT 0
+          CHECK (voice_override IN (0, 1));
+        UPDATE speaker_mappings SET voice_override = 1 WHERE voice_id IS NOT NULL;
+      `);
+    },
+  },
 ]);
 
 interface VersionRow {
